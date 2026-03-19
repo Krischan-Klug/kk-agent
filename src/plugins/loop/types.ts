@@ -38,6 +38,9 @@ export interface LoopOptions {
   onPhaseChange?: (from: string, to: string, reason: string) => void;
   onLoopState?: (state: AgentLoopState) => void;
   onStats?: (stats: TokenStats) => void;
+  maxContextTokens?: number;
+  compactionPrompt?: string;
+  compactionThreshold?: number;
 }
 
 export interface LoopResult {

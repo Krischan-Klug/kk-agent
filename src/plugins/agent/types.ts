@@ -13,6 +13,7 @@ export interface AgentDefinition {
   variables: Record<string, string>;       // custom template variables (e.g. PROJECT_NAME)
   defaultModel?: string;
   reasoningEffort?: ReasoningEffort;
+  compactionPrompt?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -91,6 +92,7 @@ export interface CreateAgentBody {
   variables?: Record<string, string>;
   defaultModel?: string;
   reasoningEffort?: ReasoningEffort;
+  compactionPrompt?: string;
 }
 
 export interface UpdateAgentBody {
@@ -103,4 +105,5 @@ export interface UpdateAgentBody {
   variables?: Record<string, string>;
   defaultModel?: string;
   reasoningEffort?: ReasoningEffort;
+  compactionPrompt?: string;
 }

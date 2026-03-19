@@ -1,0 +1,63 @@
+import type { UnifiedMessage } from "../../provider/lib/types.js";
+import { callProviderStream } from "../../provider/service.js";
+
+export const DEFAULT_COMPACTION_PROMPT = `You are a context compaction system. Your task is to create a dense, lossless summary of the conversation below.
+
+Rules:
+- Preserve ALL facts, decisions, code changes, file paths, variable names, and error messages exactly
+- Preserve the current task state: what was asked, what was done, what remains
+- Preserve any user preferences, corrections, or constraints mentioned
+- Strip redundant back-and-forth, greetings, acknowledgments, and verbose explanations
+- Use compact notation: bullet points, key:value pairs, abbreviated references
+- For code changes: note file path + what changed (not full code unless critical)
+- For tool results: keep only the essential output, not raw dumps
+- Output must be significantly shorter than input while losing zero critical information
+- Write in the same language the conversation uses
+
+Format your summary as:
+## Task
+[What the user wants accomplished]
+
+## Decisions & Constraints
+[Key decisions made, user preferences, corrections]
+
+## Progress
+[What was done, files changed, current state]
+
+## Pending
+[What still needs to be done]
+
+## Key Details
+[Critical code snippets, error messages, specific values that must not be lost]`;
+
+export async function compactContext(
+  messages: UnifiedMessage[],
+  compactionPrompt: string,
+  model: string,
+): Promise<UnifiedMessage[]> {
+  const conversationText = messages
+    .map((m) => {
+      let line = `[${m.role}]: ${m.content ?? ""}`;
+      if (m.tool_calls) {
+        line += `\n[tool_calls]: ${JSON.stringify(m.tool_calls)}`;
+      }
+      if (m.tool_call_id) {
+        line = `[tool result for ${m.tool_call_id}]: ${m.content ?? ""}`;
+      }
+      return line;
+    })
+    .join("\n\n");
+
+  const response = await callProviderStream(
+    {
+      model,
+      messages: [
+        { role: "system", content: compactionPrompt },
+        { role: "user", content: `Summarize this conversation:\n\n${conversationText}` },
+      ],
+    },
+    () => {},
+  );
+
+  return [{ role: "user", content: `[Previous Context Summary]\n\n${response.content}` }];
+}

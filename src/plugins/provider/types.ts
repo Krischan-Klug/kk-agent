@@ -18,4 +18,5 @@ export interface ReasoningLevelConfig {
 export interface ModelSettings {
   reasoningEffort?: "off" | "low" | "medium" | "high" | "on";
   levels?: Record<string, ReasoningLevelConfig>;
+  compactionPrompt?: string;
 }

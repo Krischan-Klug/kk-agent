@@ -2,7 +2,7 @@ import type { SessionState, CreateSessionBody, SSEEvent } from "./types.js";
 import * as store from "./lib/store.js";
 import { compactMessages } from "./lib/anchor.js";
 import { buildMcpInstructions } from "../systemprompt/service.js";
-import { getActiveModel, getModelSettings } from "../provider/service.js";
+import { getActiveModel, getModelSettings, getModels } from "../provider/service.js";
 import type { ReasoningLevelConfig } from "../provider/types.js";
 import { REASONING_LEVEL_DEFAULTS } from "../provider/defaults.js";
 import { getToolDefinitions, executeTool } from "../mcp/service.js";
@@ -76,6 +76,20 @@ function resolveReasoningConfig(session: SessionState): {
   };
 }
 
+async function resolveCompactionConfig(session: SessionState, agent: ReturnType<typeof getAgent>) {
+  const ms = getModelSettings(session.model);
+  const compactionPrompt = agent.compactionPrompt ?? ms.compactionPrompt; // undefined = use default in loop
+  let maxContextTokens: number | undefined;
+  try {
+    const models = await getModels();
+    const modelInfo = models.find((m) => m.id === session.model);
+    maxContextTokens = modelInfo?.contextLength ?? modelInfo?.maxContextLength;
+  } catch {
+    // Model info not available — compaction disabled
+  }
+  return { compactionPrompt, maxContextTokens };
+}
+
 export async function chat(
   sessionId: string,
   message: string,
@@ -88,6 +102,7 @@ export async function chat(
   const tools = getToolDefinitions(session.activeMcpIds);
   const mcpInstr = buildMcpInstructions(session.activeMcpIds, agent.mcpInstructions);
   const rc = resolveReasoningConfig(session);
+  const cc = await resolveCompactionConfig(session, agent);
 
   const result = await runLoop({
     agentId: session.agentId,
@@ -112,6 +127,8 @@ export async function chat(
     agentVariables: agent.variables ?? {},
     allTools: tools,
     executeTool,
+    maxContextTokens: cc.maxContextTokens,
+    compactionPrompt: cc.compactionPrompt,
   });
 
   session.messages = result.messages.map((m) => ({
@@ -148,6 +165,7 @@ export async function chatStream(
   const tools = getToolDefinitions(session.activeMcpIds);
   const mcpInstr = buildMcpInstructions(session.activeMcpIds, agent.mcpInstructions);
   const rc = resolveReasoningConfig(session);
+  const cc = await resolveCompactionConfig(session, agent);
 
   try {
     const result = await runLoop({
@@ -173,6 +191,8 @@ export async function chatStream(
       agentVariables: agent.variables ?? {},
       allTools: tools,
       executeTool,
+      maxContextTokens: cc.maxContextTokens,
+      compactionPrompt: cc.compactionPrompt,
       onContent: (content) => emit({ type: "content", content }),
       onReasoning: (content) => emit({ type: "reasoning", content }),
       onToolCall: (tc) =>

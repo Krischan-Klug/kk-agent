@@ -4,6 +4,7 @@ import type { LoopPhase, AgentLoopState, PhaseHistoryEntry, TransitionCondition 
 import { callProviderStream } from "../../provider/service.js";
 import { buildPrompt } from "../../systemprompt/service.js";
 import { getSystemVariables } from "../../systemprompt/lib/builder.js";
+import { compactContext, DEFAULT_COMPACTION_PROMPT } from "./compaction.js";
 
 function filterTools(allTools: ToolDefinition[], phase: LoopPhase): UnifiedToolDefinition[] {
   let tools = allTools;
@@ -172,6 +173,19 @@ export async function runAgentLoop(opts: LoopOptions): Promise<LoopResult> {
         }
       },
     );
+
+    // Check context compaction before processing response
+    if (opts.maxContextTokens && cumulativeStats.inputTokens > 0) {
+      const threshold = opts.compactionThreshold ?? 0.8;
+      if (cumulativeStats.inputTokens >= opts.maxContextTokens * threshold) {
+        const prompt = opts.compactionPrompt ?? DEFAULT_COMPACTION_PROMPT;
+        opts.onContent?.("\n\n---\n[Context wird komprimiert...]\n---\n\n");
+        const compacted = await compactContext(allMessages, prompt, opts.model);
+        allMessages.length = 0;
+        allMessages.push(...compacted);
+        cumulativeStats.inputTokens = 0;
+      }
+    }
 
     lastContent = response.content;
     const toolsCalled = response.tool_calls ?? [];

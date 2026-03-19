@@ -187,6 +187,12 @@ export async function runAgentLoop(opts: LoopOptions): Promise<LoopResult> {
       }
     }
 
+    // Embed reasoning as <think> tags so it persists in stored messages
+    let messageContent = response.content;
+    if (response.reasoning && !messageContent.includes("<think>")) {
+      messageContent = `<think>${response.reasoning}</think>${messageContent}`;
+    }
+
     lastContent = response.content;
     const toolsCalled = response.tool_calls ?? [];
 
@@ -194,11 +200,11 @@ export async function runAgentLoop(opts: LoopOptions): Promise<LoopResult> {
     if (toolsCalled.length > 0) {
       allMessages.push({
         role: "assistant",
-        content: response.content,
+        content: messageContent,
         tool_calls: toolsCalled,
       });
     } else {
-      allMessages.push({ role: "assistant", content: response.content });
+      allMessages.push({ role: "assistant", content: messageContent });
     }
 
     // Execute tool calls

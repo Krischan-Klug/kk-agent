@@ -1,25 +1,55 @@
-import type { UnifiedRequest, UnifiedResponse, UnifiedToolCall, OnChunkFn } from "./types.js";
+import type { UnifiedMessage, UnifiedRequest, UnifiedResponse, UnifiedToolCall, OnChunkFn } from "./types.js";
 
-export async function callLmStudio(
-  request: UnifiedRequest,
-  baseUrl: string,
-): Promise<UnifiedResponse> {
-  const openaiTools = request.tools?.map((t) => ({
-    type: "function" as const,
-    function: {
-      name: t.name,
-      description: t.description,
-      parameters: t.parameters,
-    },
-  }));
+/* ──────────────────────────────────────────────────────────
+   Helpers
+   ────────────────────────────────────────────────────────── */
 
-  const openaiMessages = request.messages.map((m) => {
+function safeParseArgs(raw: string): Record<string, unknown> {
+  try {
+    return JSON.parse(raw || "{}") as Record<string, unknown>;
+  } catch {
+    console.warn("[lmstudio] Malformed tool call arguments:", raw);
+    return { _raw: raw };
+  }
+}
+
+/** Parse <think>...</think> tags for reasoning vs content */
+function parseThinkTags(
+  text: string,
+  inThink: boolean,
+  onChunk: OnChunkFn,
+): boolean {
+  while (text.length > 0) {
+    if (!inThink) {
+      const thinkStart = text.indexOf("<think>");
+      if (thinkStart === -1) {
+        onChunk({ type: "content", content: text });
+        text = "";
+      } else {
+        if (thinkStart > 0) onChunk({ type: "content", content: text.slice(0, thinkStart) });
+        inThink = true;
+        text = text.slice(thinkStart + 7);
+      }
+    } else {
+      const thinkEnd = text.indexOf("</think>");
+      if (thinkEnd === -1) {
+        onChunk({ type: "reasoning", content: text });
+        text = "";
+      } else {
+        if (thinkEnd > 0) onChunk({ type: "reasoning", content: text.slice(0, thinkEnd) });
+        inThink = false;
+        text = text.slice(thinkEnd + 8);
+      }
+    }
+  }
+  return inThink;
+}
+
+/** Convert UnifiedMessage[] → OpenAI Chat Completions messages format */
+function buildMessages(messages: UnifiedMessage[]) {
+  return messages.map((m) => {
     if (m.role === "tool") {
-      return {
-        role: "tool" as const,
-        content: m.content,
-        tool_call_id: m.tool_call_id,
-      };
+      return { role: "tool" as const, content: m.content, tool_call_id: m.tool_call_id };
     }
     if (m.role === "assistant" && m.tool_calls?.length) {
       return {
@@ -28,34 +58,87 @@ export async function callLmStudio(
         tool_calls: m.tool_calls.map((tc) => ({
           id: tc.id,
           type: "function" as const,
-          function: {
-            name: tc.name,
-            arguments: JSON.stringify(tc.arguments),
-          },
+          function: { name: tc.name, arguments: JSON.stringify(tc.arguments) },
         })),
       };
     }
     return { role: m.role, content: m.content };
   });
+}
 
+/** Convert UnifiedToolDefinition[] → OpenAI tools format */
+function buildTools(request: UnifiedRequest) {
+  return request.tools?.map((t) => ({
+    type: "function" as const,
+    function: { name: t.name, description: t.description, parameters: t.parameters },
+  }));
+}
+
+/** Build Chat Completions request body */
+function buildBody(request: UnifiedRequest, stream: boolean): Record<string, unknown> {
   const body: Record<string, unknown> = {
     model: request.model,
-    messages: openaiMessages,
-    stream: false,
+    messages: buildMessages(request.messages),
+    stream,
   };
 
-  if (openaiTools?.length) {
-    body.tools = openaiTools;
-  }
-  if (request.reasoningEffort) {
-    body.reasoning_effort = request.reasoningEffort;
-  }
-  if (request.temperature !== undefined) {
-    body.temperature = request.temperature;
-  }
-  if (request.maxOutputTokens !== undefined) {
+  const tools = buildTools(request);
+  if (tools?.length) body.tools = tools;
+  if (request.reasoningEffort) body.reasoning_effort = request.reasoningEffort;
+  if (request.temperature !== undefined) body.temperature = request.temperature;
+  if (request.maxOutputTokens !== undefined && request.maxOutputTokens > 0) {
     body.max_tokens = request.maxOutputTokens;
   }
+  if (stream) body.stream_options = { include_usage: true };
+
+  return body;
+}
+
+/** Generic SSE stream reader */
+async function readSSEStream(
+  res: Response,
+  onEvent: (parsed: Record<string, unknown>) => boolean, // return true to stop
+): Promise<void> {
+  if (!res.body) throw new Error("No response body for streaming");
+  const reader = (res.body as ReadableStream<Uint8Array>).getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+
+    buffer += decoder.decode(value, { stream: true });
+    const lines = buffer.split("\n");
+    buffer = lines.pop() ?? "";
+
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (!trimmed.startsWith("data: ")) continue;
+      const payload = trimmed.slice(6);
+      if (payload === "[DONE]") continue;
+
+      let parsed: Record<string, unknown>;
+      try {
+        parsed = JSON.parse(payload);
+      } catch {
+        continue;
+      }
+
+      if (onEvent(parsed)) return;
+    }
+  }
+}
+
+/* ──────────────────────────────────────────────────────────
+   Chat Completions API (/v1/chat/completions)
+   ────────────────────────────────────────────────────────── */
+
+export async function callChatCompletions(
+  request: UnifiedRequest,
+  baseUrl: string,
+): Promise<UnifiedResponse> {
+  const body = buildBody(request, false);
 
   const res = await fetch(`${baseUrl}/v1/chat/completions`, {
     method: "POST",
@@ -92,15 +175,12 @@ export async function callLmStudio(
   const toolCalls: UnifiedToolCall[] | undefined = msg.tool_calls?.map((tc) => ({
     id: tc.id,
     name: tc.function.name,
-    arguments: JSON.parse(tc.function.arguments) as Record<string, unknown>,
+    arguments: safeParseArgs(tc.function.arguments),
   }));
 
   let finishReason: UnifiedResponse["finishReason"] = "stop";
-  if (choice.finish_reason === "tool_calls") {
-    finishReason = "tool_calls";
-  } else if (choice.finish_reason === "length") {
-    finishReason = "length";
-  }
+  if (choice.finish_reason === "tool_calls") finishReason = "tool_calls";
+  else if (choice.finish_reason === "length") finishReason = "length";
 
   return {
     content: msg.content ?? "",
@@ -114,51 +194,12 @@ export async function callLmStudio(
   };
 }
 
-function buildOpenaiMessages(request: UnifiedRequest) {
-  return request.messages.map((m) => {
-    if (m.role === "tool") {
-      return { role: "tool" as const, content: m.content, tool_call_id: m.tool_call_id };
-    }
-    if (m.role === "assistant" && m.tool_calls?.length) {
-      return {
-        role: "assistant" as const,
-        content: m.content || null,
-        tool_calls: m.tool_calls.map((tc) => ({
-          id: tc.id,
-          type: "function" as const,
-          function: { name: tc.name, arguments: JSON.stringify(tc.arguments) },
-        })),
-      };
-    }
-    return { role: m.role, content: m.content };
-  });
-}
-
-function buildOpenaiTools(request: UnifiedRequest) {
-  return request.tools?.map((t) => ({
-    type: "function" as const,
-    function: { name: t.name, description: t.description, parameters: t.parameters },
-  }));
-}
-
-export async function callLmStudioStream(
+export async function callChatCompletionsStream(
   request: UnifiedRequest,
   baseUrl: string,
   onChunk: OnChunkFn,
 ): Promise<UnifiedResponse> {
-  const openaiTools = buildOpenaiTools(request);
-  const openaiMessages = buildOpenaiMessages(request);
-
-  const body: Record<string, unknown> = {
-    model: request.model,
-    messages: openaiMessages,
-    stream: true,
-    stream_options: { include_usage: true },
-  };
-  if (openaiTools?.length) body.tools = openaiTools;
-  if (request.reasoningEffort) body.reasoning_effort = request.reasoningEffort;
-  if (request.temperature !== undefined) body.temperature = request.temperature;
-  if (request.maxOutputTokens !== undefined) body.max_tokens = request.maxOutputTokens;
+  const body = buildBody(request, true);
 
   const res = await fetch(`${baseUrl}/v1/chat/completions`, {
     method: "POST",
@@ -171,117 +212,72 @@ export async function callLmStudioStream(
     throw new Error(`LM Studio error ${res.status}: ${text}`);
   }
 
-  if (!res.body) throw new Error("No response body for streaming");
-
   let fullContent = "";
+  let fullReasoning = "";
   let inThink = false;
   const toolCallDeltas: Map<number, { id: string; name: string; args: string }> = new Map();
   let finishReason: UnifiedResponse["finishReason"] = "stop";
   let usage: { prompt_tokens?: number; completion_tokens?: number; reasoning_tokens?: number } | undefined;
 
-  const reader = res.body.getReader();
-  const decoder = new TextDecoder();
-  let buffer = "";
+  await readSSEStream(res, (parsed) => {
+    const choices = parsed.choices as Array<{
+      delta?: {
+        content?: string | null;
+        reasoning_content?: string | null;
+        tool_calls?: Array<{
+          index: number;
+          id?: string;
+          function?: { name?: string; arguments?: string };
+        }>;
+      };
+      finish_reason?: string | null;
+    }>;
 
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
+    const chunkUsage = parsed.usage as typeof usage;
+    if (chunkUsage) usage = chunkUsage;
 
-    buffer += decoder.decode(value, { stream: true });
-    const lines = buffer.split("\n");
-    buffer = lines.pop() ?? "";
+    if (!choices?.[0]) return false;
+    const delta = choices[0].delta;
+    const reason = choices[0].finish_reason;
 
-    for (const line of lines) {
-      const trimmed = line.trim();
-      if (!trimmed.startsWith("data: ")) continue;
-      const payload = trimmed.slice(6);
-      if (payload === "[DONE]") continue;
+    if (reason === "tool_calls") finishReason = "tool_calls";
+    else if (reason === "length") finishReason = "length";
+    else if (reason === "stop") finishReason = "stop";
 
-      let parsed: Record<string, unknown>;
-      try {
-        parsed = JSON.parse(payload);
-      } catch {
-        continue;
-      }
+    // Native reasoning_content (some models send this)
+    if (delta?.reasoning_content) {
+      fullReasoning += delta.reasoning_content;
+      onChunk({ type: "reasoning", content: delta.reasoning_content });
+    }
 
-      const choices = parsed.choices as Array<{
-        delta?: {
-          content?: string | null;
-          tool_calls?: Array<{
-            index: number;
-            id?: string;
-            function?: { name?: string; arguments?: string };
-          }>;
-        };
-        finish_reason?: string | null;
-      }>;
+    // Content with <think> tag fallback parsing
+    if (delta?.content) {
+      fullContent += delta.content;
+      inThink = parseThinkTags(delta.content, inThink, onChunk);
+    }
 
-      // Capture usage stats from chunk (usually in final chunk)
-      const chunkUsage = parsed.usage as typeof usage;
-      if (chunkUsage) usage = chunkUsage;
-
-      if (!choices?.[0]) continue;
-      const delta = choices[0].delta;
-      const reason = choices[0].finish_reason;
-
-      if (reason === "tool_calls") finishReason = "tool_calls";
-      else if (reason === "length") finishReason = "length";
-      else if (reason === "stop") finishReason = "stop";
-
-      // Handle content chunks with <think> tag detection
-      if (delta?.content) {
-        // Always store raw content (including <think> tags) for persistence
-        fullContent += delta.content;
-
-        let text = delta.content;
-
-        // Parse think tags for streaming events
-        while (text.length > 0) {
-          if (!inThink) {
-            const thinkStart = text.indexOf("<think>");
-            if (thinkStart === -1) {
-              onChunk({ type: "content", content: text });
-              text = "";
-            } else {
-              if (thinkStart > 0) {
-                onChunk({ type: "content", content: text.slice(0, thinkStart) });
-              }
-              inThink = true;
-              text = text.slice(thinkStart + 7);
-            }
-          } else {
-            const thinkEnd = text.indexOf("</think>");
-            if (thinkEnd === -1) {
-              onChunk({ type: "reasoning", content: text });
-              text = "";
-            } else {
-              if (thinkEnd > 0) {
-                onChunk({ type: "reasoning", content: text.slice(0, thinkEnd) });
-              }
-              inThink = false;
-              text = text.slice(thinkEnd + 8);
-            }
-          }
+    // Tool call deltas
+    if (delta?.tool_calls) {
+      for (const tc of delta.tool_calls) {
+        const idx = tc.index;
+        if (!toolCallDeltas.has(idx)) {
+          toolCallDeltas.set(idx, { id: tc.id ?? "", name: "", args: "" });
         }
-      }
-
-      // Handle tool call deltas
-      if (delta?.tool_calls) {
-        for (const tc of delta.tool_calls) {
-          const idx = tc.index;
-          if (!toolCallDeltas.has(idx)) {
-            toolCallDeltas.set(idx, { id: tc.id ?? "", name: "", args: "" });
-          }
-          const entry = toolCallDeltas.get(idx)!;
-          if (tc.id) entry.id = tc.id;
-          if (tc.function?.name) entry.name += tc.function.name;
-          if (tc.function?.arguments) entry.args += tc.function.arguments;
-        }
+        const entry = toolCallDeltas.get(idx)!;
+        if (tc.id) entry.id = tc.id;
+        if (tc.function?.name) entry.name += tc.function.name;
+        if (tc.function?.arguments) entry.args += tc.function.arguments;
       }
     }
+
+    return false;
+  });
+
+  // Ensure finishReason matches actual tool call presence
+  if (toolCallDeltas.size > 0 && finishReason === "stop") {
+    finishReason = "tool_calls";
   }
 
-  // Build final tool calls
   const toolCalls: UnifiedToolCall[] | undefined =
     toolCallDeltas.size > 0
       ? [...toolCallDeltas.entries()]
@@ -289,7 +285,7 @@ export async function callLmStudioStream(
           .map(([, tc]) => ({
             id: tc.id,
             name: tc.name,
-            arguments: JSON.parse(tc.args || "{}") as Record<string, unknown>,
+            arguments: safeParseArgs(tc.args),
           }))
       : undefined;
 
@@ -308,5 +304,5 @@ export async function callLmStudioStream(
   }
   onChunk({ type: "done", finishReason });
 
-  return { content: fullContent, tool_calls: toolCalls, finishReason, stats };
+  return { content: fullContent, reasoning: fullReasoning || undefined, tool_calls: toolCalls, finishReason, stats };
 }

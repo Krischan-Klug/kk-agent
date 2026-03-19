@@ -1,6 +1,6 @@
 import type { UnifiedRequest, UnifiedResponse, OnChunkFn } from "./lib/types.js";
 import type { ModelInfo, ModelSettings } from "./types.js";
-import { callLmStudio, callLmStudioStream } from "./lib/lmstudio.js";
+import { callChatCompletions, callChatCompletionsStream } from "./lib/lmstudio.js";
 import { loadState, saveState } from "../lib/state.js";
 
 const STATE_FILE = "provider.json";
@@ -16,19 +16,16 @@ let modelSettings: Record<string, ModelSettings> = {};
 
 export function configure(settings: { baseUrl?: string; activeModel?: string }): void {
   if (settings.baseUrl) baseUrl = settings.baseUrl;
-  // activeModel aus Config wird nur als Seed benutzt (siehe initState)
   if (settings.activeModel) activeModel = settings.activeModel;
 }
 
 export async function initState(): Promise<void> {
-  // State > Config > Code-Default
   const state = await loadState<ProviderState>(STATE_FILE, { activeModel: "", modelSettings: {} });
   modelSettings = state.modelSettings ?? {};
   if (state.activeModel) {
     activeModel = state.activeModel;
     console.log(`[provider] Loaded model from state: ${activeModel}`);
   } else if (activeModel) {
-    // Config-Seed: in State speichern damit er ab jetzt Source of Truth ist
     await persistState();
     console.log(`[provider] Seeded model from config: ${activeModel}`);
   }
@@ -50,57 +47,59 @@ export async function autoSelectModel(): Promise<void> {
   }
 }
 
+/**
+ * Map reasoning effort for the Chat Completions API.
+ * - On/Off models (reasoningOnOff=true): off→"off", rest→"on"
+ * - Standard: xhigh→"high" (CC kennt kein xhigh), rest direkt
+ */
+function mapReasoning(modelId: string, effort?: string): string | undefined {
+  if (!effort) return undefined;
+  const settings = modelSettings[modelId];
+
+  if (settings?.reasoningOnOff) {
+    return effort === "off" ? "off" : "on";
+  }
+
+  if (effort === "xhigh") return "high";
+  return effort;
+}
+
 export async function callProvider(request: UnifiedRequest): Promise<UnifiedResponse> {
-  return callLmStudio(request, baseUrl);
+  const mapped = { ...request, reasoningEffort: mapReasoning(request.model, request.reasoningEffort) };
+  return callChatCompletions(mapped, baseUrl);
 }
 
 export async function callProviderStream(
   request: UnifiedRequest,
   onChunk: OnChunkFn,
 ): Promise<UnifiedResponse> {
-  return callLmStudioStream(request, baseUrl, onChunk);
+  const mapped = { ...request, reasoningEffort: mapReasoning(request.model, request.reasoningEffort) };
+  return callChatCompletionsStream(mapped, baseUrl, onChunk);
 }
 
 export async function getModels(): Promise<ModelInfo[]> {
-  // Fetch from OpenAI-compatible endpoint
-  const res = await fetch(`${baseUrl}/v1/models`);
+  // Use native LM Studio API for richer model info (context length)
+  const res = await fetch(`${baseUrl}/api/v1/models`);
   if (!res.ok) {
     throw new Error(`Failed to fetch models: ${res.status}`);
   }
-  const data = (await res.json()) as { data: ModelInfo[] };
-  const models = data.data;
+  const data = (await res.json()) as {
+    models: Array<{
+      key: string;
+      max_context_length?: number;
+      loaded_instances?: Array<{
+        id: string;
+        config?: { context_length?: number };
+      }>;
+    }>;
+  };
 
-  // Try to enrich with native LM Studio API for context length info
-  try {
-    const nativeRes = await fetch(`${baseUrl}/api/v1/models`);
-    if (nativeRes.ok) {
-      const nativeData = (await nativeRes.json()) as {
-        models: Array<{
-          key: string;
-          max_context_length?: number;
-          loaded_instances?: Array<{
-            id: string;
-            config?: { context_length?: number };
-          }>;
-        }>;
-      };
-      const nativeMap = new Map(nativeData.models.map((m) => [m.key, m]));
-      for (const model of models) {
-        const native = nativeMap.get(model.id);
-        if (native) {
-          model.maxContextLength = native.max_context_length;
-          const loaded = native.loaded_instances?.[0];
-          if (loaded?.config?.context_length) {
-            model.contextLength = loaded.config.context_length;
-          }
-        }
-      }
-    }
-  } catch {
-    // Native API not available, context info stays undefined
-  }
-
-  return models;
+  return data.models.map((m) => ({
+    id: m.key,
+    object: "model",
+    maxContextLength: m.max_context_length,
+    contextLength: m.loaded_instances?.[0]?.config?.context_length,
+  }));
 }
 
 async function persistState(): Promise<void> {

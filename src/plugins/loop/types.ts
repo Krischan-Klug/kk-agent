@@ -22,7 +22,7 @@ export interface LoopOptions {
   sessionId: string;
   messages: UnifiedMessage[];
   model: string;
-  reasoningEffort?: "off" | "low" | "medium" | "high" | "on";
+  reasoningEffort?: string;
   temperature?: number;
   maxOutputTokens?: number;
   strategy: LoopStrategy;

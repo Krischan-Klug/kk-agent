@@ -66,7 +66,7 @@ AgentDefinition
 ├── mcpInstructions: { "filesystem": "Erstelle Backups vor Änderungen." }
 ├── variables: { "PROJECT_NAME": "mein-projekt" }
 ├── defaultModel?: string
-├── reasoningEffort?: "off" | "low" | "medium" | "high" | "on"
+├── reasoningEffort?: "off" | "low" | "medium" | "high" | "xhigh"
 └── compactionPrompt?: string   // Custom Context-Compaction Prompt (opt-in)
 ```
 
@@ -131,10 +131,11 @@ Custom-Variablen pro Agent (z.B. `{{PROJECT_NAME}}`) werden im Agent-Editor defi
 
 ```
 ModelSettings
-├── reasoningEffort?: "off" | "low" | "medium" | "high" | "on"  // Default-Level
-├── levels?: Record<string, ReasoningLevelConfig>                // Pro-Level Overrides
+├── reasoningEffort?: "off" | "low" | "medium" | "high" | "xhigh"  // Default-Level
+├── reasoningOnOff?: boolean                                        // true = Model nur on/off (z.B. qwen), Mapping: off→"off", rest→"on"
+├── levels?: Record<string, ReasoningLevelConfig>                   // Pro-Level Overrides
 │   └── { temperature?: number, maxOutputTokens?: number }
-└── compactionPrompt?: string                                    // Opt-in Compaction Prompt
+└── compactionPrompt?: string                                       // Opt-in Compaction Prompt
 ```
 
 ### Reasoning Level Defaults
@@ -147,7 +148,7 @@ Alle Level haben `temperature: 1.0` als Default (Mitte des 0–2 Bereichs):
 | low | 1.0 | 4096 |
 | medium | 1.0 | 8192 |
 | high | 1.0 | 16384 |
-| on | 1.0 | unlimited (-1) |
+| xhigh | 1.0 | unlimited (-1) |
 
 ### Hierarchie
 
@@ -186,7 +187,7 @@ Beim Server-Start werden **alle konfigurierten MCPs** automatisch gestartet und 
 
 | Plugin | Funktion |
 |--------|----------|
-| **provider** | LLM-Anbindung. OpenAI-kompatibel (`/v1/chat/completions`). Streaming, `<think>`-Tag-Erkennung, ModelSettings (Reasoning, Temperature). |
+| **provider** | LLM-Anbindung. Chat Completions (`/v1/chat/completions`) + Native API (`/api/v1/models` für Model-Listing). Streaming, `<think>`-Tag-Erkennung + `reasoning_content`-Support, Reasoning-Persistenz als `<think>` Tags, ModelSettings (Reasoning, Temperature, On/Off Toggle). |
 | **mcp** | MCP-Server-Registry. Startet Tools (stdio/SSE), CRUD via REST, Auto-Start beim Boot. |
 | **agent** | Agent-Definitionen. CRUD, Loop-State SSE-Stream, Phasen-Graph, Compaction-Prompt. |
 | **loop** | Phasen-basierter Agent-Loop. Context Compaction bei 80% Auslastung. Kein REST — wird intern von session aufgerufen. |

@@ -1,7 +1,6 @@
 import type { Request, Response } from "express";
-import { getModels, switchModel, getActiveModel, callProvider, getAllModelSettings, setModelSettings } from "./service.js";
+import { getModels, switchModel, getActiveModel, getAllModelSettings, setModelSettings } from "./service.js";
 import type { ModelSettings } from "./types.js";
-import { toUnified, fromUnified } from "./lib/adapter.js";
 
 export async function listModels(_req: Request, res: Response): Promise<Response> {
   const models = await getModels();
@@ -24,26 +23,4 @@ export async function doSwitchModel(req: Request, res: Response): Promise<Respon
   if (!model) return res.status(400).json({ error: "model is required" });
   await switchModel(model);
   return res.json({ activeModel: getActiveModel() });
-}
-
-export async function chatCompletions(req: Request, res: Response): Promise<Response> {
-  try {
-    const unified = toUnified(req.body, "openai");
-    if (!unified.model) unified.model = getActiveModel();
-    const result = await callProvider(unified);
-    return res.json(fromUnified(result, "openai"));
-  } catch (err) {
-    return res.status(502).json({ error: (err as Error).message });
-  }
-}
-
-export async function messages(req: Request, res: Response): Promise<Response> {
-  try {
-    const unified = toUnified(req.body, "anthropic");
-    if (!unified.model) unified.model = getActiveModel();
-    const result = await callProvider(unified);
-    return res.json(fromUnified(result, "anthropic"));
-  } catch (err) {
-    return res.status(502).json({ error: (err as Error).message });
-  }
 }

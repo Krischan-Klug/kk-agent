@@ -1,6 +1,6 @@
 /* ── Agent Definition (persisted) ── */
 
-export type ReasoningEffort = "off" | "low" | "medium" | "high" | "on";
+export type ReasoningEffort = string;
 
 export interface AgentDefinition {
   id: string;

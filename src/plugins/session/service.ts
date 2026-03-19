@@ -61,14 +61,14 @@ export function deleteSession(id: string): void {
 }
 
 function resolveReasoningConfig(session: SessionState): {
-  reasoningEffort?: "off" | "low" | "medium" | "high" | "on";
+  reasoningEffort?: string;
   temperature?: number;
   maxOutputTokens?: number;
 } {
   const ms = getModelSettings(session.model);
-  const effort = session.reasoningEffort ?? ms.reasoningEffort;
-  const levelConfig: ReasoningLevelConfig | undefined = effort ? ms.levels?.[effort] : undefined;
-  const defaults = effort ? REASONING_LEVEL_DEFAULTS[effort] : undefined;
+  const effort = session.reasoningEffort ?? ms.reasoningEffort ?? "medium";
+  const levelConfig: ReasoningLevelConfig | undefined = ms.levels?.[effort];
+  const defaults = REASONING_LEVEL_DEFAULTS[effort];
   return {
     reasoningEffort: effort,
     temperature: session.temperature ?? levelConfig?.temperature ?? defaults?.temperature,

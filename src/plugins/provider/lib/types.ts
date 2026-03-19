@@ -16,7 +16,7 @@ export interface UnifiedRequest {
   messages: UnifiedMessage[];
   tools?: UnifiedToolDefinition[];
   stream?: boolean;
-  reasoningEffort?: "off" | "low" | "medium" | "high" | "on";
+  reasoningEffort?: string;
   temperature?: number;
   maxOutputTokens?: number;
 }
@@ -29,6 +29,7 @@ export interface UnifiedToolDefinition {
 
 export interface UnifiedResponse {
   content: string;
+  reasoning?: string;
   tool_calls?: UnifiedToolCall[];
   finishReason: "stop" | "tool_calls" | "length";
   stats?: TokenStats;

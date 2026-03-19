@@ -86,8 +86,8 @@ export async function doChatStream(req: Request, res: Response): Promise<void> {
 
 export async function doPatch(req: Request, res: Response): Promise<Response> {
   try {
-    const { model, activeMcpIds, reasoningEffort } = req.body as { model?: string; activeMcpIds?: string[]; reasoningEffort?: string };
-    const session = patchSession(req.params.id, { model, activeMcpIds, reasoningEffort });
+    const { model, activeMcpIds, reasoningEffort, temperature } = req.body as { model?: string; activeMcpIds?: string[]; reasoningEffort?: string; temperature?: number };
+    const session = patchSession(req.params.id, { model, activeMcpIds, reasoningEffort, temperature });
     return res.json(session);
   } catch (err) {
     return res.status(404).json({ error: (err as Error).message });

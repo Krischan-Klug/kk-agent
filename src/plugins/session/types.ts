@@ -8,6 +8,7 @@ export interface SessionState {
   activeMcpIds: string[];
   systemPrompt: string;
   reasoningEffort?: ReasoningEffort;
+  temperature?: number;
   messages: SessionMessage[];
   createdAt: string;
   updatedAt: string;

@@ -71,7 +71,7 @@ function resolveReasoningConfig(session: SessionState): {
   const defaults = effort ? REASONING_LEVEL_DEFAULTS[effort] : undefined;
   return {
     reasoningEffort: effort,
-    temperature: levelConfig?.temperature ?? defaults?.temperature,
+    temperature: session.temperature ?? levelConfig?.temperature ?? defaults?.temperature,
     maxOutputTokens: levelConfig?.maxOutputTokens ?? defaults?.maxOutputTokens,
   };
 }
@@ -214,7 +214,7 @@ export async function chatStream(
 
 export function patchSession(
   id: string,
-  update: { model?: string; activeMcpIds?: string[]; reasoningEffort?: string },
+  update: { model?: string; activeMcpIds?: string[]; reasoningEffort?: string; temperature?: number },
 ): SessionState {
   getSession(id);
   const patch: Partial<SessionState> = {};
@@ -224,6 +224,9 @@ export function patchSession(
   }
   if (update.reasoningEffort !== undefined) {
     patch.reasoningEffort = update.reasoningEffort as SessionState["reasoningEffort"];
+  }
+  if (update.temperature !== undefined) {
+    patch.temperature = update.temperature;
   }
   return store.updateSession(id, patch);
 }

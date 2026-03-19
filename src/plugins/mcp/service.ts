@@ -1,4 +1,4 @@
-import type { McpServerConfig, McpToolDefinition, CreateMcpBody, UpdateMcpBody } from "./types.js";
+import type { McpServerConfig, McpStdioConfig, McpToolDefinition, CreateMcpBody, UpdateMcpBody } from "./types.js";
 import type { UnifiedToolDefinition } from "../provider/lib/types.js";
 import { getRegistry, updateRegistry, getMcpById, addMcp, removeMcp } from "./lib/registry.js";
 import {
@@ -99,7 +99,7 @@ export async function createMcp(body: CreateMcpBody): Promise<McpServerConfig> {
     transport: body.transport,
     server:
       body.transport === "stdio"
-        ? { command: body.command ?? "", args: body.args ?? [] }
+        ? { command: body.command ?? "", args: body.args ?? [], ...(body.env && { env: body.env }) }
         : { url: body.url ?? "" },
   };
 
@@ -130,14 +130,15 @@ export async function updateMcpConfig(id: string, body: UpdateMcpBody): Promise<
   if (body.transport !== undefined) {
     mcp.transport = body.transport;
     if (body.transport === "stdio") {
-      mcp.server = { command: body.command ?? "", args: body.args ?? [] };
+      mcp.server = { command: body.command ?? "", args: body.args ?? [], ...(body.env && { env: body.env }) };
     } else {
       mcp.server = { url: body.url ?? "" };
     }
   } else if (mcp.transport === "stdio") {
-    const s = mcp.server as { command: string; args: string[] };
+    const s = mcp.server as McpStdioConfig;
     if (body.command !== undefined) s.command = body.command;
     if (body.args !== undefined) s.args = body.args;
+    if (body.env !== undefined) s.env = Object.keys(body.env).length > 0 ? body.env : undefined;
   } else {
     const s = mcp.server as { url: string };
     if (body.url !== undefined) s.url = body.url;

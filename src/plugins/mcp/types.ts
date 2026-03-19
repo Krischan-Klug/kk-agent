@@ -34,6 +34,7 @@ export interface CreateMcpBody {
   transport: "stdio" | "sse";
   command?: string;
   args?: string[];
+  env?: Record<string, string>;
   url?: string;
   instruction?: string;
 }
@@ -43,6 +44,7 @@ export interface UpdateMcpBody {
   transport?: "stdio" | "sse";
   command?: string;
   args?: string[];
+  env?: Record<string, string>;
   url?: string;
   instruction?: string;
 }

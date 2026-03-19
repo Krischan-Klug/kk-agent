@@ -1,0 +1,49 @@
+import type { Request, Response } from "express";
+import { getModels, switchModel, getActiveModel, callProvider, getAllModelSettings, setModelSettings } from "./service.js";
+import type { ModelSettings } from "./types.js";
+import { toUnified, fromUnified } from "./lib/adapter.js";
+
+export async function listModels(_req: Request, res: Response): Promise<Response> {
+  const models = await getModels();
+  return res.json({ models, activeModel: getActiveModel(), modelSettings: getAllModelSettings() });
+}
+
+export async function doGetModelSettings(_req: Request, res: Response): Promise<Response> {
+  return res.json(getAllModelSettings());
+}
+
+export async function doSetModelSettings(req: Request, res: Response): Promise<Response> {
+  const modelId = req.params.modelId;
+  const settings = req.body as ModelSettings;
+  await setModelSettings(modelId, settings);
+  return res.json({ modelId, settings });
+}
+
+export async function doSwitchModel(req: Request, res: Response): Promise<Response> {
+  const { model } = req.body as { model?: string };
+  if (!model) return res.status(400).json({ error: "model is required" });
+  await switchModel(model);
+  return res.json({ activeModel: getActiveModel() });
+}
+
+export async function chatCompletions(req: Request, res: Response): Promise<Response> {
+  try {
+    const unified = toUnified(req.body, "openai");
+    if (!unified.model) unified.model = getActiveModel();
+    const result = await callProvider(unified);
+    return res.json(fromUnified(result, "openai"));
+  } catch (err) {
+    return res.status(502).json({ error: (err as Error).message });
+  }
+}
+
+export async function messages(req: Request, res: Response): Promise<Response> {
+  try {
+    const unified = toUnified(req.body, "anthropic");
+    if (!unified.model) unified.model = getActiveModel();
+    const result = await callProvider(unified);
+    return res.json(fromUnified(result, "anthropic"));
+  } catch (err) {
+    return res.status(502).json({ error: (err as Error).message });
+  }
+}

@@ -1,0 +1,42 @@
+{
+  "name": "kk-agent-backend",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Modular TypeScript API backend with a lightweight plugin system.",
+  "main": "dist/index.js",
+  "type": "module",
+  "scripts": {
+    "build": "tsc",
+    "prestart": "npm run build",
+    "start": "node dist/index.js",
+    "dev": "tsx watch index.ts",
+    "lint": "tsc --noEmit"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "keywords": [
+    "express",
+    "plugins",
+    "typescript",
+    "api"
+  ],
+  "license": "MIT",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.27.1",
+    "cors": "^2.8.6",
+    "dotenv": "^17.2.1",
+    "express": "^5.1.0",
+    "semver": "^7.6.2",
+    "uuid": "^13.0.0"
+  },
+  "devDependencies": {
+    "@types/cors": "^2.8.19",
+    "@types/express": "^4.17.21",
+    "@types/node": "^20.11.30",
+    "@types/semver": "^7.7.1",
+    "@types/uuid": "^10.0.0",
+    "tsx": "^4.20.5",
+    "typescript": "^5.4.2"
+  }
+}

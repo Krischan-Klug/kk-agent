@@ -12,6 +12,14 @@ export interface ToolResult {
   isError: boolean;
 }
 
+export interface LoopMessage {
+  role: "user" | "assistant" | "tool";
+  content: string;
+  reasoning?: string;
+  tool_call_id?: string;
+  tool_calls?: UnifiedToolCall[];
+}
+
 export type ExecuteToolFn = (
   name: string,
   args: Record<string, unknown>,
@@ -20,7 +28,7 @@ export type ExecuteToolFn = (
 export interface LoopOptions {
   agentId: string;
   sessionId: string;
-  messages: UnifiedMessage[];
+  messages: LoopMessage[];
   model: string;
   reasoningEffort?: string;
   temperature?: number;
@@ -44,7 +52,7 @@ export interface LoopOptions {
 }
 
 export interface LoopResult {
-  messages: UnifiedMessage[];
+  messages: LoopMessage[];
   finalResponse: string;
   iterations: number;
 }

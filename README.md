@@ -1,268 +1,261 @@
 # kk-agent-backend
 
-Modulares Multi-Agent Backend. Verbindet lokale LLMs mit MCP-Tools und orchestriert sie in konfigurierbaren, phasen-basierten Agent-Loops.
-
----
+Modulares Multi-Agent-Backend fuer lokale oder selbst gehostete LLMs. Das System verbindet Provider, MCP-Tools, phasenbasierte Agent-Loops und Sessions ueber eine kleine Plugin-Architektur.
 
 ## Architektur
 
 ```
-                         ┌─────────────────────────────┐
-                         │         HTTP / SSE           │
-                         │        (Port 3001)           │
-                         └──────────┬──────────────────┘
-                                    │
-┌───────────────────────────────────┼───────────────────────────────────┐
-│                            Plugin-System                              │
-│                                                                       │
-│   ┌─────────┐    ┌──────────────┐    ┌─────────┐    ┌─────────────┐  │
-│   │ provider │    │    agent     │    │   mcp   │    │ systemprompt│  │
-│   │          │    │              │    │         │    │             │  │
-│   │ LLM-API  │    │ Definitionen │    │ Tools   │    │ Prompt-     │  │
-│   │ Streaming │    │ Phasen-Loop  │    │ Registry│    │ Builder     │  │
-│   │ Settings  │    │ Compaction   │    │AutoStart│    │             │  │
-│   └────┬─────┘    └──────┬───────┘    └────┬────┘    └──────┬──────┘  │
-│        │                 │                 │                │         │
-│        └────────┬────────┴─────────────────┴────────┬───────┘         │
-│                 │                                   │                 │
-│            ┌────▼────┐                         ┌────▼─────┐           │
-│            │  loop   │                         │ session  │           │
-│            │         │◄────────────────────────│          │           │
-│            │ Phased  │                         │ Chat,    │           │
-│            │ Agent   │                         │ Stream,  │           │
-│            │ Loop    │                         │ State    │           │
-│            └─────────┘                         └──────────┘           │
-└───────────────────────────────────────────────────────────────────────┘
+HTTP / SSE
+   |
+   +-- provider      -> LLM-Anbindung, Streaming, Model-Settings
+   +-- mcp           -> MCP-Registry, Tool-Lifecycle, Instructions
+   +-- agent         -> Agent-Definitionen, Loop-Strategien, Loop-State
+   +-- systemprompt  -> Prompt-Building mit Variablen und MCP-Instructions
+   +-- loop          -> generischer Dev-Loop mit Phasen, Transitionen, Compaction
+   `-- session       -> Chat, Stream, Persistenz, Session-Kontext
 ```
 
-Jedes Plugin wird über `plugins.config.json` aktiviert. Abhängigkeiten werden automatisch topologisch aufgelöst.
-
----
+Plugins werden ueber `plugins.config.json` aktiviert. Runtime-State liegt unter `state/` und hat Prioritaet vor Config-Defaults.
 
 ## Agent-System
 
-Ein **Agent** definiert *wie* das LLM arbeitet — nicht *was* es tut (das kommt vom User).
+Ein Agent definiert, wie das Modell arbeitet. Der aktuelle `coding-agent` ist als generischer Dev-Loop aufgebaut:
 
-### Datenmodell
+`discover -> execute -> verify -> finalize`
 
-```
-AgentDefinition
-├── name, description
-├── loopStrategy
-│   ├── initialPhase: "analyze"
-│   ├── maxTotalIterations: 30
-│   └── phases[]
-│       ├── name: "analyze"
-│       ├── maxIterations: 3
-│       ├── toolFilter: { mode: "include", toolNames: [...] }
-│       ├── transitions[]
-│       │   ├── { to: "implement", condition: { type: "no_tool_calls" } }
-│       │   └── { to: "implement", condition: { type: "max_iterations" } }
-│       └── autoAdvance: false
-├── promptTemplates
-│   ├── base: "Du bist ein erfahrener Entwickler..."
-│   └── phases: { analyze: "Du bist in der ANALYSE-Phase ({{iteration}}/{{maxIterations}})..." }
-├── mcpIds: ["filesystem"]
-├── mcpInstructions: { "filesystem": "Erstelle Backups vor Änderungen." }
-├── variables: { "PROJECT_NAME": "mein-projekt" }
-├── defaultModel?: string
-├── reasoningEffort?: "off" | "low" | "medium" | "high" | "xhigh"
-└── compactionPrompt?: string   // Custom Context-Compaction Prompt (opt-in)
-```
+Zentrale Eigenschaften:
 
-### Phasen-Loop
+- wenige generische Phasen statt repo-spezifischer Speziallogik
+- kontrollierte Rueckspruenge aus `verify` nach `execute`
+- explizite Phasenabschlusskriterien ueber `completionCriteria`
+- optionales Weiterlaufen in derselben Phase ueber `continueOnStop`
+- Tool-Fehler als echte Transition-Bedingung (`tool_result_error`)
+- Abschluss ueber `phase_complete` statt nur ueber fehlende Tool-Calls
 
-```
-User-Nachricht
-    │
-    ▼
-┌──────────────────────────────────────────────┐
-│  Phase: analyze                              │
-│                                              │
-│  1. System-Prompt = base + phase + MCP-Instr │
-│  2. Tools = alle Tools, gefiltert nach Phase │
-│  3. LLM aufrufen (streaming)                 │
-│  4. Tool-Calls ausführen (MCP)               │
-│  5. Context-Check: ≥80% → Compaction         │
-│  6. Transition prüfen:                       │
-│     ├── no_tool_calls → implement            │
-│     ├── max_iterations → implement           │
-│     ├── tool_called("X") → ...               │
-│     ├── keyword("DONE") → ...                │
-│     └── always → ...                         │
-│  7. Phase wechseln oder weiter iterieren     │
-└──────────────────────────────────────────────┘
-```
+### Wichtige Agent-Felder
 
-Bei jedem Phasenwechsel wird der System-Prompt **komplett neu gebaut**: Agent-Base-Prompt + Phasen-Erweiterung + MCP-Instructions. Template-Variablen (`{{iteration}}`, `{{CURRENT_DATE}}`, custom) werden aufgelöst.
+```ts
+type AgentDefinition = {
+  id: string;
+  name: string;
+  description: string;
+  loopStrategy: {
+    initialPhase: string;
+    maxTotalIterations: number;
+    phases: LoopPhase[];
+  };
+  promptTemplates: {
+    base: string;
+    phases: Record<string, string>;
+  };
+  mcpIds?: string[];
+  mcpInstructions?: Record<string, string>;
+  variables?: Record<string, string>;
+  defaultModel?: string;
+  reasoningEffort?: "off" | "low" | "medium" | "high" | "xhigh";
+  compactionPrompt?: string;
+  allowedActionPolicy?: "guarded_autonomy" | "ask_on_destructive";
+};
 
-### Template-Variablen
-
-Automatisch verfügbar in Base- und Phasen-Prompts:
-
-| Variable | Wert |
-|----------|------|
-| `{{CURRENT_DATE}}` | "Dienstag, 18. März 2026" |
-| `{{CURRENT_TIME}}` | "14:30:00" |
-| `{{CURRENT_TIMESTAMP}}` | ISO 8601 |
-| `{{phase}}` | Aktuelle Phase |
-| `{{iteration}}` | Iteration in der Phase |
-| `{{maxIterations}}` | Max. Iterationen der Phase |
-
-Custom-Variablen pro Agent (z.B. `{{PROJECT_NAME}}`) werden im Agent-Editor definiert und überschreiben System-Variablen bei Namensgleichheit.
-
-### Transition-Bedingungen
-
-| Typ | Auslöser |
-|-----|----------|
-| `no_tool_calls` | LLM antwortet ohne Tool-Call |
-| `max_iterations` | Phase-Limit erreicht |
-| `tool_called` | Bestimmtes Tool wurde gerufen |
-| `keyword` | Keyword im LLM-Output |
-| `always` | Immer (Fallback) |
-
----
-
-## Reasoning & Temperature
-
-### ModelSettings (pro Model)
-
-Über die Provider-API können pro Model Einstellungen gespeichert werden:
-
-```
-ModelSettings
-├── reasoningEffort?: "off" | "low" | "medium" | "high" | "xhigh"  // Default-Level
-├── reasoningOnOff?: boolean                                        // true = Model nur on/off (z.B. qwen), Mapping: off→"off", rest→"on"
-├── levels?: Record<string, ReasoningLevelConfig>                   // Pro-Level Overrides
-│   └── { temperature?: number, maxOutputTokens?: number }
-└── compactionPrompt?: string                                       // Opt-in Compaction Prompt
+type LoopPhase = {
+  name: string;
+  description?: string;
+  maxIterations: number;
+  toolFilter?: { mode: "include" | "exclude"; toolNames: string[] };
+  autoAdvance?: boolean;
+  continueOnStop?: boolean;
+  completionCriteria?: {
+    mode: "stop" | "signal";
+    signal?: string;
+    requiresToolCall?: boolean;
+  };
+  transitions: Array<{
+    to: string;
+    condition:
+      | { type: "no_tool_calls" }
+      | { type: "max_iterations" }
+      | { type: "tool_called"; toolName: string }
+      | { type: "tool_result_error" }
+      | { type: "phase_complete" }
+      | { type: "keyword"; keyword: string }
+      | { type: "always" };
+  }>;
+};
 ```
 
-### Reasoning Level Defaults
+## Prompt-Building
 
-Alle Level haben `temperature: 1.0` als Default (Mitte des 0–2 Bereichs):
+Bei jeder Loop-Iteration wird der System-Prompt neu gebaut aus:
 
-| Level | Temperature | Max Output Tokens |
-|-------|-------------|-------------------|
-| off | 1.0 | — |
-| low | 1.0 | 4096 |
-| medium | 1.0 | 8192 |
-| high | 1.0 | 16384 |
-| xhigh | 1.0 | unlimited (-1) |
+1. Agent-Base-Prompt
+2. aktueller Phasen-Erweiterung
+3. aktiven MCP-Instructions
+4. Template-Variablen
 
-### Hierarchie
+Verfuegbare Standard-Variablen:
 
-**Reasoning Effort**: Session-Override > Model-Default > Agent-Default
-**Temperature**: Session-Override > Level-Config > Level-Default (1.0)
-**Compaction Prompt**: Agent > Model (Provider) > Default
+- `{{CURRENT_DATE}}`
+- `{{CURRENT_TIME}}`
+- `{{CURRENT_TIMESTAMP}}`
+- `{{phase}}`
+- `{{iteration}}`
+- `{{maxIterations}}`
 
----
+`GET /session/:id/prompt` liefert den echten aktuell aufgeloesten Prompt fuer die laufende Session und Phase.
+
+## Reasoning-Modell
+
+Reasoning ist von sichtbarem Assistant-Content getrennt.
+
+### SessionMessage
+
+```ts
+type SessionMessage = {
+  role: "user" | "assistant" | "tool";
+  content: string;
+  reasoning?: string;
+  tool_call_id?: string;
+  tool_calls?: Array<{ id: string; name: string; arguments: Record<string, unknown> }>;
+};
+```
+
+Regeln:
+
+- `content` ist die sichtbare Antwort fuer UI und Dialogkontext
+- `reasoning` ist optionales persistiertes Thinking fuer UI und Verlauf
+- altes Thinking wird nie wieder an das Modell zurueckgeschickt
+- Streaming liefert weiterhin getrennte `reasoning`- und `content`-Events
+- finale Session-Payloads enthalten beide Felder getrennt
+- nur strukturierte `tool_calls` aus der Provider-Antwort sind executable
+- pseudo-formatierte Tool-Aufrufe in Text oder Thinking werden nicht geparst, sondern intern mit begrenztem Retry korrigiert
+
+Damit bleibt Thinking im Frontend sichtbar, ohne unnoetigen Tokenverbrauch oder Rueckkopplung alter Selbstgespraeche in spaetere Modellaufrufe.
 
 ## Context Compaction
 
-Automatische Kontextkomprimierung bei 80% Context-Auslastung (konfigurierbar).
+Der Loop kompaktet Kontext automatisch, wenn die aktuelle Eingabe ungefaehr 80 Prozent des verfuegbaren Modellkontexts erreicht.
 
-### Ablauf
+Hierarchie fuer den Compaction-Prompt:
 
-1. Nach jedem LLM-Call prüft der Loop: `inputTokens ≥ maxContextTokens × 0.8`
-2. Wenn ja: Separater LLM-Call mit Compaction-Prompt
-3. Alle bisherigen Messages werden durch eine komprimierte Summary ersetzt
-4. Loop läuft mit reduziertem Context weiter
+1. Agent `compactionPrompt`
+2. Provider-Model-Setting `compactionPrompt`
+3. interner Default-Prompt
 
-### Compaction-Prompt Hierarchie
+Wichtig:
 
-1. **Agent** (`compactionPrompt` in AgentDefinition) — höchste Priorität
-2. **Provider** (`compactionPrompt` in ModelSettings) — mittlere Priorität
-3. **Default** — tokeneffizientes Summary-Format (Task/Decisions/Progress/Pending/Key Details)
+- fuer Compaction wird nur echter Dialogkontext verwendet
+- historisches `reasoning` wird nicht in den Compaction-Input uebernommen
+- kompaktierte Zusammenfassungen ersetzen den alten Konversationskontext im Loop
 
----
+## MCP-System
 
-## MCP Auto-Start
+MCPs werden in `state/mcps.json` verwaltet.
 
-Beim Server-Start werden **alle konfigurierten MCPs** automatisch gestartet und auf `active: true` gesetzt. Fehlschläge werden geloggt, blockieren aber nicht den Start.
+Eigenschaften:
 
----
+- Auto-Start beim Boot
+- manueller Start/Stop pro MCP
+- Instructions pro MCP
+- Tool-Discovery pro laufendem MCP
+- Session- und Agent-Referenzen werden beim Loeschen eines MCPs bereinigt
 
-## Plugins
+Wichtige Verhaltensregeln:
 
-| Plugin | Funktion |
-|--------|----------|
-| **provider** | LLM-Anbindung. Chat Completions (`/v1/chat/completions`) + Native API (`/api/v1/models` für Model-Listing). Streaming, `<think>`-Tag-Erkennung + `reasoning_content`-Support, Reasoning-Persistenz als `<think>` Tags, ModelSettings (Reasoning, Temperature, On/Off Toggle). |
-| **mcp** | MCP-Server-Registry. Startet Tools (stdio/SSE), CRUD via REST, Auto-Start beim Boot. |
-| **agent** | Agent-Definitionen. CRUD, Loop-State SSE-Stream, Phasen-Graph, Compaction-Prompt. |
-| **loop** | Phasen-basierter Agent-Loop. Context Compaction bei 80% Auslastung. Kein REST — wird intern von session aufgerufen. |
-| **systemprompt** | Prompt-Builder. Base + Phase + MCP-Instructions + Variablen. |
-| **session** | Sessions. Chat/Stream, verdrahtet alle Plugins. Jede Session gehört einem Agent. |
+- MCP-Instructions werden nur aus MCPs gebaut, die wirklich `active && running` sind
+- nicht laufende MCPs erscheinen nicht als verfuegbare Tools im Prompt
+- geloeschte MCPs verschwinden aus Agents, Sessions und dadurch auch aus UI-Zaehlungen
 
----
+## Provider / Reasoning / Temperature
+
+Model-Settings koennen pro Modell gespeichert werden:
+
+```ts
+type ModelSettings = {
+  reasoningEffort?: "off" | "low" | "medium" | "high" | "xhigh";
+  reasoningOnOff?: boolean;
+  levels?: Record<string, { temperature?: number; maxOutputTokens?: number }>;
+  compactionPrompt?: string;
+};
+```
+
+Prioritaeten:
+
+- `reasoningEffort`: Session > Model-Setting > Agent
+- `temperature`: Session > Level-Setting > Default
+- `compactionPrompt`: Agent > Model-Setting > Default
 
 ## API
 
 ### Agent
 
 | Methode | Route | Beschreibung |
-|---------|-------|-------------|
+|---|---|---|
 | GET | `/agent` | Alle Agents |
 | POST | `/agent` | Agent erstellen |
-| GET | `/agent/:id` | Agent Details |
+| GET | `/agent/:id` | Agent laden |
 | PUT | `/agent/:id` | Agent updaten |
-| DELETE | `/agent/:id` | Agent löschen |
+| DELETE | `/agent/:id` | Agent loeschen |
 | GET | `/agent/loop-state/:sessionId` | Aktueller Loop-State |
-| GET | `/agent/loop-state/:sessionId/stream` | Loop-State SSE-Stream |
+| GET | `/agent/loop-state/:sessionId/stream` | Loop-State als SSE |
 
 ### Session
 
 | Methode | Route | Beschreibung |
-|---------|-------|-------------|
-| POST | `/session` | Session erstellen (`{ agentId, model?, activeMcpIds? }`) |
-| GET | `/session` | Alle Sessions |
-| GET | `/session/:id` | Session Details |
-| DELETE | `/session/:id` | Session löschen |
-| PATCH | `/session/:id` | Session updaten (`model`, `activeMcpIds`, `reasoningEffort`, `temperature`) |
-| POST | `/session/:id/chat` | Chat (non-streaming) |
-| POST | `/session/:id/chat/stream` | SSE-Chat (`content`, `reasoning`, `tool_call`, `tool_result`, `phase_change`, `loop_state`, `stats`, `done`, `error`) |
-| GET | `/session/:id/prompt` | Aktuellen System-Prompt abrufen |
-| POST | `/session/:id/compact` | Context manuell komprimieren |
+|---|---|---|
+| POST | `/session` | Session erstellen |
+| GET | `/session` | Sessions listen |
+| GET | `/session/:id` | Session laden |
+| DELETE | `/session/:id` | Session loeschen |
+| PATCH | `/session/:id` | Model, MCPs, Reasoning, Temperature aendern |
+| POST | `/session/:id/chat` | Non-Streaming Chat |
+| POST | `/session/:id/chat/stream` | SSE-Chat |
+| GET | `/session/:id/prompt` | Aktuellen aufgeloesten System-Prompt lesen |
+| POST | `/session/:id/compact` | Session manuell kompaktieren |
 
 ### Provider
 
 | Methode | Route | Beschreibung |
-|---------|-------|-------------|
-| GET | `/provider/models` | Verfügbare Modelle + ModelSettings |
-| GET | `/provider/model-settings` | Alle ModelSettings |
-| PUT | `/provider/models/:modelId/settings` | ModelSettings setzen (reasoningEffort, levels, compactionPrompt) |
-| POST | `/provider/switch` | Aktives Model wechseln |
+|---|---|---|
+| GET | `/provider/models` | Verfuegbare Modelle |
+| GET | `/provider/model-settings` | Gespeicherte Model-Settings |
+| PUT | `/provider/models/:modelId/settings` | Model-Settings setzen |
+| POST | `/provider/switch` | Aktives Modell wechseln |
 
 ### MCP
 
 | Methode | Route | Beschreibung |
-|---------|-------|-------------|
-| GET | `/mcp` | Alle MCPs mit Status + Tools |
+|---|---|---|
+| GET | `/mcp` | MCPs mit Status und Tools |
 | POST | `/mcp` | MCP erstellen |
 | POST | `/mcp/:id/toggle` | MCP aktivieren/deaktivieren |
-| POST | `/mcp/:id/start` | MCP manuell starten |
-| POST | `/mcp/:id/stop` | MCP manuell stoppen |
+| POST | `/mcp/:id/start` | MCP starten |
+| POST | `/mcp/:id/stop` | MCP stoppen |
 | PUT | `/mcp/:id` | MCP updaten |
-| PUT | `/mcp/:id/instruction` | MCP Instruction updaten |
-| DELETE | `/mcp/:id` | MCP löschen |
+| PUT | `/mcp/:id/instruction` | MCP-Instruction updaten |
+| DELETE | `/mcp/:id` | MCP loeschen |
 | GET | `/mcp/:id/tools` | Tools eines MCPs |
-
----
 
 ## Quick Start
 
 ```bash
 npm install
-cp .env.example .env   # LLM_BASE_URL anpassen
-npm run dev             # Port 3001
+cp .env.example .env
+npm run dev
 ```
 
-Voraussetzungen: Node.js >= 18, ein LLM-Endpoint (LM Studio, Ollama, vLLM, etc.).
+Voraussetzungen:
 
----
+- Node.js >= 18
+- erreichbarer LLM-Endpoint, z. B. LM Studio
 
-## State & Config
+Standard-Port: `3001`
 
-- **`plugins.config.json`** — Versionierbar. Welche Plugins aktiv, Endpoint-URLs, Seeds.
-- **`state/`** — Gitignored. Runtime-State: aktives Model, MCP-Registry, Agent-Definitionen, ModelSettings, Prompts.
-- **Priorität:** State > Config > Code-Default.
+## State und Konfiguration
+
+- `plugins.config.json`: versionierbare Plugin-Konfiguration
+- `state/agents.json`: Agent-Definitionen
+- `state/mcps.json`: MCP-Registry
+- `state/provider.json`: aktives Modell und Model-Settings
+- `state/`: gitignored Runtime-State
+
+Prioritaet: `state > config > code default`

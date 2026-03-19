@@ -1,10 +1,31 @@
 import type { UnifiedMessage, UnifiedToolDefinition, UnifiedToolCall } from "../../provider/lib/types.js";
-import type { LoopOptions, LoopResult, ToolDefinition } from "../types.js";
-import type { LoopPhase, AgentLoopState, PhaseHistoryEntry, TransitionCondition } from "../../agent/types.js";
+import type { LoopOptions, LoopResult, ToolDefinition, LoopMessage } from "../types.js";
+import type {
+  LoopPhase,
+  AgentLoopState,
+  PhaseHistoryEntry,
+  TransitionCondition,
+  PhaseCompletionCriteria,
+} from "../../agent/types.js";
 import { callProviderStream } from "../../provider/service.js";
 import { buildPrompt } from "../../systemprompt/service.js";
 import { getSystemVariables } from "../../systemprompt/lib/builder.js";
 import { compactContext, DEFAULT_COMPACTION_PROMPT } from "./compaction.js";
+
+const INVALID_TOOL_RETRY_BUDGET = 2;
+const INVALID_TOOL_CALL_PATTERNS = [
+  /<tool_call\b/i,
+  /<function=/i,
+  /<parameter=/i,
+  /<\/function>/i,
+  /<\/tool_call>/i,
+];
+const INVALID_TOOL_RETRY_INSTRUCTION = [
+  "Dein letzter Versuch hat einen Tool-Aufruf nur als Text oder Thinking ausgegeben.",
+  "Wichtig: Tools duerfen nur ueber strukturierte tool_calls der API aufgerufen werden.",
+  "Freitext, XML, Markdown oder Thinking werden nicht als Tool-Aufruf interpretiert.",
+  "Antworte jetzt entweder mit einer normalen Antwort oder sende einen echten strukturierten Tool-Call.",
+].join(" ");
 
 function filterTools(allTools: ToolDefinition[], phase: LoopPhase): UnifiedToolDefinition[] {
   let tools = allTools;
@@ -45,15 +66,75 @@ function buildSystemPrompt(
   return buildPrompt(opts.promptTemplates.base, phaseExtension, opts.mcpInstructions, variables);
 }
 
+function hasVisibleAssistantContent(content: string): boolean {
+  return content.trim().length > 0;
+}
+
+function sanitizeVisibleAssistantContent(content: string): string {
+  return content
+    .replace(/\s*PHASE_COMPLETE:\s*[A-Z_]+\s*/gim, "\n")
+    .trim();
+}
+
+function shouldPersistAssistantMessage(content: string, toolsCalled: UnifiedToolCall[], reasoning?: string): boolean {
+  if (toolsCalled.length > 0) return true;
+  if (hasVisibleAssistantContent(content)) return true;
+  return !!reasoning?.trim();
+}
+
+function serializeMessagesForModel(messages: LoopMessage[]): UnifiedMessage[] {
+  return messages.map((message) => ({
+    role: message.role,
+    content: message.content,
+    tool_call_id: message.tool_call_id,
+    tool_calls: message.tool_calls,
+  }));
+}
+
+function looksLikeInvalidToolAttempt(content: string, reasoning?: string): boolean {
+  const combined = `${content}\n${reasoning ?? ""}`;
+  return INVALID_TOOL_CALL_PATTERNS.some((pattern) => pattern.test(combined));
+}
+
+function isPhaseComplete(
+  phase: LoopPhase,
+  finishReason: string,
+  responseContent: string,
+  phaseToolCallCount: number,
+): boolean {
+  if (finishReason === "tool_calls") return false;
+
+  const criteria: PhaseCompletionCriteria = phase.completionCriteria ?? { mode: "stop" };
+  if (criteria.requiresToolCall && phaseToolCallCount === 0) return false;
+
+  if (criteria.mode === "signal") {
+    return !!criteria.signal && responseContent.includes(criteria.signal);
+  }
+
+  return true;
+}
+
 function checkTransition(
   phase: LoopPhase,
   phaseIteration: number,
   finishReason: string,
   toolsCalled: UnifiedToolCall[],
   responseContent: string,
+  phaseToolCallCount: number,
+  hadToolError: boolean,
 ): { to: string; reason: string } | null {
   for (const transition of phase.transitions) {
-    if (matchesCondition(transition.condition, phaseIteration, phase.maxIterations, finishReason, toolsCalled, responseContent)) {
+    if (matchesCondition(
+      transition.condition,
+      phase,
+      phaseIteration,
+      phase.maxIterations,
+      finishReason,
+      toolsCalled,
+      responseContent,
+      phaseToolCallCount,
+      hadToolError,
+    )) {
       return { to: transition.to, reason: describeCondition(transition.condition) };
     }
   }
@@ -68,11 +149,14 @@ function checkTransition(
 
 function matchesCondition(
   condition: TransitionCondition,
+  phase: LoopPhase,
   phaseIteration: number,
   maxIterations: number,
   finishReason: string,
   toolsCalled: UnifiedToolCall[],
   responseContent: string,
+  phaseToolCallCount: number,
+  hadToolError: boolean,
 ): boolean {
   switch (condition.type) {
     case "max_iterations":
@@ -81,6 +165,10 @@ function matchesCondition(
       return finishReason !== "tool_calls";
     case "tool_called":
       return toolsCalled.some((tc) => tc.name === condition.toolName);
+    case "tool_result_error":
+      return hadToolError;
+    case "phase_complete":
+      return isPhaseComplete(phase, finishReason, responseContent, phaseToolCallCount);
     case "keyword":
       return responseContent.includes(condition.keyword);
     case "always":
@@ -96,6 +184,10 @@ function describeCondition(condition: TransitionCondition): string {
       return "no tool calls";
     case "tool_called":
       return `tool "${condition.toolName}" called`;
+    case "tool_result_error":
+      return "tool result error";
+    case "phase_complete":
+      return "phase completion criteria met";
     case "keyword":
       return `keyword "${condition.keyword}" found`;
     case "always":
@@ -124,12 +216,16 @@ export async function runAgentLoop(opts: LoopOptions): Promise<LoopResult> {
   let currentPhase = strategy.phases.find((p) => p.name === strategy.initialPhase);
   if (!currentPhase) throw new Error(`Initial phase "${strategy.initialPhase}" not found`);
 
-  const allMessages: UnifiedMessage[] = [...opts.messages];
+  const visibleMessages: LoopMessage[] = [...opts.messages];
+  const contextMessages: LoopMessage[] = [...opts.messages];
   let totalIterations = 0;
   let phaseIteration = 0;
   let lastContent = "";
+  let lastMeaningfulContent = "";
   let phaseToolCallCount = 0;
   let phaseStartedAt = new Date().toISOString();
+  let invalidToolAttemptCount = 0;
+  let retryInstruction: string | undefined;
 
   const loopState = createLoopState(opts, currentPhase);
   opts.onLoopState?.(loopState);
@@ -147,8 +243,12 @@ export async function runAgentLoop(opts: LoopOptions): Promise<LoopResult> {
     // Prepare messages with current system prompt
     const messagesWithSystem: UnifiedMessage[] = [
       { role: "system", content: systemPrompt },
-      ...allMessages,
+      ...(retryInstruction ? [{ role: "system" as const, content: retryInstruction }] : []),
+      ...serializeMessagesForModel(contextMessages),
     ];
+    retryInstruction = undefined;
+
+    const streamedChunks: Array<{ type: "content" | "reasoning"; content: string }> = [];
 
     // Call LLM (streaming)
     const response = await callProviderStream(
@@ -162,9 +262,9 @@ export async function runAgentLoop(opts: LoopOptions): Promise<LoopResult> {
       },
       (chunk) => {
         if (chunk.type === "content" && chunk.content) {
-          opts.onContent?.(chunk.content);
+          streamedChunks.push({ type: "content", content: chunk.content });
         } else if (chunk.type === "reasoning" && chunk.content) {
-          opts.onReasoning?.(chunk.content);
+          streamedChunks.push({ type: "reasoning", content: chunk.content });
         } else if (chunk.type === "stats" && chunk.stats) {
           cumulativeStats.inputTokens = chunk.stats.inputTokens; // last value = current context fill
           cumulativeStats.outputTokens += chunk.stats.outputTokens;
@@ -180,46 +280,91 @@ export async function runAgentLoop(opts: LoopOptions): Promise<LoopResult> {
       if (cumulativeStats.inputTokens >= opts.maxContextTokens * threshold) {
         const prompt = opts.compactionPrompt ?? DEFAULT_COMPACTION_PROMPT;
         opts.onContent?.("\n\n---\n[Context wird komprimiert...]\n---\n\n");
-        const compacted = await compactContext(allMessages, prompt, opts.model);
-        allMessages.length = 0;
-        allMessages.push(...compacted);
+        const compacted = await compactContext(serializeMessagesForModel(contextMessages), prompt, opts.model);
+        contextMessages.length = 0;
+        contextMessages.push(...compacted.map((message) => ({
+          role: message.role as LoopMessage["role"],
+          content: message.content,
+          tool_call_id: message.tool_call_id,
+          tool_calls: message.tool_calls,
+        })));
         cumulativeStats.inputTokens = 0;
       }
     }
 
-    // Embed reasoning as <think> tags so it persists in stored messages
-    let messageContent = response.content;
-    if (response.reasoning && !messageContent.includes("<think>")) {
-      messageContent = `<think>${response.reasoning}</think>${messageContent}`;
+    const messageContent = sanitizeVisibleAssistantContent(response.content);
+    const messageReasoning = response.reasoning?.trim() || undefined;
+
+    lastContent = messageContent;
+    if (hasVisibleAssistantContent(messageContent)) {
+      lastMeaningfulContent = messageContent;
+    }
+    const toolsCalled = response.tool_calls ?? [];
+    const invalidToolAttempt =
+      response.finishReason !== "tool_calls"
+      && toolsCalled.length === 0
+      && looksLikeInvalidToolAttempt(messageContent, messageReasoning);
+
+    if (invalidToolAttempt) {
+      invalidToolAttemptCount++;
+
+      if (invalidToolAttemptCount <= INVALID_TOOL_RETRY_BUDGET) {
+        retryInstruction = INVALID_TOOL_RETRY_INSTRUCTION;
+        continue;
+      }
+
+      loopState.status = "error";
+      loopState.updatedAt = new Date().toISOString();
+      opts.onLoopState?.(loopState);
+      throw new Error("Model emitted pseudo-formatted tool calls instead of structured tool_calls.");
     }
 
-    lastContent = response.content;
-    const toolsCalled = response.tool_calls ?? [];
+    invalidToolAttemptCount = 0;
+    for (const chunk of streamedChunks) {
+      if (chunk.type === "content") {
+        opts.onContent?.(chunk.content);
+      } else {
+        opts.onReasoning?.(chunk.content);
+      }
+    }
 
     // Add assistant message
     if (toolsCalled.length > 0) {
-      allMessages.push({
+      const assistantMessage: LoopMessage = {
         role: "assistant",
         content: messageContent,
+        reasoning: messageReasoning,
         tool_calls: toolsCalled,
-      });
-    } else {
-      allMessages.push({ role: "assistant", content: messageContent });
+      };
+      visibleMessages.push(assistantMessage);
+      contextMessages.push(assistantMessage);
+    } else if (shouldPersistAssistantMessage(messageContent, toolsCalled, messageReasoning)) {
+      const assistantMessage: LoopMessage = {
+        role: "assistant",
+        content: messageContent,
+        reasoning: messageReasoning,
+      };
+      visibleMessages.push(assistantMessage);
+      contextMessages.push(assistantMessage);
     }
 
     // Execute tool calls
+    let hadToolError = false;
     if (response.finishReason === "tool_calls" && toolsCalled.length > 0) {
       phaseToolCallCount += toolsCalled.length;
 
       for (const tc of toolsCalled) {
         opts.onToolCall?.(tc);
         const result = await opts.executeTool(tc.name, tc.arguments);
+        hadToolError ||= result.isError;
         opts.onToolResult?.(tc.id, result);
-        allMessages.push({
+        const toolMessage: LoopMessage = {
           role: "tool",
           content: result.content,
           tool_call_id: tc.id,
-        });
+        };
+        visibleMessages.push(toolMessage);
+        contextMessages.push(toolMessage);
       }
     }
 
@@ -236,6 +381,8 @@ export async function runAgentLoop(opts: LoopOptions): Promise<LoopResult> {
       response.finishReason,
       toolsCalled,
       response.content,
+      phaseToolCallCount,
+      hadToolError,
     );
 
     if (transition) {
@@ -266,6 +413,13 @@ export async function runAgentLoop(opts: LoopOptions): Promise<LoopResult> {
       loopState.currentPhase = currentPhase.name;
       loopState.phaseIteration = 0;
       opts.onLoopState?.(loopState);
+    } else if (
+      response.finishReason !== "tool_calls"
+      && hasVisibleAssistantContent(messageContent)
+      && currentPhase.continueOnStop
+      && !isPhaseComplete(currentPhase, response.finishReason, response.content, phaseToolCallCount)
+    ) {
+      continue;
     } else if (response.finishReason !== "tool_calls") {
       // No transition and LLM done → end loop
       // Record final phase
@@ -287,5 +441,5 @@ export async function runAgentLoop(opts: LoopOptions): Promise<LoopResult> {
   loopState.updatedAt = new Date().toISOString();
   opts.onLoopState?.(loopState);
 
-  return { messages: allMessages, finalResponse: lastContent, iterations: totalIterations };
+  return { messages: visibleMessages, finalResponse: lastMeaningfulContent || lastContent, iterations: totalIterations };
 }

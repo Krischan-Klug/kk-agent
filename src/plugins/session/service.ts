@@ -1,21 +1,89 @@
 import type { SessionState, CreateSessionBody, SSEEvent } from "./types.js";
 import * as store from "./lib/store.js";
 import { compactMessages } from "./lib/anchor.js";
-import { buildMcpInstructions } from "../systemprompt/service.js";
+import { buildMcpInstructions, buildPrompt, getSystemVariables } from "../systemprompt/service.js";
 import { getActiveModel, getModelSettings, getModels } from "../provider/service.js";
 import type { ReasoningLevelConfig } from "../provider/types.js";
 import { REASONING_LEVEL_DEFAULTS } from "../provider/defaults.js";
-import { getToolDefinitions, executeTool } from "../mcp/service.js";
+import { getToolDefinitions, executeTool, getKnownMcpIds, getRunnableMcpIds } from "../mcp/service.js";
 import { runLoop } from "../loop/service.js";
-import { getAgent, setLoopState, clearLoopState } from "../agent/service.js";
+import type { LoopMessage } from "../loop/types.js";
+import { getAgent, setLoopState, clearLoopState, getLoopState } from "../agent/service.js";
 
 function generateSessionName(content: string): string {
-  const clean = content.replace(/<think>[\s\S]*?<\/think>/g, "").trim();
+  const clean = content.trim();
   if (!clean) return "";
   if (clean.length <= 40) return clean.split("\n")[0];
   const cut = clean.slice(0, 40);
   const lastSpace = cut.lastIndexOf(" ");
   return (lastSpace > 20 ? cut.slice(0, lastSpace) : cut) + "...";
+}
+
+function toLoopMessages(messages: SessionState["messages"]): LoopMessage[] {
+  return messages.map((message) => ({
+    role: message.role,
+    content: message.content,
+    reasoning: message.reasoning,
+    tool_call_id: message.tool_call_id,
+    tool_calls: message.tool_calls?.map((toolCall) => ({
+      id: toolCall.id,
+      name: toolCall.name,
+      arguments: toolCall.arguments,
+    })),
+  }));
+}
+
+function fromLoopMessages(messages: LoopMessage[]): SessionState["messages"] {
+  return messages.map((message) => ({
+    role: message.role,
+    content: message.content,
+    reasoning: message.reasoning,
+    tool_call_id: message.tool_call_id,
+    tool_calls: message.tool_calls?.map((toolCall) => ({
+      id: toolCall.id,
+      name: toolCall.name,
+      arguments: toolCall.arguments,
+    })),
+  }));
+}
+
+function sanitizeMcpIds(mcpIds: string[]): string[] {
+  const knownIds = new Set(getKnownMcpIds());
+  return [...new Set(mcpIds)].filter((id) => knownIds.has(id));
+}
+
+function getSessionRunnableMcpIds(activeMcpIds: string[]): string[] {
+  const runnable = new Set(getRunnableMcpIds());
+  return activeMcpIds.filter((id) => runnable.has(id));
+}
+
+function buildResolvedSystemPrompt(
+  session: Pick<SessionState, "activeMcpIds">,
+  agent: ReturnType<typeof getAgent>,
+  phaseName?: string,
+  phaseIteration?: number,
+): string {
+  const runnableMcpIds = getSessionRunnableMcpIds(session.activeMcpIds);
+  const mcpInstr = buildMcpInstructions(runnableMcpIds, agent.mcpInstructions);
+  const phase = phaseName
+    ? agent.loopStrategy.phases.find((entry) => entry.name === phaseName)
+    : undefined;
+
+  const variables: Record<string, string> = {
+    ...getSystemVariables(),
+    phase: phase?.name ?? "",
+    iteration: String(phaseIteration ?? 0),
+    maxIterations: String(phase?.maxIterations ?? 0),
+    mcpInstructions: mcpInstr,
+    ...agent.variables,
+  };
+
+  return buildPrompt(
+    agent.promptTemplates.base,
+    phase ? (agent.promptTemplates.phases[phase.name] ?? "") : "",
+    mcpInstr,
+    variables,
+  );
 }
 
 export function createSession(body: CreateSessionBody): SessionState {
@@ -24,17 +92,12 @@ export function createSession(body: CreateSessionBody): SessionState {
   // Merge MCPs: agent's MCPs + any explicit MCPs from the body
   const agentMcpIds = agent.mcpIds ?? [];
   const bodyMcpIds = body.activeMcpIds ?? [];
-  const activeMcpIds = [...new Set([...agentMcpIds, ...bodyMcpIds])];
+  const activeMcpIds = sanitizeMcpIds([...agentMcpIds, ...bodyMcpIds]);
 
   const model = body.model ?? agent.defaultModel ?? getActiveModel();
 
-  // Build initial system prompt from agent's base prompt + MCP instructions
-  const mcpInstr = buildMcpInstructions(activeMcpIds, agent.mcpInstructions);
-  const systemPrompt = mcpInstr
-    ? `${agent.promptTemplates.base}\n\n---\n\n${mcpInstr}`
-    : agent.promptTemplates.base;
-
   const reasoningEffort = body.reasoningEffort ?? agent.reasoningEffort;
+  const systemPrompt = buildResolvedSystemPrompt({ activeMcpIds }, agent);
 
   return store.createSession({
     agentId: body.agentId,
@@ -58,6 +121,18 @@ export function listSessions(): SessionState[] {
 export function deleteSession(id: string): void {
   if (!store.deleteSession(id)) throw new Error(`Session "${id}" not found`);
   clearLoopState(id);
+}
+
+export function getCurrentSystemPrompt(sessionId: string): string {
+  const session = getSession(sessionId);
+  const agent = getAgent(session.agentId);
+  const loopState = getLoopState(sessionId);
+  return buildResolvedSystemPrompt(
+    session,
+    agent,
+    loopState?.currentPhase,
+    loopState?.phaseIteration,
+  );
 }
 
 function resolveReasoningConfig(session: SessionState): {
@@ -97,33 +172,24 @@ export async function chat(
   const session = getSession(sessionId);
   const agent = getAgent(session.agentId);
 
-  session.messages.push({ role: "user", content: message });
+  const userMessages = [...session.messages, { role: "user" as const, content: message }];
+  const sessionWithUserMessage = store.updateSession(sessionId, { messages: userMessages });
 
-  const tools = getToolDefinitions(session.activeMcpIds);
-  const mcpInstr = buildMcpInstructions(session.activeMcpIds, agent.mcpInstructions);
-  const rc = resolveReasoningConfig(session);
-  const cc = await resolveCompactionConfig(session, agent);
+  const tools = getToolDefinitions(sessionWithUserMessage.activeMcpIds);
+  const rc = resolveReasoningConfig(sessionWithUserMessage);
+  const cc = await resolveCompactionConfig(sessionWithUserMessage, agent);
 
   const result = await runLoop({
-    agentId: session.agentId,
+    agentId: sessionWithUserMessage.agentId,
     sessionId,
-    messages: session.messages.map((m) => ({
-      role: m.role as "user" | "assistant" | "tool" | "system",
-      content: m.content,
-      tool_call_id: m.tool_call_id,
-      tool_calls: m.tool_calls?.map((tc) => ({
-        id: tc.id,
-        name: tc.name,
-        arguments: tc.arguments,
-      })),
-    })),
-    model: session.model,
+    messages: toLoopMessages(sessionWithUserMessage.messages),
+    model: sessionWithUserMessage.model,
     reasoningEffort: rc.reasoningEffort,
     temperature: rc.temperature,
     maxOutputTokens: rc.maxOutputTokens,
     strategy: agent.loopStrategy,
     promptTemplates: agent.promptTemplates,
-    mcpInstructions: mcpInstr,
+    mcpInstructions: buildMcpInstructions(getSessionRunnableMcpIds(sessionWithUserMessage.activeMcpIds), agent.mcpInstructions),
     agentVariables: agent.variables ?? {},
     allTools: tools,
     executeTool,
@@ -131,25 +197,15 @@ export async function chat(
     compactionPrompt: cc.compactionPrompt,
   });
 
-  session.messages = result.messages.map((m) => ({
-    role: m.role as "user" | "assistant" | "tool",
-    content: m.content,
-    tool_call_id: m.tool_call_id,
-    tool_calls: m.tool_calls?.map((tc) => ({
-      id: tc.id,
-      name: tc.name,
-      arguments: tc.arguments,
-    })),
-  }));
-
-  const update: Partial<SessionState> = { messages: session.messages };
-  if (!session.name) {
+  const finalMessages = fromLoopMessages(result.messages);
+  const update: Partial<SessionState> = { messages: finalMessages };
+  if (!sessionWithUserMessage.name) {
     const name = generateSessionName(result.finalResponse);
     if (name) update.name = name;
   }
-  store.updateSession(sessionId, update);
+  const updatedSession = store.updateSession(sessionId, update);
 
-  return { response: result.finalResponse, session };
+  return { response: result.finalResponse, session: updatedSession };
 }
 
 export async function chatStream(
@@ -160,34 +216,25 @@ export async function chatStream(
   const session = getSession(sessionId);
   const agent = getAgent(session.agentId);
 
-  session.messages.push({ role: "user", content: message });
+  const userMessages = [...session.messages, { role: "user" as const, content: message }];
+  const sessionWithUserMessage = store.updateSession(sessionId, { messages: userMessages });
 
-  const tools = getToolDefinitions(session.activeMcpIds);
-  const mcpInstr = buildMcpInstructions(session.activeMcpIds, agent.mcpInstructions);
-  const rc = resolveReasoningConfig(session);
-  const cc = await resolveCompactionConfig(session, agent);
+  const tools = getToolDefinitions(sessionWithUserMessage.activeMcpIds);
+  const rc = resolveReasoningConfig(sessionWithUserMessage);
+  const cc = await resolveCompactionConfig(sessionWithUserMessage, agent);
 
   try {
     const result = await runLoop({
-      agentId: session.agentId,
+      agentId: sessionWithUserMessage.agentId,
       sessionId,
-      messages: session.messages.map((m) => ({
-        role: m.role as "user" | "assistant" | "tool" | "system",
-        content: m.content,
-        tool_call_id: m.tool_call_id,
-        tool_calls: m.tool_calls?.map((tc) => ({
-          id: tc.id,
-          name: tc.name,
-          arguments: tc.arguments,
-        })),
-      })),
-      model: session.model,
+      messages: toLoopMessages(sessionWithUserMessage.messages),
+      model: sessionWithUserMessage.model,
       reasoningEffort: rc.reasoningEffort,
       temperature: rc.temperature,
       maxOutputTokens: rc.maxOutputTokens,
       strategy: agent.loopStrategy,
       promptTemplates: agent.promptTemplates,
-      mcpInstructions: mcpInstr,
+      mcpInstructions: buildMcpInstructions(getSessionRunnableMcpIds(sessionWithUserMessage.activeMcpIds), agent.mcpInstructions),
       agentVariables: agent.variables ?? {},
       allTools: tools,
       executeTool,
@@ -209,24 +256,14 @@ export async function chatStream(
         emit({ type: "stats", inputTokens: stats.inputTokens, outputTokens: stats.outputTokens, reasoningTokens: stats.reasoningTokens }),
     });
 
-    session.messages = result.messages.map((m) => ({
-      role: m.role as "user" | "assistant" | "tool",
-      content: m.content,
-      tool_call_id: m.tool_call_id,
-      tool_calls: m.tool_calls?.map((tc) => ({
-        id: tc.id,
-        name: tc.name,
-        arguments: tc.arguments,
-      })),
-    }));
-
-    const streamUpdate: Partial<SessionState> = { messages: session.messages };
-    if (!session.name && result.finalResponse) {
+    const finalMessages = fromLoopMessages(result.messages);
+    const streamUpdate: Partial<SessionState> = { messages: finalMessages };
+    if (!sessionWithUserMessage.name && result.finalResponse) {
       const name = generateSessionName(result.finalResponse);
       if (name) streamUpdate.name = name;
     }
-    store.updateSession(sessionId, streamUpdate);
-    emit({ type: "done", session });
+    const updatedSession = store.updateSession(sessionId, streamUpdate);
+    emit({ type: "done", session: updatedSession });
   } catch (err) {
     emit({ type: "error", message: (err as Error).message });
   }
@@ -236,11 +273,12 @@ export function patchSession(
   id: string,
   update: { model?: string; activeMcpIds?: string[]; reasoningEffort?: string; temperature?: number },
 ): SessionState {
-  getSession(id);
+  const session = getSession(id);
+  const agent = getAgent(session.agentId);
   const patch: Partial<SessionState> = {};
   if (update.model) patch.model = update.model;
-  if (update.activeMcpIds) {
-    patch.activeMcpIds = update.activeMcpIds;
+  if (update.activeMcpIds !== undefined) {
+    patch.activeMcpIds = sanitizeMcpIds(update.activeMcpIds);
   }
   if (update.reasoningEffort !== undefined) {
     patch.reasoningEffort = update.reasoningEffort as SessionState["reasoningEffort"];
@@ -248,6 +286,8 @@ export function patchSession(
   if (update.temperature !== undefined) {
     patch.temperature = update.temperature;
   }
+  const nextSession = { ...session, ...patch };
+  patch.systemPrompt = buildResolvedSystemPrompt(nextSession, agent);
   return store.updateSession(id, patch);
 }
 
@@ -255,4 +295,16 @@ export function compactSession(sessionId: string, keepLast?: number): SessionSta
   const session = getSession(sessionId);
   compactMessages(session, keepLast);
   return store.updateSession(sessionId, { messages: session.messages });
+}
+
+export function removeMcpFromSessions(mcpId: string): void {
+  for (const session of listSessions()) {
+    if (!session.activeMcpIds.includes(mcpId)) continue;
+    const nextMcpIds = session.activeMcpIds.filter((id) => id !== mcpId);
+    const agent = getAgent(session.agentId);
+    store.updateSession(session.id, {
+      activeMcpIds: nextMcpIds,
+      systemPrompt: buildResolvedSystemPrompt({ ...session, activeMcpIds: nextMcpIds }, agent),
+    });
+  }
 }

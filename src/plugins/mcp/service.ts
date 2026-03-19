@@ -7,6 +7,7 @@ import {
   getToolsForMcp,
   getAllTools,
   executeTool,
+  getRunningMcps,
 } from "./lib/process-manager.js";
 
 // Cached registry for sync access
@@ -54,9 +55,19 @@ export async function updateInstruction(id: string, instruction: string): Promis
 }
 
 export function getActiveInstructions(): { id: string; name: string; instruction: string }[] {
+  const runningIds = new Set(getRunningMcps());
   return cachedMcps
-    .filter((m) => m.active)
+    .filter((m) => m.active && runningIds.has(m.id))
     .map((m) => ({ id: m.id, name: m.name, instruction: m.instruction }));
+}
+
+export function getKnownMcpIds(): string[] {
+  return cachedMcps.map((m) => m.id);
+}
+
+export function getRunnableMcpIds(): string[] {
+  const runningIds = new Set(getRunningMcps());
+  return cachedMcps.filter((m) => m.active && runningIds.has(m.id)).map((m) => m.id);
 }
 
 export function getToolDefinitions(activeMcpIds: string[]): UnifiedToolDefinition[] {
@@ -76,10 +87,19 @@ export async function startMcpServer(id: string): Promise<void> {
   const mcp = getMcpById(mcps, id);
   if (!mcp) throw new Error(`MCP "${id}" not found`);
   await startMcp(mcp);
+  mcp.active = true;
+  await updateRegistry(mcps);
+  cachedMcps = mcps;
 }
 
 export async function stopMcpServer(id: string): Promise<void> {
   await stopMcp(id);
+  const mcps = await getRegistry();
+  const mcp = getMcpById(mcps, id);
+  if (!mcp) throw new Error(`MCP "${id}" not found`);
+  mcp.active = false;
+  await updateRegistry(mcps);
+  cachedMcps = mcps;
 }
 
 export async function createMcp(body: CreateMcpBody): Promise<McpServerConfig> {

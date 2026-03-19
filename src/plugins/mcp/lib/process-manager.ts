@@ -10,6 +10,16 @@ interface RunningMcp {
 
 const running = new Map<string, RunningMcp>();
 
+function mergeEnv(env?: Record<string, string>): Record<string, string> | undefined {
+  if (!env) return undefined;
+
+  const merged: Record<string, string> = {};
+  for (const [key, value] of Object.entries({ ...process.env, ...env })) {
+    if (typeof value === "string") merged[key] = value;
+  }
+  return merged;
+}
+
 export async function startMcp(config: McpServerConfig): Promise<void> {
   if (running.has(config.id)) return;
 
@@ -21,7 +31,7 @@ export async function startMcp(config: McpServerConfig): Promise<void> {
     transport = new StdioClientTransport({
       command: srv.command,
       args: srv.args,
-      ...(srv.env && { env: { ...process.env, ...srv.env } }),
+      ...(srv.env && { env: mergeEnv(srv.env) }),
     });
   } else {
     const srv = config.server as McpSseConfig;

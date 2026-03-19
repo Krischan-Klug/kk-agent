@@ -17,6 +17,7 @@ export interface SessionState {
 export interface SessionMessage {
   role: "user" | "assistant" | "tool";
   content: string;
+  reasoning?: string;
   tool_call_id?: string;
   tool_calls?: Array<{ id: string; name: string; arguments: Record<string, unknown> }>;
 }

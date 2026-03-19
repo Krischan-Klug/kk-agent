@@ -12,6 +12,8 @@ import {
 } from "./service.js";
 import type { CreateMcpBody, UpdateMcpBody } from "./types.js";
 import { getRunningMcps } from "./lib/process-manager.js";
+import { removeMcpFromAgents } from "../agent/service.js";
+import { removeMcpFromSessions } from "../session/service.js";
 
 export async function listMcps(_req: Request, res: Response): Promise<Response> {
   const mcps = await getAllMcps();
@@ -85,6 +87,8 @@ export async function doCreate(req: Request, res: Response): Promise<Response> {
 export async function doDelete(req: Request, res: Response): Promise<Response> {
   try {
     await deleteMcp(req.params.id);
+    await removeMcpFromAgents(req.params.id);
+    removeMcpFromSessions(req.params.id);
     return res.json({ deleted: true });
   } catch (err) {
     return res.status(404).json({ error: (err as Error).message });

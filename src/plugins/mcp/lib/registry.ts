@@ -15,7 +15,7 @@ const DEFAULT_REGISTRY: { mcps: McpServerConfig[] } = {
       name: "Filesystem",
       active: false,
       instruction:
-        "Du hast Zugriff auf das lokale Dateisystem. Nutze 'read_file' zum Lesen und 'write_file' zum Schreiben. Frage den Nutzer immer bevor du etwas überschreibst. Arbeite mit absoluten Pfaden.",
+        "Du hast Zugriff auf das lokale Dateisystem. Nutze die verfuegbaren Datei-Tools gezielt zum Lesen und Schreiben, arbeite mit absoluten Pfaden und frage nur vor riskanten oder destruktiven Aenderungen nach.",
       transport: "stdio",
       server: {
         command: "npx",
@@ -89,16 +89,4 @@ export async function removeMcp(id: string): Promise<boolean> {
   mcps.splice(idx, 1);
   await updateRegistry(mcps);
   return true;
-}
-
-export async function updateMcpInRegistry(
-  id: string,
-  update: Partial<McpServerConfig>,
-): Promise<McpServerConfig | null> {
-  const mcps = await getRegistry();
-  const mcp = getMcpById(mcps, id);
-  if (!mcp) return null;
-  Object.assign(mcp, update);
-  await updateRegistry(mcps);
-  return mcp;
 }

@@ -7,10 +7,6 @@ export async function listModels(_req: Request, res: Response): Promise<Response
   return res.json({ models, activeModel: getActiveModel(), modelSettings: getAllModelSettings() });
 }
 
-export async function doGetModelSettings(_req: Request, res: Response): Promise<Response> {
-  return res.json(getAllModelSettings());
-}
-
 export async function doSetModelSettings(req: Request, res: Response): Promise<Response> {
   const modelId = req.params.modelId;
   const settings = req.body as ModelSettings;

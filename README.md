@@ -1,98 +1,97 @@
 # kk-agent-backend
 
-Modulares Multi-Agent-Backend fuer lokale oder selbst gehostete LLMs. Das System verbindet Provider, MCP-Tools, phasenbasierte Agent-Loops und Sessions ueber eine kleine Plugin-Architektur.
+Modulares Backend fuer lokale oder selbst gehostete LLMs mit Agenten, MCP-Tools, Sessions, Streaming und einem generischen phasenbasierten Loop.
 
 ## Architektur
 
-```
+```text
 HTTP / SSE
-   |
-   +-- provider      -> LLM-Anbindung, Streaming, Model-Settings
-   +-- mcp           -> MCP-Registry, Tool-Lifecycle, Instructions
-   +-- agent         -> Agent-Definitionen, Loop-Strategien, Loop-State
-   +-- systemprompt  -> Prompt-Building mit Variablen und MCP-Instructions
-   +-- loop          -> generischer Dev-Loop mit Phasen, Transitionen, Compaction
-   `-- session       -> Chat, Stream, Persistenz, Session-Kontext
+  |
+  +-- provider      -> Modellzugriff, Streaming, Model-Settings
+  +-- mcp           -> MCP-Registry, Tool-Lifecycle, Tool-Execution
+  +-- agent         -> Agent-Definitionen, Loop-Strategien, Runtime-Loop-State
+  +-- systemprompt  -> Prompt-Building mit Variablen und MCP-Instructions
+  +-- loop          -> Generischer Agent-Loop, Compaction, Tool-Retry, Verifikation
+  `-- session       -> Persistenz, Chat, Stream, Session-Kontext
 ```
 
-Plugins werden ueber `plugins.config.json` aktiviert. Runtime-State liegt unter `state/` und hat Prioritaet vor Config-Defaults.
+Runtime-State liegt unter `state/`. Die zentrale Konfiguration sitzt in:
+
+- `state/agents.json`
+- `state/mcps.json`
+- `state/provider.json`
 
 ## Agent-System
 
-Ein Agent definiert, wie das Modell arbeitet. Der aktuelle `coding-agent` ist als generischer Dev-Loop aufgebaut:
+Agenten definieren Prompt, Phasen und MCP-Zuordnung. Der aktuelle `coding-agent` nutzt einen generischen Dev-Loop:
 
 `discover -> execute -> verify -> finalize`
 
-Zentrale Eigenschaften:
+Wichtige Eigenschaften:
 
-- wenige generische Phasen statt repo-spezifischer Speziallogik
-- kontrollierte Rueckspruenge aus `verify` nach `execute`
-- explizite Phasenabschlusskriterien ueber `completionCriteria`
+- Phasenabschluss ueber `completionCriteria`
 - optionales Weiterlaufen in derselben Phase ueber `continueOnStop`
-- Tool-Fehler als echte Transition-Bedingung (`tool_result_error`)
-- Abschluss ueber `phase_complete` statt nur ueber fehlende Tool-Calls
+- Ruecksprung bei Tool-Fehlern ueber `tool_result_error`
+- Abschluss ueber `phase_complete` statt rein ueber fehlende Tool-Calls
 
-### Wichtige Agent-Felder
+### Kern-Typen
 
 ```ts
 type AgentDefinition = {
   id: string;
   name: string;
   description: string;
-  loopStrategy: {
-    initialPhase: string;
-    maxTotalIterations: number;
-    phases: LoopPhase[];
-  };
+  loopStrategy: LoopStrategy;
   promptTemplates: {
     base: string;
     phases: Record<string, string>;
   };
-  mcpIds?: string[];
-  mcpInstructions?: Record<string, string>;
-  variables?: Record<string, string>;
+  mcpIds: string[];
+  mcpInstructions: Record<string, string>;
+  variables: Record<string, string>;
   defaultModel?: string;
-  reasoningEffort?: "off" | "low" | "medium" | "high" | "xhigh";
+  reasoningEffort?: string;
   compactionPrompt?: string;
-  allowedActionPolicy?: "guarded_autonomy" | "ask_on_destructive";
+  createdAt: string;
+  updatedAt: string;
 };
 
 type LoopPhase = {
   name: string;
-  description?: string;
+  description: string;
   maxIterations: number;
   toolFilter?: { mode: "include" | "exclude"; toolNames: string[] };
-  autoAdvance?: boolean;
-  continueOnStop?: boolean;
   completionCriteria?: {
     mode: "stop" | "signal";
     signal?: string;
     requiresToolCall?: boolean;
   };
+  continueOnStop?: boolean;
   transitions: Array<{
     to: string;
     condition:
-      | { type: "no_tool_calls" }
       | { type: "max_iterations" }
+      | { type: "no_tool_calls" }
       | { type: "tool_called"; toolName: string }
       | { type: "tool_result_error" }
       | { type: "phase_complete" }
       | { type: "keyword"; keyword: string }
       | { type: "always" };
   }>;
+  autoAdvance: boolean;
 };
 ```
 
 ## Prompt-Building
 
-Bei jeder Loop-Iteration wird der System-Prompt neu gebaut aus:
+Der System-Prompt wird pro Iteration neu aufgebaut aus:
 
 1. Agent-Base-Prompt
 2. aktueller Phasen-Erweiterung
-3. aktiven MCP-Instructions
+3. MCP-Instructions der wirklich laufenden MCPs
 4. Template-Variablen
 
-Verfuegbare Standard-Variablen:
+Standard-Variablen:
 
 - `{{CURRENT_DATE}}`
 - `{{CURRENT_TIME}}`
@@ -101,13 +100,11 @@ Verfuegbare Standard-Variablen:
 - `{{iteration}}`
 - `{{maxIterations}}`
 
-`GET /session/:id/prompt` liefert den echten aktuell aufgeloesten Prompt fuer die laufende Session und Phase.
+`GET /session/:id/prompt` liefert den aktuell aufgeloesten Prompt fuer Session und Phase.
 
-## Reasoning-Modell
+## Reasoning und Tool-Protokoll
 
-Reasoning ist von sichtbarem Assistant-Content getrennt.
-
-### SessionMessage
+Assistant-Antwort und Thinking sind getrennt gespeichert.
 
 ```ts
 type SessionMessage = {
@@ -121,57 +118,48 @@ type SessionMessage = {
 
 Regeln:
 
-- `content` ist die sichtbare Antwort fuer UI und Dialogkontext
-- `reasoning` ist optionales persistiertes Thinking fuer UI und Verlauf
-- altes Thinking wird nie wieder an das Modell zurueckgeschickt
-- Streaming liefert weiterhin getrennte `reasoning`- und `content`-Events
-- finale Session-Payloads enthalten beide Felder getrennt
-- nur strukturierte `tool_calls` aus der Provider-Antwort sind executable
+- `content` ist sichtbare Antwort und einziger Assistant-Text im Dialogkontext
+- `reasoning` bleibt fuer UI und Verlauf erhalten, wird aber nicht erneut ans Modell geschickt
+- Streaming liefert getrennte `content`- und `reasoning`-Events
+- nur strukturierte `tool_calls` aus der Provider-Antwort werden ausgefuehrt
 - pseudo-formatierte Tool-Aufrufe in Text oder Thinking werden nicht geparst, sondern intern mit begrenztem Retry korrigiert
 
-Damit bleibt Thinking im Frontend sichtbar, ohne unnoetigen Tokenverbrauch oder Rueckkopplung alter Selbstgespraeche in spaetere Modellaufrufe.
+Provider-seitige `<think>`-Kompatibilitaet existiert nur noch als interner Parser-Fallback.
 
 ## Context Compaction
 
-Der Loop kompaktet Kontext automatisch, wenn die aktuelle Eingabe ungefaehr 80 Prozent des verfuegbaren Modellkontexts erreicht.
+Compaction ist intern und automatisch. Sie reduziert nur den Modellkontext im Loop, nicht den sichtbaren Session-Verlauf.
 
-Hierarchie fuer den Compaction-Prompt:
+Prioritaet fuer den Compaction-Prompt:
 
 1. Agent `compactionPrompt`
 2. Provider-Model-Setting `compactionPrompt`
-3. interner Default-Prompt
+3. interner Default
 
 Wichtig:
 
-- fuer Compaction wird nur echter Dialogkontext verwendet
-- historisches `reasoning` wird nicht in den Compaction-Input uebernommen
-- kompaktierte Zusammenfassungen ersetzen den alten Konversationskontext im Loop
+- historisches `reasoning` geht nicht in den Compaction-Input
+- finaler sichtbarer Verlauf mit Assistant-`content` und `reasoning` bleibt erhalten
 
 ## MCP-System
 
 MCPs werden in `state/mcps.json` verwaltet.
 
-Eigenschaften:
+Verhalten:
 
 - Auto-Start beim Boot
 - manueller Start/Stop pro MCP
-- Instructions pro MCP
 - Tool-Discovery pro laufendem MCP
-- Session- und Agent-Referenzen werden beim Loeschen eines MCPs bereinigt
+- MCP-Instructions nur fuer `active && running`
+- geloeschte MCPs werden aus Agents und Sessions entfernt
 
-Wichtige Verhaltensregeln:
+Die Default-Instructions beschreiben Faehigkeiten generisch und binden sich nicht an konkrete Toolnamen.
 
-- MCP-Instructions werden nur aus MCPs gebaut, die wirklich `active && running` sind
-- nicht laufende MCPs erscheinen nicht als verfuegbare Tools im Prompt
-- geloeschte MCPs verschwinden aus Agents, Sessions und dadurch auch aus UI-Zaehlungen
-
-## Provider / Reasoning / Temperature
-
-Model-Settings koennen pro Modell gespeichert werden:
+## Provider-Settings
 
 ```ts
 type ModelSettings = {
-  reasoningEffort?: "off" | "low" | "medium" | "high" | "xhigh";
+  reasoningEffort?: string;
   reasoningOnOff?: boolean;
   levels?: Record<string, { temperature?: number; maxOutputTokens?: number }>;
   compactionPrompt?: string;
@@ -210,14 +198,12 @@ Prioritaeten:
 | POST | `/session/:id/chat` | Non-Streaming Chat |
 | POST | `/session/:id/chat/stream` | SSE-Chat |
 | GET | `/session/:id/prompt` | Aktuellen aufgeloesten System-Prompt lesen |
-| POST | `/session/:id/compact` | Session manuell kompaktieren |
 
 ### Provider
 
 | Methode | Route | Beschreibung |
 |---|---|---|
 | GET | `/provider/models` | Verfuegbare Modelle |
-| GET | `/provider/model-settings` | Gespeicherte Model-Settings |
 | PUT | `/provider/models/:modelId/settings` | Model-Settings setzen |
 | POST | `/provider/switch` | Aktives Modell wechseln |
 
@@ -249,13 +235,3 @@ Voraussetzungen:
 - erreichbarer LLM-Endpoint, z. B. LM Studio
 
 Standard-Port: `3001`
-
-## State und Konfiguration
-
-- `plugins.config.json`: versionierbare Plugin-Konfiguration
-- `state/agents.json`: Agent-Definitionen
-- `state/mcps.json`: MCP-Registry
-- `state/provider.json`: aktives Modell und Model-Settings
-- `state/`: gitignored Runtime-State
-
-Prioritaet: `state > config > code default`

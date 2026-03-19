@@ -17,10 +17,6 @@ export async function initMcpService(): Promise<void> {
   cachedMcps = await getRegistry();
 }
 
-export async function refreshCache(): Promise<void> {
-  cachedMcps = await getRegistry();
-}
-
 export async function getAllMcps(): Promise<McpServerConfig[]> {
   return getRegistry();
 }

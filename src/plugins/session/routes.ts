@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { doCreate, doList, doGet, doDelete, doChat, doChatStream, doPatch, doGetPrompt, doCompact } from "./controller.js";
+import { doCreate, doList, doGet, doDelete, doChat, doChatStream, doPatch, doGetPrompt } from "./controller.js";
 
 const router = Router();
 
@@ -11,6 +11,5 @@ router.patch("/:id", doPatch);
 router.post("/:id/chat", doChat);
 router.post("/:id/chat/stream", doChatStream);
 router.get("/:id/prompt", doGetPrompt);
-router.post("/:id/compact", doCompact);
 
 export default router;

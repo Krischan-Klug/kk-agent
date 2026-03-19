@@ -1,7 +1,6 @@
 /* ── Agent Definition (persisted) ── */
 
 export type ReasoningEffort = string;
-export type AllowedActionPolicy = "guarded-autonomous" | "conservative" | "manual";
 
 export interface AgentDefinition {
   id: string;
@@ -14,7 +13,6 @@ export interface AgentDefinition {
   variables: Record<string, string>;       // custom template variables (e.g. PROJECT_NAME)
   defaultModel?: string;
   reasoningEffort?: ReasoningEffort;
-  allowedActionPolicy?: AllowedActionPolicy;
   compactionPrompt?: string;
   createdAt: string;
   updatedAt: string;
@@ -104,7 +102,6 @@ export interface CreateAgentBody {
   variables?: Record<string, string>;
   defaultModel?: string;
   reasoningEffort?: ReasoningEffort;
-  allowedActionPolicy?: AllowedActionPolicy;
   compactionPrompt?: string;
 }
 
@@ -118,6 +115,5 @@ export interface UpdateAgentBody {
   variables?: Record<string, string>;
   defaultModel?: string;
   reasoningEffort?: ReasoningEffort;
-  allowedActionPolicy?: AllowedActionPolicy;
   compactionPrompt?: string;
 }

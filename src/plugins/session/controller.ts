@@ -7,7 +7,6 @@ import {
   chat,
   chatStream,
   patchSession,
-  compactSession,
   getCurrentSystemPrompt,
 } from "./service.js";
 import type { CreateSessionBody, ChatBody } from "./types.js";
@@ -98,16 +97,6 @@ export async function doPatch(req: Request, res: Response): Promise<Response> {
 export async function doGetPrompt(req: Request, res: Response): Promise<Response> {
   try {
     return res.json({ systemPrompt: getCurrentSystemPrompt(req.params.id) });
-  } catch (err) {
-    return res.status(404).json({ error: (err as Error).message });
-  }
-}
-
-export async function doCompact(req: Request, res: Response): Promise<Response> {
-  try {
-    const { keepLast } = req.body as { keepLast?: number };
-    const session = compactSession(req.params.id, keepLast);
-    return res.json(session);
   } catch (err) {
     return res.status(404).json({ error: (err as Error).message });
   }

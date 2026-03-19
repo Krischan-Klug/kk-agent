@@ -3,7 +3,7 @@ import type { AgentDefinition } from "../types.js";
 export const DEFAULT_AGENT: AgentDefinition = {
   id: "general-assistant",
   name: "General Assistant",
-  description: "Ein allgemeiner Assistent ohne spezielle Phasen – verhält sich wie ein einfacher Agent-Loop.",
+  description: "Ein allgemeiner Assistent ohne spezielle Phasen - verhaelt sich wie ein einfacher Agent-Loop.",
   loopStrategy: {
     initialPhase: "respond",
     maxTotalIterations: 10,

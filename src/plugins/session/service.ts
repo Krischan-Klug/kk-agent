@@ -1,6 +1,5 @@
 import type { SessionState, CreateSessionBody, SSEEvent } from "./types.js";
 import * as store from "./lib/store.js";
-import { compactMessages } from "./lib/anchor.js";
 import { buildMcpInstructions, buildPrompt, getSystemVariables } from "../systemprompt/service.js";
 import { getActiveModel, getModelSettings, getModels } from "../provider/service.js";
 import type { ReasoningLevelConfig } from "../provider/types.js";
@@ -289,12 +288,6 @@ export function patchSession(
   const nextSession = { ...session, ...patch };
   patch.systemPrompt = buildResolvedSystemPrompt(nextSession, agent);
   return store.updateSession(id, patch);
-}
-
-export function compactSession(sessionId: string, keepLast?: number): SessionState {
-  const session = getSession(sessionId);
-  compactMessages(session, keepLast);
-  return store.updateSession(sessionId, { messages: session.messages });
 }
 
 export function removeMcpFromSessions(mcpId: string): void {

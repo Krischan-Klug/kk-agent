@@ -1,6 +1,6 @@
 import { loadState, saveState } from "../../lib/state.js";
 import type { AgentDefinition } from "../types.js";
-import { DEFAULT_AGENT } from "./defaults.js";
+import { getDefaultAgent } from "./defaults.js";
 
 const STATE_FILE = "agents.json";
 
@@ -14,7 +14,7 @@ export async function initStore(): Promise<void> {
   const state = await loadState<AgentsState>(STATE_FILE, { agents: [] });
 
   if (state.agents.length === 0) {
-    state.agents.push({ ...DEFAULT_AGENT, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() });
+    state.agents.push(getDefaultAgent());
     await saveState(STATE_FILE, state);
   }
 

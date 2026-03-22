@@ -1,5 +1,6 @@
 import type { AgentDefinition, CreateAgentBody, UpdateAgentBody, AgentLoopState } from "./types.js";
 import * as store from "./lib/store.js";
+import { getDefaults } from "../lib/defaults.js";
 
 export async function initAgentService(): Promise<void> {
   await store.initStore();
@@ -28,7 +29,7 @@ export async function createAgent(body: CreateAgentBody): Promise<AgentDefinitio
     name: body.name,
     description: body.description ?? "",
     systemPrompt: body.systemPrompt ?? "",
-    maxIterations: body.maxIterations ?? 10,
+    maxIterations: body.maxIterations ?? getDefaults().agent.maxIterations,
     mcpIds: body.mcpIds ?? [],
     mcpInstructions: body.mcpInstructions ?? {},
     variables: body.variables ?? {},

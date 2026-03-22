@@ -3,6 +3,7 @@ export interface McpServerConfig {
   name: string;
   active: boolean;
   instruction: string;
+  emoji?: string;
   transport: "stdio" | "sse";
   server: McpStdioConfig | McpSseConfig;
 }
@@ -37,6 +38,7 @@ export interface CreateMcpBody {
   env?: Record<string, string>;
   url?: string;
   instruction?: string;
+  emoji?: string;
 }
 
 export interface UpdateMcpBody {
@@ -47,4 +49,5 @@ export interface UpdateMcpBody {
   env?: Record<string, string>;
   url?: string;
   instruction?: string;
+  emoji?: string;
 }

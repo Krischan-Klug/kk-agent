@@ -8,6 +8,7 @@ import { getToolDefinitions, executeTool, getKnownMcpIds, getRunnableMcpIds } fr
 import { runLoop } from "../loop/service.js";
 import type { LoopMessage } from "../loop/types.js";
 import { getAgent, setLoopState, clearLoopState } from "../agent/service.js";
+import { getDefaults } from "../lib/defaults.js";
 
 function generateSessionName(content: string): string {
   const clean = content.trim();
@@ -121,7 +122,7 @@ function resolveReasoningConfig(session: SessionState): {
   maxOutputTokens?: number;
 } {
   const ms = getModelSettings(session.model);
-  const effort = session.reasoningEffort ?? ms.reasoningEffort ?? "medium";
+  const effort = session.reasoningEffort ?? ms.reasoningEffort ?? getDefaults().reasoning.defaultEffort;
   const levelConfig: ReasoningLevelConfig | undefined = ms.levels?.[effort];
   const defaults = REASONING_LEVEL_DEFAULTS[effort];
   return {

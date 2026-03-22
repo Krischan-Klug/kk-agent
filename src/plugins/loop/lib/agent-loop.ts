@@ -4,7 +4,8 @@ import type { AgentLoopState } from "../../agent/types.js";
 import { callProviderStream } from "../../provider/service.js";
 import { buildPrompt } from "../../systemprompt/service.js";
 import { getSystemVariables } from "../../systemprompt/lib/builder.js";
-import { compactContext, DEFAULT_COMPACTION_PROMPT } from "./compaction.js";
+import { compactContext } from "./compaction.js";
+import { getDefaults } from "../../lib/defaults.js";
 
 /* ── Constants ── */
 
@@ -20,31 +21,7 @@ const INVALID_TOOL_CALL_PATTERNS = [
   /<\/tool_call>/i,
 ];
 
-const EMPTY_RESPONSE_RETRY_INSTRUCTION = [
-  "Dein letzter Versuch war leer oder praktisch inhaltslos.",
-  "Gib jetzt entweder eine normale inhaltliche Antwort oder einen echten strukturierten tool_call aus.",
-  "Antworte nicht leer und wiederhole keine Meta-Ausgabe.",
-].join(" ");
-
-const INVALID_TOOL_RETRY_INSTRUCTION = [
-  "Dein letzter Versuch hat einen Tool-Aufruf nur als Text oder Thinking ausgegeben.",
-  "Wichtig: Tools duerfen nur ueber strukturierte tool_calls der API aufgerufen werden.",
-  "Freitext, XML, Markdown oder Thinking werden nicht als Tool-Aufruf interpretiert.",
-  "Antworte jetzt entweder mit einer normalen Antwort oder sende einen echten strukturierten Tool-Call.",
-].join(" ");
-
-const LENGTH_RETRY_INSTRUCTION = [
-  "Deine letzte Antwort wurde wegen Token-Limit abgeschnitten.",
-  "Fahre nahtlos fort und wiederhole keine bereits ausgegebenen Inhalte.",
-  "Wenn ein kuerzeres Ergebnis reicht, fasse dich jetzt kompakter.",
-].join(" ");
-
-const POST_COMPACTION_INSTRUCTION = [
-  "Der vorherige Kontext wurde intern komprimiert.",
-  "Die kompaktierte Summary ist interner Arbeitskontext und keine neue Nutzernachricht.",
-  "Fuehre dieselbe Aufgabe weiter.",
-  "Beginne nicht neu, wiederhole keine Begruessung und gib keine Meta-Antwort zur Compaction.",
-].join(" ");
+/* Instructions are loaded from getDefaults() at runtime — see plugins/lib/defaults.ts */
 
 /* ── Helpers ── */
 
@@ -120,7 +97,7 @@ export async function runAgentLoop(opts: LoopOptions): Promise<LoopResult> {
 
     // ── Compaction ──
     if (pendingCompaction) {
-      const prompt = opts.compactionPrompt ?? DEFAULT_COMPACTION_PROMPT;
+      const prompt = opts.compactionPrompt ?? getDefaults().compaction.prompt;
       const compactionMarker: LoopMessage = {
         role: "system",
         kind: "compaction",
@@ -150,7 +127,7 @@ export async function runAgentLoop(opts: LoopOptions): Promise<LoopResult> {
       })));
       cumulativeStats.inputTokens = 0;
       pendingCompaction = false;
-      postCompactionInstruction = POST_COMPACTION_INSTRUCTION;
+      postCompactionInstruction = getDefaults().compaction.postInstruction;
     }
 
     // ── Build system prompt ──
@@ -201,7 +178,7 @@ export async function runAgentLoop(opts: LoopOptions): Promise<LoopResult> {
 
     // ── Compaction threshold check ──
     if (opts.maxContextTokens && cumulativeStats.inputTokens > 0) {
-      const threshold = opts.compactionThreshold ?? 0.8;
+      const threshold = opts.compactionThreshold ?? getDefaults().agent.compactionThreshold;
       if (cumulativeStats.inputTokens >= opts.maxContextTokens * threshold) {
         pendingCompaction = true;
       }
@@ -214,7 +191,7 @@ export async function runAgentLoop(opts: LoopOptions): Promise<LoopResult> {
     // ── Length retry (simple: once) ──
     if (response.finishReason === "length" && lengthRetryCount < LENGTH_RETRY_BUDGET) {
       lengthRetryCount++;
-      retryInstruction = LENGTH_RETRY_INSTRUCTION;
+      retryInstruction = getDefaults().retry.lengthInstruction;
       continue;
     }
     if (response.finishReason !== "length") {
@@ -231,7 +208,7 @@ export async function runAgentLoop(opts: LoopOptions): Promise<LoopResult> {
       invalidToolAttemptCount++;
       if (invalidToolAttemptCount <= INVALID_TOOL_RETRY_BUDGET) {
         opts.onRetryNotice?.("Modellantwort wurde verworfen: Tool-Aufruf nur als Text statt strukturierter tool_call. Korrekturversuch.");
-        retryInstruction = INVALID_TOOL_RETRY_INSTRUCTION;
+        retryInstruction = getDefaults().retry.invalidToolInstruction;
         continue;
       }
       loopState.status = "error";
@@ -252,7 +229,7 @@ export async function runAgentLoop(opts: LoopOptions): Promise<LoopResult> {
       emptyResponseRetryCount++;
       if (emptyResponseRetryCount <= EMPTY_RESPONSE_RETRY_BUDGET) {
         opts.onRetryNotice?.("Modellantwort war leer. Korrekturversuch.");
-        retryInstruction = EMPTY_RESPONSE_RETRY_INSTRUCTION;
+        retryInstruction = getDefaults().retry.emptyResponseInstruction;
         continue;
       }
       loopState.status = "error";

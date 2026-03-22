@@ -112,6 +112,7 @@ export async function createMcp(body: CreateMcpBody): Promise<McpServerConfig> {
     name: body.name,
     active: false,
     instruction: body.instruction ?? "",
+    emoji: body.emoji,
     transport: body.transport,
     server:
       body.transport === "stdio"
@@ -142,6 +143,7 @@ export async function updateMcpConfig(id: string, body: UpdateMcpBody): Promise<
 
   if (body.name !== undefined) mcp.name = body.name;
   if (body.instruction !== undefined) mcp.instruction = body.instruction;
+  if (body.emoji !== undefined) mcp.emoji = body.emoji;
 
   if (body.transport !== undefined) {
     mcp.transport = body.transport;

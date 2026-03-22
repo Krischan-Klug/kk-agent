@@ -15,8 +15,9 @@ export interface SessionState {
 }
 
 export interface SessionMessage {
-  role: "user" | "assistant" | "tool";
+  role: "user" | "assistant" | "tool" | "system";
   content: string;
+  kind?: "compaction" | "internal_summary";
   reasoning?: string;
   tool_call_id?: string;
   tool_calls?: Array<{ id: string; name: string; arguments: Record<string, unknown> }>;
@@ -36,9 +37,10 @@ export interface ChatBody {
 export type SSEEvent =
   | { type: "content"; content: string }
   | { type: "reasoning"; content: string }
+  | { type: "retry_notice"; message: string }
+  | { type: "compaction"; message: SessionMessage }
   | { type: "tool_call"; toolCall: { id: string; name: string; arguments: Record<string, unknown> } }
   | { type: "tool_result"; toolCallId: string; content: string; isError: boolean }
-  | { type: "phase_change"; from: string; to: string; reason: string }
   | { type: "loop_state"; state: AgentLoopState }
   | { type: "stats"; inputTokens: number; outputTokens: number; reasoningTokens: number }
   | { type: "done"; session: SessionState }

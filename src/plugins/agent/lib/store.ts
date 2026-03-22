@@ -12,10 +12,12 @@ let cache: AgentDefinition[] | null = null;
 
 export async function initStore(): Promise<void> {
   const state = await loadState<AgentsState>(STATE_FILE, { agents: [] });
+
   if (state.agents.length === 0) {
     state.agents.push({ ...DEFAULT_AGENT, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() });
     await saveState(STATE_FILE, state);
   }
+
   cache = state.agents;
 }
 

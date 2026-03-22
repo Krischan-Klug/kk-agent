@@ -7,7 +7,7 @@ import { REASONING_LEVEL_DEFAULTS } from "../provider/defaults.js";
 import { getToolDefinitions, executeTool, getKnownMcpIds, getRunnableMcpIds } from "../mcp/service.js";
 import { runLoop } from "../loop/service.js";
 import type { LoopMessage } from "../loop/types.js";
-import { getAgent, setLoopState, clearLoopState, getLoopState } from "../agent/service.js";
+import { getAgent, setLoopState, clearLoopState } from "../agent/service.js";
 
 function generateSessionName(content: string): string {
   const clean = content.trim();
@@ -22,6 +22,7 @@ function toLoopMessages(messages: SessionState["messages"]): LoopMessage[] {
   return messages.map((message) => ({
     role: message.role,
     content: message.content,
+    kind: message.kind,
     reasoning: message.reasoning,
     tool_call_id: message.tool_call_id,
     tool_calls: message.tool_calls?.map((toolCall) => ({
@@ -36,6 +37,7 @@ function fromLoopMessages(messages: LoopMessage[]): SessionState["messages"] {
   return messages.map((message) => ({
     role: message.role,
     content: message.content,
+    kind: message.kind,
     reasoning: message.reasoning,
     tool_call_id: message.tool_call_id,
     tool_calls: message.tool_calls?.map((toolCall) => ({
@@ -59,42 +61,27 @@ function getSessionRunnableMcpIds(activeMcpIds: string[]): string[] {
 function buildResolvedSystemPrompt(
   session: Pick<SessionState, "activeMcpIds">,
   agent: ReturnType<typeof getAgent>,
-  phaseName?: string,
-  phaseIteration?: number,
 ): string {
   const runnableMcpIds = getSessionRunnableMcpIds(session.activeMcpIds);
   const mcpInstr = buildMcpInstructions(runnableMcpIds, agent.mcpInstructions);
-  const phase = phaseName
-    ? agent.loopStrategy.phases.find((entry) => entry.name === phaseName)
-    : undefined;
 
   const variables: Record<string, string> = {
     ...getSystemVariables(),
-    phase: phase?.name ?? "",
-    iteration: String(phaseIteration ?? 0),
-    maxIterations: String(phase?.maxIterations ?? 0),
     mcpInstructions: mcpInstr,
     ...agent.variables,
   };
 
-  return buildPrompt(
-    agent.promptTemplates.base,
-    phase ? (agent.promptTemplates.phases[phase.name] ?? "") : "",
-    mcpInstr,
-    variables,
-  );
+  return buildPrompt(agent.systemPrompt, mcpInstr, variables);
 }
 
 export function createSession(body: CreateSessionBody): SessionState {
   const agent = getAgent(body.agentId);
 
-  // Merge MCPs: agent's MCPs + any explicit MCPs from the body
   const agentMcpIds = agent.mcpIds ?? [];
   const bodyMcpIds = body.activeMcpIds ?? [];
   const activeMcpIds = sanitizeMcpIds([...agentMcpIds, ...bodyMcpIds]);
 
   const model = body.model ?? agent.defaultModel ?? getActiveModel();
-
   const reasoningEffort = body.reasoningEffort ?? agent.reasoningEffort;
   const systemPrompt = buildResolvedSystemPrompt({ activeMcpIds }, agent);
 
@@ -125,13 +112,7 @@ export function deleteSession(id: string): void {
 export function getCurrentSystemPrompt(sessionId: string): string {
   const session = getSession(sessionId);
   const agent = getAgent(session.agentId);
-  const loopState = getLoopState(sessionId);
-  return buildResolvedSystemPrompt(
-    session,
-    agent,
-    loopState?.currentPhase,
-    loopState?.phaseIteration,
-  );
+  return buildResolvedSystemPrompt(session, agent);
 }
 
 function resolveReasoningConfig(session: SessionState): {
@@ -152,7 +133,7 @@ function resolveReasoningConfig(session: SessionState): {
 
 async function resolveCompactionConfig(session: SessionState, agent: ReturnType<typeof getAgent>) {
   const ms = getModelSettings(session.model);
-  const compactionPrompt = agent.compactionPrompt ?? ms.compactionPrompt; // undefined = use default in loop
+  const compactionPrompt = agent.compactionPrompt ?? ms.compactionPrompt;
   let maxContextTokens: number | undefined;
   try {
     const models = await getModels();
@@ -161,7 +142,7 @@ async function resolveCompactionConfig(session: SessionState, agent: ReturnType<
   } catch {
     // Model info not available — compaction disabled
   }
-  return { compactionPrompt, maxContextTokens };
+  return { compactionPrompt, maxContextTokens, compactionThreshold: agent.compactionThreshold };
 }
 
 export async function chat(
@@ -186,14 +167,15 @@ export async function chat(
     reasoningEffort: rc.reasoningEffort,
     temperature: rc.temperature,
     maxOutputTokens: rc.maxOutputTokens,
-    strategy: agent.loopStrategy,
-    promptTemplates: agent.promptTemplates,
+    systemPrompt: agent.systemPrompt,
+    maxIterations: agent.maxIterations,
     mcpInstructions: buildMcpInstructions(getSessionRunnableMcpIds(sessionWithUserMessage.activeMcpIds), agent.mcpInstructions),
     agentVariables: agent.variables ?? {},
     allTools: tools,
     executeTool,
     maxContextTokens: cc.maxContextTokens,
     compactionPrompt: cc.compactionPrompt,
+    compactionThreshold: cc.compactionThreshold,
   });
 
   const finalMessages = fromLoopMessages(result.messages);
@@ -231,22 +213,38 @@ export async function chatStream(
       reasoningEffort: rc.reasoningEffort,
       temperature: rc.temperature,
       maxOutputTokens: rc.maxOutputTokens,
-      strategy: agent.loopStrategy,
-      promptTemplates: agent.promptTemplates,
+      systemPrompt: agent.systemPrompt,
+      maxIterations: agent.maxIterations,
       mcpInstructions: buildMcpInstructions(getSessionRunnableMcpIds(sessionWithUserMessage.activeMcpIds), agent.mcpInstructions),
       agentVariables: agent.variables ?? {},
       allTools: tools,
       executeTool,
       maxContextTokens: cc.maxContextTokens,
       compactionPrompt: cc.compactionPrompt,
+      compactionThreshold: cc.compactionThreshold,
       onContent: (content) => emit({ type: "content", content }),
       onReasoning: (content) => emit({ type: "reasoning", content }),
+      onRetryNotice: (message) => emit({ type: "retry_notice", message }),
+      onCompaction: (message) =>
+        emit({
+          type: "compaction",
+          message: {
+            role: message.role,
+            content: message.content,
+            kind: message.kind,
+            reasoning: message.reasoning,
+            tool_call_id: message.tool_call_id,
+            tool_calls: message.tool_calls?.map((toolCall) => ({
+              id: toolCall.id,
+              name: toolCall.name,
+              arguments: toolCall.arguments,
+            })),
+          },
+        }),
       onToolCall: (tc) =>
         emit({ type: "tool_call", toolCall: { id: tc.id, name: tc.name, arguments: tc.arguments } }),
       onToolResult: (toolCallId, result) =>
         emit({ type: "tool_result", toolCallId, content: result.content, isError: result.isError }),
-      onPhaseChange: (from, to, reason) =>
-        emit({ type: "phase_change", from, to, reason }),
       onLoopState: (state) => {
         setLoopState(sessionId, state);
         emit({ type: "loop_state", state });

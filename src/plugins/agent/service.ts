@@ -27,8 +27,8 @@ export async function createAgent(body: CreateAgentBody): Promise<AgentDefinitio
     id,
     name: body.name,
     description: body.description ?? "",
-    loopStrategy: body.loopStrategy,
-    promptTemplates: body.promptTemplates,
+    systemPrompt: body.systemPrompt ?? "",
+    maxIterations: body.maxIterations ?? 10,
     mcpIds: body.mcpIds ?? [],
     mcpInstructions: body.mcpInstructions ?? {},
     variables: body.variables ?? {},
@@ -46,8 +46,8 @@ export async function updateAgent(id: string, body: UpdateAgentBody): Promise<Ag
   const patch: Partial<AgentDefinition> = {};
   if (body.name !== undefined) patch.name = body.name;
   if (body.description !== undefined) patch.description = body.description;
-  if (body.loopStrategy !== undefined) patch.loopStrategy = body.loopStrategy;
-  if (body.promptTemplates !== undefined) patch.promptTemplates = body.promptTemplates;
+  if (body.systemPrompt !== undefined) patch.systemPrompt = body.systemPrompt;
+  if (body.maxIterations !== undefined) patch.maxIterations = body.maxIterations;
   if (body.mcpIds !== undefined) patch.mcpIds = body.mcpIds;
   if (body.mcpInstructions !== undefined) patch.mcpInstructions = body.mcpInstructions;
   if (body.variables !== undefined) patch.variables = body.variables;

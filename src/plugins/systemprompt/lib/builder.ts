@@ -54,23 +54,19 @@ function resolveVariables(text: string, variables: Record<string, string>): stri
 }
 
 /**
- * Build a complete system prompt for a specific agent phase.
- * Variables like {{phase}}, {{iteration}}, {{maxIterations}}, {{CURRENT_DATE}}
- * are resolved in BOTH the base prompt and the phase extension.
+ * Build a complete system prompt.
+ * Variables like {{iteration}}, {{maxIterations}}, {{CURRENT_DATE}}
+ * are resolved in the base prompt.
  */
 export function buildPrompt(
   agentBasePrompt: string,
-  phaseExtension: string,
   mcpInstructions: string,
   variables: Record<string, string>,
 ): string {
   const resolvedBase = resolveVariables(agentBasePrompt, variables);
-  const resolvedPhase = resolveVariables(phaseExtension, variables);
 
   const parts = [resolvedBase];
-  if (resolvedPhase) parts.push(resolvedPhase);
   if (mcpInstructions) parts.push(mcpInstructions);
 
   return parts.join("\n\n---\n\n");
 }
-

@@ -25,8 +25,8 @@ export async function doGet(req: Request, res: Response): Promise<Response> {
 export async function doCreate(req: Request, res: Response): Promise<Response> {
   try {
     const body = req.body as CreateAgentBody;
-    if (!body.name || !body.loopStrategy || !body.promptTemplates) {
-      return res.status(400).json({ error: "name, loopStrategy and promptTemplates are required" });
+    if (!body.name) {
+      return res.status(400).json({ error: "name is required" });
     }
     const agent = await createAgent(body);
     return res.status(201).json(agent);

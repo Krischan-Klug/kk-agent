@@ -1,5 +1,5 @@
-import type { UnifiedMessage, UnifiedToolCall, TokenStats } from "../provider/lib/types.js";
-import type { LoopStrategy, PromptTemplates, AgentLoopState } from "../agent/types.js";
+import type { UnifiedToolCall, TokenStats } from "../provider/lib/types.js";
+import type { AgentLoopState } from "../agent/types.js";
 
 export interface ToolDefinition {
   name: string;
@@ -13,8 +13,9 @@ export interface ToolResult {
 }
 
 export interface LoopMessage {
-  role: "user" | "assistant" | "tool";
+  role: "user" | "assistant" | "tool" | "system";
   content: string;
+  kind?: "compaction" | "internal_summary";
   reasoning?: string;
   tool_call_id?: string;
   tool_calls?: UnifiedToolCall[];
@@ -33,17 +34,18 @@ export interface LoopOptions {
   reasoningEffort?: string;
   temperature?: number;
   maxOutputTokens?: number;
-  strategy: LoopStrategy;
-  promptTemplates: PromptTemplates;
+  systemPrompt: string;
+  maxIterations: number;
   mcpInstructions: string;
   agentVariables: Record<string, string>;
   allTools: ToolDefinition[];
   executeTool: ExecuteToolFn;
   onContent?: (content: string) => void;
   onReasoning?: (content: string) => void;
+  onCompaction?: (message: LoopMessage) => void;
+  onRetryNotice?: (message: string) => void;
   onToolCall?: (toolCall: UnifiedToolCall) => void;
   onToolResult?: (toolCallId: string, result: ToolResult) => void;
-  onPhaseChange?: (from: string, to: string, reason: string) => void;
   onLoopState?: (state: AgentLoopState) => void;
   onStats?: (stats: TokenStats) => void;
   maxContextTokens?: number;

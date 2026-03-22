@@ -4,15 +4,14 @@ import {
 } from "./lib/builder.js";
 import { getSystemVariables } from "./lib/builder.js";
 
-/* ── Public API (used by the phased agent loop) ── */
+/* ── Public API ── */
 
 export function buildPrompt(
   agentBasePrompt: string,
-  phaseExtension: string,
   mcpInstructions: string,
   variables: Record<string, string>,
 ): string {
-  return build(agentBasePrompt, phaseExtension, mcpInstructions, variables);
+  return build(agentBasePrompt, mcpInstructions, variables);
 }
 
 export function buildMcpInstructions(

@@ -13,8 +13,6 @@ export interface AgentDefinition {
   variables: Record<string, string>;
   defaultModel?: string;
   reasoningEffort?: ReasoningEffort;
-  compactionPrompt?: string;
-  compactionThreshold?: number;
   createdAt: string;
   updatedAt: string;
 }
@@ -43,8 +41,6 @@ export interface CreateAgentBody {
   variables?: Record<string, string>;
   defaultModel?: string;
   reasoningEffort?: ReasoningEffort;
-  compactionPrompt?: string;
-  compactionThreshold?: number;
 }
 
 export interface UpdateAgentBody {
@@ -57,6 +53,4 @@ export interface UpdateAgentBody {
   variables?: Record<string, string>;
   defaultModel?: string;
   reasoningEffort?: ReasoningEffort;
-  compactionPrompt?: string;
-  compactionThreshold?: number;
 }

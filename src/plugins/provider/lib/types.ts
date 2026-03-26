@@ -39,6 +39,7 @@ export interface TokenStats {
   inputTokens: number;
   outputTokens: number;
   reasoningTokens: number;
+  source: "provider" | "estimated" | "unknown";
 }
 
 export interface StreamChunk {

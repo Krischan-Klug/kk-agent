@@ -4,8 +4,8 @@ import { configure, initState, autoSelectModel } from "./service.js";
 
 export const ProviderPlugin: ModulePlugin = {
   name: "provider",
-  version: "0.1.0",
-  description: "LLM provider with OpenAI/Anthropic format support.",
+  version: "0.2.0",
+  description: "Multi-provider LLM support (LM Studio, OpenAI, Anthropic).",
   async init(app, context) {
     const settings = context.settings as { baseUrl?: string; activeModel?: string };
     configure(settings);

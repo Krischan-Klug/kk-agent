@@ -15,7 +15,6 @@ export interface ToolResult {
 export interface LoopMessage {
   role: "user" | "assistant" | "tool" | "system";
   content: string;
-  kind?: "compaction" | "internal_summary";
   reasoning?: string;
   tool_call_id?: string;
   tool_calls?: UnifiedToolCall[];
@@ -42,15 +41,11 @@ export interface LoopOptions {
   executeTool: ExecuteToolFn;
   onContent?: (content: string) => void;
   onReasoning?: (content: string) => void;
-  onCompaction?: (message: LoopMessage) => void;
   onRetryNotice?: (message: string) => void;
   onToolCall?: (toolCall: UnifiedToolCall) => void;
   onToolResult?: (toolCallId: string, result: ToolResult) => void;
   onLoopState?: (state: AgentLoopState) => void;
   onStats?: (stats: TokenStats) => void;
-  maxContextTokens?: number;
-  compactionPrompt?: string;
-  compactionThreshold?: number;
 }
 
 export interface LoopResult {

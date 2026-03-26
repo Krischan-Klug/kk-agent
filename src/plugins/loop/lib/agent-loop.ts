@@ -4,10 +4,7 @@ import type { AgentLoopState } from "../../agent/types.js";
 import { callProviderStream } from "../../provider/service.js";
 import { buildPrompt } from "../../systemprompt/service.js";
 import { getSystemVariables } from "../../systemprompt/lib/builder.js";
-import { compactContext } from "./compaction.js";
 import { getDefaults } from "../../lib/defaults.js";
-
-/* ── Constants ── */
 
 const INVALID_TOOL_RETRY_BUDGET = 2;
 const EMPTY_RESPONSE_RETRY_BUDGET = 1;
@@ -21,10 +18,6 @@ const INVALID_TOOL_CALL_PATTERNS = [
   /<\/tool_call>/i,
 ];
 
-/* Instructions are loaded from getDefaults() at runtime — see plugins/lib/defaults.ts */
-
-/* ── Helpers ── */
-
 function looksLikeInvalidToolAttempt(content: string, reasoning?: string): boolean {
   const combined = `${content}\n${reasoning ?? ""}`;
   return INVALID_TOOL_CALL_PATTERNS.some((pattern) => pattern.test(combined));
@@ -34,39 +27,33 @@ function hasVisibleContent(content: string): boolean {
   return content.trim().length > 0;
 }
 
-function serializeMessagesForModel(messages: LoopMessage[]): UnifiedMessage[] {
-  return messages
-    .filter((m) => !(m.role === "system" && m.kind === "compaction"))
-    .map((m) => ({
+function toUnifiedTools(tools: LoopOptions["allTools"]): UnifiedToolDefinition[] {
+  return tools.map((tool) => ({
+    name: tool.name,
+    description: tool.description,
+    parameters: tool.parameters,
+  }));
+}
+
+function buildModelMessages(
+  systemPrompt: string,
+  messages: LoopMessage[],
+  retryInstruction?: string,
+): UnifiedMessage[] {
+  return [
+    { role: "system", content: systemPrompt },
+    ...(retryInstruction ? [{ role: "system" as const, content: retryInstruction }] : []),
+    ...messages.map((m) => ({
       role: m.role,
       content: m.content,
       tool_call_id: m.tool_call_id,
       tool_calls: m.tool_calls,
-    }));
+    })),
+  ];
 }
-
-function getLastMessageContent(messages: LoopMessage[], role: LoopMessage["role"]): string | undefined {
-  for (let i = messages.length - 1; i >= 0; i--) {
-    if (messages[i].role === role && messages[i].content.trim()) {
-      return messages[i].content;
-    }
-  }
-  return undefined;
-}
-
-function toUnifiedTools(tools: LoopOptions["allTools"]): UnifiedToolDefinition[] {
-  return tools.map((t) => ({
-    name: t.name,
-    description: t.description,
-    parameters: t.parameters,
-  }));
-}
-
-/* ── Main Loop ── */
 
 export async function runAgentLoop(opts: LoopOptions): Promise<LoopResult> {
-  const visibleMessages: LoopMessage[] = [...opts.messages];
-  const contextMessages: LoopMessage[] = [...opts.messages];
+  const messages: LoopMessage[] = [...opts.messages];
   const tools = toUnifiedTools(opts.allTools);
 
   let iteration = 0;
@@ -76,8 +63,6 @@ export async function runAgentLoop(opts: LoopOptions): Promise<LoopResult> {
   let emptyResponseRetryCount = 0;
   let lengthRetryCount = 0;
   let retryInstruction: string | undefined;
-  let pendingCompaction = false;
-  let postCompactionInstruction: string | undefined;
 
   const loopState: AgentLoopState = {
     sessionId: opts.sessionId,
@@ -95,42 +80,6 @@ export async function runAgentLoop(opts: LoopOptions): Promise<LoopResult> {
   while (iteration < opts.maxIterations) {
     iteration++;
 
-    // ── Compaction ──
-    if (pendingCompaction) {
-      const prompt = opts.compactionPrompt ?? getDefaults().compaction.prompt;
-      const compactionMarker: LoopMessage = {
-        role: "system",
-        kind: "compaction",
-        content: `Kontext komprimiert bei Iteration ${iteration - 1}/${opts.maxIterations}`,
-      };
-      visibleMessages.push(compactionMarker);
-      opts.onCompaction?.(compactionMarker);
-
-      const compacted = await compactContext(
-        serializeMessagesForModel(contextMessages),
-        prompt,
-        opts.model,
-        {
-          iteration: Math.max(iteration - 1, 1),
-          maxIterations: opts.maxIterations,
-          lastUserMessage: getLastMessageContent(contextMessages, "user"),
-          lastAssistantMessage: getLastMessageContent(contextMessages, "assistant"),
-        },
-      );
-      contextMessages.length = 0;
-      contextMessages.push(...compacted.map((m) => ({
-        role: m.role as LoopMessage["role"],
-        content: m.content,
-        kind: m.role === "system" ? ("internal_summary" as const) : undefined,
-        tool_call_id: m.tool_call_id,
-        tool_calls: m.tool_calls,
-      })));
-      cumulativeStats.inputTokens = 0;
-      pendingCompaction = false;
-      postCompactionInstruction = getDefaults().compaction.postInstruction;
-    }
-
-    // ── Build system prompt ──
     const variables: Record<string, string> = {
       ...getSystemVariables(),
       iteration: String(iteration),
@@ -140,18 +89,11 @@ export async function runAgentLoop(opts: LoopOptions): Promise<LoopResult> {
     };
     const systemPrompt = buildPrompt(opts.systemPrompt, opts.mcpInstructions, variables);
 
-    // ── Prepare messages ──
-    const messagesWithSystem: UnifiedMessage[] = [
-      { role: "system", content: systemPrompt },
-      ...(retryInstruction ? [{ role: "system" as const, content: retryInstruction }] : []),
-      ...(postCompactionInstruction ? [{ role: "system" as const, content: postCompactionInstruction }] : []),
-      ...serializeMessagesForModel(contextMessages),
-    ];
+    const messagesWithSystem = buildModelMessages(systemPrompt, messages, retryInstruction);
     retryInstruction = undefined;
-    postCompactionInstruction = undefined;
 
-    // ── Call LLM (streaming) ──
     const streamedChunks: Array<{ type: "content" | "reasoning"; content: string }> = [];
+    let receivedProviderStats = false;
 
     const response = await callProviderStream(
       {
@@ -165,30 +107,42 @@ export async function runAgentLoop(opts: LoopOptions): Promise<LoopResult> {
       (chunk) => {
         if (chunk.type === "content" && chunk.content) {
           streamedChunks.push({ type: "content", content: chunk.content });
-        } else if (chunk.type === "reasoning" && chunk.content) {
+          return;
+        }
+
+        if (chunk.type === "reasoning" && chunk.content) {
           streamedChunks.push({ type: "reasoning", content: chunk.content });
-        } else if (chunk.type === "stats" && chunk.stats) {
+          return;
+        }
+
+        if (chunk.type === "stats" && chunk.stats) {
+          receivedProviderStats = true;
           cumulativeStats.inputTokens = chunk.stats.inputTokens;
           cumulativeStats.outputTokens += chunk.stats.outputTokens;
           cumulativeStats.reasoningTokens += chunk.stats.reasoningTokens;
-          opts.onStats?.({ ...cumulativeStats });
+          opts.onStats?.({
+            inputTokens: cumulativeStats.inputTokens,
+            outputTokens: cumulativeStats.outputTokens,
+            reasoningTokens: cumulativeStats.reasoningTokens,
+            source: chunk.stats.source,
+          });
         }
       },
     );
 
-    // ── Compaction threshold check ──
-    if (opts.maxContextTokens && cumulativeStats.inputTokens > 0) {
-      const threshold = opts.compactionThreshold ?? getDefaults().agent.compactionThreshold;
-      if (cumulativeStats.inputTokens >= opts.maxContextTokens * threshold) {
-        pendingCompaction = true;
-      }
+    if (!receivedProviderStats) {
+      opts.onStats?.({
+        inputTokens: 0,
+        outputTokens: cumulativeStats.outputTokens,
+        reasoningTokens: cumulativeStats.reasoningTokens,
+        source: "unknown",
+      });
     }
 
     const messageContent = response.content.trim();
     const messageReasoning = response.reasoning?.trim() || undefined;
     const toolsCalled = response.tool_calls ?? [];
 
-    // ── Length retry (simple: once) ──
     if (response.finishReason === "length" && lengthRetryCount < LENGTH_RETRY_BUDGET) {
       lengthRetryCount++;
       retryInstruction = getDefaults().retry.lengthInstruction;
@@ -198,7 +152,6 @@ export async function runAgentLoop(opts: LoopOptions): Promise<LoopResult> {
       lengthRetryCount = 0;
     }
 
-    // ── Invalid tool attempt retry ──
     const invalidToolAttempt =
       response.finishReason !== "tool_calls"
       && toolsCalled.length === 0
@@ -218,7 +171,6 @@ export async function runAgentLoop(opts: LoopOptions): Promise<LoopResult> {
     }
     invalidToolAttemptCount = 0;
 
-    // ── Empty response retry ──
     const emptyResponse =
       response.finishReason === "stop"
       && toolsCalled.length === 0
@@ -239,7 +191,6 @@ export async function runAgentLoop(opts: LoopOptions): Promise<LoopResult> {
     }
     emptyResponseRetryCount = 0;
 
-    // ── Emit streamed content (delayed until validated) ──
     for (const chunk of streamedChunks) {
       if (chunk.type === "content") {
         opts.onContent?.(chunk.content);
@@ -248,7 +199,6 @@ export async function runAgentLoop(opts: LoopOptions): Promise<LoopResult> {
       }
     }
 
-    // ── Save assistant message ──
     lastContent = messageContent;
     if (hasVisibleContent(messageContent)) {
       lastMeaningfulContent = messageContent;
@@ -262,46 +212,39 @@ export async function runAgentLoop(opts: LoopOptions): Promise<LoopResult> {
     };
 
     if (toolsCalled.length > 0 || hasVisibleContent(messageContent) || messageReasoning) {
-      visibleMessages.push(assistantMessage);
-      contextMessages.push(assistantMessage);
+      messages.push(assistantMessage);
     }
 
-    // ── Execute tool calls ──
     if (response.finishReason === "tool_calls" && toolsCalled.length > 0) {
-      for (const tc of toolsCalled) {
-        opts.onToolCall?.(tc);
-        const result = await opts.executeTool(tc.name, tc.arguments);
-        opts.onToolResult?.(tc.id, result);
+      for (const toolCall of toolsCalled) {
+        opts.onToolCall?.(toolCall);
+        const result = await opts.executeTool(toolCall.name, toolCall.arguments);
+        opts.onToolResult?.(toolCall.id, result);
 
-        const toolMessage: LoopMessage = {
+        messages.push({
           role: "tool",
           content: result.content,
-          tool_call_id: tc.id,
-        };
-        visibleMessages.push(toolMessage);
-        contextMessages.push(toolMessage);
+          tool_call_id: toolCall.id,
+        });
       }
     }
 
-    // ── Update loop state ──
     loopState.iteration = iteration;
     loopState.updatedAt = new Date().toISOString();
     opts.onLoopState?.(loopState);
 
-    // ── Completion check: no tool calls = done ──
     if (response.finishReason !== "tool_calls") {
       break;
     }
   }
 
-  // ── Finalize ──
   loopState.status = "completed";
   loopState.iteration = iteration;
   loopState.updatedAt = new Date().toISOString();
   opts.onLoopState?.(loopState);
 
   return {
-    messages: visibleMessages,
+    messages,
     finalResponse: lastMeaningfulContent || lastContent,
     iterations: iteration,
   };

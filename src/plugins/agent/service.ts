@@ -35,7 +35,6 @@ export async function createAgent(body: CreateAgentBody): Promise<AgentDefinitio
     variables: body.variables ?? {},
     defaultModel: body.defaultModel,
     reasoningEffort: body.reasoningEffort,
-    compactionPrompt: body.compactionPrompt,
     createdAt: now,
     updatedAt: now,
   };
@@ -54,7 +53,6 @@ export async function updateAgent(id: string, body: UpdateAgentBody): Promise<Ag
   if (body.variables !== undefined) patch.variables = body.variables;
   if (body.defaultModel !== undefined) patch.defaultModel = body.defaultModel;
   if (body.reasoningEffort !== undefined) patch.reasoningEffort = body.reasoningEffort;
-  if (body.compactionPrompt !== undefined) patch.compactionPrompt = body.compactionPrompt;
   return store.updateAgent(id, patch);
 }
 

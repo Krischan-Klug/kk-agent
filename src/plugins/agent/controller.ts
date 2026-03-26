@@ -5,6 +5,7 @@ import {
   createAgent,
   updateAgent,
   deleteAgent,
+  listSystemVariables,
   getLoopState,
   subscribeLoopState,
 } from "./service.js";
@@ -20,6 +21,10 @@ export async function doGet(req: Request, res: Response): Promise<Response> {
   } catch (err) {
     return res.status(404).json({ error: (err as Error).message });
   }
+}
+
+export async function doListSystemVariables(_req: Request, res: Response): Promise<Response> {
+  return res.json({ variables: listSystemVariables() });
 }
 
 export async function doCreate(req: Request, res: Response): Promise<Response> {

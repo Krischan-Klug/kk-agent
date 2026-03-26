@@ -1,5 +1,15 @@
 import { getActiveInstructions } from "../../mcp/service.js";
 
+const RUNTIME_SYSTEM_VARIABLES = [
+  "CURRENT_DATE",
+  "CURRENT_TIME",
+  "CURRENT_TIMESTAMP",
+  "CURRENT_MODEL",
+  "iteration",
+  "maxIterations",
+  "mcpInstructions",
+] as const;
+
 /**
  * Build MCP instruction blocks for the given MCP IDs.
  * Agent-specific instructions override the global MCP instructions.
@@ -24,7 +34,7 @@ export function buildMcpInstructions(
 /**
  * System variables that are always available in prompts.
  */
-export function getSystemVariables(): Record<string, string> {
+export function getSystemVariables(extra: Record<string, string> = {}): Record<string, string> {
   const now = new Date();
   return {
     CURRENT_DATE: now.toLocaleDateString("de-DE", {
@@ -39,7 +49,12 @@ export function getSystemVariables(): Record<string, string> {
       second: "2-digit",
     }),
     CURRENT_TIMESTAMP: now.toISOString(),
+    ...extra,
   };
+}
+
+export function getSystemVariableNames(): string[] {
+  return [...RUNTIME_SYSTEM_VARIABLES];
 }
 
 /**

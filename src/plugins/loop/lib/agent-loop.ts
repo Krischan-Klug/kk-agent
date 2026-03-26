@@ -81,7 +81,7 @@ export async function runAgentLoop(opts: LoopOptions): Promise<LoopResult> {
     iteration++;
 
     const variables: Record<string, string> = {
-      ...getSystemVariables(),
+      ...getSystemVariables({ CURRENT_MODEL: opts.model }),
       iteration: String(iteration),
       maxIterations: String(opts.maxIterations),
       mcpInstructions: opts.mcpInstructions,

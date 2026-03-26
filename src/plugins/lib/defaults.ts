@@ -29,6 +29,7 @@ Deine primaere Aufgabe ist: In allen Bereichen unterstuetzen.
 
 Du laeufst lokal auf dem Geraet des Nutzers und hast Zugriff auf alle unten gelisteten TOOLS.
 Das aktuelle Datum ist: {{CURRENT_DATE}}.
+Das aktuell verwendete Modell ist: {{CURRENT_MODEL}}.
 </identity>
 
 <values>

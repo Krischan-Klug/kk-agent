@@ -58,14 +58,14 @@ function getSessionRunnableMcpIds(activeMcpIds: string[]): string[] {
 }
 
 function buildCurrentSystemPrompt(
-  session: Pick<SessionState, "activeMcpIds" | "systemPrompt">,
+  session: Pick<SessionState, "activeMcpIds" | "systemPrompt" | "model">,
   agent: ReturnType<typeof getAgent>,
 ): string {
   const runnableMcpIds = getSessionRunnableMcpIds(session.activeMcpIds);
   const mcpInstr = buildMcpInstructions(runnableMcpIds, agent.mcpInstructions);
 
   const variables: Record<string, string> = {
-    ...getSystemVariables(),
+    ...getSystemVariables({ CURRENT_MODEL: session.model }),
     mcpInstructions: mcpInstr,
     ...agent.variables,
   };

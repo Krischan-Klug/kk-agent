@@ -1,6 +1,7 @@
 import type { AgentDefinition, CreateAgentBody, UpdateAgentBody, AgentLoopState } from "./types.js";
 import * as store from "./lib/store.js";
 import { getDefaults } from "../lib/defaults.js";
+import { getSystemVariableNames } from "../systemprompt/lib/builder.js";
 
 export async function initAgentService(): Promise<void> {
   await store.initStore();
@@ -14,6 +15,10 @@ export function getAgent(id: string): AgentDefinition {
   const agent = store.getAgent(id);
   if (!agent) throw new Error(`Agent "${id}" not found`);
   return agent;
+}
+
+export function listSystemVariables(): string[] {
+  return getSystemVariableNames();
 }
 
 export async function createAgent(body: CreateAgentBody): Promise<AgentDefinition> {

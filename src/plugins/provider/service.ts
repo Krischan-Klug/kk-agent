@@ -14,7 +14,6 @@ import { estimateRequestTokens } from "./lib/token-estimator.js";
 import { loadState, saveState } from "../lib/state.js";
 
 const STATE_FILE = "providers.json";
-const LEGACY_STATE_FILE = "provider.json";
 
 /* ── State ── */
 
@@ -60,21 +59,6 @@ async function persist(): Promise<void> {
   await saveState(STATE_FILE, state);
 }
 
-/** Migrate old single-provider state to new multi-provider format */
-async function migrateLegacyState(): Promise<boolean> {
-  const legacy = await loadState<{ activeModel: string; modelSettings: Record<string, ModelSettings> }>(
-    LEGACY_STATE_FILE,
-    { activeModel: "", modelSettings: {} },
-  );
-
-  // Only migrate if legacy state has meaningful data and we have no providers yet
-  if (!legacy.activeModel && Object.keys(legacy.modelSettings).length === 0) return false;
-  if (state.providers.length > 0) return false;
-
-  console.log("[provider] Migrating legacy provider.json → providers.json");
-  return true;
-}
-
 /* ── Reasoning mapping ── */
 
 /**
@@ -105,7 +89,6 @@ export function configure(settings: { baseUrl?: string; activeModel?: string }):
       type: "lmstudio",
       baseUrl: settings.baseUrl,
       authMethod: "none",
-      endpoint: "chat-completions",
       isDefault: true,
     };
     state.providers.push(defaultProvider);
@@ -128,21 +111,6 @@ export async function initState(): Promise<void> {
     // Use persisted state
     state = loaded;
     console.log(`[provider] Loaded ${state.providers.length} provider(s), active: ${state.activeProviderId}`);
-    return;
-  }
-
-  // Try legacy migration
-  const legacyState = await loadState<{ activeModel: string; modelSettings: Record<string, ModelSettings> }>(
-    LEGACY_STATE_FILE,
-    { activeModel: "", modelSettings: {} },
-  );
-
-  if (legacyState.activeModel || Object.keys(legacyState.modelSettings).length > 0) {
-    // We have legacy data — preserve model and settings
-    if (legacyState.activeModel) state.activeModel = legacyState.activeModel;
-    if (Object.keys(legacyState.modelSettings).length > 0) state.modelSettings = legacyState.modelSettings;
-    console.log("[provider] Migrated legacy provider.json → providers.json");
-    await persist();
     return;
   }
 
@@ -226,7 +194,8 @@ export async function testProvider(id: string): Promise<{ ok: boolean; error?: s
 /* ── Public API: Model operations ── */
 
 export async function callProvider(request: UnifiedRequest): Promise<UnifiedResponse> {
-  const mapped = { ...request, reasoningEffort: mapReasoning(request.model, request.reasoningEffort) };
+  const endpoint = state.modelSettings[request.model]?.endpoint || "chat-completions";
+  const mapped = { ...request, endpoint, reasoningEffort: mapReasoning(request.model, request.reasoningEffort) };
   return getActiveAdapter().chat(mapped);
 }
 
@@ -234,7 +203,8 @@ export async function callProviderStream(
   request: UnifiedRequest,
   onChunk: OnChunkFn,
 ): Promise<UnifiedResponse> {
-  const mapped = { ...request, reasoningEffort: mapReasoning(request.model, request.reasoningEffort) };
+  const endpoint = state.modelSettings[request.model]?.endpoint || "chat-completions";
+  const mapped = { ...request, endpoint, reasoningEffort: mapReasoning(request.model, request.reasoningEffort) };
   return getActiveAdapter().chatStream(mapped, onChunk);
 }
 

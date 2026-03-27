@@ -13,6 +13,10 @@
     "enabled": true,
     "settings": {}
   },
+  "tools": {
+    "enabled": true,
+    "settings": {}
+  },
   "loop": {
     "enabled": true,
     "settings": {}

@@ -12,7 +12,6 @@ export interface AppDefaults {
   retry: {
     emptyResponseInstruction: string;
     invalidToolInstruction: string;
-    lengthInstruction: string;
   };
   reasoning: {
     defaultEffort: string;
@@ -107,9 +106,6 @@ Your last attempt was empty or contained no meaningful content. Provide either a
 </retry-instruction>`,
     invalidToolInstruction: `<retry-instruction reason="invalid-tool-call">
 Your last attempt output a tool call as plain text or thinking instead of a structured tool_call. Tools must be invoked exclusively via structured tool_calls in the API. Reply with a normal response or send a real structured tool call.
-</retry-instruction>`,
-    lengthInstruction: `<retry-instruction reason="length-truncated">
-Your last response was truncated due to the token limit. Continue seamlessly without repeating already-output content. If a shorter result suffices, be more concise.
 </retry-instruction>`,
   },
   reasoning: {

@@ -1,29 +1,13 @@
 import { readFile, writeFile, rename, mkdir } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { resolve, dirname } from "node:path";
-import { homedir } from "node:os";
 import type { McpServerConfig } from "../types.js";
 import { getStatePath } from "../../lib/state.js";
 
 const REGISTRY_PATH = getStatePath("mcps.json");
 const LEGACY_PATH = resolve("mcps.json");
-
-const DEFAULT_REGISTRY: { mcps: McpServerConfig[] } = {
-  mcps: [
-    {
-      id: "filesystem",
-      name: "Filesystem",
-      active: false,
-      instruction:
-        "Du hast Zugriff auf das lokale Dateisystem. Nutze die verfuegbaren Datei-Tools gezielt zum Lesen und Schreiben, arbeite mit absoluten Pfaden und frage nur vor riskanten oder destruktiven Aenderungen nach.",
-      transport: "stdio",
-      server: {
-        command: "npx",
-        args: ["-y", "@modelcontextprotocol/server-filesystem", homedir()],
-      },
-    },
-  ],
-};
+const SYSTEM_IDS = new Set(["filesystem", "web-search", "terminal", "commands"]);
+const DEFAULT_REGISTRY: { mcps: McpServerConfig[] } = { mcps: [] };
 
 async function ensureDir(): Promise<void> {
   const dir = dirname(REGISTRY_PATH);
@@ -52,7 +36,9 @@ export async function loadRegistry(): Promise<McpServerConfig[]> {
   }
   const raw = await readFile(REGISTRY_PATH, "utf-8");
   const data = JSON.parse(raw) as { mcps: McpServerConfig[] };
-  return data.mcps;
+  return (data.mcps ?? [])
+    .filter((mcp) => !SYSTEM_IDS.has(mcp.id))
+    .map((mcp) => ({ ...mcp, source: "custom" as const }));
 }
 
 export async function saveRegistry(mcps: McpServerConfig[]): Promise<void> {

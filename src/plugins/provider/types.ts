@@ -1,8 +1,8 @@
 /* ── Provider Config ── */
 
 export type ProviderType = "lmstudio" | "openai" | "anthropic";
-export type EndpointType = "chat-completions" | "responses" | "completions" | "embeddings";
-export type AuthMethod = "none" | "api-key" | "session-token";
+export type EndpointType = "chat-completions" | "responses";
+export type AuthMethod = "none" | "api-key";
 
 export interface ProviderConfig {
   id: string;
@@ -11,8 +11,6 @@ export interface ProviderConfig {
   baseUrl: string;
   authMethod: AuthMethod;
   apiKey?: string;
-  sessionToken?: string;
-  endpoint: EndpointType;
   isDefault?: boolean;
 }
 
@@ -21,13 +19,6 @@ export interface ProvidersState {
   activeProviderId: string;
   activeModel: string;
   modelSettings: Record<string, ModelSettings>;
-}
-
-/* ── Legacy (kept for migration) ── */
-
-export interface ProviderSettings {
-  baseUrl: string;
-  activeModel: string;
 }
 
 /* ── Model ── */
@@ -45,6 +36,7 @@ export interface ReasoningLevelConfig {
 }
 
 export interface ModelSettings {
+  endpoint?: EndpointType;
   reasoningEffort?: string;
   reasoningOnOff?: boolean;
   levels?: Record<string, ReasoningLevelConfig>;

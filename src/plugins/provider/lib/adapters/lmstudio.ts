@@ -12,14 +12,19 @@ import * as responses from "../endpoints/responses.js";
 
 export function createLmStudioAdapter(config: ProviderConfig): ProviderAdapter {
   const baseUrl = config.baseUrl.replace(/\/$/, "");
-  const endpoint = config.endpoint === "responses" ? responses : chatCompletions;
 
   return {
     type: "lmstudio",
 
-    chat: (request) => endpoint.chat(request, baseUrl),
+    chat: (request) => {
+      const ep = request.endpoint === "responses" ? responses : chatCompletions;
+      return ep.chat(request, baseUrl);
+    },
 
-    chatStream: (request, onChunk) => endpoint.chatStream(request, baseUrl, onChunk),
+    chatStream: (request, onChunk) => {
+      const ep = request.endpoint === "responses" ? responses : chatCompletions;
+      return ep.chatStream(request, baseUrl, onChunk);
+    },
 
     async listModels(): Promise<ModelInfo[]> {
       // Try native LM Studio API first (richer info: context length)

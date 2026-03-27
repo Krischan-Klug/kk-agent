@@ -1,24 +1,25 @@
 import type { McpServerConfig, McpStdioConfig, McpToolDefinition, CreateMcpBody, UpdateMcpBody } from "./types.js";
 import type { UnifiedToolDefinition } from "../provider/lib/types.js";
+import { getSystemMcpById } from "../tools/service.js";
 import { getRegistry, updateRegistry, getMcpById, addMcp, removeMcp } from "./lib/registry.js";
 import {
   startMcp,
   stopMcp,
   getToolsForMcp,
   getAllTools,
-  executeTool,
+  executeTool as executeCustomTool,
   getRunningMcps,
 } from "./lib/process-manager.js";
 
-// Cached registry for sync access
-let cachedMcps: McpServerConfig[] = [];
+let cachedCustomMcps: McpServerConfig[] = [];
 
 export async function initMcpService(): Promise<void> {
-  cachedMcps = await getRegistry();
+  cachedCustomMcps = await getRegistry();
 }
 
 export async function getAllMcps(): Promise<McpServerConfig[]> {
-  return getRegistry();
+  cachedCustomMcps = await getRegistry();
+  return cachedCustomMcps;
 }
 
 export async function toggleMcp(id: string, active: boolean): Promise<McpServerConfig> {
@@ -29,41 +30,33 @@ export async function toggleMcp(id: string, active: boolean): Promise<McpServerC
   mcp.active = active;
   await updateRegistry(mcps);
 
-  if (active) {
-    await startMcp(mcp);
-  } else {
-    await stopMcp(id);
-  }
+  if (active) await startMcp(mcp);
+  else await stopMcp(id);
 
-  cachedMcps = mcps;
+  cachedCustomMcps = mcps;
   return mcp;
 }
 
 export async function updateInstruction(id: string, instruction: string): Promise<McpServerConfig> {
-  const mcps = await getRegistry();
-  const mcp = getMcpById(mcps, id);
-  if (!mcp) throw new Error(`MCP "${id}" not found`);
-
-  mcp.instruction = instruction;
-  await updateRegistry(mcps);
-  cachedMcps = mcps;
-  return mcp;
+  return updateMcpConfig(id, { instruction });
 }
 
 export function getActiveInstructions(): { id: string; name: string; instruction: string }[] {
   const runningIds = new Set(getRunningMcps());
-  return cachedMcps
+  return cachedCustomMcps
     .filter((m) => m.active && runningIds.has(m.id))
     .map((m) => ({ id: m.id, name: m.name, instruction: m.instruction }));
 }
 
 export function getKnownMcpIds(): string[] {
-  return cachedMcps.map((m) => m.id);
+  return cachedCustomMcps.map((m) => m.id);
 }
 
 export function getRunnableMcpIds(): string[] {
   const runningIds = new Set(getRunningMcps());
-  return cachedMcps.filter((m) => m.active && runningIds.has(m.id)).map((m) => m.id);
+  return cachedCustomMcps
+    .filter((m) => m.active && runningIds.has(m.id))
+    .map((m) => m.id);
 }
 
 export function getToolDefinitions(activeMcpIds: string[]): UnifiedToolDefinition[] {
@@ -85,7 +78,7 @@ export async function startMcpServer(id: string): Promise<void> {
   await startMcp(mcp);
   mcp.active = true;
   await updateRegistry(mcps);
-  cachedMcps = mcps;
+  cachedCustomMcps = mcps;
 }
 
 export async function stopMcpServer(id: string): Promise<void> {
@@ -95,7 +88,7 @@ export async function stopMcpServer(id: string): Promise<void> {
   if (!mcp) throw new Error(`MCP "${id}" not found`);
   mcp.active = false;
   await updateRegistry(mcps);
-  cachedMcps = mcps;
+  cachedCustomMcps = mcps;
 }
 
 export async function createMcp(body: CreateMcpBody): Promise<McpServerConfig> {
@@ -104,6 +97,7 @@ export async function createMcp(body: CreateMcpBody): Promise<McpServerConfig> {
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-|-$/g, "");
 
+  if (getSystemMcpById(id)) throw new Error(`MCP "${id}" ist als System-MCP reserviert`);
   const existing = await getRegistry();
   if (getMcpById(existing, id)) throw new Error(`MCP "${id}" already exists`);
 
@@ -113,6 +107,7 @@ export async function createMcp(body: CreateMcpBody): Promise<McpServerConfig> {
     active: false,
     instruction: body.instruction ?? "",
     emoji: body.emoji,
+    source: "custom",
     transport: body.transport,
     server:
       body.transport === "stdio"
@@ -121,7 +116,7 @@ export async function createMcp(body: CreateMcpBody): Promise<McpServerConfig> {
   };
 
   await addMcp(config);
-  cachedMcps = await getRegistry();
+  cachedCustomMcps = await getRegistry();
   return config;
 }
 
@@ -133,7 +128,7 @@ export async function deleteMcp(id: string): Promise<void> {
   }
   const removed = await removeMcp(id);
   if (!removed) throw new Error(`MCP "${id}" not found`);
-  cachedMcps = await getRegistry();
+  cachedCustomMcps = await getRegistry();
 }
 
 export async function updateMcpConfig(id: string, body: UpdateMcpBody): Promise<McpServerConfig> {
@@ -141,6 +136,7 @@ export async function updateMcpConfig(id: string, body: UpdateMcpBody): Promise<
   const mcp = getMcpById(mcps, id);
   if (!mcp) throw new Error(`MCP "${id}" not found`);
 
+  if (body.active !== undefined) mcp.active = body.active;
   if (body.name !== undefined) mcp.name = body.name;
   if (body.instruction !== undefined) mcp.instruction = body.instruction;
   if (body.emoji !== undefined) mcp.emoji = body.emoji;
@@ -163,8 +159,15 @@ export async function updateMcpConfig(id: string, body: UpdateMcpBody): Promise<
   }
 
   await updateRegistry(mcps);
-  cachedMcps = mcps;
+  cachedCustomMcps = mcps;
   return mcp;
 }
 
-export { executeTool, getAllTools };
+export async function executeTool(
+  toolName: string,
+  args: Record<string, unknown>,
+): Promise<{ content: string; isError: boolean }> {
+  return executeCustomTool(toolName, args);
+}
+
+export { getAllTools };

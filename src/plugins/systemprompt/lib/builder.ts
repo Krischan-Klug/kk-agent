@@ -1,4 +1,5 @@
-import { getActiveInstructions } from "../../mcp/service.js";
+import { getActiveInstructions as getCustomActiveInstructions } from "../../mcp/service.js";
+import { getActiveToolInstructions } from "../../tools/service.js";
 
 const RUNTIME_SYSTEM_VARIABLES = [
   "CURRENT_DATE",
@@ -18,7 +19,7 @@ export function buildMcpInstructions(
   activeMcpIds: string[],
   agentMcpInstructions?: Record<string, string>,
 ): string {
-  const all = getActiveInstructions().filter((m) => activeMcpIds.includes(m.id));
+  const all = [...getActiveToolInstructions(), ...getCustomActiveInstructions()].filter((m) => activeMcpIds.includes(m.id));
 
   const blocks = all
     .map((m) => {

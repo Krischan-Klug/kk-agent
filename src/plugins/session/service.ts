@@ -5,6 +5,12 @@ import { getActiveModel, getModelSettings } from "../provider/service.js";
 import type { ReasoningLevelConfig } from "../provider/types.js";
 import { REASONING_LEVEL_DEFAULTS } from "../provider/defaults.js";
 import { getToolDefinitions, executeTool, getKnownMcpIds, getRunnableMcpIds } from "../mcp/service.js";
+import {
+  executeSystemToolByName,
+  getKnownSystemMcpIds,
+  getRunnableSystemMcpIds,
+  getSystemToolDefinitionsForActive,
+} from "../tools/service.js";
 import { runLoop } from "../loop/service.js";
 import type { LoopMessage } from "../loop/types.js";
 import { getAgent, setLoopState, clearLoopState } from "../agent/service.js";
@@ -48,21 +54,37 @@ function fromLoopMessages(messages: LoopMessage[]): SessionState["messages"] {
 }
 
 function sanitizeMcpIds(mcpIds: string[]): string[] {
-  const knownIds = new Set(getKnownMcpIds());
-  return [...new Set(mcpIds)].filter((id) => knownIds.has(id));
+  const knownIds = new Set([...getKnownMcpIds(), ...getKnownSystemMcpIds()]);
+  return [...new Set(mcpIds.map((id) => (id === "commands" ? "terminal" : id)))].filter((id) => knownIds.has(id));
 }
 
 function getSessionRunnableMcpIds(activeMcpIds: string[]): string[] {
-  const runnable = new Set(getRunnableMcpIds());
+  const runnable = new Set([...getRunnableMcpIds(), ...getRunnableSystemMcpIds()]);
   return activeMcpIds.filter((id) => runnable.has(id));
+}
+
+function buildRunnableMcpInstructions(
+  activeMcpIds: string[],
+  agentMcpInstructions: Record<string, string>,
+): string {
+  return buildMcpInstructions(getSessionRunnableMcpIds(activeMcpIds), agentMcpInstructions);
+}
+
+function getCombinedToolDefinitions(activeMcpIds: string[]) {
+  return [...getSystemToolDefinitionsForActive(activeMcpIds), ...getToolDefinitions(activeMcpIds)];
+}
+
+async function executeCombinedTool(toolName: string, args: Record<string, unknown>) {
+  const systemResult = await executeSystemToolByName(toolName, args);
+  if (systemResult) return systemResult;
+  return executeTool(toolName, args);
 }
 
 function buildCurrentSystemPrompt(
   session: Pick<SessionState, "activeMcpIds" | "systemPrompt" | "model">,
   agent: ReturnType<typeof getAgent>,
 ): string {
-  const runnableMcpIds = getSessionRunnableMcpIds(session.activeMcpIds);
-  const mcpInstr = buildMcpInstructions(runnableMcpIds, agent.mcpInstructions);
+  const mcpInstr = buildRunnableMcpInstructions(session.activeMcpIds, agent.mcpInstructions);
 
   const variables: Record<string, string> = {
     ...getSystemVariables({ CURRENT_MODEL: session.model }),
@@ -140,7 +162,7 @@ export async function chat(
   const userMessages = [...session.messages, { role: "user" as const, content: message }];
   store.updateSession(sessionId, { messages: userMessages });
 
-  const tools = getToolDefinitions(session.activeMcpIds);
+  const tools = getCombinedToolDefinitions(session.activeMcpIds);
   const rc = resolveReasoningConfig(session);
 
   const result = await runLoop({
@@ -153,10 +175,10 @@ export async function chat(
     maxOutputTokens: rc.maxOutputTokens,
     systemPrompt: session.systemPrompt,
     maxIterations: agent.maxIterations,
-    mcpInstructions: buildMcpInstructions(getSessionRunnableMcpIds(session.activeMcpIds), agent.mcpInstructions),
+    mcpInstructions: buildRunnableMcpInstructions(session.activeMcpIds, agent.mcpInstructions),
     agentVariables: agent.variables ?? {},
     allTools: tools,
-    executeTool,
+    executeTool: executeCombinedTool,
   });
 
   const finalMessages = fromLoopMessages(result.messages);
@@ -181,7 +203,7 @@ export async function chatStream(
   const userMessages = [...session.messages, { role: "user" as const, content: message }];
   store.updateSession(sessionId, { messages: userMessages });
 
-  const tools = getToolDefinitions(session.activeMcpIds);
+  const tools = getCombinedToolDefinitions(session.activeMcpIds);
   const rc = resolveReasoningConfig(session);
 
   try {
@@ -195,10 +217,10 @@ export async function chatStream(
       maxOutputTokens: rc.maxOutputTokens,
       systemPrompt: session.systemPrompt,
       maxIterations: agent.maxIterations,
-      mcpInstructions: buildMcpInstructions(getSessionRunnableMcpIds(session.activeMcpIds), agent.mcpInstructions),
+      mcpInstructions: buildRunnableMcpInstructions(session.activeMcpIds, agent.mcpInstructions),
       agentVariables: agent.variables ?? {},
       allTools: tools,
-      executeTool,
+      executeTool: executeCombinedTool,
       onContent: (content) => emit({ type: "content", content }),
       onReasoning: (content) => emit({ type: "reasoning", content }),
       onRetryNotice: (message) => emit({ type: "retry_notice", message }),

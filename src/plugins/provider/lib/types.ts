@@ -19,6 +19,7 @@ export interface UnifiedRequest {
   reasoningEffort?: string;
   temperature?: number;
   maxOutputTokens?: number;
+  endpoint?: string;
 }
 
 export interface UnifiedToolDefinition {

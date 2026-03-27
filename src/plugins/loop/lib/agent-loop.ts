@@ -8,7 +8,6 @@ import { getDefaults } from "../../lib/defaults.js";
 
 const INVALID_TOOL_RETRY_BUDGET = 2;
 const EMPTY_RESPONSE_RETRY_BUDGET = 1;
-const LENGTH_RETRY_BUDGET = 1;
 
 const INVALID_TOOL_CALL_PATTERNS = [
   /<tool_call\b/i,
@@ -61,7 +60,6 @@ export async function runAgentLoop(opts: LoopOptions): Promise<LoopResult> {
   let lastMeaningfulContent = "";
   let invalidToolAttemptCount = 0;
   let emptyResponseRetryCount = 0;
-  let lengthRetryCount = 0;
   let retryInstruction: string | undefined;
 
   const loopState: AgentLoopState = {
@@ -142,15 +140,6 @@ export async function runAgentLoop(opts: LoopOptions): Promise<LoopResult> {
     const messageContent = response.content.trim();
     const messageReasoning = response.reasoning?.trim() || undefined;
     const toolsCalled = response.tool_calls ?? [];
-
-    if (response.finishReason === "length" && lengthRetryCount < LENGTH_RETRY_BUDGET) {
-      lengthRetryCount++;
-      retryInstruction = getDefaults().retry.lengthInstruction;
-      continue;
-    }
-    if (response.finishReason !== "length") {
-      lengthRetryCount = 0;
-    }
 
     const invalidToolAttempt =
       response.finishReason !== "tool_calls"

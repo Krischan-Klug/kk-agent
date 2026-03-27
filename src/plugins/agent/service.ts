@@ -3,18 +3,30 @@ import * as store from "./lib/store.js";
 import { getDefaults } from "../lib/defaults.js";
 import { getSystemVariableNames } from "../systemprompt/lib/builder.js";
 
+function normalizeMcpId(id: string): string {
+  return id === "commands" ? "terminal" : id;
+}
+
+function normalizeAgent(agent: AgentDefinition): AgentDefinition {
+  const mcpIds = [...new Set((agent.mcpIds ?? []).map(normalizeMcpId))];
+  const mcpInstructions = Object.fromEntries(
+    Object.entries(agent.mcpInstructions ?? {}).map(([id, instruction]) => [normalizeMcpId(id), instruction]),
+  );
+  return { ...agent, mcpIds, mcpInstructions };
+}
+
 export async function initAgentService(): Promise<void> {
   await store.initStore();
 }
 
 export function listAgents(): AgentDefinition[] {
-  return store.listAgents();
+  return store.listAgents().map(normalizeAgent);
 }
 
 export function getAgent(id: string): AgentDefinition {
   const agent = store.getAgent(id);
   if (!agent) throw new Error(`Agent "${id}" not found`);
-  return agent;
+  return normalizeAgent(agent);
 }
 
 export function listSystemVariables(): string[] {
@@ -35,8 +47,10 @@ export async function createAgent(body: CreateAgentBody): Promise<AgentDefinitio
     description: body.description ?? "",
     systemPrompt: body.systemPrompt ?? "",
     maxIterations: body.maxIterations ?? getDefaults().agent.maxIterations,
-    mcpIds: body.mcpIds ?? [],
-    mcpInstructions: body.mcpInstructions ?? {},
+    mcpIds: (body.mcpIds ?? []).map(normalizeMcpId),
+    mcpInstructions: Object.fromEntries(
+      Object.entries(body.mcpInstructions ?? {}).map(([mcpId, instruction]) => [normalizeMcpId(mcpId), instruction]),
+    ),
     variables: body.variables ?? {},
     defaultModel: body.defaultModel,
     reasoningEffort: body.reasoningEffort,
@@ -53,8 +67,12 @@ export async function updateAgent(id: string, body: UpdateAgentBody): Promise<Ag
   if (body.description !== undefined) patch.description = body.description;
   if (body.systemPrompt !== undefined) patch.systemPrompt = body.systemPrompt;
   if (body.maxIterations !== undefined) patch.maxIterations = body.maxIterations;
-  if (body.mcpIds !== undefined) patch.mcpIds = body.mcpIds;
-  if (body.mcpInstructions !== undefined) patch.mcpInstructions = body.mcpInstructions;
+  if (body.mcpIds !== undefined) patch.mcpIds = body.mcpIds.map(normalizeMcpId);
+  if (body.mcpInstructions !== undefined) {
+    patch.mcpInstructions = Object.fromEntries(
+      Object.entries(body.mcpInstructions).map(([mcpId, instruction]) => [normalizeMcpId(mcpId), instruction]),
+    );
+  }
   if (body.variables !== undefined) patch.variables = body.variables;
   if (body.defaultModel !== undefined) patch.defaultModel = body.defaultModel;
   if (body.reasoningEffort !== undefined) patch.reasoningEffort = body.reasoningEffort;

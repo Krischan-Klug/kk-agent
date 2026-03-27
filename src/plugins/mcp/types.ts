@@ -1,9 +1,20 @@
+export type McpSource = "system" | "custom";
+export type SystemMcpKey = "filesystem" | "web-search" | "terminal";
+
+export interface SystemMcpConfig {
+  rootPath?: string;
+  workingDirectory?: string;
+}
+
 export interface McpServerConfig {
   id: string;
   name: string;
   active: boolean;
   instruction: string;
   emoji?: string;
+  source?: McpSource;
+  systemKey?: SystemMcpKey;
+  systemConfig?: SystemMcpConfig;
   transport: "stdio" | "sse";
   server: McpStdioConfig | McpSseConfig;
 }
@@ -43,6 +54,7 @@ export interface CreateMcpBody {
 
 export interface UpdateMcpBody {
   name?: string;
+  active?: boolean;
   transport?: "stdio" | "sse";
   command?: string;
   args?: string[];
@@ -50,4 +62,5 @@ export interface UpdateMcpBody {
   url?: string;
   instruction?: string;
   emoji?: string;
+  systemConfig?: SystemMcpConfig;
 }

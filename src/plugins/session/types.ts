@@ -41,5 +41,6 @@ export type SSEEvent =
   | { type: "tool_result"; toolCallId: string; content: string; isError: boolean }
   | { type: "loop_state"; state: AgentLoopState }
   | { type: "stats"; inputTokens: number; outputTokens: number; reasoningTokens: number; source: "provider" | "estimated" | "unknown" }
+  | { type: "user_prompt"; promptId: string; question: string; choices: { key: string; label: string }[] }
   | { type: "done"; session: SessionState }
   | { type: "error"; message: string };

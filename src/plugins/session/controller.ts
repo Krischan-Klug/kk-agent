@@ -10,6 +10,7 @@ import {
   getCurrentSystemPrompt,
 } from "./service.js";
 import type { CreateSessionBody, ChatBody } from "./types.js";
+import { resolvePrompt } from "../tools/lib/user-interaction/interaction-store.js";
 
 export async function doCreate(req: Request, res: Response): Promise<Response> {
   try {
@@ -91,6 +92,23 @@ export async function doPatch(req: Request, res: Response): Promise<Response> {
     return res.json(session);
   } catch (err) {
     return res.status(404).json({ error: (err as Error).message });
+  }
+}
+
+export async function doRespondToPrompt(req: Request, res: Response): Promise<Response> {
+  try {
+    const sessionId = req.params.id;
+    const { promptId, selectedKey } = req.body as { promptId: string; selectedKey: string };
+    if (!promptId || !selectedKey) {
+      return res.status(400).json({ error: "promptId and selectedKey are required" });
+    }
+    const resolved = resolvePrompt(sessionId, promptId, selectedKey);
+    if (!resolved) {
+      return res.status(404).json({ error: "No pending prompt found" });
+    }
+    return res.json({ ok: true });
+  } catch (err) {
+    return res.status(500).json({ error: (err as Error).message });
   }
 }
 

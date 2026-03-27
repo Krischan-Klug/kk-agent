@@ -15,6 +15,11 @@ import { runLoop } from "../loop/service.js";
 import type { LoopMessage } from "../loop/types.js";
 import { getAgent, setLoopState, clearLoopState } from "../agent/service.js";
 import { getDefaults } from "../lib/defaults.js";
+import {
+  registerSession,
+  unregisterSession,
+  runWithSessionId,
+} from "../tools/lib/user-interaction/interaction-store.js";
 
 function generateSessionName(content: string): string {
   const clean = content.trim();
@@ -206,41 +211,52 @@ export async function chatStream(
   const tools = getCombinedToolDefinitions(session.activeMcpIds);
   const rc = resolveReasoningConfig(session);
 
-  try {
-    const result = await runLoop({
-      agentId: session.agentId,
-      sessionId,
-      messages: toLoopMessages(userMessages),
-      model: session.model,
-      reasoningEffort: rc.reasoningEffort,
-      temperature: rc.temperature,
-      maxOutputTokens: rc.maxOutputTokens,
-      systemPrompt: session.systemPrompt,
-      maxIterations: agent.maxIterations,
-      mcpInstructions: buildRunnableMcpInstructions(session.activeMcpIds, agent.mcpInstructions),
-      agentVariables: agent.variables ?? {},
-      allTools: tools,
-      executeTool: executeCombinedTool,
-      onContent: (content) => emit({ type: "content", content }),
-      onReasoning: (content) => emit({ type: "reasoning", content }),
-      onRetryNotice: (message) => emit({ type: "retry_notice", message }),
-      onToolCall: (tc) =>
-        emit({ type: "tool_call", toolCall: { id: tc.id, name: tc.name, arguments: tc.arguments } }),
-      onToolResult: (toolCallId, result) =>
-        emit({ type: "tool_result", toolCallId, content: result.content, isError: result.isError }),
-      onLoopState: (state) => {
-        setLoopState(sessionId, state);
-        emit({ type: "loop_state", state });
-      },
-      onStats: (stats) =>
-        emit({
-          type: "stats",
-          inputTokens: stats.inputTokens,
-          outputTokens: stats.outputTokens,
-          reasoningTokens: stats.reasoningTokens,
-          source: stats.source,
-        }),
+  registerSession(sessionId, (payload) => {
+    emit({
+      type: "user_prompt",
+      promptId: payload.promptId,
+      question: payload.question,
+      choices: payload.choices,
     });
+  });
+
+  try {
+    const result = await runWithSessionId(sessionId, () =>
+      runLoop({
+        agentId: session.agentId,
+        sessionId,
+        messages: toLoopMessages(userMessages),
+        model: session.model,
+        reasoningEffort: rc.reasoningEffort,
+        temperature: rc.temperature,
+        maxOutputTokens: rc.maxOutputTokens,
+        systemPrompt: session.systemPrompt,
+        maxIterations: agent.maxIterations,
+        mcpInstructions: buildRunnableMcpInstructions(session.activeMcpIds, agent.mcpInstructions),
+        agentVariables: agent.variables ?? {},
+        allTools: tools,
+        executeTool: executeCombinedTool,
+        onContent: (content) => emit({ type: "content", content }),
+        onReasoning: (content) => emit({ type: "reasoning", content }),
+        onRetryNotice: (message) => emit({ type: "retry_notice", message }),
+        onToolCall: (tc) =>
+          emit({ type: "tool_call", toolCall: { id: tc.id, name: tc.name, arguments: tc.arguments } }),
+        onToolResult: (toolCallId, result) =>
+          emit({ type: "tool_result", toolCallId, content: result.content, isError: result.isError }),
+        onLoopState: (state) => {
+          setLoopState(sessionId, state);
+          emit({ type: "loop_state", state });
+        },
+        onStats: (stats) =>
+          emit({
+            type: "stats",
+            inputTokens: stats.inputTokens,
+            outputTokens: stats.outputTokens,
+            reasoningTokens: stats.reasoningTokens,
+            source: stats.source,
+          }),
+      }),
+    );
 
     const finalMessages = fromLoopMessages(result.messages);
     const streamUpdate: Partial<SessionState> = { messages: finalMessages };
@@ -252,6 +268,8 @@ export async function chatStream(
     emit({ type: "done", session: updatedSession });
   } catch (err) {
     emit({ type: "error", message: (err as Error).message });
+  } finally {
+    unregisterSession(sessionId);
   }
 }
 

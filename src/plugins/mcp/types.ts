@@ -1,5 +1,5 @@
 export type McpSource = "system" | "custom";
-export type SystemMcpKey = "filesystem" | "web-search" | "terminal";
+export type SystemMcpKey = "filesystem" | "web-search" | "terminal" | "user-interaction";
 
 export interface SystemMcpConfig {
   rootPath?: string;

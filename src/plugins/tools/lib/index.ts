@@ -8,6 +8,9 @@ import { terminalTools } from "./terminal/tools.js";
 import { webSearchDefinition } from "./web-search/definition.js";
 import { executeWebSearchTool } from "./web-search/runtime.js";
 import { webSearchTools } from "./web-search/tools.js";
+import { userInteractionDefinition } from "./user-interaction/definition.js";
+import { executeUserInteractionTool } from "./user-interaction/runtime.js";
+import { userInteractionTools } from "./user-interaction/tools.js";
 
 type SystemToolModule = {
   definition: McpServerConfig;
@@ -30,6 +33,11 @@ const SYSTEM_TOOL_MODULES: Record<SystemMcpKey, SystemToolModule> = {
     definition: terminalDefinition,
     tools: terminalTools,
     execute: executeTerminalTool,
+  },
+  "user-interaction": {
+    definition: userInteractionDefinition,
+    tools: userInteractionTools,
+    execute: executeUserInteractionTool,
   },
 };
 

@@ -7,9 +7,12 @@ import type { McpServerConfig, ToolCallResult } from "../../../mcp/types.js";
 
 const execAsync = promisify(exec);
 const COMMAND_OUTPUT_LIMIT = 12000;
+const DEFAULT_TIMEOUT = 30000;
 
+/** Truncate from the beginning, keeping the tail (errors/results appear at end). */
 function clamp(text: string, max = COMMAND_OUTPUT_LIMIT): string {
-  return text.length > max ? `${text.slice(0, max)}\n\n[truncated]` : text;
+  if (text.length <= max) return text;
+  return `[truncated — showing last ${max} chars]\n\n${text.slice(-max)}`;
 }
 
 function getWorkingDirectory(config: McpServerConfig): string {
@@ -44,14 +47,34 @@ export async function executeTerminalTool(
     throw new Error(`Working directory "${cwd}" does not exist`);
   }
 
-  const timeoutMs = typeof args.timeoutMs === "number" ? args.timeoutMs : 20000;
-  const { stdout, stderr } = await execAsync(command, {
-    cwd,
-    timeout: timeoutMs,
-    windowsHide: true,
-    maxBuffer: 1024 * 1024,
-  });
+  const timeoutMs = typeof args.timeoutMs === "number" ? args.timeoutMs : DEFAULT_TIMEOUT;
 
-  const output = [stdout.trim(), stderr.trim()].filter(Boolean).join("\n\n");
-  return { content: clamp(output || "[no output]"), isError: false };
+  const env =
+    typeof args.env === "object" && args.env !== null
+      ? { ...process.env, ...(args.env as Record<string, string>) }
+      : undefined;
+
+  try {
+    const { stdout, stderr } = await execAsync(command, {
+      cwd,
+      timeout: timeoutMs,
+      windowsHide: true,
+      maxBuffer: 1024 * 1024,
+      env,
+    });
+
+    const output = [stdout.trim(), stderr.trim()].filter(Boolean).join("\n\n");
+    return { content: clamp(`${output || "[no output]"}\n\n[exit code: 0]`), isError: false };
+  } catch (err: unknown) {
+    const e = err as { stdout?: string; stderr?: string; code?: number; killed?: boolean; message?: string };
+
+    if (e.killed) {
+      const output = [e.stdout?.trim(), e.stderr?.trim()].filter(Boolean).join("\n\n");
+      return { content: clamp(`${output || "[no output]"}\n\n[timed out after ${timeoutMs}ms]`), isError: true };
+    }
+
+    const output = [e.stdout?.trim(), e.stderr?.trim()].filter(Boolean).join("\n\n");
+    const code = e.code ?? 1;
+    return { content: clamp(`${output || e.message || "[no output]"}\n\n[exit code: ${code}]`), isError: code !== 0 };
+  }
 }

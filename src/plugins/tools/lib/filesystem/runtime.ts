@@ -1,10 +1,16 @@
 import { homedir } from "node:os";
 import { mkdir, readdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
-import { dirname, relative, resolve } from "node:path";
+import { dirname, extname, relative, resolve } from "node:path";
 import type { McpServerConfig, ToolCallResult } from "../../../mcp/types.js";
 
-const SEARCH_LIMIT = 10;
+const SEARCH_LIMIT = 50;
+const GREP_RESULT_LIMIT = 50;
+const READ_LINE_LIMIT = 200;
 const CONTENT_LIMIT = 12000;
+const LIST_ENTRY_LIMIT = 500;
+const LIST_MAX_DEPTH = 5;
+
+const IGNORED_DIRS = new Set(["node_modules", ".git", "dist", "build", ".next", "__pycache__"]);
 
 function clamp(text: string, max = CONTENT_LIMIT): string {
   return text.length > max ? `${text.slice(0, max)}\n\n[truncated]` : text;
@@ -24,21 +30,172 @@ function resolveWithinRoot(root: string, target?: unknown): string {
   return candidate;
 }
 
-async function walkDirectory(root: string, pattern: string, results: string[]): Promise<void> {
+function formatSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes}B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)}KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)}MB`;
+}
+
+function matchGlob(filename: string, pattern: string): boolean {
+  // Simple glob: *.ts → endsWith(.ts), *.{ts,tsx} → endsWith(.ts) || endsWith(.tsx)
+  const braceMatch = pattern.match(/^\*\.?\{(.+)\}$/);
+  if (braceMatch) {
+    const exts = braceMatch[1].split(",").map((e) => `.${e.trim()}`);
+    return exts.some((ext) => filename.endsWith(ext));
+  }
+  if (pattern.startsWith("*.")) {
+    return filename.endsWith(pattern.slice(1));
+  }
+  return filename.includes(pattern);
+}
+
+function isBinary(buffer: Buffer): boolean {
+  const check = buffer.subarray(0, 512);
+  for (let i = 0; i < check.length; i++) {
+    if (check[i] === 0) return true;
+  }
+  return false;
+}
+
+function buildRegex(pattern: string): RegExp {
+  try {
+    return new RegExp(pattern, "i");
+  } catch {
+    return new RegExp(pattern.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i");
+  }
+}
+
+/* ── Walk helpers ── */
+
+async function walkForSearch(
+  root: string,
+  pattern: string,
+  typeFilter: string,
+  results: string[],
+): Promise<void> {
   if (results.length >= SEARCH_LIMIT) return;
-  const entries = await readdir(root, { withFileTypes: true });
+  let entries;
+  try {
+    entries = await readdir(root, { withFileTypes: true });
+  } catch {
+    return;
+  }
 
   for (const entry of entries) {
     if (results.length >= SEARCH_LIMIT) return;
+    if (entry.isDirectory() && IGNORED_DIRS.has(entry.name)) continue;
+
     const fullPath = resolve(root, entry.name);
-    if (entry.name.toLowerCase().includes(pattern.toLowerCase())) {
-      results.push(fullPath);
+    const matchesName = entry.name.toLowerCase().includes(pattern.toLowerCase());
+
+    if (matchesName) {
+      const isDir = entry.isDirectory();
+      if (typeFilter === "all" || (typeFilter === "file" && !isDir) || (typeFilter === "directory" && isDir)) {
+        results.push(fullPath);
+      }
     }
+
     if (entry.isDirectory()) {
-      await walkDirectory(fullPath, pattern, results);
+      await walkForSearch(fullPath, pattern, typeFilter, results);
     }
   }
 }
+
+interface GrepMatch {
+  file: string;
+  line: number;
+  content: string;
+}
+
+async function walkForGrep(
+  root: string,
+  regex: RegExp,
+  include: string | undefined,
+  results: GrepMatch[],
+): Promise<void> {
+  if (results.length >= GREP_RESULT_LIMIT) return;
+  let entries;
+  try {
+    entries = await readdir(root, { withFileTypes: true });
+  } catch {
+    return;
+  }
+
+  for (const entry of entries) {
+    if (results.length >= GREP_RESULT_LIMIT) return;
+    if (entry.isDirectory() && IGNORED_DIRS.has(entry.name)) continue;
+
+    const fullPath = resolve(root, entry.name);
+
+    if (entry.isDirectory()) {
+      await walkForGrep(fullPath, regex, include, results);
+      continue;
+    }
+
+    if (!entry.isFile()) continue;
+    if (include && !matchGlob(entry.name, include)) continue;
+
+    try {
+      const buffer = await readFile(fullPath);
+      if (isBinary(buffer)) continue;
+
+      const text = buffer.toString("utf-8");
+      const lines = text.split("\n");
+
+      for (let i = 0; i < lines.length; i++) {
+        if (results.length >= GREP_RESULT_LIMIT) return;
+        if (regex.test(lines[i])) {
+          results.push({ file: fullPath, line: i + 1, content: lines[i] });
+        }
+      }
+    } catch {
+      // skip unreadable files
+    }
+  }
+}
+
+interface ListEntry {
+  type: "dir" | "file";
+  relPath: string;
+  size?: number;
+}
+
+async function walkForList(
+  root: string,
+  prefix: string,
+  depth: number,
+  entries: ListEntry[],
+): Promise<void> {
+  if (entries.length >= LIST_ENTRY_LIMIT || depth > LIST_MAX_DEPTH) return;
+  let dirEntries;
+  try {
+    dirEntries = await readdir(root, { withFileTypes: true });
+  } catch {
+    return;
+  }
+
+  for (const entry of dirEntries) {
+    if (entries.length >= LIST_ENTRY_LIMIT) return;
+    if (entry.isDirectory() && IGNORED_DIRS.has(entry.name)) continue;
+
+    const fullPath = resolve(root, entry.name);
+    const rel = prefix ? `${prefix}/${entry.name}` : entry.name;
+
+    if (entry.isDirectory()) {
+      entries.push({ type: "dir", relPath: rel });
+      await walkForList(fullPath, rel, depth + 1, entries);
+    } else {
+      try {
+        const info = await stat(fullPath);
+        entries.push({ type: "file", relPath: rel, size: info.size });
+      } catch {
+        entries.push({ type: "file", relPath: rel });
+      }
+    }
+  }
+}
+
+/* ── Tool execution ── */
 
 export async function executeFilesystemTool(
   config: McpServerConfig,
@@ -49,31 +206,133 @@ export async function executeFilesystemTool(
 
   if (toolName === "read_file") {
     const path = resolveWithinRoot(root, args.path);
+    const raw = await readFile(path, "utf-8");
+    const lines = raw.split("\n");
+    const total = lines.length;
+
+    const offset = typeof args.offset === "number" ? Math.max(1, Math.floor(args.offset)) : 1;
+    const limit = typeof args.limit === "number" ? Math.max(1, Math.floor(args.limit)) : READ_LINE_LIMIT;
+
+    const slice = lines.slice(offset - 1, offset - 1 + limit);
+    const endLine = Math.min(offset - 1 + limit, total);
+    const width = String(endLine).length;
+
+    const numbered = slice.map((line, i) => `${String(offset + i).padStart(width)}\t${line}`).join("\n");
+
+    const showingAll = offset === 1 && endLine >= total;
+    const footer = showingAll ? "" : `\n\n[Lines ${offset}-${endLine} of ${total}]`;
+
+    return { content: clamp(numbered + footer), isError: false };
+  }
+
+  if (toolName === "edit_file") {
+    const path = resolveWithinRoot(root, args.path);
+    const oldString = String(args.old_string ?? "");
+    const newString = String(args.new_string ?? "");
+    if (!oldString) throw new Error("old_string is required");
+
     const content = await readFile(path, "utf-8");
-    return { content: clamp(content), isError: false };
+    const occurrences = content.split(oldString).length - 1;
+
+    if (occurrences === 0) {
+      throw new Error("old_string not found in file");
+    }
+    if (occurrences > 1) {
+      throw new Error(`old_string found ${occurrences} times — must be unique. Add more surrounding context.`);
+    }
+
+    const updated = content.replace(oldString, newString);
+    await writeFile(path, updated, "utf-8");
+    return { content: `File edited: ${path}`, isError: false };
   }
 
   if (toolName === "write_file") {
     const path = resolveWithinRoot(root, args.path);
     await mkdir(dirname(path), { recursive: true });
     await writeFile(path, String(args.content ?? ""), "utf-8");
-    return { content: `Datei geschrieben: ${path}`, isError: false };
+    return { content: `File written: ${path}`, isError: false };
+  }
+
+  if (toolName === "grep") {
+    const pattern = String(args.pattern ?? "").trim();
+    if (!pattern) throw new Error("pattern is required");
+    const start = resolveWithinRoot(root, args.path);
+    const include = typeof args.include === "string" ? args.include.trim() || undefined : undefined;
+
+    const regex = buildRegex(pattern);
+    const results: GrepMatch[] = [];
+    await walkForGrep(start, regex, include, results);
+
+    if (results.length === 0) {
+      return { content: "No matches found.", isError: false };
+    }
+
+    // Group by file
+    const grouped = new Map<string, GrepMatch[]>();
+    for (const match of results) {
+      const arr = grouped.get(match.file) ?? [];
+      arr.push(match);
+      grouped.set(match.file, arr);
+    }
+
+    const output: string[] = [];
+    for (const [file, matches] of grouped) {
+      for (const m of matches) {
+        output.push(`${file}:${m.line}: ${m.content}`);
+      }
+    }
+
+    const footer = results.length >= GREP_RESULT_LIMIT ? `\n\n[limit reached — showing first ${GREP_RESULT_LIMIT} matches]` : "";
+    return { content: clamp(output.join("\n") + footer), isError: false };
   }
 
   if (toolName === "list_directory") {
     const path = resolveWithinRoot(root, args.path);
-    const entries = await readdir(path, { withFileTypes: true });
-    const content = entries.map((entry) => `${entry.isDirectory() ? "[dir]" : "[file]"} ${entry.name}`).join("\n");
-    return { content: content || "[empty directory]", isError: false };
+    const recursive = args.recursive === true;
+
+    if (!recursive) {
+      const dirEntries = await readdir(path, { withFileTypes: true });
+      const lines: string[] = [];
+      for (const entry of dirEntries) {
+        if (entry.isDirectory()) {
+          lines.push(`[dir]  ${entry.name}/`);
+        } else {
+          try {
+            const info = await stat(resolve(path, entry.name));
+            lines.push(`[file] ${formatSize(info.size).padEnd(8)} ${entry.name}`);
+          } catch {
+            lines.push(`[file]          ${entry.name}`);
+          }
+        }
+      }
+      return { content: lines.length ? lines.join("\n") : "[empty directory]", isError: false };
+    }
+
+    // Recursive — flat list with relative paths (unambiguous for LLM)
+    const entries: ListEntry[] = [];
+    await walkForList(path, "", 0, entries);
+
+    const lines = entries.map((e) => {
+      if (e.type === "dir") return `[dir]  ${e.relPath}/`;
+      const size = e.size != null ? formatSize(e.size).padEnd(8) : "        ";
+      return `[file] ${size} ${e.relPath}`;
+    });
+
+    const footer = entries.length >= LIST_ENTRY_LIMIT ? `\n\n[limit reached — ${LIST_ENTRY_LIMIT} entries shown]` : "";
+    return { content: clamp((lines.length ? lines.join("\n") : "[empty directory]") + footer), isError: false };
   }
 
   if (toolName === "search_files") {
     const start = resolveWithinRoot(root, args.path);
     const pattern = String(args.pattern ?? "").trim();
     if (!pattern) throw new Error("pattern is required");
+    const typeFilter = typeof args.type === "string" ? args.type : "all";
+
     const results: string[] = [];
-    await walkDirectory(start, pattern, results);
-    return { content: results.length ? results.join("\n") : "No matches found.", isError: false };
+    await walkForSearch(start, pattern, typeFilter, results);
+
+    const footer = results.length >= SEARCH_LIMIT ? `\n\n[limit reached — showing first ${SEARCH_LIMIT} matches]` : "";
+    return { content: (results.length ? results.join("\n") : "No matches found.") + footer, isError: false };
   }
 
   if (toolName === "stat_path") {
@@ -100,13 +359,13 @@ export async function executeFilesystemTool(
     const to = resolveWithinRoot(root, args.to);
     await mkdir(dirname(to), { recursive: true });
     await rename(from, to);
-    return { content: `Moved path from ${from} to ${to}`, isError: false };
+    return { content: `Moved: ${from} → ${to}`, isError: false };
   }
 
   if (toolName === "delete_path") {
     const path = resolveWithinRoot(root, args.path);
     await rm(path, { recursive: true, force: false });
-    return { content: `Deleted path: ${path}`, isError: false };
+    return { content: `Deleted: ${path}`, isError: false };
   }
 
   return null;

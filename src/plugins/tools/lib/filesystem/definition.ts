@@ -10,10 +10,11 @@ export const filesystemDefinition: McpServerConfig = {
   instruction:
     [
       "You can access the local filesystem inside the configured root path.",
-      "Use these tools for reading, writing, listing, searching, inspecting, moving, and deleting files or directories.",
-      "Prefer absolute paths when possible and always stay inside the allowed root.",
+      "Use read_file to inspect files (with line numbers and offset/limit for large files),",
+      "edit_file for targeted changes, write_file to create new files,",
+      "grep to search file contents, and search_files to find files by name.",
+      "Prefer edit_file over write_file when making small changes to existing files.",
       "Use read and stat tools before destructive changes when verification is needed.",
-      "Ask before deleting, overwriting important content, or making other destructive changes.",
     ].join(" "),
   emoji: "📁",
   source: "system",

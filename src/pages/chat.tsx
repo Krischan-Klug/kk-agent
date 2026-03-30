@@ -40,6 +40,11 @@ const Messages = styled.div`
   max-width: 900px;
   width: 100%;
   margin: 0 auto;
+  scrollbar-width: none;
+
+  &::-webkit-scrollbar {
+    display: none;
+  }
 `;
 
 const SystemNotice = styled.div`
@@ -80,7 +85,7 @@ const MessageBubble = styled.div<{ $role: string }>`
 `;
 
 const RoleLabel = styled.div`
-  margin-bottom: var(--space-xs);
+  margin-bottom: var(--space-sm);
   display: flex;
   align-items: center;
   gap: var(--space-sm);
@@ -199,6 +204,11 @@ const InputArea = styled.div`
   max-width: 900px;
   width: 100%;
   margin: 0 auto;
+  scrollbar-width: none;
+
+  &::-webkit-scrollbar {
+    display: none;
+  }
 `;
 
 const Composer = styled.div`
@@ -591,12 +601,19 @@ export default function ChatPage() {
   const [debugTools, setDebugTools] = useState<McpListItem[]>([]);
 
   const messagesRef = useRef<HTMLDivElement>(null);
+  const shouldAutoScrollRef = useRef(true);
 
   const scrollToBottom = useCallback(() => {
-    if (messagesRef.current) {
+    if (messagesRef.current && shouldAutoScrollRef.current) {
       messagesRef.current.scrollTop = messagesRef.current.scrollHeight;
     }
   }, []);
+
+  function handleMessagesScroll() {
+    if (!messagesRef.current) return;
+    const { scrollTop, scrollHeight, clientHeight } = messagesRef.current;
+    shouldAutoScrollRef.current = scrollHeight - (scrollTop + clientHeight) < 48;
+  }
 
   const loadSession = useCallback(() => {
     const id = localStorage.getItem("activeSessionId");
@@ -972,7 +989,7 @@ export default function ChatPage() {
         onMcpToggle={handleMcpToggle}
       />
 
-      <Messages ref={messagesRef}>
+      <Messages ref={messagesRef} onScroll={handleMessagesScroll}>
         {session.messages.length === 0 && !streaming && (
           <EmptyState>
             <p>Schreibe eine Nachricht um zu starten.</p>

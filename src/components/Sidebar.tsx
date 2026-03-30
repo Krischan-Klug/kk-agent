@@ -5,8 +5,13 @@ import { session as sessionApi } from "@/lib/api";
 import type { SessionState } from "@/types/api";
 import {
   SidebarWrapper,
+  LogoRow,
   Logo,
+  CompactLogo,
+  SidebarToggle,
   NavItem,
+  NavEmoji,
+  NavLabel,
   SidebarDivider,
   SidebarSection,
   SidebarSectionRow,
@@ -19,17 +24,18 @@ import {
 } from "./Sidebar.styled";
 
 const navItems = [
-  { href: "/chat", label: "💬 Chat" },
-  { href: "/agent", label: "🤖 Agents" },
-  { href: "/mcp", label: "🛠️ MCP" },
-  { href: "/provider", label: "🔌 Provider" },
-  { href: "/settings/defaults", label: "⚙️ Settings" },
+  { href: "/chat", emoji: "💬", label: "Chat" },
+  { href: "/agent", emoji: "🤖", label: "Agents" },
+  { href: "/mcp", emoji: "🛠️", label: "MCP" },
+  { href: "/provider", emoji: "🔌", label: "Provider" },
+  { href: "/settings/defaults", emoji: "⚙️", label: "Settings" },
 ];
 
 export default function Sidebar() {
   const router = useRouter();
   const [sessions, setSessions] = useState<SessionState[]>([]);
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
+  const [collapsed, setCollapsed] = useState(true);
 
   const loadSessions = useCallback(async () => {
     try {
@@ -43,6 +49,10 @@ export default function Sidebar() {
   useEffect(() => {
     loadSessions();
     setActiveSessionId(localStorage.getItem("activeSessionId"));
+    const stored = localStorage.getItem("sidebar-collapsed");
+    if (stored !== null) {
+      setCollapsed(stored === "true");
+    }
 
     function onSessionChanged() {
       loadSessions();
@@ -57,6 +67,11 @@ export default function Sidebar() {
     };
   }, [loadSessions]);
 
+  function setSidebarCollapsed(next: boolean) {
+    setCollapsed(next);
+    localStorage.setItem("sidebar-collapsed", String(next));
+  }
+
   function selectSession(id: string) {
     localStorage.setItem("activeSessionId", id);
     setActiveSessionId(id);
@@ -66,7 +81,11 @@ export default function Sidebar() {
 
   async function createSession() {
     try {
-      const newSession = await sessionApi.create({ agentId: "general-assistant" });
+      const fallbackAgentId =
+        sessions.find((session) => session.id === activeSessionId)?.agentId ??
+        sessions[0]?.agentId ??
+        "general-assistant";
+      const newSession = await sessionApi.create({ agentId: fallbackAgentId });
       localStorage.setItem("activeSessionId", newSession.id);
       setActiveSessionId(newSession.id);
       window.dispatchEvent(new Event("session-changed"));
@@ -95,26 +114,48 @@ export default function Sidebar() {
   }
 
   return (
-    <SidebarWrapper>
-      <Logo>^^</Logo>
+    <SidebarWrapper
+      $collapsed={collapsed}
+      onClick={() => {
+        if (collapsed) setSidebarCollapsed(false);
+      }}
+    >
+      <LogoRow $collapsed={collapsed}>
+        <CompactLogo $collapsed={collapsed}>^^</CompactLogo>
+        <Logo $collapsed={collapsed}>^^</Logo>
+        <SidebarToggle
+          $collapsed={collapsed}
+          type="button"
+          aria-label={collapsed ? "Sidebar aufklappen" : "Sidebar einklappen"}
+          title={collapsed ? "Sidebar aufklappen" : "Sidebar einklappen"}
+          onClick={(e) => {
+            e.stopPropagation();
+            setSidebarCollapsed(!collapsed);
+          }}
+        >
+          {collapsed ? ">" : "<"}
+        </SidebarToggle>
+      </LogoRow>
       {navItems.map((item) => (
         <Link key={item.href} href={item.href} style={{ textDecoration: "none" }}>
           <NavItem
+            $collapsed={collapsed}
             $active={
               (item.href === "/chat" && (router.pathname === "/" || router.pathname === "/chat")) ||
               (item.href.startsWith("/settings") && router.pathname.startsWith("/settings")) ||
               (item.href !== "/chat" && !item.href.startsWith("/settings") && router.pathname === item.href)
             }
           >
-            {item.label}
+            <NavEmoji>{item.emoji}</NavEmoji>
+            <NavLabel $collapsed={collapsed}>{item.label}</NavLabel>
           </NavItem>
         </Link>
       ))}
 
       <>
         <SidebarDivider />
-        <SidebarSectionRow>
-          <SidebarSection>Sessions</SidebarSection>
+        <SidebarSectionRow $collapsed={collapsed}>
+          <SidebarSection $collapsed={collapsed}>Sessions</SidebarSection>
           <SidebarSectionActions>
             {router.pathname === "/chat" && (
               <SessionDebug
@@ -132,7 +173,7 @@ export default function Sidebar() {
           </SidebarSectionActions>
         </SidebarSectionRow>
         {sessions.map((s) => (
-          <SessionItem key={s.id} $active={s.id === activeSessionId} onClick={() => selectSession(s.id)}>
+          <SessionItem key={s.id} $collapsed={collapsed} $active={s.id === activeSessionId} onClick={() => selectSession(s.id)}>
             <SessionName>{s.name || s.id.slice(0, 8)}</SessionName>
             <SessionDelete
               type="button"

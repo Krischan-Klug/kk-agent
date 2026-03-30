@@ -9,6 +9,7 @@ export function createSession(data: {
   activeMcpIds: string[];
   systemPrompt: string;
   reasoningEffort?: SessionState["reasoningEffort"];
+  temperature?: number;
 }): SessionState {
   const now = new Date().toISOString();
   const session: SessionState = {
@@ -19,6 +20,7 @@ export function createSession(data: {
     activeMcpIds: data.activeMcpIds,
     systemPrompt: data.systemPrompt,
     reasoningEffort: data.reasoningEffort,
+    temperature: data.temperature,
     messages: [],
     createdAt: now,
     updatedAt: now,

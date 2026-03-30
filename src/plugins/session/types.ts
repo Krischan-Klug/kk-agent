@@ -27,6 +27,15 @@ export interface CreateSessionBody {
   model?: string;
   activeMcpIds?: string[];
   reasoningEffort?: ReasoningEffort;
+  temperature?: number;
+}
+
+export interface PatchSessionBody {
+  agentId?: string;
+  model?: string;
+  activeMcpIds?: string[];
+  reasoningEffort?: ReasoningEffort;
+  temperature?: number;
 }
 
 export interface ChatBody {

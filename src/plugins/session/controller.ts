@@ -9,7 +9,7 @@ import {
   patchSession,
   getCurrentSystemPrompt,
 } from "./service.js";
-import type { CreateSessionBody, ChatBody } from "./types.js";
+import type { CreateSessionBody, ChatBody, PatchSessionBody } from "./types.js";
 import { resolvePrompt } from "../tools/lib/user-interaction/interaction-store.js";
 
 export async function doCreate(req: Request, res: Response): Promise<Response> {
@@ -87,8 +87,8 @@ export async function doChatStream(req: Request, res: Response): Promise<void> {
 
 export async function doPatch(req: Request, res: Response): Promise<Response> {
   try {
-    const { model, activeMcpIds, reasoningEffort, temperature } = req.body as { model?: string; activeMcpIds?: string[]; reasoningEffort?: string; temperature?: number };
-    const session = patchSession(req.params.id, { model, activeMcpIds, reasoningEffort, temperature });
+    const { agentId, model, activeMcpIds, reasoningEffort, temperature } = req.body as PatchSessionBody;
+    const session = patchSession(req.params.id, { agentId, model, activeMcpIds, reasoningEffort, temperature });
     return res.json(session);
   } catch (err) {
     return res.status(404).json({ error: (err as Error).message });

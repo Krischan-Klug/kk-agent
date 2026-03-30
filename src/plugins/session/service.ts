@@ -109,12 +109,14 @@ export function createSession(body: CreateSessionBody): SessionState {
 
   const model = body.model ?? agent.defaultModel ?? getActiveModel();
   const reasoningEffort = body.reasoningEffort ?? agent.reasoningEffort;
+  const temperature = body.temperature ?? agent.temperature;
   const session = store.createSession({
     agentId: body.agentId,
     model,
     activeMcpIds,
     systemPrompt: agent.systemPrompt,
     reasoningEffort,
+    temperature,
   });
   return session;
 }
@@ -276,10 +278,24 @@ export async function chatStream(
 
 export function patchSession(
   id: string,
-  update: { model?: string; activeMcpIds?: string[]; reasoningEffort?: string; temperature?: number },
+  update: { agentId?: string; model?: string; activeMcpIds?: string[]; reasoningEffort?: string; temperature?: number },
 ): SessionState {
   const session = getSession(id);
   const patch: Partial<SessionState> = {};
+  if (update.agentId !== undefined) {
+    const agent = getAgent(update.agentId);
+    patch.agentId = update.agentId;
+    patch.systemPrompt = agent.systemPrompt;
+    if (update.model === undefined) {
+      patch.model = agent.defaultModel ?? getActiveModel();
+    }
+    if (update.reasoningEffort === undefined) {
+      patch.reasoningEffort = agent.reasoningEffort;
+    }
+    if (update.temperature === undefined) {
+      patch.temperature = agent.temperature;
+    }
+  }
   if (update.model) patch.model = update.model;
   if (update.activeMcpIds !== undefined) {
     patch.activeMcpIds = sanitizeMcpIds(update.activeMcpIds);

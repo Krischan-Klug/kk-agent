@@ -12,7 +12,7 @@ Der aktuelle Fokus ist ein schlanker Agent-Loop:
 
 ```text
 provider      -> Modellzugriff, Streaming, Model-Settings
-tools         -> Eingebaute lokale Tools (filesystem, web-search, terminal)
+tools         -> Eingebaute lokale Tools (filesystem, web-search, terminal, user-interaction)
 mcp           -> Externe / custom MCP-Server
 agent         -> Agent-Definitionen und Loop-State
 systemprompt  -> Prompt-Building mit Variablen und Tool-Instructions
@@ -63,6 +63,7 @@ Es gibt zwei Tool-Quellen:
   - `filesystem`
   - `web-search`
   - `terminal`
+  - `user-interaction`
 - `mcp`: externe / custom MCP-Server
 
 Nach aussen werden beide im selben MCP-API-Shape zusammengefuehrt.
@@ -105,10 +106,11 @@ SSE liefert aktuell folgende Events:
 | GET | `/session` | Sessions listen |
 | GET | `/session/:id` | Session laden |
 | DELETE | `/session/:id` | Session loeschen |
-| PATCH | `/session/:id` | Model, MCPs, Reasoning, Temperature aendern |
+| PATCH | `/session/:id` | Agent, Model, MCPs, Reasoning, Temperature aendern |
 | POST | `/session/:id/chat` | Non-Streaming Chat |
 | POST | `/session/:id/chat/stream` | SSE-Chat |
 | GET | `/session/:id/prompt` | Aktuellen aufgeloesten System-Prompt lesen |
+| POST | `/session/:id/prompt/respond` | Antwort fuer `ask_user`-Prompt senden |
 
 ### MCP
 

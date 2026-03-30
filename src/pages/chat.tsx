@@ -341,6 +341,33 @@ const ChoiceButton = styled.button`
   }
 `;
 
+const CustomInputRow = styled.div`
+  display: flex;
+  gap: var(--space-sm);
+  margin-top: var(--space-sm);
+  padding-top: var(--space-sm);
+  border-top: 1px dashed var(--border);
+`;
+
+const CustomInput = styled.input`
+  flex: 1;
+  padding: var(--space-sm) var(--space-md);
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  font-size: var(--font-size-base);
+  outline: none;
+
+  &:focus {
+    border-color: var(--border-focus, var(--accent));
+  }
+
+  &::placeholder {
+    color: var(--text-muted);
+  }
+`;
+
 /* ── Types for streaming state ── */
 
 interface ActiveToolCall {
@@ -413,6 +440,7 @@ export default function ChatPage() {
   const [loopState, setLoopState] = useState<AgentLoopState | null>(null);
   const [tokenStats, setTokenStats] = useState<TokenDisplayStats | null>(null);
   const [pendingPrompt, setPendingPrompt] = useState<PendingPrompt | null>(null);
+  const [customAnswer, setCustomAnswer] = useState("");
 
   const messagesRef = useRef<HTMLDivElement>(null);
 
@@ -836,6 +864,30 @@ export default function ChatPage() {
                 {choice.label}
               </ChoiceButton>
             ))}
+            <CustomInputRow>
+              <CustomInput
+                value={customAnswer}
+                onChange={(e) => setCustomAnswer(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && customAnswer.trim()) {
+                    handlePromptResponse(`custom:${customAnswer.trim()}`);
+                    setCustomAnswer("");
+                  }
+                }}
+                placeholder="Oder eigene Antwort eingeben..."
+              />
+              <Button
+                onClick={() => {
+                  if (customAnswer.trim()) {
+                    handlePromptResponse(`custom:${customAnswer.trim()}`);
+                    setCustomAnswer("");
+                  }
+                }}
+                disabled={!customAnswer.trim()}
+              >
+                OK
+              </Button>
+            </CustomInputRow>
           </PromptCard>
         )}
       </Messages>

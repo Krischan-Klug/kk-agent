@@ -368,6 +368,71 @@ const CustomInput = styled.input`
   }
 `;
 
+/* ── Debug Panel Styles ── */
+
+const DebugToggle = styled.button`
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text-muted);
+  font-size: var(--font-size-sm);
+  padding: 2px 8px;
+  cursor: pointer;
+  font-family: var(--font-mono);
+
+  &:hover {
+    color: var(--text-primary);
+    border-color: var(--accent);
+  }
+`;
+
+const DebugPanel = styled.div`
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--bg-elevated);
+  margin-bottom: var(--space-md);
+  overflow: hidden;
+  flex-shrink: 0;
+  max-height: 50vh;
+  display: flex;
+  flex-direction: column;
+`;
+
+const DebugTabs = styled.div`
+  display: flex;
+  gap: 0;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+`;
+
+const DebugTab = styled.button<{ $active?: boolean }>`
+  background: ${({ $active }) => ($active ? "var(--bg-surface)" : "none")};
+  border: none;
+  border-bottom: 2px solid ${({ $active }) => ($active ? "var(--accent)" : "transparent")};
+  color: ${({ $active }) => ($active ? "var(--text-primary)" : "var(--text-muted)")};
+  font-size: var(--font-size-sm);
+  padding: var(--space-xs) var(--space-md);
+  cursor: pointer;
+  font-family: var(--font-mono);
+
+  &:hover {
+    color: var(--text-primary);
+  }
+`;
+
+const DebugContent = styled.pre`
+  margin: 0;
+  padding: var(--space-md);
+  font-size: var(--font-size-sm);
+  font-family: var(--font-mono);
+  line-height: 1.5;
+  color: var(--text-secondary);
+  white-space: pre-wrap;
+  word-break: break-word;
+  overflow-y: auto;
+  flex: 1;
+`;
+
 /* ── Types for streaming state ── */
 
 interface ActiveToolCall {
@@ -442,6 +507,12 @@ export default function ChatPage() {
   const [pendingPrompt, setPendingPrompt] = useState<PendingPrompt | null>(null);
   const [customAnswer, setCustomAnswer] = useState("");
 
+  // Debug panel state
+  const [debugOpen, setDebugOpen] = useState(false);
+  const [debugTab, setDebugTab] = useState<"prompt" | "tools" | "session" | "messages">("prompt");
+  const [debugPrompt, setDebugPrompt] = useState<string | null>(null);
+  const [debugTools, setDebugTools] = useState<McpListItem[]>([]);
+
   const messagesRef = useRef<HTMLDivElement>(null);
 
   const scrollToBottom = useCallback(() => {
@@ -500,6 +571,85 @@ export default function ChatPage() {
     ? (agents.find((agent) => agent.id === session.agentId)?.name ?? session.agentId)
     : "assistant";
 
+  async function toggleDebug() {
+    const next = !debugOpen;
+    setDebugOpen(next);
+    if (next && session) {
+      sessionApi.getPrompt(session.id).then((r) => setDebugPrompt(r.systemPrompt)).catch(() => setDebugPrompt("[Fehler beim Laden]"));
+      mcpApi.list().then(setDebugTools).catch(() => {});
+    }
+  }
+
+  function renderDebugPanel() {
+    if (!debugOpen || !session) return null;
+
+    let content = "";
+
+    if (debugTab === "prompt") {
+      content = debugPrompt ?? "Lade...";
+    } else if (debugTab === "tools") {
+      const activeTools = debugTools.filter((m) => session.activeMcpIds.includes(m.id));
+      if (activeTools.length === 0) {
+        content = "Keine aktiven Tools.";
+      } else {
+        content = activeTools
+          .map((m) => {
+            const header = `── ${m.emoji || "🛠️"} ${m.name} (${m.id}) ──`;
+            const tools = m.tools.map((t) => {
+              const params = t.inputSchema?.properties
+                ? Object.entries(t.inputSchema.properties as Record<string, { type?: string; description?: string }>)
+                    .map(([k, v]) => `    ${k}: ${v.type ?? "any"} — ${v.description ?? ""}`)
+                    .join("\n")
+                : "    (keine Parameter)";
+              return `  ${t.name}\n    ${t.description ?? ""}\n${params}`;
+            });
+            return `${header}\n${tools.join("\n\n")}`;
+          })
+          .join("\n\n");
+      }
+    } else if (debugTab === "session") {
+      content = JSON.stringify(
+        {
+          id: session.id,
+          name: session.name,
+          model: session.model,
+          agentId: session.agentId,
+          activeMcpIds: session.activeMcpIds,
+          reasoningEffort: session.reasoningEffort ?? "default",
+          temperature: session.temperature ?? "default",
+          messageCount: session.messages.length,
+          createdAt: session.createdAt,
+        },
+        null,
+        2,
+      );
+    } else if (debugTab === "messages") {
+      const msgs = session.messages.slice(-10);
+      content = msgs
+        .map((m, i) => {
+          const idx = session.messages.length - msgs.length + i;
+          const role = m.role.toUpperCase();
+          const preview = m.content?.slice(0, 300) || "(leer)";
+          const toolInfo = m.tool_calls?.length ? `\n  tool_calls: [${m.tool_calls.map((tc) => tc.name).join(", ")}]` : "";
+          const toolId = m.tool_call_id ? `\n  tool_call_id: ${m.tool_call_id}` : "";
+          return `[${idx}] ${role}${toolInfo}${toolId}\n  ${preview}${(m.content?.length ?? 0) > 300 ? "..." : ""}`;
+        })
+        .join("\n\n");
+    }
+
+    return (
+      <DebugPanel>
+        <DebugTabs>
+          <DebugTab $active={debugTab === "prompt"} onClick={() => setDebugTab("prompt")}>System Prompt</DebugTab>
+          <DebugTab $active={debugTab === "tools"} onClick={() => setDebugTab("tools")}>Tools</DebugTab>
+          <DebugTab $active={debugTab === "session"} onClick={() => setDebugTab("session")}>Session</DebugTab>
+          <DebugTab $active={debugTab === "messages"} onClick={() => setDebugTab("messages")}>Messages</DebugTab>
+        </DebugTabs>
+        <DebugContent>{content}</DebugContent>
+      </DebugPanel>
+    );
+  }
+
   async function handleSend() {
     if (!input.trim() || !session || sending) return;
     const message = input.trim();
@@ -527,6 +677,10 @@ export default function ChatPage() {
             break;
           case "reasoning":
             setStreamReasoning((prev) => prev + event.content);
+            break;
+          case "content_reset":
+            setStreamContent("");
+            setStreamReasoning("");
             break;
           case "retry_notice":
             setStreamRetryNotices((prev) => [...prev, event.message]);
@@ -575,6 +729,10 @@ export default function ChatPage() {
             setLoopState(null);
             setPendingPrompt(null);
             window.dispatchEvent(new Event("session-changed"));
+            // Refresh debug prompt after chat completes
+            if (debugOpen && session) {
+              sessionApi.getPrompt(session.id).then((r) => setDebugPrompt(r.systemPrompt)).catch(() => {});
+            }
             break;
           case "error":
             console.error("Stream error:", event.message);
@@ -806,10 +964,15 @@ export default function ChatPage() {
             {session.name || session.id.slice(0, 8)}
           </span>
         </TopBarInfo>
-        <Button size="sm" variant="secondary" onClick={handleNewSession}>
-          Neue Session
-        </Button>
+        <div style={{ display: "flex", gap: "var(--space-sm)", alignItems: "center" }}>
+          <DebugToggle onClick={toggleDebug}>{debugOpen ? "Debug ✕" : "Debug"}</DebugToggle>
+          <Button size="sm" variant="secondary" onClick={handleNewSession}>
+            Neue Session
+          </Button>
+        </div>
       </TopBar>
+
+      {renderDebugPanel()}
 
       <Messages ref={messagesRef}>
         {session.messages.length === 0 && !streaming && (
@@ -870,7 +1033,7 @@ export default function ChatPage() {
                 onChange={(e) => setCustomAnswer(e.target.value)}
                 onKeyDown={(e) => {
                   if (e.key === "Enter" && customAnswer.trim()) {
-                    handlePromptResponse(`custom:${customAnswer.trim()}`);
+                    handlePromptResponse(customAnswer.trim());
                     setCustomAnswer("");
                   }
                 }}
@@ -879,7 +1042,7 @@ export default function ChatPage() {
               <Button
                 onClick={() => {
                   if (customAnswer.trim()) {
-                    handlePromptResponse(`custom:${customAnswer.trim()}`);
+                    handlePromptResponse(customAnswer.trim());
                     setCustomAnswer("");
                   }
                 }}

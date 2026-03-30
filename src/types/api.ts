@@ -231,6 +231,7 @@ export interface AppDefaults {
 export type StreamEvent =
   | { type: "content"; content: string }
   | { type: "reasoning"; content: string }
+  | { type: "content_reset" }
   | { type: "retry_notice"; message: string }
   | { type: "tool_call"; toolCall: { id: string; name: string; arguments: Record<string, unknown> } }
   | { type: "tool_result"; toolCallId: string; content: string; isError: boolean }

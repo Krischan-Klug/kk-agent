@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import styled from "styled-components";
-import { agent as agentApi, mcp as mcpApi } from "@/lib/api";
+import { agent as agentApi, mcp as mcpApi, provider as providerApi } from "@/lib/api";
 import type {
   AgentDefinition,
   CreateAgentBody,
@@ -144,6 +144,7 @@ const Actions = styled.div`
 export default function AgentPage() {
   const [agents, setAgents] = useState<AgentDefinition[]>([]);
   const [mcps, setMcps] = useState<McpListItem[]>([]);
+  const [models, setModels] = useState<string[]>([]);
   const [systemVariables, setSystemVariables] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -154,11 +155,12 @@ export default function AgentPage() {
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    Promise.all([agentApi.list(), mcpApi.list(), agentApi.systemVariables()])
-      .then(([a, m, sv]) => {
+    Promise.all([agentApi.list(), mcpApi.list(), agentApi.systemVariables(), providerApi.getModels()])
+      .then(([a, m, sv, pm]) => {
         setAgents(a);
         setMcps(m);
         setSystemVariables(sv.variables);
+        setModels(pm.models.map((mod) => mod.id));
         if (a.length > 0) {
           setSelectedId(a[0].id);
           setEditAgent(structuredClone(a[0]));
@@ -284,6 +286,23 @@ export default function AgentPage() {
                     value={editAgent.description}
                     onChange={(e) => setEditAgent({ ...editAgent, description: e.target.value })}
                   />
+                </div>
+                <div>
+                  <FieldLabel>Default Model</FieldLabel>
+                  <Select
+                    value={editAgent.defaultModel ?? ""}
+                    onChange={(e) =>
+                      setEditAgent({
+                        ...editAgent,
+                        defaultModel: e.target.value || undefined,
+                      })
+                    }
+                  >
+                    <option value="">-- Kein Default --</option>
+                    {models.map((m) => (
+                      <option key={m} value={m}>{m}</option>
+                    ))}
+                  </Select>
                 </div>
                 <div>
                   <FieldLabel>Reasoning Effort</FieldLabel>

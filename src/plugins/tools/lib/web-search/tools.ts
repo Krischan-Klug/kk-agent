@@ -3,12 +3,12 @@ import type { McpToolDefinition } from "../../../mcp/types.js";
 export const webSearchTools: McpToolDefinition[] = [
   {
     name: "web_search",
-    description: "Search the web for relevant pages. Returns a compact result list with title, URL, and snippet so you can choose what to open next.",
+    description: "Search the web. Returns title, URL, snippet per result.",
     inputSchema: {
       type: "object",
       properties: {
-        query: { type: "string", description: "Search query to run." },
-        limit: { type: "number", description: "Maximum number of search results to return. Defaults to 5." },
+        query: { type: "string", description: "Search query." },
+        limit: { type: "number", description: "Max results (default: 5)." },
       },
       required: ["query"],
     },
@@ -16,12 +16,12 @@ export const webSearchTools: McpToolDefinition[] = [
   },
   {
     name: "fetch_url",
-    description: "Fetch a specific page and extract readable text content. Use this after search when you need to read the source itself.",
+    description: "Fetch a page and extract readable text.",
     inputSchema: {
       type: "object",
       properties: {
-        url: { type: "string", description: "The page URL to fetch." },
-        maxChars: { type: "number", description: "Maximum number of characters to return from the extracted page text." },
+        url: { type: "string", description: "Page URL to fetch." },
+        maxChars: { type: "number", description: "Max characters to return." },
       },
       required: ["url"],
     },

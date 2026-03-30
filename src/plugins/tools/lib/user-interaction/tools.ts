@@ -4,9 +4,8 @@ export const userInteractionTools: McpToolDefinition[] = [
   {
     name: "ask_user",
     description:
-      "Present a multiple-choice question to the user and wait for their selection. " +
-      "Use this when you need the user to decide between specific options before continuing. " +
-      "Returns the selected choice key as JSON.",
+      "Present a question with choices to the user. The user can pick a choice or type a custom answer. " +
+      "Returns JSON with selectedKey — either a choice key or 'custom:<user text>' for free-text input.",
     inputSchema: {
       type: "object",
       properties: {
@@ -19,14 +18,8 @@ export const userInteractionTools: McpToolDefinition[] = [
           items: {
             type: "object",
             properties: {
-              key: {
-                type: "string",
-                description: "A short unique identifier for this choice (e.g. 'a', 'option1').",
-              },
-              label: {
-                type: "string",
-                description: "The display text for this choice.",
-              },
+              key: { type: "string", description: "Unique choice identifier." },
+              label: { type: "string", description: "Display text for this choice." },
             },
             required: ["key", "label"],
           },

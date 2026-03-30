@@ -44,7 +44,7 @@ export interface McpServerConfig {
   instruction: string;
   emoji?: string;
   source?: "system" | "custom";
-  systemKey?: "filesystem" | "web-search" | "terminal";
+  systemKey?: "filesystem" | "web-search" | "terminal" | "user-interaction";
   systemConfig?: {
     rootPath?: string;
     workingDirectory?: string;

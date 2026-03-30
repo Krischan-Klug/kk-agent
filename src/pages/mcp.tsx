@@ -366,7 +366,7 @@ export default function McpPage() {
           <Card key={m.id}>
             <McpHeader>
               <McpName>
-                <span style={{ fontSize: "1.2em" }}>{m.emoji || "🛠️"}</span>
+                <span style={{ fontSize: "1.2em" }}>{m.emoji || "???"}</span>
                 {m.name}
                 <Badge variant={m.running ? "success" : "danger"}>
                   {m.running ? "running" : "stopped"}
@@ -433,7 +433,7 @@ export default function McpPage() {
                           [m.id]: { ...prev[m.id], emoji: e.target.value },
                         }))
                       }
-                      placeholder="🛠️"
+                      placeholder="???"
                       style={{ textAlign: "center", fontSize: "1.2em" }}
                     />
                   </div>
@@ -651,7 +651,7 @@ export default function McpPage() {
                 <Input
                   value={createForm.emoji ?? ""}
                   onChange={(e) => setCreateForm((prev) => ({ ...prev, emoji: e.target.value }))}
-                  placeholder="🛠️"
+                  placeholder="???"
                   style={{ textAlign: "center", fontSize: "1.2em" }}
                 />
               </div>

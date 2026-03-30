@@ -103,9 +103,7 @@ function buildCurrentSystemPrompt(
 export function createSession(body: CreateSessionBody): SessionState {
   const agent = getAgent(body.agentId);
 
-  const agentMcpIds = agent.mcpIds ?? [];
-  const bodyMcpIds = body.activeMcpIds ?? [];
-  const activeMcpIds = sanitizeMcpIds([...agentMcpIds, ...bodyMcpIds]);
+  const activeMcpIds = sanitizeMcpIds(body.activeMcpIds ?? agent.mcpIds ?? []);
 
   const model = body.model ?? agent.defaultModel ?? getActiveModel();
   const reasoningEffort = body.reasoningEffort ?? agent.reasoningEffort;
@@ -280,12 +278,14 @@ export function patchSession(
   id: string,
   update: { agentId?: string; model?: string; activeMcpIds?: string[]; reasoningEffort?: string; temperature?: number },
 ): SessionState {
-  const session = getSession(id);
   const patch: Partial<SessionState> = {};
   if (update.agentId !== undefined) {
     const agent = getAgent(update.agentId);
     patch.agentId = update.agentId;
     patch.systemPrompt = agent.systemPrompt;
+    if (update.activeMcpIds === undefined) {
+      patch.activeMcpIds = sanitizeMcpIds(agent.mcpIds ?? []);
+    }
     if (update.model === undefined) {
       patch.model = agent.defaultModel ?? getActiveModel();
     }

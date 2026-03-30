@@ -6,8 +6,7 @@ export const userInteractionDefinition: McpServerConfig = {
   active: true,
   instruction:
     "Use ask_user when you need user input, clarification, or decisions. " +
-    "Provide meaningful choices. The user can also type a custom answer (returned as 'custom:<text>'). " +
-    "Handle both choice keys and custom responses gracefully.",
+    "Provide meaningful choices that cover the most likely answers.",
   emoji: "💬",
   source: "system",
   systemKey: "user-interaction",

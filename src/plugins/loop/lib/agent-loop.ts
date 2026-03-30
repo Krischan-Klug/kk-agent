@@ -90,7 +90,6 @@ export async function runAgentLoop(opts: LoopOptions): Promise<LoopResult> {
     const messagesWithSystem = buildModelMessages(systemPrompt, messages, retryInstruction);
     retryInstruction = undefined;
 
-    const streamedChunks: Array<{ type: "content" | "reasoning"; content: string }> = [];
     let receivedProviderStats = false;
 
     const response = await callProviderStream(
@@ -104,12 +103,12 @@ export async function runAgentLoop(opts: LoopOptions): Promise<LoopResult> {
       },
       (chunk) => {
         if (chunk.type === "content" && chunk.content) {
-          streamedChunks.push({ type: "content", content: chunk.content });
+          opts.onContent?.(chunk.content);
           return;
         }
 
         if (chunk.type === "reasoning" && chunk.content) {
-          streamedChunks.push({ type: "reasoning", content: chunk.content });
+          opts.onReasoning?.(chunk.content);
           return;
         }
 
@@ -149,6 +148,7 @@ export async function runAgentLoop(opts: LoopOptions): Promise<LoopResult> {
     if (invalidToolAttempt) {
       invalidToolAttemptCount++;
       if (invalidToolAttemptCount <= INVALID_TOOL_RETRY_BUDGET) {
+        opts.onContentReset?.();
         opts.onRetryNotice?.("Modellantwort wurde verworfen: Tool-Aufruf nur als Text statt strukturierter tool_call. Korrekturversuch.");
         retryInstruction = getDefaults().retry.invalidToolInstruction;
         continue;
@@ -169,6 +169,7 @@ export async function runAgentLoop(opts: LoopOptions): Promise<LoopResult> {
     if (emptyResponse) {
       emptyResponseRetryCount++;
       if (emptyResponseRetryCount <= EMPTY_RESPONSE_RETRY_BUDGET) {
+        opts.onContentReset?.();
         opts.onRetryNotice?.("Modellantwort war leer. Korrekturversuch.");
         retryInstruction = getDefaults().retry.emptyResponseInstruction;
         continue;
@@ -179,14 +180,6 @@ export async function runAgentLoop(opts: LoopOptions): Promise<LoopResult> {
       throw new Error("Model returned an empty response twice in a row.");
     }
     emptyResponseRetryCount = 0;
-
-    for (const chunk of streamedChunks) {
-      if (chunk.type === "content") {
-        opts.onContent?.(chunk.content);
-      } else {
-        opts.onReasoning?.(chunk.content);
-      }
-    }
 
     lastContent = messageContent;
     if (hasVisibleContent(messageContent)) {

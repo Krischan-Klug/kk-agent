@@ -238,6 +238,7 @@ export async function chatStream(
         executeTool: executeCombinedTool,
         onContent: (content) => emit({ type: "content", content }),
         onReasoning: (content) => emit({ type: "reasoning", content }),
+        onContentReset: () => emit({ type: "content_reset" }),
         onRetryNotice: (message) => emit({ type: "retry_notice", message }),
         onToolCall: (tc) =>
           emit({ type: "tool_call", toolCall: { id: tc.id, name: tc.name, arguments: tc.arguments } }),

@@ -41,6 +41,7 @@ export interface LoopOptions {
   executeTool: ExecuteToolFn;
   onContent?: (content: string) => void;
   onReasoning?: (content: string) => void;
+  onContentReset?: () => void;
   onRetryNotice?: (message: string) => void;
   onToolCall?: (toolCall: UnifiedToolCall) => void;
   onToolResult?: (toolCallId: string, result: ToolResult) => void;

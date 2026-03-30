@@ -4,8 +4,8 @@ export const userInteractionTools: McpToolDefinition[] = [
   {
     name: "ask_user",
     description:
-      "Present a question with choices to the user. The user can pick a choice or type a custom answer. " +
-      "Returns JSON with selectedKey — either a choice key or 'custom:<user text>' for free-text input.",
+      "Present a question with choices to the user and wait for their selection. " +
+      "Returns the selected choice key as JSON.",
     inputSchema: {
       type: "object",
       properties: {

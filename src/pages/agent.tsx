@@ -8,7 +8,6 @@ import type {
 } from "@/types/api";
 import { REASONING_LEVELS } from "@/constants/reasoningDefaults";
 import { PageTitle } from "@/components/Layout.styled";
-import Card from "@/components/Card";
 import Badge from "@/components/Badge";
 import Button from "@/components/Button";
 import Input from "@/components/Input";
@@ -208,6 +207,7 @@ export default function AgentPage() {
         variables: editAgent.variables,
         defaultModel: editAgent.defaultModel,
         reasoningEffort: editAgent.reasoningEffort,
+        temperature: editAgent.temperature,
       });
       setAgents((prev) => prev.map((a) => (a.id === selectedId ? updated : a)));
       setEditAgent(structuredClone(updated));
@@ -305,7 +305,7 @@ export default function AgentPage() {
                   </Select>
                 </div>
                 <div>
-                  <FieldLabel>Reasoning Effort</FieldLabel>
+                  <FieldLabel>Default Reasoning</FieldLabel>
                   <Select
                     value={editAgent.reasoningEffort ?? ""}
                     onChange={(e) =>
@@ -320,6 +320,24 @@ export default function AgentPage() {
                       <option key={l} value={l}>{l}</option>
                     ))}
                   </Select>
+                </div>
+                <div>
+                  <FieldLabel>Temperature</FieldLabel>
+                  <Input
+                    type="number"
+                    min="0"
+                    max="2"
+                    step="0.1"
+                    value={editAgent.temperature ?? ""}
+                    onChange={(e) =>
+                      setEditAgent({
+                        ...editAgent,
+                        temperature: e.target.value === "" ? undefined : Number(e.target.value),
+                      })
+                    }
+                    placeholder="Default"
+                    style={{ width: 110 }}
+                  />
                 </div>
               </Row>
             </Section>

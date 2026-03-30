@@ -33,6 +33,15 @@ export interface CreateSessionBody {
   model?: string;
   activeMcpIds?: string[];
   reasoningEffort?: ReasoningEffort;
+  temperature?: number;
+}
+
+export interface UpdateSessionBody {
+  agentId?: string;
+  model?: string;
+  activeMcpIds?: string[];
+  reasoningEffort?: ReasoningEffort;
+  temperature?: number;
 }
 
 /* ── MCP ── */
@@ -168,6 +177,7 @@ export interface AgentDefinition {
   variables: Record<string, string>;
   defaultModel?: string;
   reasoningEffort?: ReasoningEffort;
+  temperature?: number;
   createdAt: string;
   updatedAt: string;
 }
@@ -192,6 +202,7 @@ export interface CreateAgentBody {
   variables?: Record<string, string>;
   defaultModel?: string;
   reasoningEffort?: ReasoningEffort;
+  temperature?: number;
 }
 
 export interface UpdateAgentBody {
@@ -204,6 +215,7 @@ export interface UpdateAgentBody {
   variables?: Record<string, string>;
   defaultModel?: string;
   reasoningEffort?: ReasoningEffort;
+  temperature?: number;
 }
 
 export interface SystemVariablesResponse {

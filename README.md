@@ -5,8 +5,7 @@ Frontend fuer `kk-agent-backend`.
 ## Seiten
 
 - `/chat` -> Streaming-Chat mit Markdown-Rendering, Tool-Cards und Loop-State
-- `/agent` -> Agent-Editor fuer Prompt, `maxIterations`, MCP-Zuordnung, Variablen und Reasoning-Effort
-- `/session` -> Sessions erstellen und verwalten
+- `/agent` -> Agent-Editor fuer Prompt, `maxIterations`, MCP-Zuordnung, Variablen sowie Agent-Defaults fuer Model, Reasoning und Temperature
 - `/mcp` -> System- und Custom-MCPs anzeigen und konfigurieren
 - `/provider` -> Modelle und Provider-Settings
 - `/settings/defaults` -> App-Defaults
@@ -42,6 +41,7 @@ type AgentDefinition = {
   variables: Record<string, string>;
   defaultModel?: string;
   reasoningEffort?: string;
+  temperature?: number;
   createdAt: string;
   updatedAt: string;
 };
@@ -52,7 +52,7 @@ type McpListItem = {
   active: boolean;
   running: boolean;
   source?: "system" | "custom";
-  systemKey?: "filesystem" | "web-search" | "terminal";
+  systemKey?: "filesystem" | "web-search" | "terminal" | "user-interaction";
 };
 ```
 

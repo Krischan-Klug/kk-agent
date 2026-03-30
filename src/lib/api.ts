@@ -17,6 +17,7 @@ import type {
   CreateProviderBody,
   UpdateProviderBody,
   SystemVariablesResponse,
+  UpdateSessionBody,
 } from "@/types/api";
 
 const BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3001";
@@ -205,7 +206,7 @@ export const session = {
   delete: (id: string) =>
     request<{ deleted: boolean }>(`/session/${id}`, { method: "DELETE" }),
 
-  update: (id: string, body: { model?: string; activeMcpIds?: string[]; reasoningEffort?: string; temperature?: number }) =>
+  update: (id: string, body: UpdateSessionBody) =>
     request<SessionState>(`/session/${id}`, {
       method: "PATCH",
       body: JSON.stringify(body),

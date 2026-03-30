@@ -2,14 +2,13 @@ import { useEffect, useState, useRef, useCallback } from "react";
 import styled from "styled-components";
 import { session as sessionApi, provider as providerApi, mcp as mcpApi, agent as agentApi } from "@/lib/api";
 import type { SessionState, SessionMessage, StreamEvent, McpListItem, AgentDefinition, AgentLoopState, ModelInfo, ModelSettings } from "@/types/api";
-import { REASONING_LEVELS } from "@/constants/reasoningDefaults";
+import { REASONING_LEVELS, REASONING_LEVEL_DEFAULTS } from "@/constants/reasoningDefaults";
 import Badge from "@/components/Badge";
 import Button from "@/components/Button";
 import Spinner from "@/components/Spinner";
 import MarkdownMessage from "@/components/MarkdownMessage";
-import ModelSelect from "@/components/ModelSelect";
-import McpSelect from "@/components/McpSelect";
 import AgentSelect from "@/components/AgentSelect";
+import ChatDebugPanel, { type ChatDebugTab } from "@/components/ChatDebugPanel";
 
 /* ── Styled Components ── */
 
@@ -18,27 +17,6 @@ const ChatWrapper = styled.div`
   flex-direction: column;
   height: 100%;
   max-height: calc(100vh - 2 * var(--space-lg));
-`;
-
-const TopBar = styled.div`
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding-bottom: var(--space-md);
-  border-bottom: 1px solid var(--border);
-  margin-bottom: var(--space-md);
-  flex-shrink: 0;
-  max-width: 900px;
-  width: 100%;
-  margin: 0 auto var(--space-md);
-`;
-
-const TopBarInfo = styled.div`
-  display: flex;
-  align-items: center;
-  gap: var(--space-sm);
-  font-size: var(--font-size-sm);
-  color: var(--text-secondary);
 `;
 
 const IterationPill = styled.span`
@@ -214,8 +192,7 @@ const ToolResultBlock = styled.div<{ $isError: boolean }>`
 
 const InputArea = styled.div`
   display: flex;
-  align-items: center;
-  gap: var(--space-sm);
+  flex-direction: column;
   padding-top: var(--space-md);
   border-top: 1px solid var(--border);
   flex-shrink: 0;
@@ -224,21 +201,112 @@ const InputArea = styled.div`
   margin: 0 auto;
 `;
 
-const InputLeft = styled.div`
+const Composer = styled.div`
+  width: 100%;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.14);
+  overflow: visible;
+`;
+
+const ComposerInputWrap = styled.div`
+  padding: var(--space-md) var(--space-md) 4px;
+`;
+
+const ComposerFooter = styled.div`
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-md);
+  padding: 0 var(--space-sm) var(--space-sm);
+  flex-wrap: wrap;
+`;
+
+const ComposerMeta = styled.div`
   display: flex;
   align-items: center;
   gap: var(--space-sm);
-  flex-shrink: 0;
+  flex-wrap: wrap;
 `;
 
-const ReasoningSelect = styled.select`
+const ComposerActions = styled.div`
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+`;
+
+const InlineDropdownWrap = styled.div`
+  position: relative;
+  display: inline-block;
+`;
+
+const InlineDropdownTrigger = styled.button`
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
+  padding: 2px var(--space-sm);
+  background: var(--bg-surface);
+  color: var(--text-primary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  font-size: var(--font-size-sm);
+  font-weight: 500;
+  cursor: pointer;
+  white-space: nowrap;
+
+  &:hover {
+    border-color: var(--accent);
+  }
+
+  &::after {
+    content: "▼";
+    font-size: 8px;
+    opacity: 0.7;
+  }
+`;
+
+const InlineDropdownMenu = styled.div`
+  position: absolute;
+  bottom: calc(100% + 6px);
+  left: 0;
+  z-index: 100;
+  min-width: 140px;
+  max-height: 280px;
+  overflow-y: auto;
   background: var(--bg-elevated);
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+`;
+
+const InlineDropdownOption = styled.button<{ $active: boolean }>`
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: var(--space-sm) var(--space-md);
+  background: ${(p) => (p.$active ? "var(--accent-muted)" : "transparent")};
   color: var(--text-primary);
-  font-size: var(--font-size-sm);
-  padding: 2px 4px;
+  border: none;
   cursor: pointer;
+  font-size: var(--font-size-sm);
+  text-align: left;
+
+  &:hover {
+    background: var(--bg-hover);
+  }
+`;
+
+const ControlGroup = styled.label`
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+`;
+
+const ControlEmoji = styled.span`
+  font-size: 14px;
+  line-height: 1;
 `;
 
 const ContextIndicator = styled.div`
@@ -251,27 +319,46 @@ const ContextIndicator = styled.div`
   flex-shrink: 0;
 `;
 
-const ChatInput = styled.textarea`
+const ChatInput = styled.input`
   flex: 1;
+  width: 100%;
   min-width: 0;
-  padding: var(--space-sm) var(--space-md);
-  background: var(--bg-elevated);
+  padding: 0;
+  background: transparent;
   color: var(--text-primary);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
+  border: none;
   font-size: var(--font-size-base);
   font-family: inherit;
-  resize: none;
   outline: none;
-  min-height: 42px;
-  max-height: 120px;
-
-  &:focus {
-    border-color: var(--border-focus);
-  }
+  height: 24px;
 
   &::placeholder {
     color: var(--text-muted);
+  }
+`;
+
+const SendIconButton = styled.button`
+  width: 36px;
+  height: 36px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: 50%;
+  background: var(--accent);
+  color: var(--bg-base);
+  cursor: pointer;
+  font-size: 16px;
+  font-weight: 700;
+  flex-shrink: 0;
+
+  &:hover:not(:disabled) {
+    filter: brightness(1.05);
+  }
+
+  &:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
   }
 `;
 
@@ -370,69 +457,6 @@ const CustomInput = styled.input`
 
 /* ── Debug Panel Styles ── */
 
-const DebugToggle = styled.button`
-  background: none;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  color: var(--text-muted);
-  font-size: var(--font-size-sm);
-  padding: 2px 8px;
-  cursor: pointer;
-  font-family: var(--font-mono);
-
-  &:hover {
-    color: var(--text-primary);
-    border-color: var(--accent);
-  }
-`;
-
-const DebugPanel = styled.div`
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
-  background: var(--bg-elevated);
-  margin-bottom: var(--space-md);
-  overflow: hidden;
-  flex-shrink: 0;
-  max-height: 50vh;
-  display: flex;
-  flex-direction: column;
-`;
-
-const DebugTabs = styled.div`
-  display: flex;
-  gap: 0;
-  border-bottom: 1px solid var(--border);
-  flex-shrink: 0;
-`;
-
-const DebugTab = styled.button<{ $active?: boolean }>`
-  background: ${({ $active }) => ($active ? "var(--bg-surface)" : "none")};
-  border: none;
-  border-bottom: 2px solid ${({ $active }) => ($active ? "var(--accent)" : "transparent")};
-  color: ${({ $active }) => ($active ? "var(--text-primary)" : "var(--text-muted)")};
-  font-size: var(--font-size-sm);
-  padding: var(--space-xs) var(--space-md);
-  cursor: pointer;
-  font-family: var(--font-mono);
-
-  &:hover {
-    color: var(--text-primary);
-  }
-`;
-
-const DebugContent = styled.pre`
-  margin: 0;
-  padding: var(--space-md);
-  font-size: var(--font-size-sm);
-  font-family: var(--font-mono);
-  line-height: 1.5;
-  color: var(--text-secondary);
-  white-space: pre-wrap;
-  word-break: break-word;
-  overflow-y: auto;
-  flex: 1;
-`;
-
 /* ── Types for streaming state ── */
 
 interface ActiveToolCall {
@@ -453,6 +477,11 @@ interface PendingPrompt {
   question: string;
   choices: { key: string; label: string }[];
 }
+
+type ComposerSelectOption = {
+  value: string;
+  label: string;
+};
 
 /* ── Context Ring ── */
 
@@ -479,8 +508,56 @@ function formatTokens(n: number): string {
   return String(n);
 }
 
-/* ── Content Parser ── */
+function ComposerSelect({
+  value,
+  options,
+  onSelect,
+}: {
+  value: string;
+  options: ComposerSelectOption[];
+  onSelect: (value: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const wrapperRef = useRef<HTMLDivElement>(null);
 
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (wrapperRef.current && !wrapperRef.current.contains(e.target as Node)) {
+        setOpen(false);
+      }
+    }
+    if (open) document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [open]);
+
+  const active = options.find((option) => option.value === value) ?? options[0];
+
+  return (
+    <InlineDropdownWrap ref={wrapperRef}>
+      <InlineDropdownTrigger type="button" onClick={() => setOpen((prev) => !prev)}>
+        {active?.label ?? value}
+      </InlineDropdownTrigger>
+      {open && (
+        <InlineDropdownMenu>
+          {options.map((option) => (
+            <InlineDropdownOption
+              key={option.value}
+              type="button"
+              $active={option.value === value}
+              onClick={() => {
+                onSelect(option.value);
+                setOpen(false);
+              }}
+            >
+              <span>{option.label}</span>
+              <span>{option.value === value ? "✓" : ""}</span>
+            </InlineDropdownOption>
+          ))}
+        </InlineDropdownMenu>
+      )}
+    </InlineDropdownWrap>
+  );
+}
 
 /* ── Component ── */
 
@@ -509,7 +586,7 @@ export default function ChatPage() {
 
   // Debug panel state
   const [debugOpen, setDebugOpen] = useState(false);
-  const [debugTab, setDebugTab] = useState<"prompt" | "tools" | "session" | "messages">("prompt");
+  const [debugTab, setDebugTab] = useState<ChatDebugTab>("prompt");
   const [debugPrompt, setDebugPrompt] = useState<string | null>(null);
   const [debugTools, setDebugTools] = useState<McpListItem[]>([]);
 
@@ -552,17 +629,45 @@ export default function ChatPage() {
     return () => window.removeEventListener("session-changed", loadSession);
   }, [loadSession]);
 
+  useEffect(() => {
+    function onDebugToggle() {
+      setDebugOpen((prev) => {
+        const next = !prev;
+        if (next && session) {
+          sessionApi.getPrompt(session.id).then((r) => setDebugPrompt(r.systemPrompt)).catch(() => setDebugPrompt("[Fehler beim Laden]"));
+          mcpApi.list().then(setDebugTools).catch(() => {});
+        }
+        return next;
+      });
+    }
+
+    window.addEventListener("chat-debug-toggle", onDebugToggle);
+    return () => window.removeEventListener("chat-debug-toggle", onDebugToggle);
+  }, [session]);
+
   useEffect(scrollToBottom, [session?.messages, streamContent, streamReasoning, streamToolCalls, scrollToBottom]);
 
   const reasoningLevels = REASONING_LEVELS;
+  const reasoningOptions = reasoningLevels.map((level) => ({ value: level, label: level }));
+  const temperatureOptions = Array.from({ length: 21 }, (_, i) => {
+    const value = (i * 0.1).toFixed(1);
+    return { value, label: value };
+  });
 
   // Resolve effective reasoning effort: session override > model default > "medium"
   const resolvedEffort: string = session
     ? (session.reasoningEffort ?? modelSettingsMap[session.model]?.reasoningEffort ?? "medium")
     : "medium";
 
-  // Resolve effective temperature: session override > level config > default (1.0)
-  const resolvedTemp: number = session?.temperature ?? 1.0;
+  // Resolve effective temperature: session override > model level config > default level value
+  const resolvedTemp: number = session
+    ? (
+      session.temperature ??
+      modelSettingsMap[session.model]?.levels?.[resolvedEffort]?.temperature ??
+      REASONING_LEVEL_DEFAULTS[resolvedEffort]?.temperature ??
+      1.0
+    )
+    : 1.0;
 
   // Context info: prefer actual loaded context length, fall back to model maximum
   const modelInfo = session ? modelInfoMap.get(session.model) : undefined;
@@ -570,85 +675,6 @@ export default function ChatPage() {
   const currentAgentName = session
     ? (agents.find((agent) => agent.id === session.agentId)?.name ?? session.agentId)
     : "assistant";
-
-  async function toggleDebug() {
-    const next = !debugOpen;
-    setDebugOpen(next);
-    if (next && session) {
-      sessionApi.getPrompt(session.id).then((r) => setDebugPrompt(r.systemPrompt)).catch(() => setDebugPrompt("[Fehler beim Laden]"));
-      mcpApi.list().then(setDebugTools).catch(() => {});
-    }
-  }
-
-  function renderDebugPanel() {
-    if (!debugOpen || !session) return null;
-
-    let content = "";
-
-    if (debugTab === "prompt") {
-      content = debugPrompt ?? "Lade...";
-    } else if (debugTab === "tools") {
-      const activeTools = debugTools.filter((m) => session.activeMcpIds.includes(m.id));
-      if (activeTools.length === 0) {
-        content = "Keine aktiven Tools.";
-      } else {
-        content = activeTools
-          .map((m) => {
-            const header = `── ${m.emoji || "🛠️"} ${m.name} (${m.id}) ──`;
-            const tools = m.tools.map((t) => {
-              const params = t.inputSchema?.properties
-                ? Object.entries(t.inputSchema.properties as Record<string, { type?: string; description?: string }>)
-                    .map(([k, v]) => `    ${k}: ${v.type ?? "any"} — ${v.description ?? ""}`)
-                    .join("\n")
-                : "    (keine Parameter)";
-              return `  ${t.name}\n    ${t.description ?? ""}\n${params}`;
-            });
-            return `${header}\n${tools.join("\n\n")}`;
-          })
-          .join("\n\n");
-      }
-    } else if (debugTab === "session") {
-      content = JSON.stringify(
-        {
-          id: session.id,
-          name: session.name,
-          model: session.model,
-          agentId: session.agentId,
-          activeMcpIds: session.activeMcpIds,
-          reasoningEffort: session.reasoningEffort ?? "default",
-          temperature: session.temperature ?? "default",
-          messageCount: session.messages.length,
-          createdAt: session.createdAt,
-        },
-        null,
-        2,
-      );
-    } else if (debugTab === "messages") {
-      const msgs = session.messages.slice(-10);
-      content = msgs
-        .map((m, i) => {
-          const idx = session.messages.length - msgs.length + i;
-          const role = m.role.toUpperCase();
-          const preview = m.content?.slice(0, 300) || "(leer)";
-          const toolInfo = m.tool_calls?.length ? `\n  tool_calls: [${m.tool_calls.map((tc) => tc.name).join(", ")}]` : "";
-          const toolId = m.tool_call_id ? `\n  tool_call_id: ${m.tool_call_id}` : "";
-          return `[${idx}] ${role}${toolInfo}${toolId}\n  ${preview}${(m.content?.length ?? 0) > 300 ? "..." : ""}`;
-        })
-        .join("\n\n");
-    }
-
-    return (
-      <DebugPanel>
-        <DebugTabs>
-          <DebugTab $active={debugTab === "prompt"} onClick={() => setDebugTab("prompt")}>System Prompt</DebugTab>
-          <DebugTab $active={debugTab === "tools"} onClick={() => setDebugTab("tools")}>Tools</DebugTab>
-          <DebugTab $active={debugTab === "session"} onClick={() => setDebugTab("session")}>Session</DebugTab>
-          <DebugTab $active={debugTab === "messages"} onClick={() => setDebugTab("messages")}>Messages</DebugTab>
-        </DebugTabs>
-        <DebugContent>{content}</DebugContent>
-      </DebugPanel>
-    );
-  }
 
   async function handleSend() {
     if (!input.trim() || !session || sending) return;
@@ -752,8 +778,8 @@ export default function ChatPage() {
     }
   }
 
-  function handleKeyDown(e: React.KeyboardEvent) {
-    if (e.key === "Enter" && !e.shiftKey) {
+  function handleKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
+    if (e.key === "Enter") {
       e.preventDefault();
       handleSend();
     }
@@ -806,13 +832,8 @@ export default function ChatPage() {
   async function handleAgentSwitch(agentId: string) {
     if (!session || agentId === session.agentId) return;
     try {
-      const newSession = await sessionApi.create({
-        agentId,
-        model: session.model,
-        activeMcpIds: session.activeMcpIds,
-      });
-      localStorage.setItem("activeSessionId", newSession.id);
-      setSession(newSession);
+      const updated = await sessionApi.update(session.id, { agentId });
+      setSession(updated);
       setTokenStats(null);
       window.dispatchEvent(new Event("session-changed"));
     } catch (err) {
@@ -938,41 +959,18 @@ export default function ChatPage() {
 
   return (
     <ChatWrapper>
-      <TopBar>
-        <TopBarInfo>
-          {agents.length > 0 && (
-            <AgentSelect agents={agents} currentAgentId={session.agentId} onSelect={handleAgentSwitch} />
-          )}
-          {models.length > 0 ? (
-            <ModelSelect models={models} currentModel={session.model} onSelect={handleModelSwitch} />
-          ) : (
-            <Badge variant="info">{session.model}</Badge>
-          )}
-          <McpSelect
-            mcps={mcps}
-            activeMcpIds={session.activeMcpIds}
-            onToggle={handleMcpToggle}
-          />
-          <span style={{
-            color: "var(--text-secondary)",
-            fontSize: "var(--font-size-sm)",
-            fontFamily: "var(--font-mono)",
-            overflow: "hidden",
-            textOverflow: "ellipsis",
-            whiteSpace: "nowrap",
-          }}>
-            {session.name || session.id.slice(0, 8)}
-          </span>
-        </TopBarInfo>
-        <div style={{ display: "flex", gap: "var(--space-sm)", alignItems: "center" }}>
-          <DebugToggle onClick={toggleDebug}>{debugOpen ? "Debug ✕" : "Debug"}</DebugToggle>
-          <Button size="sm" variant="secondary" onClick={handleNewSession}>
-            Neue Session
-          </Button>
-        </div>
-      </TopBar>
-
-      {renderDebugPanel()}
+      <ChatDebugPanel
+        open={debugOpen}
+        debugTab={debugTab}
+        onTabChange={setDebugTab}
+        session={session}
+        debugPrompt={debugPrompt}
+        debugTools={debugTools}
+        models={models}
+        mcps={mcps}
+        onModelSwitch={handleModelSwitch}
+        onMcpToggle={handleMcpToggle}
+      />
 
       <Messages ref={messagesRef}>
         {session.messages.length === 0 && !streaming && (
@@ -1056,46 +1054,54 @@ export default function ChatPage() {
       </Messages>
 
       <InputArea>
-        <InputLeft>
-          <span style={{ fontSize: "var(--font-size-sm)" }}>🧠</span>
-          <ReasoningSelect
-            value={resolvedEffort}
-            onChange={(e) => handleReasoningEffort(e.target.value)}
-          >
-            {reasoningLevels.map((l) => (
-              <option key={l} value={l}>{l}</option>
-            ))}
-          </ReasoningSelect>
-          <span style={{ fontSize: "var(--font-size-sm)" }}>🔥</span>
-          <ReasoningSelect
-            value={resolvedTemp.toFixed(1)}
-            onChange={(e) => handleTemperature(e.target.value)}
-          >
-            {Array.from({ length: 21 }, (_, i) => {
-              const v = (i * 0.1).toFixed(1);
-              return <option key={v} value={v}>{v}</option>;
-            })}
-          </ReasoningSelect>
-        </InputLeft>
-        <ChatInput
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          onKeyDown={handleKeyDown}
-          placeholder="Nachricht eingeben..."
-          rows={1}
-          disabled={sending}
-        />
-        <Button onClick={handleSend} disabled={sending || !input.trim()}>
-          Senden
-        </Button>
-        {maxCtx > 0 && tokenStats && (
-          <ContextIndicator
-            title={`Input: ${tokenStats.input.toLocaleString()} | Output: ${tokenStats.output.toLocaleString()} | Reasoning: ${tokenStats.reasoning.toLocaleString()}`}
-          >
-            <ContextRing used={tokenStats.input} max={maxCtx} />
-            <span>{formatTokens(tokenStats.input)} / {formatTokens(maxCtx)}</span>
-          </ContextIndicator>
-        )}
+        <Composer>
+          <ComposerInputWrap>
+            <ChatInput
+              type="text"
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              onKeyDown={handleKeyDown}
+              placeholder="Nachricht eingeben..."
+              disabled={sending}
+            />
+          </ComposerInputWrap>
+          <ComposerFooter>
+            <ComposerMeta>
+              <ControlGroup>
+                <ControlEmoji>🧠</ControlEmoji>
+                <ComposerSelect
+                  value={resolvedEffort}
+                  options={reasoningOptions}
+                  onSelect={handleReasoningEffort}
+                />
+              </ControlGroup>
+              <ControlGroup>
+                <ControlEmoji>🔥</ControlEmoji>
+                <ComposerSelect
+                  value={resolvedTemp.toFixed(1)}
+                  options={temperatureOptions}
+                  onSelect={handleTemperature}
+                />
+              </ControlGroup>
+              {maxCtx > 0 && tokenStats && (
+                <ContextIndicator
+                  title={`Input: ${tokenStats.input.toLocaleString()} | Output: ${tokenStats.output.toLocaleString()} | Reasoning: ${tokenStats.reasoning.toLocaleString()}`}
+                >
+                  <ContextRing used={tokenStats.input} max={maxCtx} />
+                  <span>{formatTokens(tokenStats.input)} / {formatTokens(maxCtx)}</span>
+                </ContextIndicator>
+              )}
+            </ComposerMeta>
+            <ComposerActions>
+              {agents.length > 0 && (
+                <AgentSelect agents={agents} currentAgentId={session.agentId} onSelect={handleAgentSwitch} direction="up" />
+              )}
+              <SendIconButton onClick={handleSend} disabled={sending || !input.trim()} aria-label="Nachricht senden">
+                ^
+              </SendIconButton>
+            </ComposerActions>
+          </ComposerFooter>
+        </Composer>
       </InputArea>
     </ChatWrapper>
   );

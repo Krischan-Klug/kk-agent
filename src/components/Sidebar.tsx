@@ -9,12 +9,17 @@ import {
   NavItem,
   SidebarDivider,
   SidebarSection,
+  SidebarSectionRow,
+  SidebarSectionActions,
   SessionItem,
+  SessionName,
+  SessionAdd,
+  SessionDebug,
+  SessionDelete,
 } from "./Sidebar.styled";
 
 const navItems = [
   { href: "/chat", label: "💬 Chat" },
-  { href: "/session", label: "📂 Sessions" },
   { href: "/agent", label: "🤖 Agents" },
   { href: "/mcp", label: "🛠️ MCP" },
   { href: "/provider", label: "🔌 Provider" },
@@ -59,9 +64,39 @@ export default function Sidebar() {
     router.push("/chat");
   }
 
+  async function createSession() {
+    try {
+      const newSession = await sessionApi.create({ agentId: "general-assistant" });
+      localStorage.setItem("activeSessionId", newSession.id);
+      setActiveSessionId(newSession.id);
+      window.dispatchEvent(new Event("session-changed"));
+      await loadSessions();
+      router.push("/chat");
+    } catch {
+      // ignore
+    }
+  }
+
+  async function deleteSession(id: string) {
+    try {
+      await sessionApi.delete(id);
+      if (localStorage.getItem("activeSessionId") === id) {
+        localStorage.removeItem("activeSessionId");
+        setActiveSessionId(null);
+      }
+      window.dispatchEvent(new Event("session-changed"));
+      await loadSessions();
+      if (router.pathname === "/chat") {
+        router.replace("/chat");
+      }
+    } catch {
+      // ignore
+    }
+  }
+
   return (
     <SidebarWrapper>
-      <Logo>KK Agent</Logo>
+      <Logo>^^</Logo>
       {navItems.map((item) => (
         <Link key={item.href} href={item.href} style={{ textDecoration: "none" }}>
           <NavItem
@@ -76,21 +111,44 @@ export default function Sidebar() {
         </Link>
       ))}
 
-      {sessions.length > 0 && (
-        <>
-          <SidebarDivider />
+      <>
+        <SidebarDivider />
+        <SidebarSectionRow>
           <SidebarSection>Sessions</SidebarSection>
-          {sessions.map((s) => (
-            <SessionItem
-              key={s.id}
-              $active={s.id === activeSessionId}
-              onClick={() => selectSession(s.id)}
+          <SidebarSectionActions>
+            {router.pathname === "/chat" && (
+              <SessionDebug
+                type="button"
+                aria-label="Debug umschalten"
+                title="Debug umschalten"
+                onClick={() => window.dispatchEvent(new Event("chat-debug-toggle"))}
+              >
+                Debug
+              </SessionDebug>
+            )}
+            <SessionAdd type="button" aria-label="Neue Session" title="Neue Session" onClick={() => void createSession()}>
+              +
+            </SessionAdd>
+          </SidebarSectionActions>
+        </SidebarSectionRow>
+        {sessions.map((s) => (
+          <SessionItem key={s.id} $active={s.id === activeSessionId} onClick={() => selectSession(s.id)}>
+            <SessionName>{s.name || s.id.slice(0, 8)}</SessionName>
+            <SessionDelete
+              type="button"
+              aria-label="Session loeschen"
+              title="Session loeschen"
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                void deleteSession(s.id);
+              }}
             >
-              {s.name || s.id.slice(0, 8)}
-            </SessionItem>
-          ))}
-        </>
-      )}
+              x
+            </SessionDelete>
+          </SessionItem>
+        ))}
+      </>
     </SidebarWrapper>
   );
 }

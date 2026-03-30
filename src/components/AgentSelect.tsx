@@ -33,11 +33,11 @@ const Trigger = styled.button`
   }
 `;
 
-const Dropdown = styled.div`
+const Dropdown = styled.div<{ $direction: "up" | "down" }>`
   position: absolute;
-  top: calc(100% + 4px);
+  ${({ $direction }) => ($direction === "up" ? "bottom: calc(100% + 4px);" : "top: calc(100% + 4px);")}
   left: 0;
-  z-index: 100;
+  z-index: 1000;
   min-width: 220px;
   max-height: 280px;
   overflow-y: auto;
@@ -84,9 +84,10 @@ interface AgentSelectProps {
   agents: AgentDefinition[];
   currentAgentId: string;
   onSelect: (agentId: string) => void;
+  direction?: "up" | "down";
 }
 
-export default function AgentSelect({ agents, currentAgentId, onSelect }: AgentSelectProps) {
+export default function AgentSelect({ agents, currentAgentId, onSelect, direction = "down" }: AgentSelectProps) {
   const [open, setOpen] = useState(false);
   const wrapperRef = useRef<HTMLDivElement>(null);
 
@@ -108,7 +109,7 @@ export default function AgentSelect({ agents, currentAgentId, onSelect }: AgentS
         {current?.name ?? currentAgentId}
       </Trigger>
       {open && (
-        <Dropdown>
+        <Dropdown $direction={direction}>
           {agents.map((a) => (
             <Option
               key={a.id}

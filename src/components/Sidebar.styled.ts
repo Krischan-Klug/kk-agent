@@ -52,9 +52,57 @@ export const SidebarSection = styled.div`
   letter-spacing: 0.5px;
 `;
 
+export const SidebarSectionRow = styled.div`
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-right: var(--space-lg);
+`;
+
+export const SidebarSectionActions = styled.div`
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+`;
+
+export const SessionAdd = styled.button`
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 18px;
+  line-height: 1;
+  padding: 0;
+  flex: 0 0 auto;
+  transform: translateX(1px);
+
+  &:hover {
+    color: var(--text-primary);
+  }
+`;
+
+export const SessionDebug = styled.button`
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 11px;
+  line-height: 1;
+  padding: 0;
+  flex: 0 0 auto;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+
+  &:hover {
+    color: var(--text-primary);
+  }
+`;
+
 export const SessionItem = styled.a<{ $active?: boolean }>`
   display: flex;
   align-items: center;
+  justify-content: space-between;
+  gap: var(--space-sm);
   padding: var(--space-xs) var(--space-lg);
   color: ${(p) => (p.$active ? "var(--accent)" : "var(--text-secondary)")};
   font-size: var(--font-size-sm);
@@ -70,5 +118,34 @@ export const SessionItem = styled.a<{ $active?: boolean }>`
   &:hover {
     color: var(--text-primary);
     background: var(--bg-hover);
+  }
+
+  &:hover button,
+  &:focus-within button {
+    opacity: 1;
+  }
+`;
+
+export const SessionName = styled.span`
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+`;
+
+export const SessionDelete = styled.button`
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 14px;
+  line-height: 1;
+  padding: 0;
+  flex: 0 0 auto;
+  opacity: 0;
+  transition: opacity 0.15s ease, color 0.15s ease;
+  transform: translateX(-1px);
+
+  &:hover {
+    color: var(--text-primary);
   }
 `;

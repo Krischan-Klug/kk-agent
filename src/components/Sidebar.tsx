@@ -3,6 +3,16 @@ import Link from "next/link";
 import { useRouter } from "next/router";
 import { session as sessionApi } from "@/lib/api";
 import type { SessionState } from "@/types/api";
+import { addAppEventListener, CHAT_DEBUG_TOGGLE_EVENT, emitAppEvent, SESSION_CHANGED_EVENT } from "@/lib/appEvents";
+import {
+  clearActiveSessionId,
+  getActiveSessionId,
+  getSidebarCollapsed,
+  setActiveSessionId as persistActiveSessionId,
+  setSidebarCollapsed as persistSidebarCollapsed,
+} from "@/lib/sessionState";
+import { createAndActivateSession, resolveDefaultSessionAgentId } from "@/lib/sessionFactory";
+import { logUiError } from "@/lib/uiLogger";
 import {
   SidebarWrapper,
   LogoRow,
@@ -31,16 +41,25 @@ const navItems = [
   { href: "/settings/defaults", emoji: "⚙️", label: "Settings" },
 ];
 
+const navLinkStyle = { textDecoration: "none" };
+
+function isNavActive(pathname: string, href: string): boolean {
+  return (
+    (href === "/chat" && (pathname === "/" || pathname === "/chat")) ||
+    (href.startsWith("/settings") && pathname.startsWith("/settings")) ||
+    (href !== "/chat" && !href.startsWith("/settings") && pathname === href)
+  );
+}
+
 export default function Sidebar() {
   const router = useRouter();
   const [sessions, setSessions] = useState<SessionState[]>([]);
-  const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
+  const [activeSessionId, setActiveSessionIdState] = useState<string | null>(null);
   const [collapsed, setCollapsed] = useState(true);
 
   const loadSessions = useCallback(async () => {
     try {
-      const data = await sessionApi.list();
-      setSessions(data);
+      setSessions(await sessionApi.list());
     } catch {
       // ignore
     }
@@ -48,78 +67,66 @@ export default function Sidebar() {
 
   useEffect(() => {
     loadSessions();
-    setActiveSessionId(localStorage.getItem("activeSessionId"));
-    const stored = localStorage.getItem("sidebar-collapsed");
-    if (stored !== null) {
-      setCollapsed(stored === "true");
+    setActiveSessionIdState(getActiveSessionId());
+    setCollapsed(getSidebarCollapsed());
+
+    function syncSessionState() {
+      void loadSessions();
+      setActiveSessionIdState(getActiveSessionId());
     }
 
-    function onSessionChanged() {
-      loadSessions();
-      setActiveSessionId(localStorage.getItem("activeSessionId"));
-    }
-
-    window.addEventListener("session-changed", onSessionChanged);
-    window.addEventListener("storage", onSessionChanged);
+    const unsubscribe = addAppEventListener(SESSION_CHANGED_EVENT, syncSessionState);
+    window.addEventListener("storage", syncSessionState);
     return () => {
-      window.removeEventListener("session-changed", onSessionChanged);
-      window.removeEventListener("storage", onSessionChanged);
+      unsubscribe();
+      window.removeEventListener("storage", syncSessionState);
     };
   }, [loadSessions]);
 
-  function setSidebarCollapsed(next: boolean) {
+  function updateSidebarCollapsed(next: boolean) {
     setCollapsed(next);
-    localStorage.setItem("sidebar-collapsed", String(next));
+    persistSidebarCollapsed(next);
   }
 
   function selectSession(id: string) {
-    localStorage.setItem("activeSessionId", id);
-    setActiveSessionId(id);
-    window.dispatchEvent(new Event("session-changed"));
-    router.push("/chat");
+    persistActiveSessionId(id);
+    setActiveSessionIdState(id);
+    emitAppEvent(SESSION_CHANGED_EVENT);
+    void router.push("/chat");
   }
 
   async function createSession() {
     try {
-      const fallbackAgentId =
-        sessions.find((session) => session.id === activeSessionId)?.agentId ??
-        sessions[0]?.agentId ??
-        "general-assistant";
-      const newSession = await sessionApi.create({ agentId: fallbackAgentId });
-      localStorage.setItem("activeSessionId", newSession.id);
-      setActiveSessionId(newSession.id);
-      window.dispatchEvent(new Event("session-changed"));
+      const fallbackAgentId = resolveDefaultSessionAgentId(
+        [],
+        sessions.find((session) => session.id === activeSessionId)?.agentId ?? sessions[0]?.agentId,
+      );
+      const newSession = await createAndActivateSession([], fallbackAgentId);
+      setActiveSessionIdState(newSession.id);
       await loadSessions();
-      router.push("/chat");
-    } catch {
-      // ignore
+      await router.push("/chat");
+    } catch (err) {
+      logUiError("sidebar-create-session", err);
     }
   }
 
   async function deleteSession(id: string) {
     try {
       await sessionApi.delete(id);
-      if (localStorage.getItem("activeSessionId") === id) {
-        localStorage.removeItem("activeSessionId");
-        setActiveSessionId(null);
+      if (getActiveSessionId() === id) {
+        clearActiveSessionId();
+        setActiveSessionIdState(null);
       }
-      window.dispatchEvent(new Event("session-changed"));
+      emitAppEvent(SESSION_CHANGED_EVENT);
       await loadSessions();
-      if (router.pathname === "/chat") {
-        router.replace("/chat");
-      }
-    } catch {
-      // ignore
+      if (router.pathname === "/chat") await router.replace("/chat");
+    } catch (err) {
+      logUiError("sidebar-delete-session", err);
     }
   }
 
   return (
-    <SidebarWrapper
-      $collapsed={collapsed}
-      onClick={() => {
-        if (collapsed) setSidebarCollapsed(false);
-      }}
-    >
+    <SidebarWrapper $collapsed={collapsed} onClick={() => collapsed && updateSidebarCollapsed(false)}>
       <LogoRow $collapsed={collapsed}>
         <CompactLogo $collapsed={collapsed}>^^</CompactLogo>
         <Logo $collapsed={collapsed}>^^</Logo>
@@ -130,22 +137,16 @@ export default function Sidebar() {
           title={collapsed ? "Sidebar aufklappen" : "Sidebar einklappen"}
           onClick={(e) => {
             e.stopPropagation();
-            setSidebarCollapsed(!collapsed);
+            updateSidebarCollapsed(!collapsed);
           }}
         >
           {collapsed ? ">" : "<"}
         </SidebarToggle>
       </LogoRow>
+
       {navItems.map((item) => (
-        <Link key={item.href} href={item.href} style={{ textDecoration: "none" }}>
-          <NavItem
-            $collapsed={collapsed}
-            $active={
-              (item.href === "/chat" && (router.pathname === "/" || router.pathname === "/chat")) ||
-              (item.href.startsWith("/settings") && router.pathname.startsWith("/settings")) ||
-              (item.href !== "/chat" && !item.href.startsWith("/settings") && router.pathname === item.href)
-            }
-          >
+        <Link key={item.href} href={item.href} style={navLinkStyle}>
+          <NavItem $collapsed={collapsed} $active={isNavActive(router.pathname, item.href)}>
             <NavEmoji>{item.emoji}</NavEmoji>
             <NavLabel $collapsed={collapsed}>{item.label}</NavLabel>
           </NavItem>
@@ -162,7 +163,7 @@ export default function Sidebar() {
                 type="button"
                 aria-label="Debug umschalten"
                 title="Debug umschalten"
-                onClick={() => window.dispatchEvent(new Event("chat-debug-toggle"))}
+                onClick={() => emitAppEvent(CHAT_DEBUG_TOGGLE_EVENT)}
               >
                 Debug
               </SessionDebug>
@@ -172,9 +173,9 @@ export default function Sidebar() {
             </SessionAdd>
           </SidebarSectionActions>
         </SidebarSectionRow>
-        {sessions.map((s) => (
-          <SessionItem key={s.id} $collapsed={collapsed} $active={s.id === activeSessionId} onClick={() => selectSession(s.id)}>
-            <SessionName>{s.name || s.id.slice(0, 8)}</SessionName>
+        {sessions.map((session) => (
+          <SessionItem key={session.id} $collapsed={collapsed} $active={session.id === activeSessionId} onClick={() => selectSession(session.id)}>
+            <SessionName>{session.name || session.id.slice(0, 8)}</SessionName>
             <SessionDelete
               type="button"
               aria-label="Session loeschen"
@@ -182,7 +183,7 @@ export default function Sidebar() {
               onClick={(e) => {
                 e.preventDefault();
                 e.stopPropagation();
-                void deleteSession(s.id);
+                void deleteSession(session.id);
               }}
             >
               x

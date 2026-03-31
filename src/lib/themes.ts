@@ -1,3 +1,5 @@
+import { getStoredJson, getStoredString, setStoredJson, setStoredString } from "@/lib/storage";
+
 export interface Theme {
   id: string;
   name: string;
@@ -55,17 +57,11 @@ export const defaultThemes: Theme[] = [
 /* ── Custom themes (localStorage) ── */
 
 export function getCustomThemes(): Theme[] {
-  if (typeof window === "undefined") return [];
-  try {
-    const raw = localStorage.getItem(CUSTOM_THEMES_KEY);
-    return raw ? (JSON.parse(raw) as Theme[]) : [];
-  } catch {
-    return [];
-  }
+  return getStoredJson<Theme[]>(CUSTOM_THEMES_KEY, []);
 }
 
 function saveCustomThemes(themes: Theme[]): void {
-  localStorage.setItem(CUSTOM_THEMES_KEY, JSON.stringify(themes));
+  setStoredJson(CUSTOM_THEMES_KEY, themes);
 }
 
 export function getAllThemes(): Theme[] {
@@ -110,8 +106,7 @@ export function buildVariablesFromAccent(accent: string): Record<string, string>
 /* ── Active theme ── */
 
 export function getSavedThemeId(): string {
-  if (typeof window === "undefined") return "indigo";
-  return localStorage.getItem(THEME_STORAGE_KEY) || "indigo";
+  return getStoredString(THEME_STORAGE_KEY) || "indigo";
 }
 
 export function getThemeById(id: string): Theme {
@@ -129,7 +124,7 @@ export function applyTheme(theme: Theme): void {
 }
 
 export function saveAndApplyTheme(themeId: string): void {
-  localStorage.setItem(THEME_STORAGE_KEY, themeId);
+  setStoredString(THEME_STORAGE_KEY, themeId);
   applyTheme(getThemeById(themeId));
 }
 

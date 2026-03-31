@@ -1,6 +1,6 @@
-import { useState, useRef, useEffect } from "react";
 import styled from "styled-components";
 import type { McpListItem } from "@/types/api";
+import { useDropdown } from "@/hooks/useDropdown";
 import Toggle from "./Toggle";
 
 const Wrapper = styled.div`
@@ -97,25 +97,14 @@ interface McpSelectProps {
 }
 
 export default function McpSelect({ mcps, activeMcpIds, onToggle }: McpSelectProps) {
-  const [open, setOpen] = useState(false);
-  const wrapperRef = useRef<HTMLDivElement>(null);
+  const { open, ref, toggle } = useDropdown<HTMLDivElement>();
 
   const activeCount = activeMcpIds.length;
   const hasUnavailable = mcps.some((m) => !m.running && activeMcpIds.includes(m.id));
 
-  useEffect(() => {
-    function handleClickOutside(e: MouseEvent) {
-      if (wrapperRef.current && !wrapperRef.current.contains(e.target as Node)) {
-        setOpen(false);
-      }
-    }
-    if (open) document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, [open]);
-
   return (
-    <Wrapper ref={wrapperRef}>
-      <Trigger $warn={hasUnavailable} onClick={() => setOpen(!open)}>
+    <Wrapper ref={ref}>
+      <Trigger $warn={hasUnavailable} onClick={toggle}>
         MCPs ({activeCount})
       </Trigger>
       {open && (

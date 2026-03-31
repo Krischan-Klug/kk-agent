@@ -15,6 +15,7 @@ import { runLoop } from "../loop/service.js";
 import type { LoopMessage } from "../loop/types.js";
 import { getAgent, setLoopState, clearLoopState } from "../agent/service.js";
 import { getDefaults } from "../lib/defaults.js";
+import { normalizeMcpId } from "../lib/ids.js";
 import {
   registerSession,
   unregisterSession,
@@ -60,7 +61,7 @@ function fromLoopMessages(messages: LoopMessage[]): SessionState["messages"] {
 
 function sanitizeMcpIds(mcpIds: string[]): string[] {
   const knownIds = new Set([...getKnownMcpIds(), ...getKnownSystemMcpIds()]);
-  return [...new Set(mcpIds.map((id) => (id === "commands" ? "terminal" : id)))].filter((id) => knownIds.has(id));
+  return [...new Set(mcpIds.map(normalizeMcpId))].filter((id) => knownIds.has(id));
 }
 
 function getSessionRunnableMcpIds(activeMcpIds: string[]): string[] {
@@ -100,21 +101,32 @@ function buildCurrentSystemPrompt(
   return buildPrompt(session.systemPrompt, mcpInstr, variables);
 }
 
+function resolveSessionMcpIds(agent: ReturnType<typeof getAgent>, activeMcpIds?: string[]): string[] {
+  return sanitizeMcpIds(activeMcpIds ?? agent.mcpIds ?? []);
+}
+
+function resolveSessionDefaults(
+  agent: ReturnType<typeof getAgent>,
+  body: Pick<CreateSessionBody, "activeMcpIds" | "model" | "reasoningEffort" | "temperature">,
+) {
+  return {
+    activeMcpIds: resolveSessionMcpIds(agent, body.activeMcpIds),
+    model: body.model ?? agent.defaultModel ?? getActiveModel(),
+    reasoningEffort: body.reasoningEffort ?? agent.reasoningEffort,
+    temperature: body.temperature ?? agent.temperature,
+  };
+}
+
 export function createSession(body: CreateSessionBody): SessionState {
   const agent = getAgent(body.agentId);
-
-  const activeMcpIds = sanitizeMcpIds(body.activeMcpIds ?? agent.mcpIds ?? []);
-
-  const model = body.model ?? agent.defaultModel ?? getActiveModel();
-  const reasoningEffort = body.reasoningEffort ?? agent.reasoningEffort;
-  const temperature = body.temperature ?? agent.temperature;
+  const defaults = resolveSessionDefaults(agent, body);
   const session = store.createSession({
     agentId: body.agentId,
-    model,
-    activeMcpIds,
+    model: defaults.model,
+    activeMcpIds: defaults.activeMcpIds,
     systemPrompt: agent.systemPrompt,
-    reasoningEffort,
-    temperature,
+    reasoningEffort: defaults.reasoningEffort,
+    temperature: defaults.temperature,
   });
   return session;
 }
@@ -157,44 +169,70 @@ function resolveReasoningConfig(session: SessionState): {
   };
 }
 
+function prepareLoopRun(sessionId: string, message: string) {
+  const session = getSession(sessionId);
+  const agent = getAgent(session.agentId);
+  const messages = [...session.messages, { role: "user" as const, content: message }];
+  store.updateSession(sessionId, { messages });
+
+  return {
+    session,
+    agent,
+    messages,
+    tools: getCombinedToolDefinitions(session.activeMcpIds),
+    reasoning: resolveReasoningConfig(session),
+    mcpInstructions: buildRunnableMcpInstructions(session.activeMcpIds, agent.mcpInstructions),
+  };
+}
+
+function finalizeLoopSession(
+  sessionId: string,
+  session: SessionState,
+  messages: LoopMessage[],
+  finalResponse: string,
+): SessionState {
+  const nextMessages = fromLoopMessages(messages);
+  const patch: Partial<SessionState> = { messages: nextMessages };
+  if (!session.name && finalResponse) {
+    const name = generateSessionName(finalResponse);
+    if (name) patch.name = name;
+  }
+  return store.updateSession(sessionId, patch);
+}
+
+function buildLoopRequest(
+  prepared: ReturnType<typeof prepareLoopRun>,
+  sessionId: string,
+  handlers: Parameters<typeof runLoop>[0] extends infer T ? Partial<T> : never = {},
+) {
+  return {
+    agentId: prepared.session.agentId,
+    sessionId,
+    messages: toLoopMessages(prepared.messages),
+    model: prepared.session.model,
+    reasoningEffort: prepared.reasoning.reasoningEffort,
+    temperature: prepared.reasoning.temperature,
+    maxOutputTokens: prepared.reasoning.maxOutputTokens,
+    systemPrompt: prepared.session.systemPrompt,
+    maxIterations: prepared.agent.maxIterations,
+    mcpInstructions: prepared.mcpInstructions,
+    agentVariables: prepared.agent.variables ?? {},
+    allTools: prepared.tools,
+    executeTool: executeCombinedTool,
+    ...handlers,
+  };
+}
+
 export async function chat(
   sessionId: string,
   message: string,
 ): Promise<{ response: string; session: SessionState }> {
-  const session = getSession(sessionId);
-  const agent = getAgent(session.agentId);
-
-  const userMessages = [...session.messages, { role: "user" as const, content: message }];
-  store.updateSession(sessionId, { messages: userMessages });
-
-  const tools = getCombinedToolDefinitions(session.activeMcpIds);
-  const rc = resolveReasoningConfig(session);
-
-  const result = await runLoop({
-    agentId: session.agentId,
-    sessionId,
-    messages: toLoopMessages(userMessages),
-    model: session.model,
-    reasoningEffort: rc.reasoningEffort,
-    temperature: rc.temperature,
-    maxOutputTokens: rc.maxOutputTokens,
-    systemPrompt: session.systemPrompt,
-    maxIterations: agent.maxIterations,
-    mcpInstructions: buildRunnableMcpInstructions(session.activeMcpIds, agent.mcpInstructions),
-    agentVariables: agent.variables ?? {},
-    allTools: tools,
-    executeTool: executeCombinedTool,
-  });
-
-  const finalMessages = fromLoopMessages(result.messages);
-  const update: Partial<SessionState> = { messages: finalMessages };
-  if (!session.name) {
-    const name = generateSessionName(result.finalResponse);
-    if (name) update.name = name;
-  }
-  const updatedSession = store.updateSession(sessionId, update);
-
-  return { response: result.finalResponse, session: updatedSession };
+  const prepared = prepareLoopRun(sessionId, message);
+  const result = await runLoop(buildLoopRequest(prepared, sessionId));
+  return {
+    response: result.finalResponse,
+    session: finalizeLoopSession(sessionId, prepared.session, result.messages, result.finalResponse),
+  };
 }
 
 export async function chatStream(
@@ -202,14 +240,7 @@ export async function chatStream(
   message: string,
   emit: (event: SSEEvent) => void,
 ): Promise<void> {
-  const session = getSession(sessionId);
-  const agent = getAgent(session.agentId);
-
-  const userMessages = [...session.messages, { role: "user" as const, content: message }];
-  store.updateSession(sessionId, { messages: userMessages });
-
-  const tools = getCombinedToolDefinitions(session.activeMcpIds);
-  const rc = resolveReasoningConfig(session);
+  const prepared = prepareLoopRun(sessionId, message);
 
   registerSession(sessionId, (payload) => {
     emit({
@@ -222,20 +253,7 @@ export async function chatStream(
 
   try {
     const result = await runWithSessionId(sessionId, () =>
-      runLoop({
-        agentId: session.agentId,
-        sessionId,
-        messages: toLoopMessages(userMessages),
-        model: session.model,
-        reasoningEffort: rc.reasoningEffort,
-        temperature: rc.temperature,
-        maxOutputTokens: rc.maxOutputTokens,
-        systemPrompt: session.systemPrompt,
-        maxIterations: agent.maxIterations,
-        mcpInstructions: buildRunnableMcpInstructions(session.activeMcpIds, agent.mcpInstructions),
-        agentVariables: agent.variables ?? {},
-        allTools: tools,
-        executeTool: executeCombinedTool,
+      runLoop(buildLoopRequest(prepared, sessionId, {
         onContent: (content) => emit({ type: "content", content }),
         onReasoning: (content) => emit({ type: "reasoning", content }),
         onContentReset: () => emit({ type: "content_reset" }),
@@ -256,16 +274,9 @@ export async function chatStream(
             reasoningTokens: stats.reasoningTokens,
             source: stats.source,
           }),
-      }),
+      })),
     );
-
-    const finalMessages = fromLoopMessages(result.messages);
-    const streamUpdate: Partial<SessionState> = { messages: finalMessages };
-    if (!session.name && result.finalResponse) {
-      const name = generateSessionName(result.finalResponse);
-      if (name) streamUpdate.name = name;
-    }
-    const updatedSession = store.updateSession(sessionId, streamUpdate);
+    const updatedSession = finalizeLoopSession(sessionId, prepared.session, result.messages, result.finalResponse);
     emit({ type: "done", session: updatedSession });
   } catch (err) {
     emit({ type: "error", message: (err as Error).message });
@@ -281,19 +292,20 @@ export function patchSession(
   const patch: Partial<SessionState> = {};
   if (update.agentId !== undefined) {
     const agent = getAgent(update.agentId);
+    const defaults = resolveSessionDefaults(agent, update);
     patch.agentId = update.agentId;
     patch.systemPrompt = agent.systemPrompt;
     if (update.activeMcpIds === undefined) {
-      patch.activeMcpIds = sanitizeMcpIds(agent.mcpIds ?? []);
+      patch.activeMcpIds = defaults.activeMcpIds;
     }
     if (update.model === undefined) {
-      patch.model = agent.defaultModel ?? getActiveModel();
+      patch.model = defaults.model;
     }
     if (update.reasoningEffort === undefined) {
-      patch.reasoningEffort = agent.reasoningEffort;
+      patch.reasoningEffort = defaults.reasoningEffort;
     }
     if (update.temperature === undefined) {
-      patch.temperature = agent.temperature;
+      patch.temperature = defaults.temperature;
     }
   }
   if (update.model) patch.model = update.model;

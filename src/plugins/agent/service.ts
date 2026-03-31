@@ -1,11 +1,8 @@
 import type { AgentDefinition, CreateAgentBody, UpdateAgentBody, AgentLoopState } from "./types.js";
 import * as store from "./lib/store.js";
 import { getDefaults } from "../lib/defaults.js";
+import { createSlugId, normalizeMcpId } from "../lib/ids.js";
 import { getSystemVariableNames } from "../systemprompt/lib/builder.js";
-
-function normalizeMcpId(id: string): string {
-  return id === "commands" ? "terminal" : id;
-}
 
 function normalizeAgent(agent: AgentDefinition): AgentDefinition {
   const mcpIds = [...new Set((agent.mcpIds ?? []).map(normalizeMcpId))];
@@ -34,10 +31,7 @@ export function listSystemVariables(): string[] {
 }
 
 export async function createAgent(body: CreateAgentBody): Promise<AgentDefinition> {
-  const id = body.name
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-|-$/g, "");
+  const id = createSlugId(body.name);
 
   const now = new Date().toISOString();
 

@@ -24,7 +24,6 @@ export interface AgentDefinition {
   defaultModel?: string;
   reasoningEffort?: ReasoningEffort;
   temperature?: number;
-  maxOutputTokens?: number;
   loopMode: AgentLoopMode;
   phasePrompts: AgentPhasePrompts;
   createdAt: string;
@@ -59,7 +58,6 @@ export interface CreateAgentBody {
   defaultModel?: string;
   reasoningEffort?: ReasoningEffort;
   temperature?: number;
-  maxOutputTokens?: number;
   loopMode?: AgentLoopMode;
   phasePrompts?: AgentPhasePrompts;
 }
@@ -77,7 +75,6 @@ export interface UpdateAgentBody {
   defaultModel?: string;
   reasoningEffort?: ReasoningEffort;
   temperature?: number;
-  maxOutputTokens?: number;
   loopMode?: AgentLoopMode;
   phasePrompts?: AgentPhasePrompts;
 }

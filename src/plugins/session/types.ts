@@ -11,7 +11,6 @@ export interface SessionState {
   systemPrompt: string;
   reasoningEffort?: ReasoningEffort;
   temperature?: number;
-  maxOutputTokens?: number;
   messages: SessionMessage[];
   createdAt: string;
   updatedAt: string;
@@ -32,7 +31,6 @@ export interface CreateSessionBody {
   activeMcpIds?: string[];
   reasoningEffort?: ReasoningEffort;
   temperature?: number;
-  maxOutputTokens?: number;
 }
 
 export interface PatchSessionBody {
@@ -42,7 +40,6 @@ export interface PatchSessionBody {
   activeMcpIds?: string[];
   reasoningEffort?: ReasoningEffort;
   temperature?: number;
-  maxOutputTokens?: number;
 }
 
 export interface ChatBody {

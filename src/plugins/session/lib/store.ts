@@ -12,7 +12,6 @@ export function createSession(data: {
   systemPrompt: string;
   reasoningEffort?: SessionState["reasoningEffort"];
   temperature?: number;
-  maxOutputTokens?: number;
 }): SessionState {
   const now = new Date().toISOString();
   const session: SessionState = {
@@ -26,7 +25,6 @@ export function createSession(data: {
     systemPrompt: data.systemPrompt,
     reasoningEffort: data.reasoningEffort,
     temperature: data.temperature,
-    maxOutputTokens: data.maxOutputTokens,
     messages: [],
     createdAt: now,
     updatedAt: now,

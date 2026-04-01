@@ -131,7 +131,7 @@ function resolveSessionMcpIds(agent: ReturnType<typeof getAgent>, activeMcpIds?:
 
 async function resolveSessionDefaults(
   agent: ReturnType<typeof getAgent>,
-  body: Pick<CreateSessionBody, "activeToolIds" | "activeMcpIds" | "model" | "reasoningEffort" | "temperature" | "maxOutputTokens">,
+  body: Pick<CreateSessionBody, "activeToolIds" | "activeMcpIds" | "model" | "reasoningEffort" | "temperature">,
   providerId: string,
 ) {
   const selection = await resolveProviderModel(providerId, body.model ?? agent.defaultModel);
@@ -142,7 +142,6 @@ async function resolveSessionDefaults(
     activeMcpIds: resolveSessionMcpIds(agent, body.activeMcpIds),
     reasoningEffort: body.reasoningEffort ?? agent.reasoningEffort,
     temperature: body.temperature ?? agent.temperature,
-    maxOutputTokens: body.maxOutputTokens ?? agent.maxOutputTokens,
   };
 }
 
@@ -158,7 +157,6 @@ export async function createSession(body: CreateSessionBody): Promise<SessionSta
     systemPrompt: agent.systemPrompt,
     reasoningEffort: defaults.reasoningEffort,
     temperature: defaults.temperature,
-    maxOutputTokens: defaults.maxOutputTokens,
   });
 }
 
@@ -335,7 +333,6 @@ export async function patchSession(
     activeMcpIds?: string[];
     reasoningEffort?: string;
     temperature?: number;
-    maxOutputTokens?: number;
   },
 ): Promise<SessionState> {
   const session = getSession(id);
@@ -351,7 +348,6 @@ export async function patchSession(
     if (update.model === undefined) patch.model = defaults.model;
     if (update.reasoningEffort === undefined) patch.reasoningEffort = defaults.reasoningEffort;
     if (update.temperature === undefined) patch.temperature = defaults.temperature;
-    if (update.maxOutputTokens === undefined) patch.maxOutputTokens = defaults.maxOutputTokens;
   }
 
   if (update.model) {
@@ -363,7 +359,6 @@ export async function patchSession(
   if (update.activeMcpIds !== undefined) patch.activeMcpIds = sanitizeMcpIds(update.activeMcpIds);
   if (update.reasoningEffort !== undefined) patch.reasoningEffort = update.reasoningEffort as SessionState["reasoningEffort"];
   if (update.temperature !== undefined) patch.temperature = update.temperature;
-  if (update.maxOutputTokens !== undefined) patch.maxOutputTokens = update.maxOutputTokens;
   return store.updateSession(id, patch);
 }
 

@@ -1,3 +1,4 @@
+import { useState } from "react";
 import styled from "styled-components";
 import type { RefObject } from "react";
 import type { AgentLoopState, McpListItem, SessionMessage, SessionState } from "@/types/api";
@@ -6,6 +7,71 @@ import Button from "@/components/Button";
 import Spinner from "@/components/Spinner";
 import MarkdownMessage from "@/components/MarkdownMessage";
 import type { ActiveToolCall, PendingPrompt } from "./types";
+
+/* ── Iteration grouping types & utility ── */
+
+interface AgentIteration {
+  assistant: SessionMessage;
+  toolResults: Map<string, { content: string; isError: boolean }>;
+}
+
+type MessageGroup =
+  | { kind: "single"; message: SessionMessage; index: number }
+  | { kind: "agent-turn"; iterations: AgentIteration[]; indices: number[] };
+
+function groupMessages(messages: SessionMessage[]): MessageGroup[] {
+  const groups: MessageGroup[] = [];
+  let i = 0;
+
+  while (i < messages.length) {
+    const msg = messages[i];
+
+    if (msg.role !== "assistant") {
+      if (msg.role !== "tool") {
+        groups.push({ kind: "single", message: msg, index: i });
+      }
+      i++;
+      continue;
+    }
+
+    // Start accumulating an agent turn
+    const iterations: AgentIteration[] = [];
+    const indices: number[] = [];
+
+    while (i < messages.length && (messages[i].role === "assistant" || messages[i].role === "tool")) {
+      const current = messages[i];
+
+      if (current.role === "assistant") {
+        const toolResults = new Map<string, { content: string; isError: boolean }>();
+        indices.push(i);
+        i++;
+
+        // Collect subsequent tool messages belonging to this assistant's tool_calls
+        while (i < messages.length && messages[i].role === "tool") {
+          const toolMsg = messages[i];
+          if (toolMsg.tool_call_id) {
+            toolResults.set(toolMsg.tool_call_id, { content: toolMsg.content, isError: false });
+          }
+          i++;
+        }
+
+        iterations.push({ assistant: current, toolResults });
+      } else {
+        // orphan tool message (shouldn't happen normally)
+        i++;
+      }
+    }
+
+    // Single assistant message without tool_calls -> render as simple single message
+    if (iterations.length === 1 && (!iterations[0].assistant.tool_calls || iterations[0].assistant.tool_calls.length === 0)) {
+      groups.push({ kind: "single", message: iterations[0].assistant, index: indices[0] });
+    } else {
+      groups.push({ kind: "agent-turn", iterations, indices });
+    }
+  }
+
+  return groups;
+}
 
 const Messages = styled.div`
   flex: 1;
@@ -294,6 +360,49 @@ const LoadingWrap = styled.div`
   align-self: flex-start;
 `;
 
+const IterationSummaryBar = styled.div`
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  padding: var(--space-sm) 0;
+  margin-bottom: var(--space-sm);
+  border-bottom: 1px dashed var(--border);
+  cursor: pointer;
+  user-select: none;
+  font-size: var(--font-size-sm);
+  color: var(--text-secondary);
+
+  &:hover {
+    color: var(--text-primary);
+  }
+`;
+
+const IterationSection = styled.div`
+  padding-left: var(--space-md);
+  border-left: 2px solid var(--border);
+  margin-bottom: var(--space-sm);
+
+  &:last-child {
+    margin-bottom: var(--space-sm);
+  }
+`;
+
+const IterationHeader = styled.div`
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  margin-bottom: var(--space-xs);
+  font-size: var(--font-size-sm);
+  color: var(--text-muted);
+`;
+
+const ExpandArrow = styled.span<{ $expanded: boolean }>`
+  margin-left: auto;
+  font-size: 10px;
+  transition: transform 0.15s;
+  transform: rotate(${(p) => (p.$expanded ? "90deg" : "0deg")});
+`;
+
 type Props = {
   session: SessionState;
   currentAgentName: string;
@@ -329,11 +438,16 @@ export default function ChatMessages({
   onCustomAnswerChange,
   onPromptResponse,
 }: Props) {
-  const toolResults = new Map(
-    session.messages
-      .filter((message) => message.role === "tool" && message.tool_call_id)
-      .map((message) => [message.tool_call_id as string, { content: message.content, isError: false }]),
-  );
+  const [expandedTurns, setExpandedTurns] = useState<Set<number>>(new Set());
+
+  function toggleTurn(key: number) {
+    setExpandedTurns((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  }
 
   function getToolEmoji(toolName: string): string {
     for (const mcp of mcps) {
@@ -398,14 +512,79 @@ export default function ChatMessages({
         )}
 
         {message.role === "assistant" ? <MarkdownMessage content={message.content} /> : message.content}
+      </MessageBubble>
+    );
+  }
 
-        {message.tool_calls && message.tool_calls.length > 0 && renderToolCalls(
-          message.tool_calls.map((toolCall) => ({
+  function renderAgentTurn(turn: MessageGroup & { kind: "agent-turn" }, turnKey: number) {
+    const { iterations } = turn;
+    const finalIteration = iterations[iterations.length - 1];
+    const totalToolCalls = iterations.reduce(
+      (sum, it) => sum + (it.assistant.tool_calls?.length ?? 0), 0,
+    );
+    const isExpanded = expandedTurns.has(turnKey);
+    const hasMultiple = iterations.length > 1 || totalToolCalls > 0;
+
+    return (
+      <MessageBubble key={turnKey} $role="assistant">
+        <RoleLabel>
+          <Badge variant="info">{currentAgentName}</Badge>
+        </RoleLabel>
+
+        {hasMultiple && (
+          <IterationSummaryBar onClick={() => toggleTurn(turnKey)}>
+            <IterationPill>
+              {iterations.length} Iteration{iterations.length > 1 ? "en" : ""}
+            </IterationPill>
+            {totalToolCalls > 0 && (
+              <PhasePill>
+                {totalToolCalls} Tool Call{totalToolCalls > 1 ? "s" : ""}
+              </PhasePill>
+            )}
+            <ExpandArrow $expanded={isExpanded}>&#9654;</ExpandArrow>
+          </IterationSummaryBar>
+        )}
+
+        {isExpanded && iterations.map((iteration, i) => {
+          const tc = iteration.assistant.tool_calls ?? [];
+          const activeToolCalls: ActiveToolCall[] = tc.map((toolCall) => ({
             id: toolCall.id,
             name: toolCall.name,
             arguments: toolCall.arguments,
-            result: toolResults.get(toolCall.id),
-          })),
+            result: iteration.toolResults.get(toolCall.id),
+          }));
+
+          return (
+            <IterationSection key={i}>
+              <IterationHeader>
+                <IterationPill>#{i + 1}</IterationPill>
+                {tc.length > 0 && (
+                  <PhasePill>{tc.length} Tool{tc.length > 1 ? "s" : ""}</PhasePill>
+                )}
+              </IterationHeader>
+              {iteration.assistant.reasoning?.trim() && (
+                <ReasoningCard>
+                  <ReasoningSummary>Reasoning</ReasoningSummary>
+                  <CardContent>{iteration.assistant.reasoning.trim()}</CardContent>
+                </ReasoningCard>
+              )}
+              {iteration.assistant.content?.trim() && (
+                <MarkdownMessage content={iteration.assistant.content} />
+              )}
+              {activeToolCalls.length > 0 && renderToolCalls(activeToolCalls)}
+            </IterationSection>
+          );
+        })}
+
+        {!isExpanded && finalIteration.assistant.reasoning?.trim() && (
+          <ReasoningCard>
+            <ReasoningSummary>Reasoning</ReasoningSummary>
+            <CardContent>{finalIteration.assistant.reasoning.trim()}</CardContent>
+          </ReasoningCard>
+        )}
+
+        {finalIteration.assistant.content?.trim() && (
+          <MarkdownMessage content={finalIteration.assistant.content} />
         )}
       </MessageBubble>
     );
@@ -419,7 +598,10 @@ export default function ChatMessages({
         </EmptyState>
       )}
 
-      {session.messages.map(renderMessage)}
+      {groupMessages(session.messages).map((group) => {
+        if (group.kind === "single") return renderMessage(group.message, group.index);
+        return renderAgentTurn(group, group.indices[0]);
+      })}
 
       {streamRetryNotices.map((message, idx) => (
         <SystemNotice key={`stream-retry-${idx}`}>{message}</SystemNotice>

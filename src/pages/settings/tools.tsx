@@ -4,8 +4,8 @@ import { tools as toolsApi } from "@/lib/api";
 import { logUiError } from "@/lib/uiLogger";
 import type { McpListItem } from "@/types/api";
 import { useToggleSet } from "@/hooks/useToggleSet";
-import { PageTitle } from "@/components/Layout.styled";
 import Spinner from "@/components/Spinner";
+import SettingsLayout from "@/components/SettingsLayout";
 import McpCard from "@/components/mcp/McpCard";
 import { EmptyHint } from "@/components/PageForm";
 import { buildEditForm, type EditForm } from "@/components/mcp/types";
@@ -28,7 +28,7 @@ const Grid = styled.div`
   }
 `;
 
-export default function ToolsPage() {
+export default function SettingsToolsPage() {
   const [toolMcps, setToolMcps] = useState<McpListItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [instructions, setInstructions] = useState<Record<string, string>>({});
@@ -96,35 +96,36 @@ export default function ToolsPage() {
     }
   }
 
-  if (loading) return <Spinner />;
-
   return (
-    <>
-      <PageTitle>Tools</PageTitle>
-      <Grid>
-        {toolMcps.map((tool) => (
-          <McpCard
-            key={tool.id}
-            mcp={tool}
-            instruction={instructions[tool.id] ?? ""}
-            editForm={editForms[tool.id]}
-            editOpen={expandedEdit.has(tool.id)}
-            toolsOpen={expandedTools.has(tool.id)}
-            instructionsOpen={expandedInstructions.has(tool.id)}
-            onStateToggle={() => void handleStateToggle(tool)}
-            onEditToggle={() => expandedEdit.toggle(tool.id)}
-            onDelete={() => undefined}
-            onInstructionToggle={() => expandedInstructions.toggle(tool.id)}
-            onInstructionChange={(value) => setInstructions((prev) => ({ ...prev, [tool.id]: value }))}
-            onInstructionSave={() => void handleSaveInstruction(tool.id)}
-            onToolsToggle={() => expandedTools.toggle(tool.id)}
-            onOpenEdit={() => openEdit(tool)}
-            onEditFormChange={(form) => setEditForms((prev) => ({ ...prev, [tool.id]: form }))}
-            onSaveEdit={() => void handleSaveEdit(tool)}
-          />
-        ))}
-        {toolMcps.length === 0 && <EmptyHint>Keine internen Tools gefunden.</EmptyHint>}
-      </Grid>
-    </>
+    <SettingsLayout>
+      {loading ? (
+        <Spinner />
+      ) : (
+        <Grid>
+          {toolMcps.map((tool) => (
+            <McpCard
+              key={tool.id}
+              mcp={tool}
+              instruction={instructions[tool.id] ?? ""}
+              editForm={editForms[tool.id]}
+              editOpen={expandedEdit.has(tool.id)}
+              toolsOpen={expandedTools.has(tool.id)}
+              instructionsOpen={expandedInstructions.has(tool.id)}
+              onStateToggle={() => void handleStateToggle(tool)}
+              onEditToggle={() => expandedEdit.toggle(tool.id)}
+              onDelete={() => undefined}
+              onInstructionToggle={() => expandedInstructions.toggle(tool.id)}
+              onInstructionChange={(value) => setInstructions((prev) => ({ ...prev, [tool.id]: value }))}
+              onInstructionSave={() => void handleSaveInstruction(tool.id)}
+              onToolsToggle={() => expandedTools.toggle(tool.id)}
+              onOpenEdit={() => openEdit(tool)}
+              onEditFormChange={(form) => setEditForms((prev) => ({ ...prev, [tool.id]: form }))}
+              onSaveEdit={() => void handleSaveEdit(tool)}
+            />
+          ))}
+          {toolMcps.length === 0 && <EmptyHint>Keine internen Tools gefunden.</EmptyHint>}
+        </Grid>
+      )}
+    </SettingsLayout>
   );
 }

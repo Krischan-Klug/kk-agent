@@ -6,6 +6,8 @@ import { PageTitle } from "./Layout.styled";
 const settingsNav = [
   { href: "/settings/defaults", label: "📋 Defaults" },
   { href: "/settings/appearance", label: "🎨 Appearance" },
+  { href: "/settings/tools", label: "🛠️ Tools" },
+  { href: "/settings/provider", label: "🔌 Provider" },
 ];
 
 const Wrapper = styled.div`
@@ -57,9 +59,7 @@ export default function SettingsLayout({ children }: { children: React.ReactNode
         <SubNav>
           {settingsNav.map((item) => (
             <Link key={item.href} href={item.href} style={{ textDecoration: "none" }}>
-              <SubNavItem $active={router.pathname === item.href}>
-                {item.label}
-              </SubNavItem>
+              <SubNavItem $active={router.pathname === item.href}>{item.label}</SubNavItem>
             </Link>
           ))}
         </SubNav>

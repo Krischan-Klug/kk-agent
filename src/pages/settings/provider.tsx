@@ -4,10 +4,10 @@ import { provider as providerApi } from "@/lib/api";
 import { logUiError } from "@/lib/uiLogger";
 import type { ModelInfo, ModelSettings, ProviderConfig } from "@/types/api";
 import { useToggleSet } from "@/hooks/useToggleSet";
-import { PageTitle } from "@/components/Layout.styled";
 import Card from "@/components/Card";
 import Button from "@/components/Button";
 import Spinner from "@/components/Spinner";
+import SettingsLayout from "@/components/SettingsLayout";
 import ProviderCard from "@/components/provider/ProviderCard";
 import CreateProviderModal from "@/components/provider/CreateProviderModal";
 import { DEFAULT_PROVIDER_BASE_URL } from "@/components/provider/constants";
@@ -22,7 +22,7 @@ const HeaderActions = styled.div`
   margin-bottom: var(--space-md);
 `;
 
-export default function ProviderPage() {
+export default function SettingsProviderPage() {
   const [providers, setProviders] = useState<ProviderConfig[]>([]);
   const [models, setModels] = useState<ModelInfo[]>([]);
   const [modelSettings, setModelSettings] = useState<Record<string, ModelSettings>>({});
@@ -45,7 +45,9 @@ export default function ProviderPage() {
       const providerList = await providerApi.listProviders();
       setProviders(providerList);
 
-      const activeId = providerList[0]?.id ? (providerList.find((provider) => provider.id === activeProviderId)?.id ?? providerList[0].id) : "";
+      const activeId = providerList[0]?.id
+        ? providerList.find((provider) => provider.id === activeProviderId)?.id ?? providerList[0].id
+        : "";
       const modelsData = await providerApi.getModels(activeId || undefined);
       setModels(modelsData.models);
       setModelSettings(modelsData.modelSettings ?? {});
@@ -124,7 +126,7 @@ export default function ProviderPage() {
     }
   }
 
-  async function handleProviderFieldChange(id: keyof ProviderConfig extends never ? never : string, field: keyof ProviderConfig, value: string) {
+  async function handleProviderFieldChange(id: string, field: keyof ProviderConfig, value: string) {
     try {
       const updated = await providerApi.updateProvider(id, {
         [field]: value || undefined,
@@ -145,56 +147,59 @@ export default function ProviderPage() {
     }
   }
 
-  if (loading) return <Spinner />;
-
   return (
-    <div>
-      <PageTitle>Provider</PageTitle>
-      <HeaderActions>
-        <Button size="sm" onClick={() => setShowCreate(true)}>
-          + Provider hinzufügen
-        </Button>
-      </HeaderActions>
-      <Grid>
-        {providers.length === 0 ? (
-          <Card>
-            <span style={{ color: "var(--text-muted)" }}>Keine lokalen Provider konfiguriert. Füge einen hinzu.</span>
-          </Card>
-        ) : (
-          providers.map((provider) => (
-            <ProviderCard
-              key={provider.id}
-              provider={provider}
-              isActive={provider.id === activeProviderId}
-              isExpanded={expanded.has(provider.id)}
-              isTesting={testing.has(provider.id)}
-              testResult={testResults[provider.id]}
-              models={provider.id === activeProviderId ? models : []}
-              modelSettings={provider.id === activeProviderId ? modelSettings : {}}
-              onToggleExpand={() => expanded.toggle(provider.id)}
-              onActivate={() => void handleActivate(provider.id)}
-              onTest={() => void handleTest(provider.id)}
-              onDelete={() => void handleDelete(provider.id)}
-              onFieldChange={(field, value) => void handleProviderFieldChange(provider.id, field, value)}
-              onModelSettingsSave={handleModelSettingsSave}
-            />
-          ))
-        )}
-      </Grid>
-      <CreateProviderModal
-        open={showCreate}
-        name={newName}
-        baseUrl={newBaseUrl}
-        apiKey={newApiKey}
-        onNameChange={setNewName}
-        onBaseUrlChange={setNewBaseUrl}
-        onApiKeyChange={setNewApiKey}
-        onCreate={handleCreate}
-        onClose={() => {
-          setShowCreate(false);
-          resetCreateForm();
-        }}
-      />
-    </div>
+    <SettingsLayout>
+      {loading ? (
+        <Spinner />
+      ) : (
+        <>
+          <HeaderActions>
+            <Button size="sm" onClick={() => setShowCreate(true)}>
+              + Provider hinzufuegen
+            </Button>
+          </HeaderActions>
+          <Grid>
+            {providers.length === 0 ? (
+              <Card>
+                <span style={{ color: "var(--text-muted)" }}>Keine lokalen Provider konfiguriert. Fuege einen hinzu.</span>
+              </Card>
+            ) : (
+              providers.map((provider) => (
+                <ProviderCard
+                  key={provider.id}
+                  provider={provider}
+                  isActive={provider.id === activeProviderId}
+                  isExpanded={expanded.has(provider.id)}
+                  isTesting={testing.has(provider.id)}
+                  testResult={testResults[provider.id]}
+                  models={provider.id === activeProviderId ? models : []}
+                  modelSettings={provider.id === activeProviderId ? modelSettings : {}}
+                  onToggleExpand={() => expanded.toggle(provider.id)}
+                  onActivate={() => void handleActivate(provider.id)}
+                  onTest={() => void handleTest(provider.id)}
+                  onDelete={() => void handleDelete(provider.id)}
+                  onFieldChange={(field, value) => void handleProviderFieldChange(provider.id, field, value)}
+                  onModelSettingsSave={handleModelSettingsSave}
+                />
+              ))
+            )}
+          </Grid>
+          <CreateProviderModal
+            open={showCreate}
+            name={newName}
+            baseUrl={newBaseUrl}
+            apiKey={newApiKey}
+            onNameChange={setNewName}
+            onBaseUrlChange={setNewBaseUrl}
+            onApiKeyChange={setNewApiKey}
+            onCreate={handleCreate}
+            onClose={() => {
+              setShowCreate(false);
+              resetCreateForm();
+            }}
+          />
+        </>
+      )}
+    </SettingsLayout>
   );
 }

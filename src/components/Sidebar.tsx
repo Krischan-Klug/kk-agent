@@ -35,9 +35,7 @@ import {
 const navItems = [
   { href: "/chat", emoji: "💬", label: "Chat" },
   { href: "/agent", emoji: "🤖", label: "Agents" },
-  { href: "/tools", emoji: "🛠️", label: "Tools" },
-  { href: "/mcp", emoji: "🔌", label: "MCP" },
-  { href: "/provider", emoji: "🔌", label: "Provider" },
+  { href: "/mcp", emoji: "🧩", label: "MCP" },
   { href: "/settings/defaults", emoji: "⚙️", label: "Settings" },
 ];
 

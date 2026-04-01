@@ -11,6 +11,12 @@ import { webSearchTools } from "./web-search/tools.js";
 import { userInteractionDefinition } from "./user-interaction/definition.js";
 import { executeUserInteractionTool } from "./user-interaction/runtime.js";
 import { userInteractionTools } from "./user-interaction/tools.js";
+import { taskDefinition } from "./task/definition.js";
+import { executeTaskTool } from "./task/runtime.js";
+import { taskTools } from "./task/tools.js";
+import { memoryDefinition } from "./memory/definition.js";
+import { executeMemoryTool } from "./memory/runtime.js";
+import { memoryTools } from "./memory/tools.js";
 
 type SystemToolModule = {
   definition: McpServerConfig;
@@ -38,6 +44,16 @@ const SYSTEM_TOOL_MODULES: Record<SystemMcpKey, SystemToolModule> = {
     definition: userInteractionDefinition,
     tools: userInteractionTools,
     execute: executeUserInteractionTool,
+  },
+  task: {
+    definition: taskDefinition,
+    tools: taskTools,
+    execute: executeTaskTool,
+  },
+  memory: {
+    definition: memoryDefinition,
+    tools: memoryTools,
+    execute: executeMemoryTool,
   },
 };
 

@@ -9,6 +9,8 @@ export function getDefaultAgent(): AgentDefinition {
     description: "Ein allgemeiner Assistent mit einfachem Iterations-Loop.",
     systemPrompt: d.agent.systemPrompt,
     maxIterations: d.agent.maxIterations,
+    loopMode: d.agent.loopMode,
+    phasePrompts: {},
     mcpIds: [],
     mcpInstructions: {},
     variables: {},

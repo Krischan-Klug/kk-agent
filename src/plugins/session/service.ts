@@ -16,6 +16,7 @@ import type { LoopMessage } from "../loop/types.js";
 import { getAgent, setLoopState, clearLoopState } from "../agent/service.js";
 import { getDefaults } from "../lib/defaults.js";
 import { normalizeMcpId } from "../lib/ids.js";
+import { clearSessionFacts, clearTasks } from "../tools/service.js";
 import {
   registerSession,
   unregisterSession,
@@ -87,6 +88,7 @@ async function executeCombinedTool(toolName: string, args: Record<string, unknow
 }
 
 function buildCurrentSystemPrompt(
+  sessionId: string,
   session: Pick<SessionState, "activeMcpIds" | "systemPrompt" | "model">,
   agent: ReturnType<typeof getAgent>,
 ): string {
@@ -98,7 +100,11 @@ function buildCurrentSystemPrompt(
     ...agent.variables,
   };
 
-  return buildPrompt(session.systemPrompt, mcpInstr, variables);
+  return buildPrompt(session.systemPrompt, mcpInstr, variables, {
+    sessionId,
+    phase: "executing",
+    phasePrompt: agent.phasePrompts.executing,
+  });
 }
 
 function resolveSessionMcpIds(agent: ReturnType<typeof getAgent>, activeMcpIds?: string[]): string[] {
@@ -144,13 +150,15 @@ export function listSessions(): SessionState[] {
 export function deleteSession(id: string): void {
   if (!store.deleteSession(id)) throw new Error(`Session "${id}" not found`);
   clearLoopState(id);
+  clearTasks(id);
+  clearSessionFacts(id);
 }
 
 export function getCurrentSystemPrompt(sessionId: string): string {
   const session = store.getSession(sessionId);
   if (!session) throw new Error(`Session "${sessionId}" not found`);
   const agent = getAgent(session.agentId);
-  return buildCurrentSystemPrompt(session, agent);
+  return buildCurrentSystemPrompt(sessionId, session, agent);
 }
 
 function resolveReasoningConfig(session: SessionState): {
@@ -215,8 +223,11 @@ function buildLoopRequest(
     maxOutputTokens: prepared.reasoning.maxOutputTokens,
     systemPrompt: prepared.session.systemPrompt,
     maxIterations: prepared.agent.maxIterations,
+    loopMode: prepared.agent.loopMode,
+    phasePrompts: prepared.agent.phasePrompts ?? {},
     mcpInstructions: prepared.mcpInstructions,
     agentVariables: prepared.agent.variables ?? {},
+    phase: prepared.agent.loopMode === "simple" ? "executing" as const : "planning" as const,
     allTools: prepared.tools,
     executeTool: executeCombinedTool,
     ...handlers,

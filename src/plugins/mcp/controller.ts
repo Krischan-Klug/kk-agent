@@ -14,22 +14,14 @@ import type { CreateMcpBody, UpdateMcpBody } from "./types.js";
 import { getRunningMcps } from "./lib/process-manager.js";
 import { removeMcpFromAgents } from "../agent/service.js";
 import { removeMcpFromSessions } from "../session/service.js";
-import {
-  getAllSystemMcps,
-  getSystemMcpById,
-  getSystemToolsForId,
-  toggleSystemMcp,
-  updateSystemMcpConfig,
-} from "../tools/service.js";
 
 export async function listMcps(_req: Request, res: Response): Promise<Response> {
   const customMcps = await getAllMcps();
-  const mcps = [...getAllSystemMcps(), ...customMcps];
   const runningIds = getRunningMcps();
-  const result = mcps.map((m) => ({
+  const result = customMcps.map((m) => ({
     ...m,
-    running: m.source === "system" ? true : runningIds.includes(m.id),
-    tools: m.source === "system" ? getSystemToolsForId(m.id) : getMcpTools(m.id),
+    running: runningIds.includes(m.id),
+    tools: getMcpTools(m.id),
   }));
   return res.json(result);
 }
@@ -38,10 +30,7 @@ export async function doToggle(req: Request, res: Response): Promise<Response> {
   try {
     const { active } = req.body as { active?: boolean };
     if (typeof active !== "boolean") return res.status(400).json({ error: "active (boolean) is required" });
-    const mcp = getSystemMcpById(req.params.id)
-      ? await toggleSystemMcp(req.params.id, active)
-      : await toggleMcp(req.params.id, active);
-    return res.json(mcp);
+    return res.json(await toggleMcp(req.params.id, active));
   } catch (err) {
     return res.status(404).json({ error: (err as Error).message });
   }
@@ -51,26 +40,18 @@ export async function doUpdateInstruction(req: Request, res: Response): Promise<
   try {
     const { instruction } = req.body as { instruction?: string };
     if (instruction === undefined) return res.status(400).json({ error: "instruction is required" });
-    const mcp = getSystemMcpById(req.params.id)
-      ? await updateSystemMcpConfig(req.params.id, { instruction })
-      : await updateInstruction(req.params.id, instruction);
-    return res.json(mcp);
+    return res.json(await updateInstruction(req.params.id, instruction));
   } catch (err) {
     return res.status(404).json({ error: (err as Error).message });
   }
 }
 
 export async function listMcpTools(req: Request, res: Response): Promise<Response> {
-  const tools = getSystemMcpById(req.params.id) ? getSystemToolsForId(req.params.id) : getMcpTools(req.params.id);
-  return res.json(tools);
+  return res.json(getMcpTools(req.params.id));
 }
 
 export async function doStart(req: Request, res: Response): Promise<Response> {
   try {
-    if (getSystemMcpById(req.params.id)) {
-      await toggleSystemMcp(req.params.id, true);
-      return res.json({ status: "started" });
-    }
     await startMcpServer(req.params.id);
     return res.json({ status: "started" });
   } catch (err) {
@@ -80,10 +61,6 @@ export async function doStart(req: Request, res: Response): Promise<Response> {
 
 export async function doStop(req: Request, res: Response): Promise<Response> {
   try {
-    if (getSystemMcpById(req.params.id)) {
-      await toggleSystemMcp(req.params.id, false);
-      return res.json({ status: "stopped" });
-    }
     await stopMcpServer(req.params.id);
     return res.json({ status: "stopped" });
   } catch (err) {
@@ -106,9 +83,6 @@ export async function doCreate(req: Request, res: Response): Promise<Response> {
 
 export async function doDelete(req: Request, res: Response): Promise<Response> {
   try {
-    if (getSystemMcpById(req.params.id)) {
-      return res.status(400).json({ error: `System-MCP "${req.params.id}" kann nicht geloescht werden` });
-    }
     await deleteMcp(req.params.id);
     await removeMcpFromAgents(req.params.id);
     removeMcpFromSessions(req.params.id);
@@ -121,10 +95,7 @@ export async function doDelete(req: Request, res: Response): Promise<Response> {
 export async function doUpdate(req: Request, res: Response): Promise<Response> {
   try {
     const body = req.body as UpdateMcpBody;
-    const mcp = getSystemMcpById(req.params.id)
-      ? await updateSystemMcpConfig(req.params.id, body)
-      : await updateMcpConfig(req.params.id, body);
-    return res.json(mcp);
+    return res.json(await updateMcpConfig(req.params.id, body));
   } catch (err) {
     return res.status(404).json({ error: (err as Error).message });
   }

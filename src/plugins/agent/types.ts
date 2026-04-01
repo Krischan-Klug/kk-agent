@@ -1,6 +1,14 @@
 /* ── Agent Definition (persisted) ── */
 
 export type ReasoningEffort = string;
+export type AgentLoopMode = "simple" | "plan_execute" | "full_verify";
+export type AgentLoopPhase = "planning" | "executing" | "verifying" | "completed" | "error";
+
+export interface AgentPhasePrompts {
+  planning?: string;
+  executing?: string;
+  verifying?: string;
+}
 
 export interface AgentDefinition {
   id: string;
@@ -14,6 +22,8 @@ export interface AgentDefinition {
   defaultModel?: string;
   reasoningEffort?: ReasoningEffort;
   temperature?: number;
+  loopMode: AgentLoopMode;
+  phasePrompts: AgentPhasePrompts;
   createdAt: string;
   updatedAt: string;
 }
@@ -24,6 +34,7 @@ export interface AgentLoopState {
   sessionId: string;
   agentId: string;
   status: "idle" | "running" | "completed" | "error";
+  phase: AgentLoopPhase;
   iteration: number;
   maxIterations: number;
   startedAt: string;
@@ -43,6 +54,8 @@ export interface CreateAgentBody {
   defaultModel?: string;
   reasoningEffort?: ReasoningEffort;
   temperature?: number;
+  loopMode?: AgentLoopMode;
+  phasePrompts?: AgentPhasePrompts;
 }
 
 export interface UpdateAgentBody {
@@ -56,4 +69,6 @@ export interface UpdateAgentBody {
   defaultModel?: string;
   reasoningEffort?: ReasoningEffort;
   temperature?: number;
+  loopMode?: AgentLoopMode;
+  phasePrompts?: AgentPhasePrompts;
 }

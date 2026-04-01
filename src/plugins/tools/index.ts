@@ -1,5 +1,6 @@
 import type { ModulePlugin } from "../types.js";
 import { initToolsService } from "./service.js";
+import routes from "./routes.js";
 
 export const ToolsPlugin: ModulePlugin = {
   name: "tools",
@@ -8,7 +9,9 @@ export const ToolsPlugin: ModulePlugin = {
   async beforeInit() {
     await initToolsService();
   },
-  init() {},
+  init(app) {
+    app.use("/tools", routes);
+  },
 };
 
 export default ToolsPlugin;

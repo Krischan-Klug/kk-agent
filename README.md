@@ -11,8 +11,9 @@ Der aktuelle Fokus ist ein schlanker Agent-Loop:
 ## Plugins
 
 ```text
+core          -> technisches Bootstrap-Minimum fuer den Plugin-Loader
 provider      -> Modellzugriff, Streaming, Model-Settings
-tools         -> Eingebaute lokale Tools (filesystem, web-search, terminal, user-interaction)
+tools         -> Interne Tools und interner Tool-State (filesystem, web-search, terminal, user-interaction, task, memory)
 mcp           -> Externe / custom MCP-Server
 agent         -> Agent-Definitionen und Loop-State
 systemprompt  -> Prompt-Building mit Variablen und Tool-Instructions
@@ -30,8 +31,15 @@ Runtime-State liegt unter `state/`:
 - `provider.json`
 - `sessions.json`
 - `system-mcps.json`
+- `user-memory.json`
 
 ## Wie der Loop funktioniert
+
+Je nach `loopMode` arbeitet der Agent als:
+
+1. `simple` -> direkt `executing`
+2. `plan_execute` -> `planning` -> `executing`
+3. `full_verify` -> `planning` -> `executing` -> interne `verifying`-Phase
 
 Jede Iteration besteht aus:
 
@@ -52,8 +60,15 @@ Verfuegbare Runtime-Variablen:
 - `{{CURRENT_MODEL}}`
 - `{{iteration}}`
 - `{{maxIterations}}`
+- `{{phase}}`
+- `{{TASK_SUMMARY}}`
+- `{{FEEDBACK}}`
 
 Agents koennen zusaetzlich eigene Variablen definieren.
+
+Hinweis:
+- `core` ist kein fachliches HTTP-Plugin mehr, sondern nur technisches Bootstrap-Minimum.
+- `src/plugins/lib` enthaelt nur noch gemeinsame Utilities wie Defaults/State-Helper, kein eigenes Plugin.
 
 ## Tools
 
@@ -64,9 +79,14 @@ Es gibt zwei Tool-Quellen:
   - `web-search`
   - `terminal`
   - `user-interaction`
+  - `task`
+  - `memory`
 - `mcp`: externe / custom MCP-Server
 
-Nach aussen werden beide im selben MCP-API-Shape zusammengefuehrt.
+Nach aussen bleiben beide getrennt:
+
+- `/tools` -> interne Tools
+- `/mcp` -> externe MCPs
 
 ## Reasoning und Streaming
 
@@ -75,6 +95,7 @@ SSE liefert aktuell folgende Events:
 
 - `content`
 - `reasoning`
+- `content_reset`
 - `retry_notice`
 - `tool_call`
 - `tool_result`
@@ -116,7 +137,7 @@ SSE liefert aktuell folgende Events:
 
 | Methode | Route | Beschreibung |
 |---|---|---|
-| GET | `/mcp` | System- und Custom-MCPs gemeinsam listen |
+| GET | `/mcp` | Nur externe MCPs listen |
 | POST | `/mcp` | Custom-MCP erstellen |
 | POST | `/mcp/:id/toggle` | MCP aktivieren/deaktivieren |
 | POST | `/mcp/:id/start` | MCP starten |
@@ -125,6 +146,22 @@ SSE liefert aktuell folgende Events:
 | PUT | `/mcp/:id/instruction` | Instruction updaten |
 | DELETE | `/mcp/:id` | Custom-MCP loeschen |
 | GET | `/mcp/:id/tools` | Tools eines MCPs |
+
+### Tools
+
+| Methode | Route | Beschreibung |
+|---|---|---|
+| GET | `/tools` | Interne Tools listen |
+| GET | `/tools/:id/tools` | Tool-Definitionen eines internen Tools |
+| POST | `/tools/:id/toggle` | Internes Tool aktivieren/deaktivieren |
+| PUT | `/tools/:id/instruction` | Tool-Instruktion updaten |
+| PUT | `/tools/:id` | Interne Tool-Konfig updaten |
+| GET | `/tools/task/session/:sessionId` | Session-Tasks lesen |
+| PUT | `/tools/task/session/:sessionId` | Session-Tasks ersetzen |
+| GET | `/tools/memory/user` | User-Memory lesen |
+| PUT | `/tools/memory/user` | User-Memory ersetzen |
+| GET | `/tools/memory/session/:sessionId` | Session-Memory lesen |
+| PUT | `/tools/memory/session/:sessionId` | Session-Memory ersetzen |
 
 ### Provider
 

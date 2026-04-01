@@ -5,11 +5,18 @@ import { createSlugId, normalizeMcpId } from "../lib/ids.js";
 import { getSystemVariableNames } from "../systemprompt/lib/builder.js";
 
 function normalizeAgent(agent: AgentDefinition): AgentDefinition {
+  const defaults = getDefaults();
   const mcpIds = [...new Set((agent.mcpIds ?? []).map(normalizeMcpId))];
   const mcpInstructions = Object.fromEntries(
     Object.entries(agent.mcpInstructions ?? {}).map(([id, instruction]) => [normalizeMcpId(id), instruction]),
   );
-  return { ...agent, mcpIds, mcpInstructions };
+  return {
+    ...agent,
+    mcpIds,
+    mcpInstructions,
+    loopMode: agent.loopMode ?? defaults.agent.loopMode,
+    phasePrompts: agent.phasePrompts ?? {},
+  };
 }
 
 export async function initAgentService(): Promise<void> {
@@ -49,6 +56,8 @@ export async function createAgent(body: CreateAgentBody): Promise<AgentDefinitio
     defaultModel: body.defaultModel,
     reasoningEffort: body.reasoningEffort,
     temperature: body.temperature,
+    loopMode: body.loopMode ?? getDefaults().agent.loopMode,
+    phasePrompts: body.phasePrompts ?? {},
     createdAt: now,
     updatedAt: now,
   };
@@ -72,6 +81,8 @@ export async function updateAgent(id: string, body: UpdateAgentBody): Promise<Ag
   if (body.defaultModel !== undefined) patch.defaultModel = body.defaultModel;
   if (body.reasoningEffort !== undefined) patch.reasoningEffort = body.reasoningEffort;
   if (body.temperature !== undefined) patch.temperature = body.temperature;
+  if (body.loopMode !== undefined) patch.loopMode = body.loopMode;
+  if (body.phasePrompts !== undefined) patch.phasePrompts = body.phasePrompts;
   return store.updateAgent(id, patch);
 }
 

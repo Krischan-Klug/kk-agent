@@ -2,7 +2,6 @@ import fs from "node:fs";
 import fsPromises from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { setTimeout as delay } from "node:timers/promises";
 import type { Express } from "express";
 import semver from "semver";
 import type {
@@ -15,18 +14,8 @@ import type {
 } from "./types.js";
 
 const CONFIG_FILE = path.resolve(process.cwd(), "plugins.config.json");
-const LEGACY_CONFIG_FILE = path.resolve(process.cwd(), "plugins.json");
 const pluginsDir = fileURLToPath(new URL("./", import.meta.url));
 const CORE_PLUGIN_NAME = "core";
-
-const DEV_LIFECYCLE = process.env.npm_lifecycle_event === "dev";
-const AUTO_SCAFFOLD_ENV = process.env.PLUGIN_AUTO_SCAFFOLD ?? "";
-const AUTO_SCAFFOLD_ENABLED =
-  DEV_LIFECYCLE ||
-  AUTO_SCAFFOLD_ENV.toLowerCase() === "1" ||
-  AUTO_SCAFFOLD_ENV.toLowerCase() === "true";
-
-let scaffoldWatcherStarted = false;
 
 const entryCandidates = ["index.ts", "index.js", "index.mjs", "index.cjs"];
 
@@ -49,144 +38,6 @@ interface PluginAnalysis {
   staleConfigEntries: string[];
 }
 
-function toPascalCase(value: string): string {
-  return value
-    .split(/[^a-zA-Z0-9]+/)
-    .filter(Boolean)
-    .map((part) => part.charAt(0).toUpperCase() + part.slice(1).toLowerCase())
-    .join("");
-}
-
-function writeFileSafe(target: string, content: string): void {
-  if (!fs.existsSync(target)) {
-    fs.writeFileSync(target, content, "utf8");
-  }
-}
-
-function ensurePluginDirectoryScaffold(pluginName: string): void {
-  if (!AUTO_SCAFFOLD_ENABLED) {
-    return;
-  }
-
-  const normalized = pluginName.trim();
-  if (!normalized) {
-    return;
-  }
-
-  const pluginPath = path.join(pluginsDir, normalized);
-  if (!fs.existsSync(pluginPath) || !fs.statSync(pluginPath).isDirectory()) {
-    return;
-  }
-
-  const indexPath = path.join(pluginPath, "index.ts");
-  const indexJsPath = path.join(pluginPath, "index.js");
-
-  if (fs.existsSync(indexPath) || fs.existsSync(indexJsPath)) {
-    return;
-  }
-
-  const pascal = toPascalCase(normalized) || "Plugin";
-  const pluginConst = `${pascal}Plugin`;
-  const routeHandler = `get${pascal}`;
-  const serviceFn = `get${pascal}Data`;
-  const description = `Auto-generated plugin '${normalized}'.`;
-
-  writeFileSafe(
-    indexPath,
-    `import type { ModulePlugin } from "../types.js";
-import routes from "./routes.js";
-
-export const ${pluginConst}: ModulePlugin = {
-  name: "${normalized}",
-  version: "0.1.0",
-  description: "${description}",
-  async init(app, _context) {
-    app.use("/${normalized}", routes);
-  },
-};
-
-export default ${pluginConst};
-
-export * from "./service.js";
-export * from "./types.js";
-`
-  );
-
-  writeFileSafe(
-    path.join(pluginPath, "routes.ts"),
-    `import { Router } from "express";
-import { ${routeHandler} } from "./controller.js";
-
-const router = Router();
-
-router.get("/", ${routeHandler});
-
-export default router;
-`
-  );
-
-  writeFileSafe(
-    path.join(pluginPath, "controller.ts"),
-    `import type { Request, Response } from "express";
-import { ${serviceFn} } from "./service.js";
-
-export async function ${routeHandler}(_req: Request, res: Response): Promise<Response> {
-  const result = await ${serviceFn}();
-  return res.json(result);
-}
-`
-  );
-
-  writeFileSafe(
-    path.join(pluginPath, "types.ts"),
-    `export interface ${pascal}Data {
-  message: string;
-}
-`
-  );
-
-  writeFileSafe(
-    path.join(pluginPath, "service.ts"),
-    `import type { ${pascal}Data } from "./types.js";
-
-export async function ${serviceFn}(): Promise<${pascal}Data> {
-  return {
-    message: "Hello from ${normalized}!",
-  };
-}
-`
-  );
-}
-
-function watchPluginsDirectory(): void {
-  if (scaffoldWatcherStarted || !AUTO_SCAFFOLD_ENABLED) {
-    return;
-  }
-
-  scaffoldWatcherStarted = true;
-
-  if (!fs.existsSync(pluginsDir)) {
-    fs.mkdirSync(pluginsDir, { recursive: true });
-  }
-
-  fs.watch(
-    pluginsDir,
-    { persistent: false, encoding: "utf8" },
-    (_eventType, filename) => {
-      const name = (filename ?? "").trim();
-      if (!name || name.startsWith(".")) {
-        return;
-      }
-      // Use a slight delay to avoid race conditions where the directory is created after the watch event.
-      void delay(50)
-        .then(() => ensurePluginDirectoryScaffold(name))
-        .catch((error) => {
-          console.warn("Failed to scaffold plugin directory:", error);
-        });
-    }
-  );
-}
-
 async function readJSONFile<T>(filePath: string): Promise<T | null> {
   try {
     const raw = await fsPromises.readFile(filePath, "utf8");
@@ -206,9 +57,7 @@ async function writeJSONFile(filePath: string, data: unknown): Promise<void> {
 }
 
 async function loadConfig(): Promise<PluginConfigMap> {
-  const config =
-    (await readJSONFile<PluginConfigMap>(CONFIG_FILE)) ??
-    (await readJSONFile<PluginConfigMap>(LEGACY_CONFIG_FILE));
+  const config = await readJSONFile<PluginConfigMap>(CONFIG_FILE);
 
   if (!config || typeof config !== "object" || Array.isArray(config)) {
     return {};
@@ -227,10 +76,6 @@ async function discoverPluginDirectories(): Promise<string[]> {
     .map((entry) => entry.name)
     .filter((name) => !name.startsWith(".") && name !== "lib")
     .sort((a, b) => a.localeCompare(b));
-
-  if (AUTO_SCAFFOLD_ENABLED) {
-    directories.forEach((dir) => ensurePluginDirectoryScaffold(dir));
-  }
 
   return directories;
 }
@@ -552,8 +397,6 @@ function buildContext(
 }
 
 async function preparePlugins(): Promise<PluginAnalysis> {
-  watchPluginsDirectory();
-
   const config = await loadConfig();
   const directories = await discoverPluginDirectories();
   if (!directories.length) {

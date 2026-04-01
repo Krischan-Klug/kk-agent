@@ -1,5 +1,5 @@
 import type { UnifiedToolCall, TokenStats } from "../provider/lib/types.js";
-import type { AgentLoopState } from "../agent/types.js";
+import type { AgentLoopMode, AgentLoopPhase, AgentLoopState, AgentPhasePrompts } from "../agent/types.js";
 
 export interface ToolDefinition {
   name: string;
@@ -10,6 +10,7 @@ export interface ToolDefinition {
 export interface ToolResult {
   content: string;
   isError: boolean;
+  contextContent?: string;
 }
 
 export interface LoopMessage {
@@ -35,8 +36,11 @@ export interface LoopOptions {
   maxOutputTokens?: number;
   systemPrompt: string;
   maxIterations: number;
+  loopMode: AgentLoopMode;
+  phasePrompts: AgentPhasePrompts;
   mcpInstructions: string;
   agentVariables: Record<string, string>;
+  phase: AgentLoopPhase;
   allTools: ToolDefinition[];
   executeTool: ExecuteToolFn;
   onContent?: (content: string) => void;

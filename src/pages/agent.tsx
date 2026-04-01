@@ -1,9 +1,9 @@
 import { useEffect, useState } from "react";
 import styled from "styled-components";
-import { agent as agentApi, mcp as mcpApi, provider as providerApi, tools as toolsApi } from "@/lib/api";
+import { agent as agentApi, mcp as mcpApi, provider as providerApi, settings as settingsApi, tools as toolsApi } from "@/lib/api";
 import { cloneDraft } from "@/lib/draft";
 import { logUiError } from "@/lib/uiLogger";
-import type { AgentDefinition, CreateAgentBody, McpListItem, ModelInfo, ModelSettings } from "@/types/api";
+import type { AgentDefinition, AppDefaults, CreateAgentBody, McpListItem, ModelInfo, ModelSettings } from "@/types/api";
 import { PageTitle } from "@/components/Layout.styled";
 import Spinner from "@/components/Spinner";
 import AgentList from "@/components/agent/AgentList";
@@ -22,6 +22,7 @@ export default function AgentPage() {
   const [internalTools, setInternalTools] = useState<McpListItem[]>([]);
   const [models, setModels] = useState<ModelInfo[]>([]);
   const [modelSettings, setModelSettings] = useState<Record<string, ModelSettings>>({});
+  const [defaults, setDefaults] = useState<AppDefaults | null>(null);
   const [systemVariables, setSystemVariables] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -32,14 +33,15 @@ export default function AgentPage() {
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    Promise.all([agentApi.list(), mcpApi.list(), toolsApi.list(), agentApi.systemVariables(), providerApi.getModels()])
-      .then(([agentList, mcpList, toolList, vars, providerModels]) => {
+    Promise.all([agentApi.list(), mcpApi.list(), toolsApi.list(), agentApi.systemVariables(), providerApi.getModels(), settingsApi.getDefaults()])
+      .then(([agentList, mcpList, toolList, vars, providerModels, appDefaults]) => {
         setAgents(agentList);
         setMcps(mcpList);
         setInternalTools(toolList);
         setSystemVariables(vars.variables);
         setModels(providerModels.models);
         setModelSettings(providerModels.modelSettings ?? {});
+        setDefaults(appDefaults);
         if (agentList.length > 0) {
           setSelectedId(agentList[0].id);
           setEditAgent(cloneDraft(agentList[0]));
@@ -88,7 +90,6 @@ export default function AgentPage() {
         defaultModel: editAgent.defaultModel,
         reasoningEffort: editAgent.reasoningEffort,
         temperature: editAgent.temperature,
-        maxOutputTokens: editAgent.maxOutputTokens,
       });
       setAgents((prev) => prev.map((agent) => (agent.id === selectedId ? updated : agent)));
       setEditAgent(cloneDraft(updated));
@@ -135,6 +136,7 @@ export default function AgentPage() {
           internalTools={internalTools}
           models={models}
           modelSettings={modelSettings}
+          defaults={defaults}
           systemVariables={systemVariables}
           saving={saving}
           showSystemVariables={showSystemVariables}

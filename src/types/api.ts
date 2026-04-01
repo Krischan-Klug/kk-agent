@@ -11,7 +11,6 @@ export interface SessionState {
   systemPrompt: string;
   reasoningEffort?: ReasoningEffort;
   temperature?: number;
-  maxOutputTokens?: number;
   messages: SessionMessage[];
   createdAt: string;
   updatedAt: string;
@@ -38,7 +37,6 @@ export interface CreateSessionBody {
   activeMcpIds?: string[];
   reasoningEffort?: ReasoningEffort;
   temperature?: number;
-  maxOutputTokens?: number;
 }
 
 export interface UpdateSessionBody {
@@ -48,7 +46,6 @@ export interface UpdateSessionBody {
   activeMcpIds?: string[];
   reasoningEffort?: ReasoningEffort;
   temperature?: number;
-  maxOutputTokens?: number;
 }
 
 export type TaskStatus = "pending" | "in_progress" | "completed";
@@ -214,7 +211,6 @@ export interface AgentDefinition {
   defaultModel?: string;
   reasoningEffort?: ReasoningEffort;
   temperature?: number;
-  maxOutputTokens?: number;
   loopMode: AgentLoopMode;
   phasePrompts: AgentPhasePrompts;
   createdAt: string;
@@ -245,7 +241,6 @@ export interface CreateAgentBody {
   defaultModel?: string;
   reasoningEffort?: ReasoningEffort;
   temperature?: number;
-  maxOutputTokens?: number;
   loopMode?: AgentLoopMode;
   phasePrompts?: AgentPhasePrompts;
 }
@@ -263,7 +258,6 @@ export interface UpdateAgentBody {
   defaultModel?: string;
   reasoningEffort?: ReasoningEffort;
   temperature?: number;
-  maxOutputTokens?: number;
   loopMode?: AgentLoopMode;
   phasePrompts?: AgentPhasePrompts;
 }

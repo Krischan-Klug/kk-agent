@@ -121,11 +121,12 @@ type Props = {
   loopState: AgentLoopState | null;
   debugPrompt: string | null;
   debugTools: McpListItem[];
+  internalTools: McpListItem[];
+  debugMcps: McpListItem[];
   debugTasks: TaskItem[];
   debugSessionFacts: MemoryFact[];
   debugUserFacts: MemoryFact[];
   models: string[];
-  mcps: McpListItem[];
   onModelSwitch: (model: string) => void;
   onMcpToggle: (mcpId: string, enabled: boolean) => void;
   onSaveTasks: (tasks: TaskItem[]) => Promise<void>;
@@ -152,11 +153,12 @@ export default function ChatDebugPanel({
   loopState,
   debugPrompt,
   debugTools,
+  internalTools,
+  debugMcps,
   debugTasks,
   debugSessionFacts,
   debugUserFacts,
   models,
-  mcps,
   onModelSwitch,
   onMcpToggle,
   onSaveTasks,
@@ -287,7 +289,20 @@ export default function ChatDebugPanel({
           ) : (
             <Badge variant="info">{session.model}</Badge>
           )}
-          <McpSelect mcps={mcps} activeMcpIds={session.activeMcpIds} onToggle={onMcpToggle} />
+          <McpSelect
+            mcps={internalTools}
+            activeMcpIds={session.activeMcpIds}
+            onToggle={onMcpToggle}
+            label="Tools"
+            emptyHint="Keine internen Tools gefunden"
+          />
+          <McpSelect
+            mcps={debugMcps}
+            activeMcpIds={session.activeMcpIds}
+            onToggle={onMcpToggle}
+            label="MCPs"
+            emptyHint="Keine MCP Server konfiguriert"
+          />
         </DebugControls>
       </DebugTabs>
 

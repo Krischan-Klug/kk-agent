@@ -69,6 +69,11 @@ const McpLabelGroup = styled.div`
   overflow: hidden;
 `;
 
+const McpEmoji = styled.span`
+  flex-shrink: 0;
+  line-height: 1;
+`;
+
 const StatusDot = styled.span<{ $running: boolean }>`
   width: 6px;
   height: 6px;
@@ -94,31 +99,39 @@ interface McpSelectProps {
   mcps: McpListItem[];
   activeMcpIds: string[];
   onToggle: (mcpId: string, enabled: boolean) => void;
+  label?: string;
+  emptyHint?: string;
 }
 
-export default function McpSelect({ mcps, activeMcpIds, onToggle }: McpSelectProps) {
+export default function McpSelect({
+  mcps,
+  activeMcpIds,
+  onToggle,
+  label = "MCPs",
+  emptyHint = "Keine MCP Server konfiguriert",
+}: McpSelectProps) {
   const { open, ref, toggle } = useDropdown<HTMLDivElement>();
 
-  const activeCount = activeMcpIds.length;
+  const activeCount = mcps.filter((m) => activeMcpIds.includes(m.id)).length;
   const hasUnavailable = mcps.some((m) => !m.running && activeMcpIds.includes(m.id));
 
   return (
     <Wrapper ref={ref}>
       <Trigger $warn={hasUnavailable} onClick={toggle}>
-        MCPs ({activeCount})
+        {label} ({activeCount})
       </Trigger>
       {open && (
         <Dropdown>
           {mcps.length === 0 ? (
-            <EmptyHint>Keine MCP Server konfiguriert</EmptyHint>
+            <EmptyHint>{emptyHint}</EmptyHint>
           ) : (
             mcps.map((m) => (
               <McpRow key={m.id}>
                 <McpLabelGroup>
                   <StatusDot $running={m.running} />
+                  <McpEmoji>{m.emoji || (m.source === "system" ? "🛠️" : "🔌")}</McpEmoji>
                   <McpLabel $stopped={!m.running}>
                     {m.name}
-                    {m.source === "system" ? " (system)" : ""}
                   </McpLabel>
                 </McpLabelGroup>
                 <Toggle

@@ -67,6 +67,7 @@ export default function ChatPage() {
   const [modelInfoMap, setModelInfoMap] = useState<Map<string, ModelInfo>>(new Map());
   const [modelSettingsMap, setModelSettingsMap] = useState<Record<string, ModelSettings>>({});
   const [mcps, setMcps] = useState<McpListItem[]>([]);
+  const [toolMcps, setToolMcps] = useState<McpListItem[]>([]);
   const [agents, setAgents] = useState<AgentDefinition[]>([]);
   const [streaming, setStreaming] = useState(false);
   const [streamContent, setStreamContent] = useState("");
@@ -85,6 +86,11 @@ export default function ChatPage() {
   const [sessionFacts, setSessionFacts] = useState<MemoryFact[]>([]);
   const [userFacts, setUserFacts] = useState<MemoryFact[]>([]);
   const { ref: messagesRef, scrollToBottom, handleScroll } = useChatAutoScroll();
+
+  const loadAvailableMcps = useCallback(async (): Promise<{ tools: McpListItem[]; mcps: McpListItem[] }> => {
+    const [internalTools, externalMcps] = await Promise.all([toolsApi.list(), mcpApi.list()]);
+    return { tools: internalTools, mcps: externalMcps };
+  }, []);
 
   function resetStreamingState() {
     setStreaming(false);
@@ -140,9 +146,15 @@ export default function ChatPage() {
 
   const loadDebugData = useCallback((sessionId: string) => {
     sessionApi.getPrompt(sessionId).then((result) => setDebugPrompt(result.systemPrompt)).catch(() => setDebugPrompt("[Fehler beim Laden]"));
-    mcpApi.list().then(setDebugTools).catch(() => {});
+    loadAvailableMcps()
+      .then(({ tools, mcps }) => {
+        setDebugTools([...tools, ...mcps]);
+        setToolMcps(tools);
+        setMcps(mcps);
+      })
+      .catch(() => {});
     void loadContextData(sessionId);
-  }, [loadContextData]);
+  }, [loadAvailableMcps, loadContextData]);
 
   useEffect(() => {
     loadSession();
@@ -153,11 +165,16 @@ export default function ChatPage() {
         setModelSettingsMap(result.modelSettings ?? {});
       })
       .catch(() => {});
-    mcpApi.list().then(setMcps).catch(() => {});
+    loadAvailableMcps()
+      .then(({ tools, mcps }) => {
+        setToolMcps(tools);
+        setMcps(mcps);
+      })
+      .catch(() => {});
     agentApi.list().then(setAgents).catch(() => {});
 
     return addAppEventListener(SESSION_CHANGED_EVENT, loadSession);
-  }, [loadSession]);
+  }, [loadAvailableMcps, loadSession]);
 
   useEffect(() => addAppEventListener(CHAT_DEBUG_TOGGLE_EVENT, () => {
     setDebugOpen((prev) => {
@@ -409,11 +426,12 @@ export default function ChatPage() {
         loopState={loopState}
         debugPrompt={debugPrompt}
         debugTools={debugTools}
+        internalTools={toolMcps}
+        debugMcps={mcps}
         debugTasks={tasks}
         debugSessionFacts={sessionFacts}
         debugUserFacts={userFacts}
         models={models}
-        mcps={mcps}
         onModelSwitch={handleModelSwitch}
         onMcpToggle={handleMcpToggle}
         onSaveTasks={handleSaveTasks}

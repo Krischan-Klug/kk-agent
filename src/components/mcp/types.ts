@@ -36,11 +36,6 @@ export function buildEditForm(mcp: McpListItem): EditForm {
   };
 }
 
-export function getStateActionLabel(mcp: McpListItem): string {
-  if (mcp.source === "system") return mcp.active ? "Deaktivieren" : "Aktivieren";
-  return mcp.running ? "Stop" : "Start";
-}
-
 export function getConfigSummary(mcp: McpListItem): string {
   if (mcp.source === "system") {
     if (mcp.systemKey === "filesystem") return `rootPath: ${mcp.systemConfig?.rootPath ?? "-"}`;

@@ -15,13 +15,19 @@ import {
   SectionTitle,
 } from "@/components/PageForm";
 import type { EditForm } from "./types";
-import { getConfigSummary, getStateActionLabel } from "./types";
+import { getConfigSummary } from "./types";
 
 const Header = styled.div`
   display: flex;
-  align-items: center;
-  justify-content: space-between;
+  flex-direction: column;
+  gap: var(--space-sm);
   margin-bottom: var(--space-md);
+`;
+
+const HeaderTop = styled.div`
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
   gap: var(--space-md);
 `;
 
@@ -29,15 +35,39 @@ const Name = styled.div`
   display: flex;
   align-items: center;
   gap: var(--space-sm);
-  font-weight: 600;
   flex-wrap: wrap;
+  flex: 1;
+  min-width: 0;
 `;
 
 const Controls = styled.div`
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: var(--space-sm);
   flex-wrap: wrap;
+  flex-shrink: 0;
+`;
+
+const StatusToggle = styled.button`
+  border: 0;
+  padding: 0;
+  background: transparent;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+`;
+
+const HeaderNameInput = styled(Input)`
+  min-width: 0;
+  flex: 1;
+  font-weight: 600;
+`;
+
+const HeaderEmojiInput = styled(Input)`
+  width: 56px;
+  text-align: center;
+  font-size: 1.2em;
+  flex-shrink: 0;
 `;
 
 const ConfigDetail = styled.div`
@@ -106,57 +136,70 @@ export default function McpCard({
   return (
     <Card>
       <Header>
-        <Name>
-          <span style={{ fontSize: "1.2em" }}>{mcp.emoji || "???"}</span>
-          {mcp.name}
-          <Badge variant={mcp.running ? "success" : "danger"}>{mcp.running ? "running" : "stopped"}</Badge>
-          <Badge>{mcp.source === "system" ? "system" : "custom"}</Badge>
-          <Badge>{mcp.transport}</Badge>
-        </Name>
-        <Controls>
-          <Button size="sm" variant="secondary" onClick={onStateToggle}>
-            {getStateActionLabel(mcp)}
-          </Button>
-          <Button size="sm" variant="secondary" onClick={handleEditToggle}>
-            {editOpen ? "Schließen" : "Bearbeiten"}
-          </Button>
-          {mcp.source !== "system" && (
-            <Button size="sm" variant="danger" onClick={onDelete}>
-              Löschen
+        <HeaderTop>
+          <Name>
+            <StatusToggle
+              type="button"
+              onClick={onStateToggle}
+              aria-label={mcp.running ? "Stoppen" : "Starten"}
+              title={mcp.running ? "Stoppen" : "Starten"}
+            >
+              <Badge variant={mcp.running ? "success" : "danger"}>{mcp.running ? "running" : "stopped"}</Badge>
+            </StatusToggle>
+            <Badge>{mcp.source === "system" ? "system" : "custom"}</Badge>
+            <Badge>{mcp.transport}</Badge>
+          </Name>
+          <Controls>
+            <Button size="sm" variant="secondary" onClick={handleEditToggle}>
+              {editOpen ? "Schliessen" : "Bearbeiten"}
             </Button>
+            {mcp.source !== "system" && (
+              <Button size="sm" variant="danger" onClick={onDelete}>
+                Loeschen
+              </Button>
+            )}
+          </Controls>
+        </HeaderTop>
+        <Name>
+          {editOpen && editForm ? (
+            <>
+              <HeaderEmojiInput
+                value={editForm.emoji}
+                onChange={(e) => onEditFormChange({ ...editForm, emoji: e.target.value })}
+                placeholder="???"
+              />
+              <HeaderNameInput
+                value={editForm.name}
+                onChange={(e) => onEditFormChange({ ...editForm, name: e.target.value })}
+              />
+            </>
+          ) : (
+            <>
+              <span style={{ fontSize: "1.2em" }}>{mcp.emoji || "???"}</span>
+              <span style={{ fontWeight: 600 }}>{mcp.name}</span>
+            </>
           )}
-        </Controls>
+        </Name>
       </Header>
 
       {!editOpen && (
         <ConfigDetail>
           {getConfigSummary(mcp)}
-          {mcp.source !== "system" && mcp.transport === "stdio" && Object.keys((mcp.server as { env?: Record<string, string> }).env ?? {}).length > 0 && (
-            <div style={{ marginTop: "var(--space-xs)", color: "var(--text-muted)", fontSize: "var(--font-size-sm)" }}>
-              env: {Object.entries((mcp.server as { env?: Record<string, string> }).env ?? {}).map(([k, v]) => `${k}=${v}`).join(", ")}
-            </div>
-          )}
+          {mcp.source !== "system" &&
+            mcp.transport === "stdio" &&
+            Object.keys((mcp.server as { env?: Record<string, string> }).env ?? {}).length > 0 && (
+              <div style={{ marginTop: "var(--space-xs)", color: "var(--text-muted)", fontSize: "var(--font-size-sm)" }}>
+                env:{" "}
+                {Object.entries((mcp.server as { env?: Record<string, string> }).env ?? {})
+                  .map(([k, v]) => `${k}=${v}`)
+                  .join(", ")}
+              </div>
+            )}
         </ConfigDetail>
       )}
 
       {editOpen && editForm && (
         <Section>
-          <FormRow>
-            <FormField $flex={1}>
-              <FieldLabel>Name</FieldLabel>
-              <Input value={editForm.name} onChange={(e) => onEditFormChange({ ...editForm, name: e.target.value })} />
-            </FormField>
-            <FormField>
-              <FieldLabel>Emoji</FieldLabel>
-              <Input
-                value={editForm.emoji}
-                onChange={(e) => onEditFormChange({ ...editForm, emoji: e.target.value })}
-                placeholder="???"
-                style={{ width: 60, textAlign: "center", fontSize: "1.2em" }}
-              />
-            </FormField>
-          </FormRow>
-
           {mcp.source === "system" ? (
             <>
               {mcp.systemKey === "filesystem" && (
@@ -168,12 +211,16 @@ export default function McpCard({
               {mcp.systemKey === "terminal" && (
                 <FormField>
                   <FieldLabel>Working Directory</FieldLabel>
-                  <Input value={editForm.workingDirectory} onChange={(e) => onEditFormChange({ ...editForm, workingDirectory: e.target.value })} />
+                  <Input
+                    value={editForm.workingDirectory}
+                    onChange={(e) => onEditFormChange({ ...editForm, workingDirectory: e.target.value })}
+                  />
                 </FormField>
               )}
-              {(mcp.systemKey === "web-search" || mcp.systemKey === "user-interaction" || mcp.systemKey === "task" || mcp.systemKey === "memory") && (
-                <ConfigDetail>Keine weitere System-Konfiguration in v1.</ConfigDetail>
-              )}
+              {(mcp.systemKey === "web-search" ||
+                mcp.systemKey === "user-interaction" ||
+                mcp.systemKey === "task" ||
+                mcp.systemKey === "memory") && <ConfigDetail>Keine weitere System-Konfiguration in v1.</ConfigDetail>}
             </>
           ) : mcp.transport === "stdio" ? (
             <>
@@ -198,11 +245,17 @@ export default function McpCard({
           )}
 
           <ActionsRow>
-            <Button size="sm" onClick={() => onSaveEdit(false)}>Speichern</Button>
+            <Button size="sm" onClick={() => onSaveEdit(false)}>
+              Speichern
+            </Button>
             {mcp.source !== "system" && mcp.running && (
-              <Button size="sm" onClick={() => onSaveEdit(true)}>Speichern & Neustarten</Button>
+              <Button size="sm" onClick={() => onSaveEdit(true)}>
+                Speichern & Neustarten
+              </Button>
             )}
-            <Button size="sm" variant="secondary" onClick={onEditToggle}>Abbrechen</Button>
+            <Button size="sm" variant="secondary" onClick={onEditToggle}>
+              Abbrechen
+            </Button>
           </ActionsRow>
         </Section>
       )}
@@ -210,7 +263,7 @@ export default function McpCard({
       <ActionsRow style={{ marginTop: "var(--space-md)" }}>
         <SectionTitle as="span">Instruction</SectionTitle>
         <Button size="sm" variant="secondary" onClick={onInstructionToggle}>
-          {instructionsOpen ? "Schließen" : "Bearbeiten"}
+          {instructionsOpen ? "Schliessen" : "Bearbeiten"}
         </Button>
         {instructionsOpen && (
           <Button size="sm" variant="secondary" onClick={onInstructionSave}>

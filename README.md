@@ -28,7 +28,7 @@ Runtime-State liegt unter `state/`:
 - `agents.json`
 - `defaults.json`
 - `mcps.json`
-- `provider.json`
+- `providers.json`
 - `system-mcps.json`
 - `user-memory.json`
 
@@ -176,13 +176,35 @@ SSE liefert aktuell folgende Events:
 |---|---|---|
 | GET | `/provider/models` | Verfuegbare Modelle |
 | PUT | `/provider/models/:modelId/settings` | Model-Settings speichern |
-| POST | `/provider/switch` | Aktives Modell wechseln |
 | GET | `/provider/providers` | Provider listen |
 | POST | `/provider/providers` | Provider erstellen |
 | PUT | `/provider/providers/:id` | Provider updaten |
 | DELETE | `/provider/providers/:id` | Provider loeschen |
 | POST | `/provider/providers/:id/activate` | Provider aktivieren |
 | POST | `/provider/providers/:id/test` | Provider testen |
+
+## Provider-Modell
+
+- Provider sind jetzt nur noch:
+  - `name`
+  - `baseUrl`
+  - optional `apiKey`
+- Keine Provider-Typen mehr im Datenmodell oder UI.
+- Discovery erfolgt automatisch ueber lokale Endpoints:
+  - `/api/v1/models`
+  - `/api/tags`
+  - `/v1/models`
+- Es gibt kein globales `activeModel` mehr.
+- Sessions speichern zusaetzlich `providerId`, damit laufende Chats am richtigen Backend bleiben.
+- Session-Fallback fuer das Modell:
+  1. explizites Session-Modell
+  2. `agent.defaultModel`, falls beim Session-Provider vorhanden
+  3. erstes verfuegbares Modell des Session-Providers
+- Model-Capabilities steuern intern und im Frontend:
+  - `supportsTools`
+  - `supportsReasoning`
+  - `supportsStreaming`
+  - `supportedEndpoints`
 
 ## Quick Start
 

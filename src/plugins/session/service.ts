@@ -1,7 +1,7 @@
 import type { SessionState, CreateSessionBody, SSEEvent } from "./types.js";
 import * as store from "./lib/store.js";
 import { buildCapabilityInstructions, buildPrompt, getSystemVariables } from "../systemprompt/service.js";
-import { getActiveModel, getModelSettings } from "../provider/service.js";
+import { getModelSettings, getActiveProviderId, resolveProviderModel } from "../provider/service.js";
 import type { ReasoningLevelConfig } from "../provider/types.js";
 import { REASONING_LEVEL_DEFAULTS } from "../provider/defaults.js";
 import { getToolDefinitions, executeTool, getKnownMcpIds, getRunnableMcpIds } from "../mcp/service.js";
@@ -129,32 +129,37 @@ function resolveSessionMcpIds(agent: ReturnType<typeof getAgent>, activeMcpIds?:
   return sanitizeMcpIds(activeMcpIds ?? agent.mcpIds ?? []);
 }
 
-function resolveSessionDefaults(
+async function resolveSessionDefaults(
   agent: ReturnType<typeof getAgent>,
-  body: Pick<CreateSessionBody, "activeToolIds" | "activeMcpIds" | "model" | "reasoningEffort" | "temperature">,
+  body: Pick<CreateSessionBody, "activeToolIds" | "activeMcpIds" | "model" | "reasoningEffort" | "temperature" | "maxOutputTokens">,
+  providerId: string,
 ) {
+  const selection = await resolveProviderModel(providerId, body.model ?? agent.defaultModel);
   return {
+    providerId: selection.providerId,
+    model: selection.model,
     activeToolIds: resolveSessionToolIds(agent, body.activeToolIds),
     activeMcpIds: resolveSessionMcpIds(agent, body.activeMcpIds),
-    model: body.model ?? agent.defaultModel ?? getActiveModel(),
     reasoningEffort: body.reasoningEffort ?? agent.reasoningEffort,
     temperature: body.temperature ?? agent.temperature,
+    maxOutputTokens: body.maxOutputTokens ?? agent.maxOutputTokens,
   };
 }
 
-export function createSession(body: CreateSessionBody): SessionState {
+export async function createSession(body: CreateSessionBody): Promise<SessionState> {
   const agent = getAgent(body.agentId);
-  const defaults = resolveSessionDefaults(agent, body);
-  const session = store.createSession({
+  const defaults = await resolveSessionDefaults(agent, body, getActiveProviderId());
+  return store.createSession({
     agentId: body.agentId,
+    providerId: defaults.providerId,
     model: defaults.model,
     activeToolIds: defaults.activeToolIds,
     activeMcpIds: defaults.activeMcpIds,
     systemPrompt: agent.systemPrompt,
     reasoningEffort: defaults.reasoningEffort,
     temperature: defaults.temperature,
+    maxOutputTokens: defaults.maxOutputTokens,
   });
-  return session;
 }
 
 export function getSession(id: string): SessionState {
@@ -186,7 +191,7 @@ function resolveReasoningConfig(session: SessionState): {
   temperature?: number;
   maxOutputTokens?: number;
 } {
-  const ms = getModelSettings(session.model);
+  const ms = getModelSettings(session.providerId, session.model);
   const effort = session.reasoningEffort ?? ms.reasoningEffort ?? getDefaults().reasoning.defaultEffort;
   const levelConfig: ReasoningLevelConfig | undefined = ms.levels?.[effort];
   const defaults = REASONING_LEVEL_DEFAULTS[effort];
@@ -240,6 +245,7 @@ function buildLoopRequest(
   return {
     agentId: prepared.session.agentId,
     sessionId,
+    providerId: prepared.session.providerId,
     messages: toLoopMessages(prepared.messages),
     model: prepared.session.model,
     reasoningEffort: prepared.reasoning.reasoningEffort,
@@ -320,7 +326,7 @@ export async function chatStream(
   }
 }
 
-export function patchSession(
+export async function patchSession(
   id: string,
   update: {
     agentId?: string;
@@ -329,62 +335,48 @@ export function patchSession(
     activeMcpIds?: string[];
     reasoningEffort?: string;
     temperature?: number;
+    maxOutputTokens?: number;
   },
-): SessionState {
+): Promise<SessionState> {
+  const session = getSession(id);
   const patch: Partial<SessionState> = {};
+
   if (update.agentId !== undefined) {
     const agent = getAgent(update.agentId);
-    const defaults = resolveSessionDefaults(agent, update);
+    const defaults = await resolveSessionDefaults(agent, update, session.providerId);
     patch.agentId = update.agentId;
     patch.systemPrompt = agent.systemPrompt;
-    if (update.activeToolIds === undefined) {
-      patch.activeToolIds = defaults.activeToolIds;
-    }
-    if (update.activeMcpIds === undefined) {
-      patch.activeMcpIds = defaults.activeMcpIds;
-    }
-    if (update.model === undefined) {
-      patch.model = defaults.model;
-    }
-    if (update.reasoningEffort === undefined) {
-      patch.reasoningEffort = defaults.reasoningEffort;
-    }
-    if (update.temperature === undefined) {
-      patch.temperature = defaults.temperature;
-    }
+    if (update.activeToolIds === undefined) patch.activeToolIds = defaults.activeToolIds;
+    if (update.activeMcpIds === undefined) patch.activeMcpIds = defaults.activeMcpIds;
+    if (update.model === undefined) patch.model = defaults.model;
+    if (update.reasoningEffort === undefined) patch.reasoningEffort = defaults.reasoningEffort;
+    if (update.temperature === undefined) patch.temperature = defaults.temperature;
+    if (update.maxOutputTokens === undefined) patch.maxOutputTokens = defaults.maxOutputTokens;
   }
-  if (update.model) patch.model = update.model;
-  if (update.activeToolIds !== undefined) {
-    patch.activeToolIds = sanitizeToolIds(update.activeToolIds);
+
+  if (update.model) {
+    const selection = await resolveProviderModel(session.providerId, update.model);
+    patch.providerId = selection.providerId;
+    patch.model = selection.model;
   }
-  if (update.activeMcpIds !== undefined) {
-    patch.activeMcpIds = sanitizeMcpIds(update.activeMcpIds);
-  }
-  if (update.reasoningEffort !== undefined) {
-    patch.reasoningEffort = update.reasoningEffort as SessionState["reasoningEffort"];
-  }
-  if (update.temperature !== undefined) {
-    patch.temperature = update.temperature;
-  }
+  if (update.activeToolIds !== undefined) patch.activeToolIds = sanitizeToolIds(update.activeToolIds);
+  if (update.activeMcpIds !== undefined) patch.activeMcpIds = sanitizeMcpIds(update.activeMcpIds);
+  if (update.reasoningEffort !== undefined) patch.reasoningEffort = update.reasoningEffort as SessionState["reasoningEffort"];
+  if (update.temperature !== undefined) patch.temperature = update.temperature;
+  if (update.maxOutputTokens !== undefined) patch.maxOutputTokens = update.maxOutputTokens;
   return store.updateSession(id, patch);
 }
 
 export function removeMcpFromSessions(mcpId: string): void {
   for (const session of listSessions()) {
     if (!session.activeMcpIds.includes(mcpId)) continue;
-    const nextMcpIds = session.activeMcpIds.filter((id) => id !== mcpId);
-    store.updateSession(session.id, {
-      activeMcpIds: nextMcpIds,
-    });
+    store.updateSession(session.id, { activeMcpIds: session.activeMcpIds.filter((id) => id !== mcpId) });
   }
 }
 
 export function removeToolFromSessions(toolId: string): void {
   for (const session of listSessions()) {
     if (!session.activeToolIds.includes(toolId)) continue;
-    const nextToolIds = session.activeToolIds.filter((id) => id !== toolId);
-    store.updateSession(session.id, {
-      activeToolIds: nextToolIds,
-    });
+    store.updateSession(session.id, { activeToolIds: session.activeToolIds.filter((id) => id !== toolId) });
   }
 }

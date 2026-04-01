@@ -5,17 +5,20 @@ const sessions = new Map<string, SessionState>();
 
 export function createSession(data: {
   agentId: string;
+  providerId: string;
   model: string;
   activeToolIds: string[];
   activeMcpIds: string[];
   systemPrompt: string;
   reasoningEffort?: SessionState["reasoningEffort"];
   temperature?: number;
+  maxOutputTokens?: number;
 }): SessionState {
   const now = new Date().toISOString();
   const session: SessionState = {
     id: uuidv4(),
     name: "",
+    providerId: data.providerId,
     model: data.model,
     agentId: data.agentId,
     activeToolIds: data.activeToolIds,
@@ -23,6 +26,7 @@ export function createSession(data: {
     systemPrompt: data.systemPrompt,
     reasoningEffort: data.reasoningEffort,
     temperature: data.temperature,
+    maxOutputTokens: data.maxOutputTokens,
     messages: [],
     createdAt: now,
     updatedAt: now,

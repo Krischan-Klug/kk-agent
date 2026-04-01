@@ -101,16 +101,26 @@ export async function chat(
       name?: string;
       arguments?: string;
     }>;
-    usage?: { input_tokens?: number; output_tokens?: number; reasoning_tokens?: number };
+    usage?: {
+      input_tokens?: number;
+      output_tokens?: number;
+      reasoning_tokens?: number;
+      output_tokens_details?: { reasoning_tokens?: number };
+    };
   };
 
   let content = "";
+  let reasoning = "";
   const toolCalls: UnifiedToolCall[] = [];
 
   for (const item of data.output) {
     if (item.type === "message" && item.content) {
       for (const part of item.content) {
         if (part.type === "output_text" && part.text) content += part.text;
+      }
+    } else if (item.type === "reasoning" && item.content) {
+      for (const part of item.content) {
+        if (part.type === "reasoning_text" && part.text) reasoning += part.text;
       }
     } else if (item.type === "function_call" && item.id && item.name) {
       toolCalls.push({
@@ -123,13 +133,14 @@ export async function chat(
 
   return {
     content,
+    reasoning: reasoning || undefined,
     tool_calls: toolCalls.length > 0 ? toolCalls : undefined,
     finishReason: toolCalls.length > 0 ? "tool_calls" : "stop",
     stats: data.usage
       ? {
           inputTokens: data.usage.input_tokens ?? 0,
           outputTokens: data.usage.output_tokens ?? 0,
-          reasoningTokens: data.usage.reasoning_tokens ?? 0,
+          reasoningTokens: data.usage.reasoning_tokens ?? data.usage.output_tokens_details?.reasoning_tokens ?? 0,
           source: "provider",
         }
       : undefined,
@@ -162,7 +173,13 @@ export async function chatStream(
   let currentFnCallId = "";
   let currentFnCallName = "";
   let currentFnCallArgs = "";
-  let usage: { input_tokens?: number; output_tokens?: number; reasoning_tokens?: number } | undefined;
+  let fullReasoning = "";
+  let usage: {
+    input_tokens?: number;
+    output_tokens?: number;
+    reasoning_tokens?: number;
+    output_tokens_details?: { reasoning_tokens?: number };
+  } | undefined;
 
   await readSSEStream(res, (parsed) => {
     const eventType = parsed.type as string;
@@ -173,6 +190,14 @@ export async function chatStream(
       if (delta) {
         fullContent += delta;
         onChunk({ type: "content", content: delta });
+      }
+    }
+
+    if (eventType === "response.reasoning_text.delta") {
+      const delta = parsed.delta as string;
+      if (delta) {
+        fullReasoning += delta;
+        onChunk({ type: "reasoning", content: delta });
       }
     }
 
@@ -222,16 +247,22 @@ export async function chatStream(
   }
 
   const stats = usage
-    ? {
-        inputTokens: usage.input_tokens ?? 0,
-        outputTokens: usage.output_tokens ?? 0,
-        reasoningTokens: usage.reasoning_tokens ?? 0,
-        source: "provider" as const,
-      }
-    : undefined;
+      ? {
+          inputTokens: usage.input_tokens ?? 0,
+          outputTokens: usage.output_tokens ?? 0,
+          reasoningTokens: usage.reasoning_tokens ?? usage.output_tokens_details?.reasoning_tokens ?? 0,
+          source: "provider" as const,
+        }
+      : undefined;
 
   if (stats) onChunk({ type: "stats", stats });
   onChunk({ type: "done", finishReason });
 
-  return { content: fullContent, tool_calls: toolCalls.length > 0 ? toolCalls : undefined, finishReason, stats };
+  return {
+    content: fullContent,
+    reasoning: fullReasoning || undefined,
+    tool_calls: toolCalls.length > 0 ? toolCalls : undefined,
+    finishReason,
+    stats,
+  };
 }

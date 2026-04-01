@@ -1,33 +1,52 @@
-/* ── Provider Config ── */
-
-export type ProviderType = "lmstudio" | "openai" | "anthropic";
 export type EndpointType = "chat-completions" | "responses";
-export type AuthMethod = "none" | "api-key";
+export type ReasoningControl = "none" | "effort" | "on-off";
+export type ReasoningSource = "none" | "declared" | "observed";
+
+export interface NumericRange {
+  min: number;
+  max: number;
+  step?: number;
+}
+
+export interface EndpointCapabilities {
+  temperatureSupported: boolean;
+  temperatureRange?: NumericRange;
+  maxOutputTokensSupported: boolean;
+  maxOutputTokensRange?: NumericRange;
+}
 
 export interface ProviderConfig {
   id: string;
   name: string;
-  type: ProviderType;
   baseUrl: string;
-  authMethod: AuthMethod;
   apiKey?: string;
-  isDefault?: boolean;
 }
 
 export interface ProvidersState {
   providers: ProviderConfig[];
   activeProviderId: string;
-  activeModel: string;
   modelSettings: Record<string, ModelSettings>;
+  observedReasoning: Record<string, { observed: boolean; lastObservedAt: string }>;
 }
 
-/* ── Model ── */
+export interface ModelCapabilities {
+  supportsTools: boolean;
+  supportsReasoning: boolean;
+  reasoningSource: ReasoningSource;
+  supportsStreaming: boolean;
+  supportedEndpoints: EndpointType[];
+  reasoningControl: ReasoningControl;
+  reasoningLevels: string[];
+  endpointCapabilities: Partial<Record<EndpointType, EndpointCapabilities>>;
+}
 
 export interface ModelInfo {
   id: string;
   object: string;
+  providerId: string;
   maxContextLength?: number;
   contextLength?: number;
+  capabilities: ModelCapabilities;
 }
 
 export interface ReasoningLevelConfig {
@@ -38,6 +57,5 @@ export interface ReasoningLevelConfig {
 export interface ModelSettings {
   endpoint?: EndpointType;
   reasoningEffort?: string;
-  reasoningOnOff?: boolean;
   levels?: Record<string, ReasoningLevelConfig>;
 }

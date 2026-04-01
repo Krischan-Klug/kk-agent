@@ -129,6 +129,7 @@ async function runModelPass(
   let receivedProviderStats = false;
   const response = await callProviderStream(
     {
+      providerId: opts.providerId,
       model: opts.model,
       messages: messagesWithSystem,
       tools: phase === "verifying" ? undefined : opts.allTools.length > 0 ? toUnifiedTools(opts.allTools) : undefined,

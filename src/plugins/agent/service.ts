@@ -66,6 +66,7 @@ export async function createAgent(body: CreateAgentBody): Promise<AgentDefinitio
     defaultModel: body.defaultModel,
     reasoningEffort: body.reasoningEffort,
     temperature: body.temperature,
+    maxOutputTokens: body.maxOutputTokens,
     loopMode: body.loopMode ?? getDefaults().agent.loopMode,
     phasePrompts: body.phasePrompts ?? {},
     createdAt: now,
@@ -97,6 +98,7 @@ export async function updateAgent(id: string, body: UpdateAgentBody): Promise<Ag
   if (body.defaultModel !== undefined) patch.defaultModel = body.defaultModel;
   if (body.reasoningEffort !== undefined) patch.reasoningEffort = body.reasoningEffort;
   if (body.temperature !== undefined) patch.temperature = body.temperature;
+  if (body.maxOutputTokens !== undefined) patch.maxOutputTokens = body.maxOutputTokens;
   if (body.loopMode !== undefined) patch.loopMode = body.loopMode;
   if (body.phasePrompts !== undefined) patch.phasePrompts = body.phasePrompts;
   return store.updateAgent(id, patch);

@@ -29,6 +29,7 @@ export type ExecuteToolFn = (
 export interface LoopOptions {
   agentId: string;
   sessionId: string;
+  providerId: string;
   messages: LoopMessage[];
   model: string;
   reasoningEffort?: string;

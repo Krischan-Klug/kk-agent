@@ -1,8 +1,6 @@
 import type { Request, Response } from "express";
 import {
   getModels,
-  switchModel,
-  getActiveModel,
   getActiveProviderId,
   getAllModelSettings,
   setModelSettings,
@@ -15,33 +13,25 @@ import {
 } from "./service.js";
 import type { ModelSettings, ProviderConfig } from "./types.js";
 
-/* ── Model endpoints (unchanged) ── */
-
-export async function listModels(_req: Request, res: Response): Promise<Response> {
-  const models = await getModels();
+export async function listModels(req: Request, res: Response): Promise<Response> {
+  const providerId = typeof req.query.providerId === "string" ? req.query.providerId : undefined;
+  const activeProviderId = providerId ?? getActiveProviderId();
+  const models = await getModels(activeProviderId);
   return res.json({
     models,
-    activeModel: getActiveModel(),
-    activeProviderId: getActiveProviderId(),
-    modelSettings: getAllModelSettings(),
+    activeProviderId,
+    modelSettings: getAllModelSettings(activeProviderId),
   });
 }
 
 export async function doSetModelSettings(req: Request, res: Response): Promise<Response> {
-  const modelId = req.params.modelId;
-  const settings = req.body as ModelSettings;
-  await setModelSettings(modelId, settings);
-  return res.json({ modelId, settings });
+  const { providerId, settings } = req.body as { providerId?: string; settings?: ModelSettings };
+  if (!providerId || !settings) {
+    return res.status(400).json({ error: "providerId and settings are required" });
+  }
+  await setModelSettings(providerId, req.params.modelId, settings);
+  return res.json({ providerId, modelId: req.params.modelId, settings });
 }
-
-export async function doSwitchModel(req: Request, res: Response): Promise<Response> {
-  const { model } = req.body as { model?: string };
-  if (!model) return res.status(400).json({ error: "model is required" });
-  await switchModel(model);
-  return res.json({ activeModel: getActiveModel() });
-}
-
-/* ── Provider CRUD ── */
 
 export async function doListProviders(_req: Request, res: Response): Promise<Response> {
   return res.json(listProviders());
@@ -49,8 +39,8 @@ export async function doListProviders(_req: Request, res: Response): Promise<Res
 
 export async function doAddProvider(req: Request, res: Response): Promise<Response> {
   const body = req.body as Omit<ProviderConfig, "id">;
-  if (!body.name || !body.type) {
-    return res.status(400).json({ error: "name and type are required" });
+  if (!body.name || !body.baseUrl) {
+    return res.status(400).json({ error: "name and baseUrl are required" });
   }
   const provider = await addProvider(body);
   return res.status(201).json(provider);
@@ -81,8 +71,7 @@ export async function doActivateProvider(req: Request, res: Response): Promise<R
 
 export async function doTestProvider(req: Request, res: Response): Promise<Response> {
   try {
-    const result = await testProvider(req.params.id);
-    return res.json(result);
+    return res.json(await testProvider(req.params.id));
   } catch (err) {
     return res.json({ ok: false, error: (err as Error).message });
   }

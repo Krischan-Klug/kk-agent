@@ -1,7 +1,6 @@
 import { Router } from "express";
 import {
   listModels,
-  doSwitchModel,
   doSetModelSettings,
   doListProviders,
   doAddProvider,
@@ -13,12 +12,9 @@ import {
 
 const router = Router();
 
-/* Model endpoints (unchanged) */
 router.get("/models", listModels);
 router.put("/models/:modelId/settings", doSetModelSettings);
-router.post("/switch", doSwitchModel);
 
-/* Provider CRUD */
 router.get("/providers", doListProviders);
 router.post("/providers", doAddProvider);
 router.put("/providers/:id", doUpdateProvider);

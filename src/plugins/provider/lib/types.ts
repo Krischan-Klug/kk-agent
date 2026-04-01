@@ -12,6 +12,7 @@ export interface UnifiedToolCall {
 }
 
 export interface UnifiedRequest {
+  providerId?: string;
   model: string;
   messages: UnifiedMessage[];
   tools?: UnifiedToolDefinition[];

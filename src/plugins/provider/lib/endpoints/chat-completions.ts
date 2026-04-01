@@ -37,24 +37,31 @@ export async function chat(
     choices: Array<{
       message: {
         content?: string | null;
+        reasoning_content?: string | null;
         tool_calls?: Array<{ id: string; function: { name: string; arguments: string } }>;
       };
       finish_reason: string;
     }>;
-    usage?: { prompt_tokens?: number; completion_tokens?: number; reasoning_tokens?: number };
+    usage?: {
+      prompt_tokens?: number;
+      completion_tokens?: number;
+      reasoning_tokens?: number;
+      completion_tokens_details?: { reasoning_tokens?: number };
+    };
   };
 
   const choice = data.choices[0];
 
   return {
     content: choice.message.content ?? "",
+    reasoning: choice.message.reasoning_content ?? undefined,
     tool_calls: parseToolCalls(choice.message.tool_calls),
     finishReason: mapFinishReason(choice.finish_reason),
     stats: data.usage
       ? {
           inputTokens: data.usage.prompt_tokens ?? 0,
           outputTokens: data.usage.completion_tokens ?? 0,
-          reasoningTokens: data.usage.reasoning_tokens ?? 0,
+          reasoningTokens: data.usage.reasoning_tokens ?? data.usage.completion_tokens_details?.reasoning_tokens ?? 0,
           source: "provider",
         }
       : undefined,
@@ -87,7 +94,12 @@ export async function chatStream(
   let inThink = false;
   const toolCallDeltas: Map<number, { id: string; name: string; args: string }> = new Map();
   let finishReason: UnifiedResponse["finishReason"] = "stop";
-  let usage: { prompt_tokens?: number; completion_tokens?: number; reasoning_tokens?: number } | undefined;
+  let usage: {
+    prompt_tokens?: number;
+    completion_tokens?: number;
+    reasoning_tokens?: number;
+    completion_tokens_details?: { reasoning_tokens?: number };
+  } | undefined;
 
   await readSSEStream(res, (parsed) => {
     const choices = parsed.choices as
@@ -166,12 +178,12 @@ export async function chatStream(
   }
 
   const stats = usage
-    ? {
-        inputTokens: usage.prompt_tokens ?? 0,
-        outputTokens: usage.completion_tokens ?? 0,
-        reasoningTokens: usage.reasoning_tokens ?? 0,
-        source: "provider" as const,
-      }
+      ? {
+          inputTokens: usage.prompt_tokens ?? 0,
+          outputTokens: usage.completion_tokens ?? 0,
+          reasoningTokens: usage.reasoning_tokens ?? usage.completion_tokens_details?.reasoning_tokens ?? 0,
+          source: "provider" as const,
+        }
     : undefined;
 
   if (stats) onChunk({ type: "stats", stats });

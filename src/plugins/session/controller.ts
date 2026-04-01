@@ -16,7 +16,7 @@ export async function doCreate(req: Request, res: Response): Promise<Response> {
   try {
     const body = req.body as CreateSessionBody;
     if (!body.agentId) return res.status(400).json({ error: "agentId is required" });
-    const session = createSession(body);
+    const session = await createSession(body);
     return res.status(201).json(session);
   } catch (err) {
     return res.status(400).json({ error: (err as Error).message });
@@ -87,14 +87,15 @@ export async function doChatStream(req: Request, res: Response): Promise<void> {
 
 export async function doPatch(req: Request, res: Response): Promise<Response> {
   try {
-    const { agentId, model, activeToolIds, activeMcpIds, reasoningEffort, temperature } = req.body as PatchSessionBody;
-    const session = patchSession(req.params.id, {
+    const { agentId, model, activeToolIds, activeMcpIds, reasoningEffort, temperature, maxOutputTokens } = req.body as PatchSessionBody;
+    const session = await patchSession(req.params.id, {
       agentId,
       model,
       activeToolIds,
       activeMcpIds,
       reasoningEffort,
       temperature,
+      maxOutputTokens,
     });
     return res.json(session);
   } catch (err) {

@@ -3,6 +3,7 @@ import type { AgentLoopState, ReasoningEffort } from "../agent/types.js";
 export interface SessionState {
   id: string;
   name: string;
+  providerId: string;
   model: string;
   agentId: string;
   activeToolIds: string[];
@@ -10,6 +11,7 @@ export interface SessionState {
   systemPrompt: string;
   reasoningEffort?: ReasoningEffort;
   temperature?: number;
+  maxOutputTokens?: number;
   messages: SessionMessage[];
   createdAt: string;
   updatedAt: string;
@@ -30,6 +32,7 @@ export interface CreateSessionBody {
   activeMcpIds?: string[];
   reasoningEffort?: ReasoningEffort;
   temperature?: number;
+  maxOutputTokens?: number;
 }
 
 export interface PatchSessionBody {
@@ -39,6 +42,7 @@ export interface PatchSessionBody {
   activeMcpIds?: string[];
   reasoningEffort?: ReasoningEffort;
   temperature?: number;
+  maxOutputTokens?: number;
 }
 
 export interface ChatBody {

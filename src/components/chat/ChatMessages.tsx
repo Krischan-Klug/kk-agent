@@ -125,6 +125,20 @@ const RoleLabel = styled.div`
   display: flex;
   align-items: center;
   gap: var(--space-sm);
+  width: 100%;
+`;
+
+const RoleMetaGroup = styled.button`
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-sm);
+  margin-left: auto;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  color: inherit;
+  font: inherit;
 `;
 
 const CollapsibleCard = styled.details`
@@ -360,23 +374,6 @@ const LoadingWrap = styled.div`
   align-self: flex-start;
 `;
 
-const IterationSummaryBar = styled.div`
-  display: flex;
-  align-items: center;
-  gap: var(--space-sm);
-  padding: var(--space-sm) 0;
-  margin-bottom: var(--space-sm);
-  border-bottom: 1px dashed var(--border);
-  cursor: pointer;
-  user-select: none;
-  font-size: var(--font-size-sm);
-  color: var(--text-secondary);
-
-  &:hover {
-    color: var(--text-primary);
-  }
-`;
-
 const IterationSection = styled.div`
   padding-left: var(--space-md);
   border-left: 2px solid var(--border);
@@ -529,21 +526,25 @@ export default function ChatMessages({
       <MessageBubble key={turnKey} $role="assistant">
         <RoleLabel>
           <Badge variant="info">{currentAgentName}</Badge>
+          {hasMultiple && (
+            <RoleMetaGroup
+              type="button"
+              onClick={() => toggleTurn(turnKey)}
+              aria-label={isExpanded ? "Details ausblenden" : "Details einblenden"}
+              title={isExpanded ? "Details ausblenden" : "Details einblenden"}
+            >
+              <IterationPill>
+                {iterations.length} Iteration{iterations.length > 1 ? "en" : ""}
+              </IterationPill>
+              {totalToolCalls > 0 && (
+                <PhasePill>
+                  {totalToolCalls} Tool Call{totalToolCalls > 1 ? "s" : ""}
+                </PhasePill>
+              )}
+              <ExpandArrow $expanded={isExpanded}>&#9654;</ExpandArrow>
+            </RoleMetaGroup>
+          )}
         </RoleLabel>
-
-        {hasMultiple && (
-          <IterationSummaryBar onClick={() => toggleTurn(turnKey)}>
-            <IterationPill>
-              {iterations.length} Iteration{iterations.length > 1 ? "en" : ""}
-            </IterationPill>
-            {totalToolCalls > 0 && (
-              <PhasePill>
-                {totalToolCalls} Tool Call{totalToolCalls > 1 ? "s" : ""}
-              </PhasePill>
-            )}
-            <ExpandArrow $expanded={isExpanded}>&#9654;</ExpandArrow>
-          </IterationSummaryBar>
-        )}
 
         {isExpanded && iterations.map((iteration, i) => {
           const tc = iteration.assistant.tool_calls ?? [];

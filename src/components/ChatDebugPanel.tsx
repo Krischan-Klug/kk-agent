@@ -1,10 +1,14 @@
+import { useEffect, useState } from "react";
 import styled from "styled-components";
-import type { McpListItem, SessionState } from "@/types/api";
+import type { McpListItem, SessionState, TaskItem, MemoryFact, AgentLoopState } from "@/types/api";
 import Badge from "@/components/Badge";
+import Button from "@/components/Button";
+import Input from "@/components/Input";
+import TextArea from "@/components/TextArea";
 import ModelSelect from "@/components/ModelSelect";
 import McpSelect from "@/components/McpSelect";
 
-export type ChatDebugTab = "prompt" | "tools" | "session" | "messages";
+export type ChatDebugTab = "prompt" | "tools" | "session" | "messages" | "tasks" | "memory";
 
 const DebugPanel = styled.div`
   border: 1px solid var(--border);
@@ -63,32 +67,151 @@ const DebugContent = styled.pre`
   flex: 1;
 `;
 
+const EditorWrap = styled.div`
+  padding: var(--space-md);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+  overflow-y: auto;
+  flex: 1;
+`;
+
+const TaskRow = styled.div`
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 140px minmax(0, 1fr) auto;
+  gap: var(--space-sm);
+  align-items: start;
+
+  @media (max-width: 840px) {
+    grid-template-columns: 1fr;
+  }
+`;
+
+const InlineSelect = styled.select`
+  width: 100%;
+  padding: 8px 12px;
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  font-size: var(--font-size-base);
+  outline: none;
+
+  &:focus {
+    border-color: var(--border-focus);
+  }
+`;
+
+const RowActions = styled.div`
+  display: flex;
+  gap: var(--space-sm);
+  flex-wrap: wrap;
+`;
+
+const Hint = styled.div`
+  font-size: var(--font-size-sm);
+  color: var(--text-secondary);
+`;
+
 type Props = {
   open: boolean;
-  debugTab: ChatDebugTab;
-  onTabChange: (tab: ChatDebugTab) => void;
+  debugTab: ChatDebugTab | null;
+  onTabChange: (tab: ChatDebugTab | null) => void;
   session: SessionState | null;
+  loopState: AgentLoopState | null;
   debugPrompt: string | null;
   debugTools: McpListItem[];
+  debugTasks: TaskItem[];
+  debugSessionFacts: MemoryFact[];
+  debugUserFacts: MemoryFact[];
   models: string[];
   mcps: McpListItem[];
   onModelSwitch: (model: string) => void;
   onMcpToggle: (mcpId: string, enabled: boolean) => void;
+  onSaveTasks: (tasks: TaskItem[]) => Promise<void>;
+  onSaveSessionFacts: (facts: MemoryFact[]) => Promise<void>;
+  onSaveUserFacts: (facts: MemoryFact[]) => Promise<void>;
 };
+
+function parseFactsDraft(value: string): MemoryFact[] {
+  return value
+    .split("\n")
+    .map((line, index) => ({ id: `fact-${index + 1}`, text: line.trim() }))
+    .filter((fact) => fact.text.length > 0);
+}
+
+function toFactDraft(facts: MemoryFact[]): string {
+  return facts.map((fact) => fact.text).join("\n");
+}
 
 export default function ChatDebugPanel({
   open,
   debugTab,
   onTabChange,
   session,
+  loopState,
   debugPrompt,
   debugTools,
+  debugTasks,
+  debugSessionFacts,
+  debugUserFacts,
   models,
   mcps,
   onModelSwitch,
   onMcpToggle,
+  onSaveTasks,
+  onSaveSessionFacts,
+  onSaveUserFacts,
 }: Props) {
+  const [taskDraft, setTaskDraft] = useState<TaskItem[]>(debugTasks);
+  const [sessionMemoryDraft, setSessionMemoryDraft] = useState(toFactDraft(debugSessionFacts));
+  const [userMemoryDraft, setUserMemoryDraft] = useState(toFactDraft(debugUserFacts));
+  const [saving, setSaving] = useState<"tasks" | "session" | "user" | null>(null);
+
+  useEffect(() => setTaskDraft(debugTasks), [debugTasks]);
+  useEffect(() => setSessionMemoryDraft(toFactDraft(debugSessionFacts)), [debugSessionFacts]);
+  useEffect(() => setUserMemoryDraft(toFactDraft(debugUserFacts)), [debugUserFacts]);
+
   if (!open || !session) return null;
+
+  function updateTask(index: number, patch: Partial<TaskItem>) {
+    setTaskDraft((prev) => prev.map((task, i) => (i === index ? { ...task, ...patch } : task)));
+  }
+
+  function addTask() {
+    setTaskDraft((prev) => [...prev, { id: `task-${Date.now()}`, title: "", status: "pending", notes: "" }]);
+  }
+
+  function removeTask(index: number) {
+    setTaskDraft((prev) => prev.filter((_, i) => i !== index));
+  }
+
+  async function saveTasks() {
+    setSaving("tasks");
+    try {
+      await onSaveTasks(taskDraft);
+    } finally {
+      setSaving(null);
+    }
+  }
+
+  async function saveSessionMemory() {
+    setSaving("session");
+    try {
+      await onSaveSessionFacts(parseFactsDraft(sessionMemoryDraft));
+    } finally {
+      setSaving(null);
+    }
+  }
+
+  async function saveUserMemory() {
+    setSaving("user");
+    try {
+      await onSaveUserFacts(parseFactsDraft(userMemoryDraft));
+    } finally {
+      setSaving(null);
+    }
+  }
 
   let content = "";
 
@@ -96,24 +219,22 @@ export default function ChatDebugPanel({
     content = debugPrompt ?? "Lade...";
   } else if (debugTab === "tools") {
     const activeTools = debugTools.filter((m) => session.activeMcpIds.includes(m.id));
-    if (activeTools.length === 0) {
-      content = "Keine aktiven Tools.";
-    } else {
-      content = activeTools
-        .map((m) => {
-          const header = `-- ${m.emoji || "Tool"} ${m.name} (${m.id}) --`;
-          const tools = m.tools.map((t) => {
-            const params = t.inputSchema?.properties
-              ? Object.entries(t.inputSchema.properties as Record<string, { type?: string; description?: string }>)
-                  .map(([k, v]) => `    ${k}: ${v.type ?? "any"} - ${v.description ?? ""}`)
-                  .join("\n")
-              : "    (keine Parameter)";
-            return `  ${t.name}\n    ${t.description ?? ""}\n${params}`;
-          });
-          return `${header}\n${tools.join("\n\n")}`;
-        })
-        .join("\n\n");
-    }
+    content = activeTools.length === 0
+      ? "Keine aktiven Tools."
+      : activeTools
+          .map((m) => {
+            const header = `-- ${m.emoji || "Tool"} ${m.name} (${m.id}) --`;
+            const tools = m.tools.map((t) => {
+              const params = t.inputSchema?.properties
+                ? Object.entries(t.inputSchema.properties as Record<string, { type?: string; description?: string }>)
+                    .map(([k, v]) => `    ${k}: ${v.type ?? "any"} - ${v.description ?? ""}`)
+                    .join("\n")
+                : "    (keine Parameter)";
+              return `  ${t.name}\n    ${t.description ?? ""}\n${params}`;
+            });
+            return `${header}\n${tools.join("\n\n")}`;
+          })
+          .join("\n\n");
   } else if (debugTab === "session") {
     content = JSON.stringify(
       {
@@ -125,6 +246,8 @@ export default function ChatDebugPanel({
         reasoningEffort: session.reasoningEffort ?? "default",
         temperature: session.temperature ?? "default",
         messageCount: session.messages.length,
+        loopPhase: loopState?.phase ?? null,
+        loopStatus: loopState?.status ?? null,
         createdAt: session.createdAt,
       },
       null,
@@ -144,14 +267,21 @@ export default function ChatDebugPanel({
       .join("\n\n");
   }
 
+  function toggleTab(tab: ChatDebugTab) {
+    onTabChange(debugTab === tab ? null : tab);
+  }
+
   return (
     <DebugPanel>
       <DebugTabs>
-        <DebugTab $active={debugTab === "prompt"} onClick={() => onTabChange("prompt")}>System Prompt</DebugTab>
-        <DebugTab $active={debugTab === "tools"} onClick={() => onTabChange("tools")}>Tools</DebugTab>
-        <DebugTab $active={debugTab === "session"} onClick={() => onTabChange("session")}>Session</DebugTab>
-        <DebugTab $active={debugTab === "messages"} onClick={() => onTabChange("messages")}>Messages</DebugTab>
+        <DebugTab $active={debugTab === "prompt"} onClick={() => toggleTab("prompt")}>System Prompt</DebugTab>
+        <DebugTab $active={debugTab === "tools"} onClick={() => toggleTab("tools")}>Tools</DebugTab>
+        <DebugTab $active={debugTab === "session"} onClick={() => toggleTab("session")}>Session</DebugTab>
+        <DebugTab $active={debugTab === "messages"} onClick={() => toggleTab("messages")}>Messages</DebugTab>
+        <DebugTab $active={debugTab === "tasks"} onClick={() => toggleTab("tasks")}>Tasks</DebugTab>
+        <DebugTab $active={debugTab === "memory"} onClick={() => toggleTab("memory")}>Memory</DebugTab>
         <DebugControls>
+          {loopState && <Badge variant="info">{loopState.phase}</Badge>}
           {models.length > 0 ? (
             <ModelSelect models={models} currentModel={session.model} onSelect={onModelSwitch} />
           ) : (
@@ -160,7 +290,79 @@ export default function ChatDebugPanel({
           <McpSelect mcps={mcps} activeMcpIds={session.activeMcpIds} onToggle={onMcpToggle} />
         </DebugControls>
       </DebugTabs>
-      <DebugContent>{content}</DebugContent>
+
+      {(debugTab === "prompt" || debugTab === "tools" || debugTab === "session" || debugTab === "messages") && (
+        <DebugContent>{content}</DebugContent>
+      )}
+
+      {debugTab === "tasks" && (
+        <EditorWrap>
+          <Hint>Tasks nur im Debug pflegen, damit der normale Chat sauber bleibt.</Hint>
+          {taskDraft.map((task, index) => (
+            <TaskRow key={task.id}>
+              <Input
+                value={task.title}
+                onChange={(e) => updateTask(index, { title: e.target.value })}
+                placeholder="Task-Titel"
+              />
+              <InlineSelect
+                value={task.status}
+                onChange={(e) => updateTask(index, { status: e.target.value as TaskItem["status"] })}
+              >
+                <option value="pending">pending</option>
+                <option value="in_progress">in_progress</option>
+                <option value="completed">completed</option>
+              </InlineSelect>
+              <Input
+                value={task.notes ?? ""}
+                onChange={(e) => updateTask(index, { notes: e.target.value })}
+                placeholder="Notizen"
+              />
+              <Button variant="secondary" size="sm" onClick={() => removeTask(index)}>
+                Entfernen
+              </Button>
+            </TaskRow>
+          ))}
+          <RowActions>
+            <Button variant="secondary" size="sm" onClick={addTask}>Task hinzufuegen</Button>
+            <Button size="sm" onClick={() => void saveTasks()} disabled={saving === "tasks"}>
+              {saving === "tasks" ? "Speichert..." : "Tasks speichern"}
+            </Button>
+          </RowActions>
+        </EditorWrap>
+      )}
+
+      {debugTab === "memory" && (
+        <EditorWrap>
+          <Hint>Session und User Memory liegen nur noch im Debug-Bereich.</Hint>
+          <div>
+            <Hint>Session Memory, eine Zeile pro Fakt.</Hint>
+            <TextArea
+              value={sessionMemoryDraft}
+              onChange={(e) => setSessionMemoryDraft(e.target.value)}
+              placeholder={"Projekt nutzt Plugin-Architektur\nUser will kurze Antworten"}
+            />
+            <RowActions style={{ marginTop: "var(--space-sm)" }}>
+              <Button size="sm" onClick={() => void saveSessionMemory()} disabled={saving === "session"}>
+                {saving === "session" ? "Speichert..." : "Session Memory speichern"}
+              </Button>
+            </RowActions>
+          </div>
+          <div>
+            <Hint>User Memory, eine Zeile pro Fakt.</Hint>
+            <TextArea
+              value={userMemoryDraft}
+              onChange={(e) => setUserMemoryDraft(e.target.value)}
+              placeholder={"User bevorzugt Deutsch\nAntworten bitte knapp halten"}
+            />
+            <RowActions style={{ marginTop: "var(--space-sm)" }}>
+              <Button size="sm" onClick={() => void saveUserMemory()} disabled={saving === "user"}>
+                {saving === "user" ? "Speichert..." : "User Memory speichern"}
+              </Button>
+            </RowActions>
+          </div>
+        </EditorWrap>
+      )}
     </DebugPanel>
   );
 }

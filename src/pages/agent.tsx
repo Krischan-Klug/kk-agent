@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import styled from "styled-components";
-import { agent as agentApi, mcp as mcpApi, provider as providerApi } from "@/lib/api";
+import { agent as agentApi, mcp as mcpApi, provider as providerApi, tools as toolsApi } from "@/lib/api";
 import { cloneDraft } from "@/lib/draft";
 import { logUiError } from "@/lib/uiLogger";
 import type { AgentDefinition, CreateAgentBody, McpListItem } from "@/types/api";
@@ -19,6 +19,7 @@ const PageLayout = styled.div`
 export default function AgentPage() {
   const [agents, setAgents] = useState<AgentDefinition[]>([]);
   const [mcps, setMcps] = useState<McpListItem[]>([]);
+  const [internalTools, setInternalTools] = useState<McpListItem[]>([]);
   const [models, setModels] = useState<string[]>([]);
   const [systemVariables, setSystemVariables] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
@@ -30,10 +31,11 @@ export default function AgentPage() {
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    Promise.all([agentApi.list(), mcpApi.list(), agentApi.systemVariables(), providerApi.getModels()])
-      .then(([agentList, mcpList, vars, providerModels]) => {
+    Promise.all([agentApi.list(), mcpApi.list(), toolsApi.list(), agentApi.systemVariables(), providerApi.getModels()])
+      .then(([agentList, mcpList, toolList, vars, providerModels]) => {
         setAgents(agentList);
         setMcps(mcpList);
+        setInternalTools(toolList);
         setSystemVariables(vars.variables);
         setModels(providerModels.models.map((model) => model.id));
         if (agentList.length > 0) {
@@ -74,6 +76,8 @@ export default function AgentPage() {
         description: editAgent.description,
         systemPrompt: editAgent.systemPrompt,
         maxIterations: editAgent.maxIterations,
+        loopMode: editAgent.loopMode,
+        phasePrompts: editAgent.phasePrompts,
         mcpIds: editAgent.mcpIds,
         mcpInstructions: editAgent.mcpInstructions,
         variables: editAgent.variables,
@@ -115,7 +119,7 @@ export default function AgentPage() {
       <PageLayout>
         <AgentList
           agents={agents}
-          mcps={mcps}
+          mcps={[...internalTools, ...mcps]}
           selectedId={selectedId}
           onSelect={selectAgent}
           onCreate={() => setShowCreate(true)}
@@ -123,6 +127,7 @@ export default function AgentPage() {
         <AgentEditor
           agent={editAgent}
           mcps={mcps}
+          internalTools={internalTools}
           models={models}
           systemVariables={systemVariables}
           saving={saving}

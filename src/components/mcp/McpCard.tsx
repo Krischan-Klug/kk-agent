@@ -171,7 +171,7 @@ export default function McpCard({
                   <Input value={editForm.workingDirectory} onChange={(e) => onEditFormChange({ ...editForm, workingDirectory: e.target.value })} />
                 </FormField>
               )}
-              {(mcp.systemKey === "web-search" || mcp.systemKey === "user-interaction") && (
+              {(mcp.systemKey === "web-search" || mcp.systemKey === "user-interaction" || mcp.systemKey === "task" || mcp.systemKey === "memory") && (
                 <ConfigDetail>Keine weitere System-Konfiguration in v1.</ConfigDetail>
               )}
             </>

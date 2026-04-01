@@ -178,7 +178,7 @@ export default function McpPage() {
             onSaveEdit={(restart) => void handleSaveEdit(mcp, restart)}
           />
         ))}
-        {mcps.length === 0 && <EmptyHint>Keine MCP Server konfiguriert.</EmptyHint>}
+        {mcps.length === 0 && <EmptyHint>Keine externen MCP Server konfiguriert.</EmptyHint>}
       </Grid>
       <CreateMcpModal
         open={showCreate}

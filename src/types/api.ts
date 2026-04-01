@@ -44,6 +44,20 @@ export interface UpdateSessionBody {
   temperature?: number;
 }
 
+export type TaskStatus = "pending" | "in_progress" | "completed";
+
+export interface TaskItem {
+  id: string;
+  title: string;
+  status: TaskStatus;
+  notes?: string;
+}
+
+export interface MemoryFact {
+  id: string;
+  text: string;
+}
+
 /* ── MCP ── */
 
 export interface McpServerConfig {
@@ -53,7 +67,7 @@ export interface McpServerConfig {
   instruction: string;
   emoji?: string;
   source?: "system" | "custom";
-  systemKey?: "filesystem" | "web-search" | "terminal" | "user-interaction";
+  systemKey?: "filesystem" | "web-search" | "terminal" | "user-interaction" | "task" | "memory";
   systemConfig?: {
     rootPath?: string;
     workingDirectory?: string;
@@ -165,6 +179,12 @@ export interface UpdateMcpBody {
 /* ── Agent ── */
 
 export type ReasoningEffort = string;
+export type AgentLoopMode = "simple" | "plan_execute" | "full_verify";
+export interface AgentPhasePrompts {
+  planning?: string;
+  executing?: string;
+  verifying?: string;
+}
 
 export interface AgentDefinition {
   id: string;
@@ -178,6 +198,8 @@ export interface AgentDefinition {
   defaultModel?: string;
   reasoningEffort?: ReasoningEffort;
   temperature?: number;
+  loopMode: AgentLoopMode;
+  phasePrompts: AgentPhasePrompts;
   createdAt: string;
   updatedAt: string;
 }
@@ -186,6 +208,7 @@ export interface AgentLoopState {
   sessionId: string;
   agentId: string;
   status: "idle" | "running" | "completed" | "error";
+  phase: "planning" | "executing" | "verifying" | "completed" | "error";
   iteration: number;
   maxIterations: number;
   startedAt: string;
@@ -203,6 +226,8 @@ export interface CreateAgentBody {
   defaultModel?: string;
   reasoningEffort?: ReasoningEffort;
   temperature?: number;
+  loopMode?: AgentLoopMode;
+  phasePrompts?: AgentPhasePrompts;
 }
 
 export interface UpdateAgentBody {
@@ -216,6 +241,8 @@ export interface UpdateAgentBody {
   defaultModel?: string;
   reasoningEffort?: ReasoningEffort;
   temperature?: number;
+  loopMode?: AgentLoopMode;
+  phasePrompts?: AgentPhasePrompts;
 }
 
 export interface SystemVariablesResponse {
@@ -228,6 +255,26 @@ export interface AppDefaults {
   agent: {
     systemPrompt: string;
     maxIterations: number;
+    loopMode: AgentLoopMode;
+    phasePrompts: {
+      planningPrompt: string;
+      executingPrompt: string;
+      verifyingPrompt: string;
+    };
+    phaseGuidance: {
+      planning: string;
+      executing: string;
+      verifying: string;
+    };
+    promptSections: {
+      taskWithSession: string;
+      memoryWithSession: string;
+      toolRulesWithSession: string;
+    };
+  };
+  loop: {
+    verificationInstruction: string;
+    verificationRetryMessage: string;
   };
   retry: {
     emptyResponseInstruction: string;

@@ -3,7 +3,7 @@ import Link from "next/link";
 import { useRouter } from "next/router";
 import { session as sessionApi } from "@/lib/api";
 import type { SessionState } from "@/types/api";
-import { addAppEventListener, CHAT_DEBUG_TOGGLE_EVENT, emitAppEvent, SESSION_CHANGED_EVENT } from "@/lib/appEvents";
+import { addAppEventListener, emitAppEvent, SESSION_CHANGED_EVENT } from "@/lib/appEvents";
 import {
   clearActiveSessionId,
   getActiveSessionId,
@@ -29,13 +29,13 @@ import {
   SessionItem,
   SessionName,
   SessionAdd,
-  SessionDebug,
   SessionDelete,
 } from "./Sidebar.styled";
 
 const navItems = [
   { href: "/chat", emoji: "💬", label: "Chat" },
   { href: "/agent", emoji: "🤖", label: "Agents" },
+  { href: "/tools", emoji: "🧰", label: "Tools" },
   { href: "/mcp", emoji: "🛠️", label: "MCP" },
   { href: "/provider", emoji: "🔌", label: "Provider" },
   { href: "/settings/defaults", emoji: "⚙️", label: "Settings" },
@@ -66,7 +66,7 @@ export default function Sidebar() {
   }, []);
 
   useEffect(() => {
-    loadSessions();
+    void loadSessions();
     setActiveSessionIdState(getActiveSessionId());
     setCollapsed(getSidebarCollapsed());
 
@@ -158,23 +158,18 @@ export default function Sidebar() {
         <SidebarSectionRow $collapsed={collapsed}>
           <SidebarSection $collapsed={collapsed}>Sessions</SidebarSection>
           <SidebarSectionActions>
-            {router.pathname === "/chat" && (
-              <SessionDebug
-                type="button"
-                aria-label="Debug umschalten"
-                title="Debug umschalten"
-                onClick={() => emitAppEvent(CHAT_DEBUG_TOGGLE_EVENT)}
-              >
-                Debug
-              </SessionDebug>
-            )}
             <SessionAdd type="button" aria-label="Neue Session" title="Neue Session" onClick={() => void createSession()}>
               +
             </SessionAdd>
           </SidebarSectionActions>
         </SidebarSectionRow>
         {sessions.map((session) => (
-          <SessionItem key={session.id} $collapsed={collapsed} $active={session.id === activeSessionId} onClick={() => selectSession(session.id)}>
+          <SessionItem
+            key={session.id}
+            $collapsed={collapsed}
+            $active={session.id === activeSessionId}
+            onClick={() => selectSession(session.id)}
+          >
             <SessionName>{session.name || session.id.slice(0, 8)}</SessionName>
             <SessionDelete
               type="button"

@@ -278,6 +278,18 @@ const IterationPill = styled.span`
   flex-shrink: 0;
 `;
 
+const PhasePill = styled.span`
+  padding: 1px var(--space-sm);
+  background: var(--bg-elevated);
+  color: var(--text-secondary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  font-size: 11px;
+  font-weight: 500;
+  font-family: var(--font-mono);
+  flex-shrink: 0;
+`;
+
 const LoadingWrap = styled.div`
   align-self: flex-start;
 `;
@@ -372,7 +384,9 @@ export default function ChatMessages({
       <MessageBubble key={idx} $role={message.role}>
         {message.role !== "user" && (
           <RoleLabel>
-            <Badge variant="info">{currentAgentName}</Badge>
+            <Badge variant={message.role === "system" ? "warning" : "info"}>
+              {message.role === "system" ? "system" : currentAgentName}
+            </Badge>
           </RoleLabel>
         )}
 
@@ -417,6 +431,7 @@ export default function ChatMessages({
             <Badge variant="info">{currentAgentName}</Badge>
             <StreamingDot />
             {loopState && <IterationPill>Iteration {loopState.iteration}/{loopState.maxIterations}</IterationPill>}
+            {loopState && <PhasePill>{loopState.phase}</PhasePill>}
           </RoleLabel>
 
           {streamReasoning && (

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import styled from "styled-components";
-import { agent as agentApi, mcp as mcpApi, provider as providerApi, session as sessionApi } from "@/lib/api";
-import type { AgentDefinition, AgentLoopState, McpListItem, ModelInfo, ModelSettings, SessionState, StreamEvent } from "@/types/api";
+import { agent as agentApi, mcp as mcpApi, provider as providerApi, session as sessionApi, tools as toolsApi } from "@/lib/api";
+import type { AgentDefinition, AgentLoopState, McpListItem, MemoryFact, ModelInfo, ModelSettings, SessionState, StreamEvent, TaskItem } from "@/types/api";
 import { REASONING_LEVEL_DEFAULTS, REASONING_LEVELS } from "@/constants/reasoningDefaults";
 import Button from "@/components/Button";
 import Spinner from "@/components/Spinner";
@@ -32,6 +32,32 @@ const EmptyState = styled.div`
   color: var(--text-secondary);
 `;
 
+const FloatingDebugButton = styled.button`
+  position: fixed;
+  right: var(--space-lg);
+  bottom: var(--space-lg);
+  z-index: 40;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
+  padding: 2px var(--space-sm);
+  background: var(--accent-muted);
+  color: var(--accent);
+  border: 1px solid var(--accent);
+  border-radius: var(--radius-sm);
+  font-size: var(--font-size-sm);
+  font-weight: 500;
+  cursor: pointer;
+  white-space: nowrap;
+  box-shadow: var(--shadow-sm);
+
+  &:hover {
+    background: var(--accent);
+    color: var(--bg-base);
+    border-color: var(--accent);
+  }
+`;
+
 export default function ChatPage() {
   const [session, setSession] = useState<SessionState | null>(null);
   const [input, setInput] = useState("");
@@ -52,33 +78,71 @@ export default function ChatPage() {
   const [pendingPrompt, setPendingPrompt] = useState<PendingPrompt | null>(null);
   const [customAnswer, setCustomAnswer] = useState("");
   const [debugOpen, setDebugOpen] = useState(false);
-  const [debugTab, setDebugTab] = useState<ChatDebugTab>("prompt");
+  const [debugTab, setDebugTab] = useState<ChatDebugTab | null>("prompt");
   const [debugPrompt, setDebugPrompt] = useState<string | null>(null);
   const [debugTools, setDebugTools] = useState<McpListItem[]>([]);
+  const [tasks, setTasks] = useState<TaskItem[]>([]);
+  const [sessionFacts, setSessionFacts] = useState<MemoryFact[]>([]);
+  const [userFacts, setUserFacts] = useState<MemoryFact[]>([]);
   const { ref: messagesRef, scrollToBottom, handleScroll } = useChatAutoScroll();
+
+  function resetStreamingState() {
+    setStreaming(false);
+    setStreamContent("");
+    setStreamReasoning("");
+    setStreamToolCalls([]);
+    setStreamRetryNotices([]);
+    setLoopState(null);
+    setPendingPrompt(null);
+  }
+
+  const loadContextData = useCallback(async (sessionId: string) => {
+    try {
+      const [taskResult, sessionMemoryResult, userMemoryResult] = await Promise.all([
+        toolsApi.listTasks(sessionId),
+        toolsApi.listSessionMemory(sessionId),
+        toolsApi.listUserMemory(),
+      ]);
+      setTasks(taskResult.tasks);
+      setSessionFacts(sessionMemoryResult.facts);
+      setUserFacts(userMemoryResult.facts);
+    } catch (err) {
+      logUiError("chat-context-load", err);
+    }
+  }, []);
 
   const loadSession = useCallback(() => {
     const id = getActiveSessionId();
     if (!id) {
       setSession(null);
+      setTasks([]);
+      setSessionFacts([]);
+      setUserFacts([]);
       setLoading(false);
       return;
     }
 
     sessionApi
       .get(id)
-      .then(setSession)
+      .then((nextSession) => {
+        setSession(nextSession);
+        void loadContextData(nextSession.id);
+      })
       .catch(() => {
         clearActiveSessionId();
         setSession(null);
+        setTasks([]);
+        setSessionFacts([]);
+        setUserFacts([]);
       })
       .finally(() => setLoading(false));
-  }, []);
+  }, [loadContextData]);
 
   const loadDebugData = useCallback((sessionId: string) => {
     sessionApi.getPrompt(sessionId).then((result) => setDebugPrompt(result.systemPrompt)).catch(() => setDebugPrompt("[Fehler beim Laden]"));
     mcpApi.list().then(setDebugTools).catch(() => {});
-  }, []);
+    void loadContextData(sessionId);
+  }, [loadContextData]);
 
   useEffect(() => {
     loadSession();
@@ -165,9 +229,15 @@ export default function ChatPage() {
             setStreamToolCalls((prev) => [...prev, { id: event.toolCall.id, name: event.toolCall.name, arguments: event.toolCall.arguments }]);
             break;
           case "tool_result":
-            setStreamToolCalls((prev) => prev.map((toolCall) => toolCall.id === event.toolCallId
-              ? { ...toolCall, result: { content: event.content, isError: event.isError } }
-              : toolCall));
+            setStreamToolCalls((prev) => {
+              const matched = prev.find((toolCall) => toolCall.id === event.toolCallId);
+              if (matched && session && (matched.name === "update_tasks" || matched.name === "remember_facts")) {
+                void loadContextData(session.id);
+              }
+              return prev.map((toolCall) => toolCall.id === event.toolCallId
+                ? { ...toolCall, result: { content: event.content, isError: event.isError } }
+                : toolCall);
+            });
             break;
           case "loop_state":
             setLoopState(event.state);
@@ -182,29 +252,20 @@ export default function ChatPage() {
             break;
           case "done":
             setSession(event.session);
-            setStreaming(false);
-            setStreamContent("");
-            setStreamReasoning("");
-            setStreamToolCalls([]);
-            setStreamRetryNotices([]);
-            setLoopState(null);
-            setPendingPrompt(null);
+            void loadContextData(event.session.id);
+            resetStreamingState();
             emitAppEvent(SESSION_CHANGED_EVENT);
             if (debugOpen) loadDebugData(event.session.id);
             break;
           case "error":
             logUiError("chat-stream", event.message);
-            setStreaming(false);
-            setStreamRetryNotices([]);
-            setLoopState(null);
-            setPendingPrompt(null);
+            resetStreamingState();
             break;
         }
       });
     } catch (err) {
       logUiError("chat-stream", err);
-      setStreaming(false);
-      setLoopState(null);
+      resetStreamingState();
     } finally {
       setSending(false);
     }
@@ -212,7 +273,9 @@ export default function ChatPage() {
 
   async function updateSessionAndSet(body: Parameters<typeof sessionApi.update>[1]) {
     if (!session) return;
-    setSession(await sessionApi.update(session.id, body));
+    const nextSession = await sessionApi.update(session.id, body);
+    setSession(nextSession);
+    await loadContextData(nextSession.id);
   }
 
   async function handleModelSwitch(model: string) {
@@ -271,8 +334,38 @@ export default function ChatPage() {
       const newSession = await createAndActivateSession(agents, resolveDefaultSessionAgentId(agents));
       setSession(newSession);
       setTokenStats(null);
+      await loadContextData(newSession.id);
     } catch (err) {
       logUiError("chat-new-session", err);
+    }
+  }
+
+  async function handleSaveTasks(nextTasks: TaskItem[]) {
+    if (!session) return;
+    try {
+      const result = await toolsApi.replaceTasks(session.id, nextTasks);
+      setTasks(result.tasks);
+    } catch (err) {
+      logUiError("chat-save-tasks", err);
+    }
+  }
+
+  async function handleSaveSessionFacts(nextFacts: MemoryFact[]) {
+    if (!session) return;
+    try {
+      const result = await toolsApi.replaceSessionMemory(session.id, nextFacts);
+      setSessionFacts(result.facts);
+    } catch (err) {
+      logUiError("chat-save-session-memory", err);
+    }
+  }
+
+  async function handleSaveUserFacts(nextFacts: MemoryFact[]) {
+    try {
+      const result = await toolsApi.replaceUserMemory(nextFacts);
+      setUserFacts(result.facts);
+    } catch (err) {
+      logUiError("chat-save-user-memory", err);
     }
   }
 
@@ -313,12 +406,19 @@ export default function ChatPage() {
         debugTab={debugTab}
         onTabChange={setDebugTab}
         session={session}
+        loopState={loopState}
         debugPrompt={debugPrompt}
         debugTools={debugTools}
+        debugTasks={tasks}
+        debugSessionFacts={sessionFacts}
+        debugUserFacts={userFacts}
         models={models}
         mcps={mcps}
         onModelSwitch={handleModelSwitch}
         onMcpToggle={handleMcpToggle}
+        onSaveTasks={handleSaveTasks}
+        onSaveSessionFacts={handleSaveSessionFacts}
+        onSaveUserFacts={handleSaveUserFacts}
       />
       <ChatMessages
         session={session}
@@ -355,6 +455,14 @@ export default function ChatPage() {
         onAgentSwitch={handleAgentSwitch}
         onSend={handleSend}
       />
+      <FloatingDebugButton
+        type="button"
+        aria-label="Debug umschalten"
+        title="Debug umschalten"
+        onClick={() => emitAppEvent(CHAT_DEBUG_TOGGLE_EVENT)}
+      >
+        Debug
+      </FloatingDebugButton>
     </ChatWrapper>
   );
 }

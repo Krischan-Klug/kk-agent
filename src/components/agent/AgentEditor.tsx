@@ -1,5 +1,5 @@
 import styled from "styled-components";
-import type { AgentDefinition, McpListItem } from "@/types/api";
+import type { AgentDefinition, McpListItem, AgentLoopMode } from "@/types/api";
 import { REASONING_LEVELS } from "@/constants/reasoningDefaults";
 import Badge from "@/components/Badge";
 import Button from "@/components/Button";
@@ -79,9 +79,16 @@ const StatusDot = styled.span<{ $running: boolean }>`
   flex-shrink: 0;
 `;
 
+const PhaseHint = styled.div`
+  display: flex;
+  gap: var(--space-sm);
+  flex-wrap: wrap;
+`;
+
 type Props = {
   agent: AgentDefinition | null;
   mcps: McpListItem[];
+  internalTools: McpListItem[];
   models: string[];
   systemVariables: string[];
   saving: boolean;
@@ -92,13 +99,24 @@ type Props = {
   onDelete: () => void;
 };
 
+const LOOP_MODE_OPTIONS: { value: AgentLoopMode; label: string; phases: string[] }[] = [
+  { value: "simple", label: "Simple", phases: ["executing"] },
+  { value: "plan_execute", label: "Plan + Execute", phases: ["planning", "executing"] },
+  { value: "full_verify", label: "Full Verify", phases: ["planning", "executing", "verifying"] },
+];
+
 function updateAgentVariables(agent: AgentDefinition, variables: Record<string, string>): AgentDefinition {
   return { ...agent, variables };
+}
+
+function getModePhases(loopMode: AgentLoopMode): string[] {
+  return LOOP_MODE_OPTIONS.find((option) => option.value === loopMode)?.phases ?? ["executing"];
 }
 
 export default function AgentEditor({
   agent,
   mcps,
+  internalTools,
   models,
   systemVariables,
   saving,
@@ -111,15 +129,17 @@ export default function AgentEditor({
   if (!agent) {
     return (
       <EditorArea>
-        <EmptyHint>Wähle einen Agent aus oder erstelle einen neuen.</EmptyHint>
+        <EmptyHint>Waehle einen Agent aus oder erstelle einen neuen.</EmptyHint>
       </EditorArea>
     );
   }
 
+  const activePhases = new Set(getModePhases(agent.loopMode));
+
   return (
     <EditorArea>
       <Section>
-        <SectionTitle>📋 Agent Info</SectionTitle>
+        <SectionTitle>Agent Info</SectionTitle>
         <FormRow>
           <FormField $flex={1}>
             <FieldLabel>Name</FieldLabel>
@@ -169,18 +189,29 @@ export default function AgentEditor({
       </Section>
 
       <Section>
-        <SectionTitle>📝 System Prompt</SectionTitle>
+        <SectionTitle>System Prompt</SectionTitle>
         <TextArea
           value={agent.systemPrompt}
           onChange={(e) => onChange({ ...agent, systemPrompt: e.target.value })}
           rows={15}
-          placeholder="Der System-Prompt für diesen Agent..."
+          placeholder="Der System-Prompt fuer diesen Agent..."
         />
       </Section>
 
       <Section>
-        <SectionTitle>🔄 Iteration</SectionTitle>
+        <SectionTitle>Loop</SectionTitle>
         <FormRow>
+          <FormField>
+            <FieldLabel>Loop Mode</FieldLabel>
+            <Select
+              value={agent.loopMode}
+              onChange={(e) => onChange({ ...agent, loopMode: e.target.value as AgentLoopMode })}
+            >
+              {LOOP_MODE_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>{option.label}</option>
+              ))}
+            </Select>
+          </FormField>
           <FormField>
             <FieldLabel>Max Iterationen</FieldLabel>
             <Input
@@ -191,16 +222,122 @@ export default function AgentEditor({
             />
           </FormField>
           <FormField $flex={1}>
-            <FieldLabel>&nbsp;</FieldLabel>
-            <MutedText>
-              Der Agent iteriert (LLM → Tools → repeat) bis keine Tool-Calls mehr kommen oder das Limit erreicht ist.
-            </MutedText>
+            <FieldLabel>Aktive Phasen</FieldLabel>
+            <PhaseHint>
+              {["planning", "executing", "verifying"].map((phase) => (
+                <Badge key={phase} variant={activePhases.has(phase) ? "success" : "default"}>
+                  {phase}
+                </Badge>
+              ))}
+            </PhaseHint>
           </FormField>
         </FormRow>
+        <MutedText>
+          `simple` verhaelt sich wie der alte Iterations-Loop. `plan_execute` fuegt Planung hinzu. `full_verify`
+          haengt am Ende eine interne Verifikation an.
+        </MutedText>
       </Section>
 
       <Section>
-        <SectionTitle>🔧 MCP-Tools</SectionTitle>
+        <SectionTitle>Phase Prompt Overrides</SectionTitle>
+        <MutedText>
+          Wenn gesetzt, ersetzt der Agent den jeweiligen Default-Text aus den Settings komplett.
+        </MutedText>
+        <FormField>
+          <FieldLabel>Planning Override</FieldLabel>
+          <TextArea
+            rows={4}
+            value={agent.phasePrompts.planning ?? ""}
+            onChange={(e) => onChange({
+              ...agent,
+              phasePrompts: { ...agent.phasePrompts, planning: e.target.value || undefined },
+            })}
+            placeholder="Leer = Settings-Default verwenden"
+          />
+        </FormField>
+        <FormField>
+          <FieldLabel>Executing Override</FieldLabel>
+          <TextArea
+            rows={4}
+            value={agent.phasePrompts.executing ?? ""}
+            onChange={(e) => onChange({
+              ...agent,
+              phasePrompts: { ...agent.phasePrompts, executing: e.target.value || undefined },
+            })}
+            placeholder="Leer = Settings-Default verwenden"
+          />
+        </FormField>
+        <FormField>
+          <FieldLabel>Verifying Override</FieldLabel>
+          <TextArea
+            rows={4}
+            value={agent.phasePrompts.verifying ?? ""}
+            onChange={(e) => onChange({
+              ...agent,
+              phasePrompts: { ...agent.phasePrompts, verifying: e.target.value || undefined },
+            })}
+            placeholder="Leer = Settings-Default verwenden"
+          />
+        </FormField>
+      </Section>
+
+      <Section>
+        <SectionTitle>Interne Tools</SectionTitle>
+        {internalTools.map((mcp) => {
+          const isActive = agent.mcpIds.includes(mcp.id);
+          const isOverridden = mcp.id in agent.mcpInstructions;
+          return (
+            <McpRow key={mcp.id} $active={isActive}>
+              <McpHeader>
+                <CheckboxRow>
+                  <input
+                    type="checkbox"
+                    checked={isActive}
+                    onChange={() => onChange({
+                      ...agent,
+                      mcpIds: isActive
+                        ? agent.mcpIds.filter((id) => id !== mcp.id)
+                        : [...agent.mcpIds, mcp.id],
+                    })}
+                  />
+                  <span style={{ fontSize: "1.1em" }}>{mcp.emoji || "🧰"}</span>
+                  <span style={{ fontWeight: 500 }}>{mcp.name}</span>
+                  <StatusDot $running={mcp.running} />
+                  {!mcp.running && <span style={{ color: "var(--danger)", fontSize: "0.7rem" }}>disabled</span>}
+                </CheckboxRow>
+                {isActive && (
+                  <FormRow style={{ alignItems: "center", gap: "var(--space-xs)" }}>
+                    <MutedText>Instruction ueberschreiben</MutedText>
+                    <Toggle
+                      checked={isOverridden}
+                      onChange={() => {
+                        const next = { ...agent.mcpInstructions };
+                        if (isOverridden) delete next[mcp.id];
+                        else next[mcp.id] = "";
+                        onChange({ ...agent, mcpInstructions: next });
+                      }}
+                    />
+                  </FormRow>
+                )}
+              </McpHeader>
+              {isActive && isOverridden && (
+                <TextArea
+                  value={agent.mcpInstructions[mcp.id] ?? ""}
+                  onChange={(e) => onChange({
+                    ...agent,
+                    mcpInstructions: { ...agent.mcpInstructions, [mcp.id]: e.target.value },
+                  })}
+                  rows={2}
+                  placeholder="Leer = Tool-Instruction komplett unterdruecken"
+                />
+              )}
+            </McpRow>
+          );
+        })}
+      </Section>
+
+      <Section>
+        <SectionTitle>Externe MCP-Tools</SectionTitle>
         {mcps.map((mcp) => {
           const isActive = agent.mcpIds.includes(mcp.id);
           const isOverridden = mcp.id in agent.mcpInstructions;
@@ -225,7 +362,7 @@ export default function AgentEditor({
                 </CheckboxRow>
                 {isActive && (
                   <FormRow style={{ alignItems: "center", gap: "var(--space-xs)" }}>
-                    <MutedText>Instruction überschreiben</MutedText>
+                    <MutedText>Instruction ueberschreiben</MutedText>
                     <Toggle
                       checked={isOverridden}
                       onChange={() => {
@@ -246,7 +383,7 @@ export default function AgentEditor({
                     mcpInstructions: { ...agent.mcpInstructions, [mcp.id]: e.target.value },
                   })}
                   rows={2}
-                  placeholder="Leer = MCP-Instruction komplett unterdrücken"
+                  placeholder="Leer = MCP-Instruction komplett unterdruecken"
                 />
               )}
             </McpRow>
@@ -255,7 +392,7 @@ export default function AgentEditor({
       </Section>
 
       <Section>
-        <SectionTitle>📐 Variablen</SectionTitle>
+        <SectionTitle>Variablen</SectionTitle>
         <ActionsRow>
           <Button size="sm" variant="secondary" onClick={onToggleSystemVariables}>
             {showSystemVariables ? "System-Variablen ausblenden" : "System-Variablen anzeigen"}
@@ -277,7 +414,7 @@ export default function AgentEditor({
           {saving ? <Spinner size={14} /> : "Speichern"}
         </Button>
         <Button variant="danger" onClick={onDelete}>
-          Agent löschen
+          Agent loeschen
         </Button>
       </ActionsRow>
     </EditorArea>

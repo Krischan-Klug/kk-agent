@@ -18,6 +18,8 @@ import type {
   UpdateProviderBody,
   SystemVariablesResponse,
   UpdateSessionBody,
+  TaskItem,
+  MemoryFact,
 } from "@/types/api";
 
 const BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3001";
@@ -111,6 +113,60 @@ export const mcp = {
     request<McpServerConfig>(`/mcp/${id}`, {
       method: "PUT",
       body: JSON.stringify(body),
+    }),
+};
+
+export const tools = {
+  list: () => request<McpListItem[]>("/tools"),
+
+  toggle: (id: string, active: boolean) =>
+    request<McpServerConfig>(`/tools/${id}/toggle`, {
+      method: "POST",
+      body: JSON.stringify({ active }),
+    }),
+
+  setInstruction: (id: string, instruction: string) =>
+    request<McpServerConfig>(`/tools/${id}/instruction`, {
+      method: "PUT",
+      body: JSON.stringify({ instruction }),
+    }),
+
+  start: (id: string) =>
+    request<{ status: string }>(`/tools/${id}/start`, { method: "POST" }),
+
+  stop: (id: string) =>
+    request<{ status: string }>(`/tools/${id}/stop`, { method: "POST" }),
+
+  update: (id: string, body: UpdateMcpBody) =>
+    request<McpServerConfig>(`/tools/${id}`, {
+      method: "PUT",
+      body: JSON.stringify(body),
+    }),
+  listTasks: (sessionId: string) =>
+    request<{ tasks: TaskItem[] }>(`/tools/task/session/${sessionId}`),
+
+  replaceTasks: (sessionId: string, tasks: TaskItem[]) =>
+    request<{ tasks: TaskItem[] }>(`/tools/task/session/${sessionId}`, {
+      method: "PUT",
+      body: JSON.stringify({ tasks }),
+    }),
+
+  listUserMemory: () =>
+    request<{ facts: MemoryFact[] }>("/tools/memory/user"),
+
+  replaceUserMemory: (facts: MemoryFact[]) =>
+    request<{ facts: MemoryFact[] }>("/tools/memory/user", {
+      method: "PUT",
+      body: JSON.stringify({ facts }),
+    }),
+
+  listSessionMemory: (sessionId: string) =>
+    request<{ facts: MemoryFact[] }>(`/tools/memory/session/${sessionId}`),
+
+  replaceSessionMemory: (sessionId: string, facts: MemoryFact[]) =>
+    request<{ facts: MemoryFact[] }>(`/tools/memory/session/${sessionId}`, {
+      method: "PUT",
+      body: JSON.stringify({ facts }),
     }),
 };
 

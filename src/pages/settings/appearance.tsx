@@ -171,12 +171,13 @@ const PreviewStrip = styled.div`
 /* ── Page ── */
 
 export default function AppearancePage() {
+  const defaultTheme = defaultThemes[0];
   const [activeId, setActiveId] = useState(getSavedThemeId());
   const [themes, setThemes] = useState(getAllThemes());
   const [creating, setCreating] = useState(false);
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
-  const [accent, setAccent] = useState("#6c8aff");
+  const [accent, setAccent] = useState(defaultTheme.variables["--accent"]);
 
   function selectTheme(theme: Theme) {
     saveAndApplyTheme(theme.id);
@@ -200,7 +201,7 @@ export default function AppearancePage() {
     setCreating(false);
     setName("");
     setDescription("");
-    setAccent("#6c8aff");
+    setAccent(defaultTheme.variables["--accent"]);
   }
 
   function handleDelete(id: string) {
@@ -208,8 +209,8 @@ export default function AppearancePage() {
     const updated = getAllThemes();
     setThemes(updated);
     if (activeId === id) {
-      saveAndApplyTheme("indigo");
-      setActiveId("indigo");
+      saveAndApplyTheme(defaultTheme.id);
+      setActiveId(defaultTheme.id);
     }
   }
 

@@ -20,41 +20,17 @@ const CUSTOM_THEMES_KEY = "kk-agent-custom-themes";
 
 export const defaultThemes: Theme[] = [
   {
-    id: "indigo",
-    name: "Indigo",
-    description: "Cool blue — the default",
+    id: "custom-1774905357884",
+    name: "Swagos",
+    description: "Warmer Kupfer-Look fuer Swagos.",
     variables: {
-      "--accent": "#6c8aff",
-      "--accent-hover": "#8aa4ff",
-      "--accent-muted": "rgba(108, 138, 255, 0.15)",
-      "--border-focus": "#6c8aff",
-    },
-  },
-  {
-    id: "emerald",
-    name: "Emerald",
-    description: "Fresh green accent",
-    variables: {
-      "--accent": "#34d399",
-      "--accent-hover": "#6ee7b7",
-      "--accent-muted": "rgba(52, 211, 153, 0.15)",
-      "--border-focus": "#34d399",
-    },
-  },
-  {
-    id: "amber",
-    name: "Amber",
-    description: "Warm golden accent",
-    variables: {
-      "--accent": "#f59e0b",
-      "--accent-hover": "#fbbf24",
-      "--accent-muted": "rgba(245, 158, 11, 0.15)",
-      "--border-focus": "#f59e0b",
+      "--accent": "#c15f3c",
+      "--accent-hover": "#df7d5a",
+      "--accent-muted": "rgba(193, 95, 60, 0.15)",
+      "--border-focus": "#c15f3c",
     },
   },
 ];
-
-/* ── Custom themes (localStorage) ── */
 
 export function getCustomThemes(): Theme[] {
   return getStoredJson<Theme[]>(CUSTOM_THEMES_KEY, []);
@@ -77,8 +53,6 @@ export function addCustomTheme(theme: Theme): void {
 export function deleteCustomTheme(id: string): void {
   saveCustomThemes(getCustomThemes().filter((t) => t.id !== id));
 }
-
-/* ── Helpers ── */
 
 export function hexToRgba(hex: string, alpha: number): string {
   const r = parseInt(hex.slice(1, 3), 16);
@@ -103,10 +77,8 @@ export function buildVariablesFromAccent(accent: string): Record<string, string>
   };
 }
 
-/* ── Active theme ── */
-
 export function getSavedThemeId(): string {
-  return getStoredString(THEME_STORAGE_KEY) || "indigo";
+  return getStoredString(THEME_STORAGE_KEY) || defaultThemes[0].id;
 }
 
 export function getThemeById(id: string): Theme {

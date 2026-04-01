@@ -1,8 +1,9 @@
-/* ── Session ── */
+/* Session */
 
 export interface SessionState {
   id: string;
   name: string;
+  providerId: string;
   model: string;
   agentId: string;
   activeToolIds: string[];
@@ -10,6 +11,7 @@ export interface SessionState {
   systemPrompt: string;
   reasoningEffort?: ReasoningEffort;
   temperature?: number;
+  maxOutputTokens?: number;
   messages: SessionMessage[];
   createdAt: string;
   updatedAt: string;
@@ -36,6 +38,7 @@ export interface CreateSessionBody {
   activeMcpIds?: string[];
   reasoningEffort?: ReasoningEffort;
   temperature?: number;
+  maxOutputTokens?: number;
 }
 
 export interface UpdateSessionBody {
@@ -45,6 +48,7 @@ export interface UpdateSessionBody {
   activeMcpIds?: string[];
   reasoningEffort?: ReasoningEffort;
   temperature?: number;
+  maxOutputTokens?: number;
 }
 
 export type TaskStatus = "pending" | "in_progress" | "completed";
@@ -61,7 +65,7 @@ export interface MemoryFact {
   text: string;
 }
 
-/* ── MCP ── */
+/* MCP */
 
 export interface McpServerConfig {
   id: string;
@@ -101,11 +105,29 @@ export interface McpListItem extends McpServerConfig {
   tools: McpToolDefinition[];
 }
 
+export type EndpointType = "chat-completions" | "responses";
+
 export interface ModelInfo {
   id: string;
   object: string;
+  providerId: string;
   maxContextLength?: number;
   contextLength?: number;
+  capabilities: {
+    supportsTools: boolean;
+    supportsReasoning: boolean;
+    reasoningSource: "none" | "declared" | "observed";
+    supportsStreaming: boolean;
+    supportedEndpoints: EndpointType[];
+    reasoningControl: "none" | "effort" | "on-off";
+    reasoningLevels: string[];
+    endpointCapabilities: Partial<Record<EndpointType, {
+      temperatureSupported: boolean;
+      temperatureRange?: { min: number; max: number; step?: number };
+      maxOutputTokensSupported: boolean;
+      maxOutputTokensRange?: { min: number; max: number; step?: number };
+    }>>;
+  };
 }
 
 export interface ReasoningLevelConfig {
@@ -116,39 +138,27 @@ export interface ReasoningLevelConfig {
 export interface ModelSettings {
   endpoint?: EndpointType;
   reasoningEffort?: ReasoningEffort;
-  reasoningOnOff?: boolean;
   levels?: Record<string, ReasoningLevelConfig>;
 }
 
-/* ── Provider ── */
-
-export type ProviderType = "lmstudio" | "openai" | "anthropic";
-export type EndpointType = "chat-completions" | "responses";
-export type AuthMethod = "none" | "api-key";
+/* Provider */
 
 export interface ProviderConfig {
   id: string;
   name: string;
-  type: ProviderType;
   baseUrl: string;
-  authMethod: AuthMethod;
   apiKey?: string;
-  isDefault?: boolean;
 }
 
 export interface CreateProviderBody {
   name: string;
-  type: ProviderType;
   baseUrl: string;
-  authMethod: AuthMethod;
   apiKey?: string;
 }
 
 export interface UpdateProviderBody {
   name?: string;
-  type?: ProviderType;
   baseUrl?: string;
-  authMethod?: AuthMethod;
   apiKey?: string;
 }
 
@@ -179,10 +189,11 @@ export interface UpdateMcpBody {
   };
 }
 
-/* ── Agent ── */
+/* Agent */
 
 export type ReasoningEffort = string;
 export type AgentLoopMode = "simple" | "plan_execute" | "full_verify";
+
 export interface AgentPhasePrompts {
   planning?: string;
   executing?: string;
@@ -203,6 +214,7 @@ export interface AgentDefinition {
   defaultModel?: string;
   reasoningEffort?: ReasoningEffort;
   temperature?: number;
+  maxOutputTokens?: number;
   loopMode: AgentLoopMode;
   phasePrompts: AgentPhasePrompts;
   createdAt: string;
@@ -233,6 +245,7 @@ export interface CreateAgentBody {
   defaultModel?: string;
   reasoningEffort?: ReasoningEffort;
   temperature?: number;
+  maxOutputTokens?: number;
   loopMode?: AgentLoopMode;
   phasePrompts?: AgentPhasePrompts;
 }
@@ -250,6 +263,7 @@ export interface UpdateAgentBody {
   defaultModel?: string;
   reasoningEffort?: ReasoningEffort;
   temperature?: number;
+  maxOutputTokens?: number;
   loopMode?: AgentLoopMode;
   phasePrompts?: AgentPhasePrompts;
 }
@@ -258,7 +272,7 @@ export interface SystemVariablesResponse {
   variables: string[];
 }
 
-/* ── Defaults ── */
+/* Defaults */
 
 export interface AppDefaults {
   agent: {
@@ -294,7 +308,7 @@ export interface AppDefaults {
   };
 }
 
-/* ── Streaming ── */
+/* Streaming */
 
 export type StreamEvent =
   | { type: "content"; content: string }

@@ -1,6 +1,10 @@
 import styled from "styled-components";
-import type { AgentDefinition, McpListItem, AgentLoopMode } from "@/types/api";
-import { REASONING_LEVELS } from "@/constants/reasoningDefaults";
+import type { AgentDefinition, McpListItem, AgentLoopMode, ModelInfo, ModelSettings } from "@/types/api";
+import {
+  getEndpointCapabilities,
+  getReasoningLevels,
+  getResolvedEndpoint,
+} from "@/lib/modelCapabilities";
 import Badge from "@/components/Badge";
 import Button from "@/components/Button";
 import Input from "@/components/Input";
@@ -89,7 +93,8 @@ type Props = {
   agent: AgentDefinition | null;
   mcps: McpListItem[];
   internalTools: McpListItem[];
-  models: string[];
+  models: ModelInfo[];
+  modelSettings: Record<string, ModelSettings>;
   systemVariables: string[];
   saving: boolean;
   showSystemVariables: boolean;
@@ -118,6 +123,7 @@ export default function AgentEditor({
   mcps,
   internalTools,
   models,
+  modelSettings,
   systemVariables,
   saving,
   showSystemVariables,
@@ -135,6 +141,14 @@ export default function AgentEditor({
   }
 
   const activePhases = new Set(getModePhases(agent.loopMode));
+  const selectedModelInfo = models.find((model) => model.id === agent.defaultModel) ?? models[0];
+  const selectedModelSettings = selectedModelInfo ? modelSettings[selectedModelInfo.id] : undefined;
+  const selectedEndpoint = getResolvedEndpoint(selectedModelInfo, selectedModelSettings);
+  const endpointCapabilities = getEndpointCapabilities(selectedModelInfo, selectedEndpoint);
+  const reasoningLevels = getReasoningLevels(selectedModelInfo);
+  const showReasoning = reasoningLevels.length > 0;
+  const showTemperature = endpointCapabilities.temperatureSupported;
+  const showMaxOutputTokens = endpointCapabilities.maxOutputTokensSupported;
 
   return (
     <EditorArea>
@@ -156,35 +170,57 @@ export default function AgentEditor({
               onChange={(e) => onChange({ ...agent, defaultModel: e.target.value || undefined })}
             >
               <option value="">-- Kein Default --</option>
-              {models.map((model) => <option key={model} value={model}>{model}</option>)}
+              {models.map((model) => <option key={model.id} value={model.id}>{model.id}</option>)}
             </Select>
           </FormField>
-          <FormField>
-            <FieldLabel>Default Reasoning</FieldLabel>
-            <Select
-              value={agent.reasoningEffort ?? ""}
-              onChange={(e) => onChange({ ...agent, reasoningEffort: e.target.value || undefined })}
-            >
-              <option value="">-- Default --</option>
-              {REASONING_LEVELS.map((level) => <option key={level} value={level}>{level}</option>)}
-            </Select>
-          </FormField>
-          <FormField>
-            <FieldLabel>Temperature</FieldLabel>
-            <Input
-              type="number"
-              min="0"
-              max="2"
-              step="0.1"
-              value={agent.temperature ?? ""}
-              onChange={(e) => onChange({
-                ...agent,
-                temperature: e.target.value === "" ? undefined : Number(e.target.value),
-              })}
-              placeholder="Default"
-              style={{ width: 110 }}
-            />
-          </FormField>
+          {showReasoning && (
+            <FormField>
+              <FieldLabel>Default Reasoning</FieldLabel>
+              <Select
+                value={agent.reasoningEffort ?? ""}
+                onChange={(e) => onChange({ ...agent, reasoningEffort: e.target.value || undefined })}
+              >
+                <option value="">-- Default --</option>
+                {reasoningLevels.map((level) => <option key={level} value={level}>{level}</option>)}
+              </Select>
+            </FormField>
+          )}
+          {showTemperature && (
+            <FormField>
+              <FieldLabel>Temperature</FieldLabel>
+              <Input
+                type="number"
+                min={endpointCapabilities.temperatureRange?.min ?? 0}
+                max={endpointCapabilities.temperatureRange?.max ?? 2}
+                step={endpointCapabilities.temperatureRange?.step ?? 0.1}
+                value={agent.temperature ?? ""}
+                onChange={(e) => onChange({
+                  ...agent,
+                  temperature: e.target.value === "" ? undefined : Number(e.target.value),
+                })}
+                placeholder="Default"
+                style={{ width: 110 }}
+              />
+            </FormField>
+          )}
+          {showMaxOutputTokens && (
+            <FormField>
+              <FieldLabel>Max Output</FieldLabel>
+              <Input
+                type="number"
+                min={endpointCapabilities.maxOutputTokensRange?.min ?? 1}
+                max={endpointCapabilities.maxOutputTokensRange?.max}
+                step={endpointCapabilities.maxOutputTokensRange?.step ?? 1}
+                value={agent.maxOutputTokens ?? ""}
+                onChange={(e) => onChange({
+                  ...agent,
+                  maxOutputTokens: e.target.value === "" ? undefined : Number(e.target.value),
+                })}
+                placeholder="Default"
+                style={{ width: 130 }}
+              />
+            </FormField>
+          )}
         </FormRow>
       </Section>
 

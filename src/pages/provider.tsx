@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import styled from "styled-components";
 import { provider as providerApi } from "@/lib/api";
 import { logUiError } from "@/lib/uiLogger";
-import type { AuthMethod, ModelInfo, ModelSettings, ProviderConfig, ProviderType } from "@/types/api";
+import type { ModelInfo, ModelSettings, ProviderConfig } from "@/types/api";
 import { useToggleSet } from "@/hooks/useToggleSet";
 import { PageTitle } from "@/components/Layout.styled";
 import Card from "@/components/Card";
@@ -10,7 +10,7 @@ import Button from "@/components/Button";
 import Spinner from "@/components/Spinner";
 import ProviderCard from "@/components/provider/ProviderCard";
 import CreateProviderModal from "@/components/provider/CreateProviderModal";
-import { AUTH_OPTIONS, DEFAULT_BASE_URLS } from "@/components/provider/constants";
+import { DEFAULT_PROVIDER_BASE_URL } from "@/components/provider/constants";
 
 const Grid = styled.div`
   display: flex;
@@ -32,10 +32,8 @@ export default function ProviderPage() {
   const testing = useToggleSet();
   const [showCreate, setShowCreate] = useState(false);
   const [testResults, setTestResults] = useState<Record<string, { ok: boolean; error?: string }>>({});
-  const [newType, setNewType] = useState<ProviderType>("lmstudio");
   const [newName, setNewName] = useState("");
-  const [newBaseUrl, setNewBaseUrl] = useState(DEFAULT_BASE_URLS.lmstudio);
-  const [newAuth, setNewAuth] = useState<AuthMethod>("none");
+  const [newBaseUrl, setNewBaseUrl] = useState(DEFAULT_PROVIDER_BASE_URL);
   const [newApiKey, setNewApiKey] = useState("");
 
   useEffect(() => {
@@ -44,11 +42,14 @@ export default function ProviderPage() {
 
   async function loadData() {
     try {
-      const [providerList, modelsData] = await Promise.all([providerApi.listProviders(), providerApi.getModels()]);
+      const providerList = await providerApi.listProviders();
       setProviders(providerList);
+
+      const activeId = providerList[0]?.id ? (providerList.find((provider) => provider.id === activeProviderId)?.id ?? providerList[0].id) : "";
+      const modelsData = await providerApi.getModels(activeId || undefined);
       setModels(modelsData.models);
       setModelSettings(modelsData.modelSettings ?? {});
-      setActiveProviderId(modelsData.activeProviderId ?? "");
+      setActiveProviderId(modelsData.activeProviderId ?? activeId);
     } catch (err) {
       logUiError("provider-load", err);
     } finally {
@@ -57,22 +58,18 @@ export default function ProviderPage() {
   }
 
   function resetCreateForm() {
-    setNewType("lmstudio");
     setNewName("");
-    setNewBaseUrl(DEFAULT_BASE_URLS.lmstudio);
-    setNewAuth("none");
+    setNewBaseUrl(DEFAULT_PROVIDER_BASE_URL);
     setNewApiKey("");
   }
 
   async function handleCreate() {
-    if (!newName.trim()) return;
+    if (!newName.trim() || !newBaseUrl.trim()) return;
     try {
       const created = await providerApi.addProvider({
         name: newName.trim(),
-        type: newType,
-        baseUrl: newBaseUrl,
-        authMethod: newAuth,
-        apiKey: newAuth === "api-key" ? newApiKey : undefined,
+        baseUrl: newBaseUrl.trim(),
+        apiKey: newApiKey || undefined,
       });
       setProviders((prev) => [...prev, created]);
       setShowCreate(false);
@@ -82,13 +79,17 @@ export default function ProviderPage() {
     }
   }
 
+  async function loadProviderModels(providerId: string) {
+    const modelsData = await providerApi.getModels(providerId);
+    setModels(modelsData.models);
+    setModelSettings(modelsData.modelSettings ?? {});
+    setActiveProviderId(modelsData.activeProviderId ?? providerId);
+  }
+
   async function handleActivate(id: string) {
     try {
       const result = await providerApi.activateProvider(id);
-      setActiveProviderId(result.activeProviderId);
-      const modelsData = await providerApi.getModels();
-      setModels(modelsData.models);
-      setModelSettings(modelsData.modelSettings ?? {});
+      await loadProviderModels(result.activeProviderId);
     } catch (err) {
       logUiError("provider-activate", err);
     }
@@ -97,11 +98,14 @@ export default function ProviderPage() {
   async function handleDelete(id: string) {
     try {
       await providerApi.removeProvider(id);
-      setProviders((prev) => prev.filter((provider) => provider.id !== id));
-      if (activeProviderId === id) {
-        const modelsData = await providerApi.getModels();
-        setActiveProviderId(modelsData.activeProviderId ?? "");
-        setModels(modelsData.models);
+      const nextProviders = providers.filter((provider) => provider.id !== id);
+      setProviders(nextProviders);
+      if (activeProviderId === id && nextProviders[0]) {
+        await loadProviderModels(nextProviders[0].id);
+      } else if (nextProviders.length === 0) {
+        setActiveProviderId("");
+        setModels([]);
+        setModelSettings({});
       }
     } catch (err) {
       logUiError("provider-delete", err);
@@ -120,9 +124,11 @@ export default function ProviderPage() {
     }
   }
 
-  async function handleProviderFieldChange(id: string, field: string, value: string) {
+  async function handleProviderFieldChange(id: keyof ProviderConfig extends never ? never : string, field: keyof ProviderConfig, value: string) {
     try {
-      const updated = await providerApi.updateProvider(id, { [field]: value });
+      const updated = await providerApi.updateProvider(id, {
+        [field]: value || undefined,
+      });
       setProviders((prev) => prev.map((provider) => (provider.id === id ? updated : provider)));
     } catch (err) {
       logUiError("provider-update", err);
@@ -130,9 +136,10 @@ export default function ProviderPage() {
   }
 
   async function handleModelSettingsSave(modelId: string, settings: ModelSettings) {
+    if (!activeProviderId) return;
     setModelSettings((prev) => ({ ...prev, [modelId]: settings }));
     try {
-      await providerApi.setModelSettings(modelId, settings);
+      await providerApi.setModelSettings(activeProviderId, modelId, settings);
     } catch (err) {
       logUiError("provider-model-settings", err);
     }
@@ -151,7 +158,7 @@ export default function ProviderPage() {
       <Grid>
         {providers.length === 0 ? (
           <Card>
-            <span style={{ color: "var(--text-muted)" }}>Keine Provider konfiguriert. Füge einen hinzu.</span>
+            <span style={{ color: "var(--text-muted)" }}>Keine lokalen Provider konfiguriert. Füge einen hinzu.</span>
           </Card>
         ) : (
           providers.map((provider) => (
@@ -162,8 +169,8 @@ export default function ProviderPage() {
               isExpanded={expanded.has(provider.id)}
               isTesting={testing.has(provider.id)}
               testResult={testResults[provider.id]}
-              models={models}
-              modelSettings={modelSettings}
+              models={provider.id === activeProviderId ? models : []}
+              modelSettings={provider.id === activeProviderId ? modelSettings : {}}
               onToggleExpand={() => expanded.toggle(provider.id)}
               onActivate={() => void handleActivate(provider.id)}
               onTest={() => void handleTest(provider.id)}
@@ -176,15 +183,11 @@ export default function ProviderPage() {
       </Grid>
       <CreateProviderModal
         open={showCreate}
-        type={newType}
         name={newName}
         baseUrl={newBaseUrl}
-        auth={newAuth}
         apiKey={newApiKey}
-        onTypeChange={setNewType}
         onNameChange={setNewName}
         onBaseUrlChange={setNewBaseUrl}
-        onAuthChange={setNewAuth}
         onApiKeyChange={setNewApiKey}
         onCreate={handleCreate}
         onClose={() => {

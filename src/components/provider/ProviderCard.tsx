@@ -1,10 +1,9 @@
 import styled from "styled-components";
-import type { ProviderConfig, ProviderType, AuthMethod, ModelInfo, ModelSettings } from "@/types/api";
+import type { ModelInfo, ModelSettings, ProviderConfig } from "@/types/api";
 import Badge from "@/components/Badge";
 import Button from "@/components/Button";
 import Input from "@/components/Input";
 import ModelSettingsSection from "./ModelSettingsSection";
-import { AUTH_OPTIONS, PROVIDER_TYPES } from "./constants";
 
 const Wrapper = styled.div<{ $active: boolean }>`
   background: var(--bg-elevated);
@@ -71,20 +70,6 @@ const Label = styled.label`
   color: var(--text-muted);
 `;
 
-const Select = styled.select`
-  background: var(--bg-elevated);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  color: var(--text-primary);
-  font-size: var(--font-size-sm);
-  padding: var(--space-xs) var(--space-sm);
-
-  &:focus {
-    border-color: var(--border-focus);
-    outline: none;
-  }
-`;
-
 const TestResult = styled.span<{ $ok: boolean }>`
   font-size: var(--font-size-sm);
   color: ${(p) => (p.$ok ? "var(--success)" : "var(--danger)")};
@@ -102,7 +87,7 @@ type Props = {
   onActivate: () => void;
   onTest: () => void;
   onDelete: () => void;
-  onFieldChange: (field: string, value: string) => void;
+  onFieldChange: (field: keyof ProviderConfig, value: string) => void;
   onModelSettingsSave: (modelId: string, settings: ModelSettings) => void;
 };
 
@@ -127,7 +112,7 @@ export default function ProviderCard({
         <Name>
           {isActive && <Badge variant="info">aktiv</Badge>}
           {provider.name}
-          <Meta>{provider.type} · {provider.baseUrl}</Meta>
+          <Meta>{provider.baseUrl}</Meta>
         </Name>
         <HeaderActions>
           {!isActive && (
@@ -150,34 +135,23 @@ export default function ProviderCard({
               <Label>Name</Label>
               <Input value={provider.name} onChange={(e) => onFieldChange("name", e.target.value)} />
             </FormField>
-            <FormField>
-              <Label>Typ</Label>
-              <Select value={provider.type} onChange={(e) => onFieldChange("type", e.target.value)}>
-                {PROVIDER_TYPES.map((type) => <option key={type.value} value={type.value}>{type.label}</option>)}
-              </Select>
-            </FormField>
             <FormField $flex={1}>
               <Label>Base URL</Label>
               <Input value={provider.baseUrl} onChange={(e) => onFieldChange("baseUrl", e.target.value)} />
             </FormField>
           </FormRow>
 
-          {provider.type !== "lmstudio" && (
-            <FormRow>
-              <FormField>
-                <Label>Auth</Label>
-                <Select value={provider.authMethod} onChange={(e) => onFieldChange("authMethod", e.target.value)}>
-                  {(AUTH_OPTIONS[provider.type as ProviderType] ?? []).map((auth) => <option key={auth.value} value={auth.value}>{auth.label}</option>)}
-                </Select>
-              </FormField>
-              {provider.authMethod === "api-key" && (
-                <FormField $flex={1}>
-                  <Label>API Key</Label>
-                  <Input type="password" value={provider.apiKey ?? ""} onChange={(e) => onFieldChange("apiKey", e.target.value)} placeholder="sk-..." />
-                </FormField>
-              )}
-            </FormRow>
-          )}
+          <FormRow>
+            <FormField $flex={1}>
+              <Label>API Key</Label>
+              <Input
+                type="password"
+                value={provider.apiKey ?? ""}
+                onChange={(e) => onFieldChange("apiKey", e.target.value)}
+                placeholder="optional"
+              />
+            </FormField>
+          </FormRow>
 
           {isActive && (
             <ModelSettingsSection models={models} modelSettings={modelSettings} onSave={onModelSettingsSave} />

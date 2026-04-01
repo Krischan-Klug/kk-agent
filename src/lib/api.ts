@@ -38,19 +38,15 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 
 export const provider = {
   /* Model endpoints */
-  getModels: () =>
-    request<{ models: ModelInfo[]; activeModel: string; activeProviderId: string; modelSettings: Record<string, ModelSettings> }>("/provider/models"),
+  getModels: (providerId?: string) =>
+    request<{ models: ModelInfo[]; activeProviderId: string; modelSettings: Record<string, ModelSettings> }>(
+      `/provider/models${providerId ? `?providerId=${encodeURIComponent(providerId)}` : ""}`,
+    ),
 
-  switchModel: (model: string) =>
-    request<{ activeModel: string }>("/provider/switch", {
-      method: "POST",
-      body: JSON.stringify({ model }),
-    }),
-
-  setModelSettings: (modelId: string, settings: ModelSettings) =>
+  setModelSettings: (providerId: string, modelId: string, settings: ModelSettings) =>
     request<{ modelId: string; settings: ModelSettings }>(
       `/provider/models/${encodeURIComponent(modelId)}/settings`,
-      { method: "PUT", body: JSON.stringify(settings) },
+      { method: "PUT", body: JSON.stringify({ providerId, settings }) },
     ),
 
   /* Provider CRUD */

@@ -8,7 +8,7 @@ Frontend fuer `kk-agent-backend`.
 - `/agent` -> Agent-Editor fuer Prompt, Loop-Mode, Phase-Overrides, MCP-/Tool-Zuordnung und Variablen
 - `/tools` -> interne Tools anzeigen und konfigurieren
 - `/mcp` -> nur externe Nutzer-MCPs anzeigen und konfigurieren
-- `/provider` -> Modelle und Provider-Settings
+- `/provider` -> lokale LLM-Provider und Modelle
 - `/settings/defaults` -> globale LLM-/Loop-Defaults
 
 ## Aktueller API-Vertrag
@@ -19,6 +19,8 @@ Wichtige Punkte:
 - Nur strukturierte `tool_calls` sind echte Tool-Aufrufe
 - Das Chatfenster rendert Assistant-Text als Markdown
 - `/tools` und `/mcp` sind getrennt
+- `/provider` ist capability-basiert: Reasoning-Optionen erscheinen nur, wenn das Modell sie unterstuetzt
+- Provider werden nur ueber `name`, `baseUrl` und optionalen `apiKey` gepflegt
 
 ### Relevante Typen
 
@@ -54,9 +56,21 @@ type AgentDefinition = {
 type SessionState = {
   id: string;
   agentId: string;
+  providerId: string;
   activeToolIds: string[];
   activeMcpIds: string[];
   messages: SessionMessage[];
+};
+
+type ModelInfo = {
+  id: string;
+  providerId: string;
+  capabilities: {
+    supportsTools: boolean;
+    supportsReasoning: boolean;
+    supportsStreaming: boolean;
+    supportedEndpoints: Array<"chat-completions" | "responses">;
+  };
 };
 
 type McpListItem = {

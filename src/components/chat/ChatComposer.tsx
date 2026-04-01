@@ -153,6 +153,8 @@ type Props = {
   sending: boolean;
   agents: AgentDefinition[];
   currentAgentId: string;
+  showReasoningControl: boolean;
+  showTemperatureControl: boolean;
   resolvedEffort: string;
   resolvedTemp: number;
   reasoningOptions: SelectMenuOption[];
@@ -172,6 +174,8 @@ export default function ChatComposer({
   sending,
   agents,
   currentAgentId,
+  showReasoningControl,
+  showTemperatureControl,
   resolvedEffort,
   resolvedTemp,
   reasoningOptions,
@@ -200,24 +204,28 @@ export default function ChatComposer({
         </ComposerInputWrap>
         <ComposerFooter>
           <ComposerMeta>
-            <ControlGroup>
-              <ControlEmoji>🧠</ControlEmoji>
-              <SelectMenu
-                value={resolvedEffort}
-                options={reasoningOptions}
-                onSelect={onReasoningSelect}
-                variant="neutral"
-              />
-            </ControlGroup>
-            <ControlGroup>
-              <ControlEmoji>🔥</ControlEmoji>
-              <SelectMenu
-                value={resolvedTemp.toFixed(1)}
-                options={temperatureOptions}
-                onSelect={onTemperatureSelect}
-                variant="neutral"
-              />
-            </ControlGroup>
+            {showReasoningControl && (
+              <ControlGroup>
+                <ControlEmoji>🧠</ControlEmoji>
+                <SelectMenu
+                  value={resolvedEffort}
+                  options={reasoningOptions}
+                  onSelect={onReasoningSelect}
+                  variant="neutral"
+                />
+              </ControlGroup>
+            )}
+            {showTemperatureControl && (
+              <ControlGroup>
+                <ControlEmoji>🔥</ControlEmoji>
+                <SelectMenu
+                  value={resolvedTemp.toFixed(1)}
+                  options={temperatureOptions}
+                  onSelect={onTemperatureSelect}
+                  variant="neutral"
+                />
+              </ControlGroup>
+            )}
             {maxCtx > 0 && tokenStats && (
               <ContextIndicator
                 title={`Input: ${tokenStats.input.toLocaleString()} | Output: ${tokenStats.output.toLocaleString()} | Reasoning: ${tokenStats.reasoning.toLocaleString()}`}

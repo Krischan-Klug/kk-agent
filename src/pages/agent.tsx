@@ -3,7 +3,7 @@ import styled from "styled-components";
 import { agent as agentApi, mcp as mcpApi, provider as providerApi, tools as toolsApi } from "@/lib/api";
 import { cloneDraft } from "@/lib/draft";
 import { logUiError } from "@/lib/uiLogger";
-import type { AgentDefinition, CreateAgentBody, McpListItem } from "@/types/api";
+import type { AgentDefinition, CreateAgentBody, McpListItem, ModelInfo, ModelSettings } from "@/types/api";
 import { PageTitle } from "@/components/Layout.styled";
 import Spinner from "@/components/Spinner";
 import AgentList from "@/components/agent/AgentList";
@@ -20,7 +20,8 @@ export default function AgentPage() {
   const [agents, setAgents] = useState<AgentDefinition[]>([]);
   const [mcps, setMcps] = useState<McpListItem[]>([]);
   const [internalTools, setInternalTools] = useState<McpListItem[]>([]);
-  const [models, setModels] = useState<string[]>([]);
+  const [models, setModels] = useState<ModelInfo[]>([]);
+  const [modelSettings, setModelSettings] = useState<Record<string, ModelSettings>>({});
   const [systemVariables, setSystemVariables] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -37,7 +38,8 @@ export default function AgentPage() {
         setMcps(mcpList);
         setInternalTools(toolList);
         setSystemVariables(vars.variables);
-        setModels(providerModels.models.map((model) => model.id));
+        setModels(providerModels.models);
+        setModelSettings(providerModels.modelSettings ?? {});
         if (agentList.length > 0) {
           setSelectedId(agentList[0].id);
           setEditAgent(cloneDraft(agentList[0]));
@@ -86,6 +88,7 @@ export default function AgentPage() {
         defaultModel: editAgent.defaultModel,
         reasoningEffort: editAgent.reasoningEffort,
         temperature: editAgent.temperature,
+        maxOutputTokens: editAgent.maxOutputTokens,
       });
       setAgents((prev) => prev.map((agent) => (agent.id === selectedId ? updated : agent)));
       setEditAgent(cloneDraft(updated));
@@ -131,6 +134,7 @@ export default function AgentPage() {
           mcps={mcps}
           internalTools={internalTools}
           models={models}
+          modelSettings={modelSettings}
           systemVariables={systemVariables}
           saving={saving}
           showSystemVariables={showSystemVariables}

@@ -1,7 +1,14 @@
 import React from "react";
 import styled from "styled-components";
 import type { EndpointType, ModelInfo, ModelSettings, ReasoningLevelConfig } from "@/types/api";
-import { REASONING_LEVELS, REASONING_LEVEL_DEFAULTS } from "@/constants/reasoningDefaults";
+import {
+  DEFAULT_REASONING_LEVELS,
+  buildMaxOutputOptions,
+  getDefaultLevelConfig,
+  getEndpointCapabilities,
+  getReasoningLevels,
+  getResolvedEndpoint,
+} from "@/lib/modelCapabilities";
 import { useToggleSet } from "@/hooks/useToggleSet";
 import { ENDPOINT_OPTIONS } from "./constants";
 
@@ -73,12 +80,25 @@ const ModelName = styled.div`
   display: flex;
   align-items: center;
   gap: var(--space-sm);
+  flex-wrap: wrap;
 `;
 
 const ContextInfo = styled.span`
   font-size: var(--font-size-sm);
   color: var(--text-muted);
   font-family: var(--font-mono);
+`;
+
+const CapabilityBadge = styled.span`
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  font-size: 0.7rem;
+  border-radius: 999px;
+  color: var(--accent);
+  background: var(--accent-muted);
+  border: 1px solid var(--border);
 `;
 
 const LevelGrid = styled.div`
@@ -124,7 +144,7 @@ const DefaultDot = styled.span`
 `;
 
 const SmallInput = styled.input<{ $isDefault?: boolean }>`
-  background: ${(p) => (p.$isDefault ? "rgba(108, 138, 255, 0.08)" : "var(--bg-elevated)")};
+  background: ${(p) => (p.$isDefault ? "rgba(193, 95, 60, 0.08)" : "var(--bg-elevated)")};
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   color: var(--text-primary);
@@ -182,12 +202,22 @@ export default function ModelSettingsSection({ models, modelSettings, onSave }: 
       <SectionDivider>Modelle</SectionDivider>
       {models.length === 0 ? (
         <span style={{ color: "var(--text-muted)", fontSize: "var(--font-size-sm)" }}>
-          Keine Modelle verfügbar. Ist der Provider gestartet?
+          Keine Modelle verfuegbar. Ist der Provider gestartet?
         </span>
       ) : (
         models.map((model) => {
           const settings = modelSettings[model.id] ?? {};
           const isOpen = expandedModels.has(model.id);
+          const endpoints = model.capabilities.supportedEndpoints;
+          const showReasoning = model.capabilities.supportsReasoning;
+          const reasoningLevels = showReasoning ? getReasoningLevels(model) : [...DEFAULT_REASONING_LEVELS];
+          const selectedEndpoint = getResolvedEndpoint(model, settings);
+          const endpointCapabilities = getEndpointCapabilities(model, selectedEndpoint);
+          const maxOutputOptions = buildMaxOutputOptions(
+            endpointCapabilities.maxOutputTokensRange,
+            endpointCapabilities.maxOutputTokensRange?.max,
+          );
+          const showSettings = showReasoning || endpointCapabilities.temperatureSupported || endpointCapabilities.maxOutputTokensSupported;
 
           return (
             <ModelCard key={model.id}>
@@ -200,44 +230,71 @@ export default function ModelSettingsSection({ models, modelSettings, onSave }: 
                       {model.maxContextLength.toLocaleString()}
                     </ContextInfo>
                   )}
+                  {model.capabilities.supportsTools && <CapabilityBadge>🛠️ Tools</CapabilityBadge>}
+                  {showReasoning && (
+                    <CapabilityBadge>
+                      🧠 {model.capabilities.reasoningSource === "observed" ? "observed" : model.capabilities.reasoningControl}
+                    </CapabilityBadge>
+                  )}
+                  {endpointCapabilities.temperatureSupported && endpointCapabilities.temperatureRange && (
+                    <CapabilityBadge>
+                      🔥 {endpointCapabilities.temperatureRange.min}-{endpointCapabilities.temperatureRange.max}
+                    </CapabilityBadge>
+                  )}
+                  {endpointCapabilities.maxOutputTokensSupported && endpointCapabilities.maxOutputTokensRange && (
+                    <CapabilityBadge>
+                      📦 {endpointCapabilities.maxOutputTokensRange.max.toLocaleString()}
+                    </CapabilityBadge>
+                  )}
+                  {model.capabilities.supportsStreaming && <CapabilityBadge>🌊 Streaming</CapabilityBadge>}
                 </ModelName>
                 <SettingsRow>
-                  <Label>Endpoint:</Label>
-                  <Select
-                    value={settings.endpoint ?? "chat-completions"}
-                    onChange={(e) => onSave(model.id, { ...settings, endpoint: e.target.value as EndpointType })}
-                  >
-                    {ENDPOINT_OPTIONS.map((endpoint) => <option key={endpoint.value} value={endpoint.value}>{endpoint.label}</option>)}
-                  </Select>
-                  <label style={{ display: "flex", alignItems: "center", gap: "var(--space-xs)", fontSize: "var(--font-size-sm)", color: "var(--text-muted)", cursor: "pointer" }}>
-                    <input
-                      type="checkbox"
-                      checked={settings.reasoningOnOff ?? false}
-                      onChange={(e) => onSave(model.id, { ...settings, reasoningOnOff: e.target.checked || undefined })}
-                      style={{ accentColor: "var(--accent)" }}
-                    />
-                    🧠 On/Off-Mapping
-                  </label>
-                  <Label>Default:</Label>
-                  <Select value={settings.reasoningEffort ?? ""} onChange={(e) => handleDefaultChange(model.id, e.target.value)}>
-                    <option value="">--</option>
-                    {REASONING_LEVELS.map((level) => <option key={level} value={level}>{level}</option>)}
-                  </Select>
-                  <SettingsToggle onClick={() => expandedModels.toggle(model.id)}>
-                    {isOpen ? "▲ Settings" : "▼ Settings"}
-                  </SettingsToggle>
+                  {endpoints.length > 1 && (
+                    <>
+                      <Label>Endpoint:</Label>
+                      <Select
+                        value={selectedEndpoint}
+                        onChange={(e) => onSave(model.id, { ...settings, endpoint: e.target.value as EndpointType })}
+                      >
+                        {ENDPOINT_OPTIONS.filter((endpoint) => endpoints.includes(endpoint.value)).map((endpoint) => (
+                          <option key={endpoint.value} value={endpoint.value}>{endpoint.label}</option>
+                        ))}
+                      </Select>
+                    </>
+                  )}
+                  {showSettings && (
+                    <>
+                      <Label>{showReasoning ? "Default" : "Profil"}</Label>
+                      <Select value={settings.reasoningEffort ?? ""} onChange={(e) => handleDefaultChange(model.id, e.target.value)}>
+                        <option value="">--</option>
+                        {reasoningLevels.map((level) => <option key={level} value={level}>{level}</option>)}
+                      </Select>
+                    </>
+                  )}
+                  {showSettings && (
+                    <SettingsToggle onClick={() => expandedModels.toggle(model.id)}>
+                      {isOpen ? "▲ Settings" : "▼ Settings"}
+                    </SettingsToggle>
+                  )}
                 </SettingsRow>
               </ModelHeader>
-              {isOpen && (
+              {showSettings && isOpen && (
                 <LevelGrid>
                   <LevelHeaderCell>Level</LevelHeaderCell>
-                  <LevelHeaderCell>Temperature<UnitHint>0–2</UnitHint></LevelHeaderCell>
+                  <LevelHeaderCell>
+                    Temperature
+                    {endpointCapabilities.temperatureRange && (
+                      <UnitHint>
+                        {endpointCapabilities.temperatureRange.min}-{endpointCapabilities.temperatureRange.max}
+                      </UnitHint>
+                    )}
+                  </LevelHeaderCell>
                   <LevelHeaderCell>Max Output<UnitHint>tokens</UnitHint></LevelHeaderCell>
-                  {REASONING_LEVELS.map((level, index) => {
+                  {reasoningLevels.map((level, index) => {
                     const levelConfig = settings.levels?.[level] ?? {};
                     const isDefault = level === settings.reasoningEffort;
-                    const isLast = index === REASONING_LEVELS.length - 1;
-                    const defaults = REASONING_LEVEL_DEFAULTS[level];
+                    const isLast = index === reasoningLevels.length - 1;
+                    const defaults = getDefaultLevelConfig(level);
                     return (
                       <React.Fragment key={level}>
                         <LevelLabelCell $isDefault={isDefault} $isLast={isLast}>
@@ -247,9 +304,9 @@ export default function ModelSettingsSection({ models, modelSettings, onSave }: 
                         <LevelCell $isDefault={isDefault} $isLast={isLast}>
                           <SmallInput
                             type="number"
-                            min="0"
-                            max="2"
-                            step="0.1"
+                            min={endpointCapabilities.temperatureRange?.min ?? 0}
+                            max={endpointCapabilities.temperatureRange?.max ?? 2}
+                            step={endpointCapabilities.temperatureRange?.step ?? 0.1}
                             $isDefault={isDefault}
                             placeholder={defaults?.temperature?.toString() ?? "auto"}
                             value={levelConfig.temperature ?? ""}
@@ -259,13 +316,14 @@ export default function ModelSettingsSection({ models, modelSettings, onSave }: 
                         <LevelCell $isDefault={isDefault} $isLast={isLast}>
                           <SmallInput
                             type="number"
-                            min="-1"
-                            step="1024"
+                            min={endpointCapabilities.maxOutputTokensRange?.min ?? 1}
+                            max={endpointCapabilities.maxOutputTokensRange?.max}
+                            step={endpointCapabilities.maxOutputTokensRange?.step ?? 1}
                             $isDefault={isDefault}
                             placeholder={
                               defaults?.maxOutputTokens != null
-                                ? defaults.maxOutputTokens === -1 ? "unlimited" : defaults.maxOutputTokens.toString()
-                                : "auto"
+                                ? defaults.maxOutputTokens.toString()
+                                : maxOutputOptions[0]?.label ?? "auto"
                             }
                             value={levelConfig.maxOutputTokens ?? ""}
                             onChange={(e) => handleLevelChange(model.id, level, "maxOutputTokens", e.target.value)}

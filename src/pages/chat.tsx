@@ -2,7 +2,15 @@ import { useCallback, useEffect, useState } from "react";
 import styled from "styled-components";
 import { agent as agentApi, mcp as mcpApi, provider as providerApi, session as sessionApi, tools as toolsApi } from "@/lib/api";
 import type { AgentDefinition, AgentLoopState, McpListItem, MemoryFact, ModelInfo, ModelSettings, SessionState, StreamEvent, TaskItem } from "@/types/api";
-import { REASONING_LEVEL_DEFAULTS, REASONING_LEVELS } from "@/constants/reasoningDefaults";
+import {
+  DEFAULT_REASONING_LEVELS,
+  buildTemperatureOptions,
+  getDefaultLevelConfig,
+  getEndpointCapabilities,
+  getReasoningLevels,
+  getResolvedEndpoint,
+  getResolvedReasoningEffort,
+} from "@/lib/modelCapabilities";
 import Button from "@/components/Button";
 import Spinner from "@/components/Spinner";
 import ChatDebugPanel, { type ChatDebugTab } from "@/components/ChatDebugPanel";
@@ -131,6 +139,11 @@ export default function ChatPage() {
       .get(id)
       .then((nextSession) => {
         setSession(nextSession);
+        void providerApi.getModels(nextSession.providerId).then((result) => {
+          setModels(result.models.map((model) => model.id));
+          setModelInfoMap(new Map(result.models.map((model) => [model.id, model])));
+          setModelSettingsMap(result.modelSettings ?? {});
+        }).catch(() => {});
         void loadContextData(nextSession.id);
       })
       .catch(() => {
@@ -156,13 +169,6 @@ export default function ChatPage() {
 
   useEffect(() => {
     loadSession();
-    providerApi.getModels()
-      .then((result) => {
-        setModels(result.models.map((model) => model.id));
-        setModelInfoMap(new Map(result.models.map((model) => [model.id, model])));
-        setModelSettingsMap(result.modelSettings ?? {});
-      })
-      .catch(() => {});
     loadAvailableMcps()
       .then(({ tools, mcps }) => {
         setToolMcps(tools);
@@ -184,26 +190,35 @@ export default function ChatPage() {
 
   useEffect(scrollToBottom, [session?.messages, streamContent, streamReasoning, streamToolCalls, scrollToBottom]);
 
-  const reasoningOptions = REASONING_LEVELS.map((level) => ({ value: level, label: level }));
-  const temperatureOptions = Array.from({ length: 21 }, (_, i) => {
-    const value = (i * 0.1).toFixed(1);
-    return { value, label: value };
-  });
-
-  const resolvedEffort = session
-    ? session.reasoningEffort ?? modelSettingsMap[session.model]?.reasoningEffort ?? "medium"
-    : "medium";
-
+  const modelInfo = session ? modelInfoMap.get(session.model) : undefined;
+  const modelSettings = session ? modelSettingsMap[session.model] : undefined;
+  const resolvedEndpoint = getResolvedEndpoint(modelInfo, modelSettings);
+  const endpointCapabilities = getEndpointCapabilities(modelInfo, resolvedEndpoint);
+  const reasoningLevels = modelInfo?.capabilities.supportsReasoning
+    ? getReasoningLevels(modelInfo)
+    : [...DEFAULT_REASONING_LEVELS];
+  const reasoningOptions = reasoningLevels.map((level) => ({ value: level, label: level }));
+  const resolvedEffort = getResolvedReasoningEffort(modelInfo, modelSettings, session?.reasoningEffort);
+  const resolvedLevelConfig = getDefaultLevelConfig(resolvedEffort);
   const resolvedTemp = session
     ? (
       session.temperature ??
-      modelSettingsMap[session.model]?.levels?.[resolvedEffort]?.temperature ??
-      REASONING_LEVEL_DEFAULTS[resolvedEffort]?.temperature ??
+      modelSettings?.levels?.[resolvedEffort]?.temperature ??
+      resolvedLevelConfig?.temperature ??
+      endpointCapabilities.temperatureRange?.min ??
       1.0
     )
     : 1.0;
-
-  const modelInfo = session ? modelInfoMap.get(session.model) : undefined;
+  const resolvedMaxOutputTokens = session
+    ? (
+      modelSettings?.levels?.[resolvedEffort]?.maxOutputTokens ??
+      resolvedLevelConfig?.maxOutputTokens ??
+      endpointCapabilities.maxOutputTokensRange?.max
+    )
+    : endpointCapabilities.maxOutputTokensRange?.max;
+  const temperatureOptions = buildTemperatureOptions(endpointCapabilities.temperatureRange);
+  const showReasoningControl = reasoningLevels.length > 0;
+  const showTemperatureControl = endpointCapabilities.temperatureSupported && temperatureOptions.length > 0;
   const maxCtx = modelInfo?.contextLength ?? modelInfo?.maxContextLength ?? 0;
   const currentAgentName = session
     ? agents.find((agent) => agent.id === session.agentId)?.name ?? session.agentId
@@ -290,6 +305,10 @@ export default function ChatPage() {
     if (!session) return;
     const nextSession = await sessionApi.update(session.id, body);
     setSession(nextSession);
+    const modelsResult = await providerApi.getModels(nextSession.providerId);
+    setModels(modelsResult.models.map((model) => model.id));
+    setModelInfoMap(new Map(modelsResult.models.map((model) => [model.id, model])));
+    setModelSettingsMap(modelsResult.modelSettings ?? {});
     await loadContextData(nextSession.id);
   }
 
@@ -471,6 +490,8 @@ export default function ChatPage() {
         sending={sending}
         agents={agents}
         currentAgentId={session.agentId}
+        showReasoningControl={showReasoningControl}
+        showTemperatureControl={showTemperatureControl}
         resolvedEffort={resolvedEffort}
         resolvedTemp={resolvedTemp}
         reasoningOptions={reasoningOptions}

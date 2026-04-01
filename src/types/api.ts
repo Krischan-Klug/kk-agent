@@ -5,6 +5,7 @@ export interface SessionState {
   name: string;
   model: string;
   agentId: string;
+  activeToolIds: string[];
   activeMcpIds: string[];
   systemPrompt: string;
   reasoningEffort?: ReasoningEffort;
@@ -31,6 +32,7 @@ export interface ToolCall {
 export interface CreateSessionBody {
   agentId: string;
   model?: string;
+  activeToolIds?: string[];
   activeMcpIds?: string[];
   reasoningEffort?: ReasoningEffort;
   temperature?: number;
@@ -39,6 +41,7 @@ export interface CreateSessionBody {
 export interface UpdateSessionBody {
   agentId?: string;
   model?: string;
+  activeToolIds?: string[];
   activeMcpIds?: string[];
   reasoningEffort?: ReasoningEffort;
   temperature?: number;
@@ -192,7 +195,9 @@ export interface AgentDefinition {
   description: string;
   systemPrompt: string;
   maxIterations: number;
+  toolIds: string[];
   mcpIds: string[];
+  toolInstructions: Record<string, string>;
   mcpInstructions: Record<string, string>;
   variables: Record<string, string>;
   defaultModel?: string;
@@ -220,7 +225,9 @@ export interface CreateAgentBody {
   description?: string;
   systemPrompt?: string;
   maxIterations?: number;
+  toolIds?: string[];
   mcpIds?: string[];
+  toolInstructions?: Record<string, string>;
   mcpInstructions?: Record<string, string>;
   variables?: Record<string, string>;
   defaultModel?: string;
@@ -235,7 +242,9 @@ export interface UpdateAgentBody {
   description?: string;
   systemPrompt?: string;
   maxIterations?: number;
+  toolIds?: string[];
   mcpIds?: string[];
+  toolInstructions?: Record<string, string>;
   mcpInstructions?: Record<string, string>;
   variables?: Record<string, string>;
   defaultModel?: string;

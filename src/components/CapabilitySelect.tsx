@@ -49,7 +49,7 @@ const Dropdown = styled.div`
   padding: var(--space-xs) 0;
 `;
 
-const McpRow = styled.div`
+const CapabilityRow = styled.div`
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -62,14 +62,14 @@ const McpRow = styled.div`
   }
 `;
 
-const McpLabelGroup = styled.div`
+const CapabilityLabelGroup = styled.div`
   display: flex;
   align-items: center;
   gap: var(--space-xs);
   overflow: hidden;
 `;
 
-const McpEmoji = styled.span`
+const CapabilityEmoji = styled.span`
   flex-shrink: 0;
   line-height: 1;
 `;
@@ -82,7 +82,7 @@ const StatusDot = styled.span<{ $running: boolean }>`
   flex-shrink: 0;
 `;
 
-const McpLabel = styled.span<{ $stopped?: boolean }>`
+const CapabilityLabel = styled.span<{ $stopped?: boolean }>`
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -95,25 +95,25 @@ const EmptyHint = styled.div`
   font-size: var(--font-size-sm);
 `;
 
-interface McpSelectProps {
-  mcps: McpListItem[];
-  activeMcpIds: string[];
-  onToggle: (mcpId: string, enabled: boolean) => void;
+type Props = {
+  items: McpListItem[];
+  activeIds: string[];
+  onToggle: (id: string, enabled: boolean) => void;
   label?: string;
   emptyHint?: string;
-}
+};
 
-export default function McpSelect({
-  mcps,
-  activeMcpIds,
+export default function CapabilitySelect({
+  items,
+  activeIds,
   onToggle,
-  label = "MCPs",
-  emptyHint = "Keine MCP Server konfiguriert",
-}: McpSelectProps) {
+  label = "Capabilities",
+  emptyHint = "Keine Eintraege konfiguriert",
+}: Props) {
   const { open, ref, toggle } = useDropdown<HTMLDivElement>();
 
-  const activeCount = mcps.filter((m) => activeMcpIds.includes(m.id)).length;
-  const hasUnavailable = mcps.some((m) => !m.running && activeMcpIds.includes(m.id));
+  const activeCount = items.filter((item) => activeIds.includes(item.id)).length;
+  const hasUnavailable = items.some((item) => !item.running && activeIds.includes(item.id));
 
   return (
     <Wrapper ref={ref}>
@@ -122,24 +122,22 @@ export default function McpSelect({
       </Trigger>
       {open && (
         <Dropdown>
-          {mcps.length === 0 ? (
+          {items.length === 0 ? (
             <EmptyHint>{emptyHint}</EmptyHint>
           ) : (
-            mcps.map((m) => (
-              <McpRow key={m.id}>
-                <McpLabelGroup>
-                  <StatusDot $running={m.running} />
-                  <McpEmoji>{m.emoji || (m.source === "system" ? "🛠️" : "🔌")}</McpEmoji>
-                  <McpLabel $stopped={!m.running}>
-                    {m.name}
-                  </McpLabel>
-                </McpLabelGroup>
+            items.map((item) => (
+              <CapabilityRow key={item.id}>
+                <CapabilityLabelGroup>
+                  <StatusDot $running={item.running} />
+                  <CapabilityEmoji>{item.emoji || (item.source === "system" ? "🛠️" : "🔌")}</CapabilityEmoji>
+                  <CapabilityLabel $stopped={!item.running}>{item.name}</CapabilityLabel>
+                </CapabilityLabelGroup>
                 <Toggle
-                  checked={activeMcpIds.includes(m.id)}
-                  onChange={(checked) => onToggle(m.id, checked)}
-                  disabled={!m.running}
+                  checked={activeIds.includes(item.id)}
+                  onChange={(checked) => onToggle(item.id, checked)}
+                  disabled={!item.running}
                 />
-              </McpRow>
+              </CapabilityRow>
             ))
           )}
         </Dropdown>

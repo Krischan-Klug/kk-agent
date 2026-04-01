@@ -284,8 +284,8 @@ export default function AgentEditor({
       <Section>
         <SectionTitle>Interne Tools</SectionTitle>
         {internalTools.map((mcp) => {
-          const isActive = agent.mcpIds.includes(mcp.id);
-          const isOverridden = mcp.id in agent.mcpInstructions;
+          const isActive = agent.toolIds.includes(mcp.id);
+          const isOverridden = mcp.id in agent.toolInstructions;
           return (
             <McpRow key={mcp.id} $active={isActive}>
               <McpHeader>
@@ -295,9 +295,9 @@ export default function AgentEditor({
                     checked={isActive}
                     onChange={() => onChange({
                       ...agent,
-                      mcpIds: isActive
-                        ? agent.mcpIds.filter((id) => id !== mcp.id)
-                        : [...agent.mcpIds, mcp.id],
+                      toolIds: isActive
+                        ? agent.toolIds.filter((id) => id !== mcp.id)
+                        : [...agent.toolIds, mcp.id],
                     })}
                   />
                   <span style={{ fontSize: "1.1em" }}>{mcp.emoji || "🧰"}</span>
@@ -311,10 +311,10 @@ export default function AgentEditor({
                     <Toggle
                       checked={isOverridden}
                       onChange={() => {
-                        const next = { ...agent.mcpInstructions };
+                        const next = { ...agent.toolInstructions };
                         if (isOverridden) delete next[mcp.id];
                         else next[mcp.id] = "";
-                        onChange({ ...agent, mcpInstructions: next });
+                        onChange({ ...agent, toolInstructions: next });
                       }}
                     />
                   </FormRow>
@@ -322,10 +322,10 @@ export default function AgentEditor({
               </McpHeader>
               {isActive && isOverridden && (
                 <TextArea
-                  value={agent.mcpInstructions[mcp.id] ?? ""}
+                  value={agent.toolInstructions[mcp.id] ?? ""}
                   onChange={(e) => onChange({
                     ...agent,
-                    mcpInstructions: { ...agent.mcpInstructions, [mcp.id]: e.target.value },
+                    toolInstructions: { ...agent.toolInstructions, [mcp.id]: e.target.value },
                   })}
                   rows={2}
                   placeholder="Leer = Tool-Instruction komplett unterdruecken"

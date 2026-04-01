@@ -6,7 +6,7 @@ import Button from "@/components/Button";
 import Input from "@/components/Input";
 import TextArea from "@/components/TextArea";
 import ModelSelect from "@/components/ModelSelect";
-import McpSelect from "@/components/McpSelect";
+import CapabilitySelect from "@/components/CapabilitySelect";
 
 export type ChatDebugTab = "prompt" | "tools" | "mcps" | "session" | "messages" | "tasks" | "memory";
 
@@ -127,6 +127,7 @@ type Props = {
   debugUserFacts: MemoryFact[];
   models: string[];
   onModelSwitch: (model: string) => void;
+  onToolToggle: (toolId: string, enabled: boolean) => void;
   onMcpToggle: (mcpId: string, enabled: boolean) => void;
   onSaveTasks: (tasks: TaskItem[]) => Promise<void>;
   onSaveSessionFacts: (facts: MemoryFact[]) => Promise<void>;
@@ -158,6 +159,7 @@ export default function ChatDebugPanel({
   debugUserFacts,
   models,
   onModelSwitch,
+  onToolToggle,
   onMcpToggle,
   onSaveTasks,
   onSaveSessionFacts,
@@ -174,6 +176,7 @@ export default function ChatDebugPanel({
 
   if (!open || !session) return null;
   const activeMcpIds = session.activeMcpIds;
+  const activeToolIds = session.activeToolIds;
 
   function updateTask(index: number, patch: Partial<TaskItem>) {
     setTaskDraft((prev) => prev.map((task, i) => (i === index ? { ...task, ...patch } : task)));
@@ -236,10 +239,30 @@ export default function ChatDebugPanel({
           .join("\n\n");
   }
 
+  function renderToolDefinitions(items: McpListItem[], emptyLabel: string): string {
+    const activeItems = items.filter((m) => activeToolIds.includes(m.id));
+    return activeItems.length === 0
+      ? emptyLabel
+      : activeItems
+          .map((m) => {
+            const header = `-- ${m.emoji || "🛠️"} ${m.name} (${m.id}) --`;
+            const tools = m.tools.map((t) => {
+              const params = t.inputSchema?.properties
+                ? Object.entries(t.inputSchema.properties as Record<string, { type?: string; description?: string }>)
+                    .map(([k, v]) => `    ${k}: ${v.type ?? "any"} - ${v.description ?? ""}`)
+                    .join("\n")
+                : "    (keine Parameter)";
+              return `  ${t.name}\n    ${t.description ?? ""}\n${params}`;
+            });
+            return `${header}\n${tools.join("\n\n")}`;
+          })
+          .join("\n\n");
+  }
+
   if (debugTab === "prompt") {
     content = debugPrompt ?? "Lade...";
   } else if (debugTab === "tools") {
-    content = renderDefinitions(internalTools, "Keine aktiven Tools.");
+    content = renderToolDefinitions(internalTools, "Keine aktiven Tools.");
   } else if (debugTab === "mcps") {
     content = renderDefinitions(debugMcps, "Keine aktiven MCPs.");
   } else if (debugTab === "session") {
@@ -249,6 +272,7 @@ export default function ChatDebugPanel({
         name: session.name,
         model: session.model,
         agentId: session.agentId,
+        activeToolIds: session.activeToolIds,
         activeMcpIds: session.activeMcpIds,
         reasoningEffort: session.reasoningEffort ?? "default",
         temperature: session.temperature ?? "default",
@@ -295,16 +319,16 @@ export default function ChatDebugPanel({
           ) : (
             <Badge variant="info">{session.model}</Badge>
           )}
-          <McpSelect
-            mcps={internalTools}
-            activeMcpIds={session.activeMcpIds}
-            onToggle={onMcpToggle}
+          <CapabilitySelect
+            items={internalTools}
+            activeIds={session.activeToolIds}
+            onToggle={onToolToggle}
             label="Tools"
             emptyHint="Keine internen Tools gefunden"
           />
-          <McpSelect
-            mcps={debugMcps}
-            activeMcpIds={session.activeMcpIds}
+          <CapabilitySelect
+            items={debugMcps}
+            activeIds={session.activeMcpIds}
             onToggle={onMcpToggle}
             label="MCPs"
             emptyHint="Keine MCP Server konfiguriert"

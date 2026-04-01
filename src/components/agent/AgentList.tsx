@@ -54,20 +54,23 @@ export default function AgentList({ agents, mcps, selectedId, onSelect, onCreate
       <Button size="sm" onClick={onCreate}>
         Neuer Agent
       </Button>
-      {agents.map((agent) => (
-        <Item key={agent.id} $active={agent.id === selectedId} onClick={() => onSelect(agent.id)}>
-          <Name>{agent.name}</Name>
-          {agent.description && <Description>{agent.description}</Description>}
-          <Meta>
-            <Badge variant="info">{agent.maxIterations} Iterationen</Badge>
-            {agent.mcpIds.length > 0 && (
-              <Badge variant="success">
-                {agent.mcpIds.map((id) => mcps.find((mcp) => mcp.id === id)?.emoji || "🛠️").join("")}
-              </Badge>
-            )}
-          </Meta>
-        </Item>
-      ))}
+      {agents.map((agent) => {
+        const capabilityIds = [...agent.toolIds, ...agent.mcpIds];
+        return (
+          <Item key={agent.id} $active={agent.id === selectedId} onClick={() => onSelect(agent.id)}>
+            <Name>{agent.name}</Name>
+            {agent.description && <Description>{agent.description}</Description>}
+            <Meta>
+              <Badge variant="info">{agent.maxIterations} Iterationen</Badge>
+              {capabilityIds.length > 0 && (
+                <Badge variant="success">
+                  {capabilityIds.map((id) => mcps.find((mcp) => mcp.id === id)?.emoji || "🛠️").join("")}
+                </Badge>
+              )}
+            </Meta>
+          </Item>
+        );
+      })}
     </List>
   );
 }

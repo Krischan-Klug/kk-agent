@@ -315,6 +315,19 @@ export default function ChatPage() {
     }
   }
 
+  async function handleToolToggle(toolId: string, enabled: boolean) {
+    if (!session) return;
+    try {
+      await updateSessionAndSet({
+        activeToolIds: enabled
+          ? [...session.activeToolIds, toolId]
+          : session.activeToolIds.filter((id) => id !== toolId),
+      });
+    } catch (err) {
+      logUiError("chat-tool-toggle", err);
+    }
+  }
+
   async function handleReasoningEffort(value: string) {
     if (!session) return;
     try {
@@ -430,6 +443,7 @@ export default function ChatPage() {
         debugUserFacts={userFacts}
         models={models}
         onModelSwitch={handleModelSwitch}
+        onToolToggle={handleToolToggle}
         onMcpToggle={handleMcpToggle}
         onSaveTasks={handleSaveTasks}
         onSaveSessionFacts={handleSaveSessionFacts}

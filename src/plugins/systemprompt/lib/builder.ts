@@ -23,20 +23,21 @@ export interface PromptBuildContext {
 }
 
 /**
- * Build MCP instruction blocks for the given MCP IDs.
- * Agent-specific instructions override the global MCP instructions.
+ * Build capability instruction blocks for the given active tool and MCP IDs.
+ * Agent-specific instructions override the global instructions.
  */
-export function buildMcpInstructions(
-  activeMcpIds: string[],
-  agentMcpInstructions?: Record<string, string>,
+export function buildCapabilityInstructions(
+  activeCapabilityIds: string[],
+  agentInstructions?: Record<string, string>,
 ): string {
-  const all = [...getActiveToolInstructions(), ...getCustomActiveInstructions()].filter((m) => activeMcpIds.includes(m.id));
+  const all = [...getActiveToolInstructions(), ...getCustomActiveInstructions()]
+    .filter((capability) => activeCapabilityIds.includes(capability.id));
 
   const blocks = all
-    .map((m) => {
-      const instruction = agentMcpInstructions?.[m.id] ?? m.instruction;
+    .map((capability) => {
+      const instruction = agentInstructions?.[capability.id] ?? capability.instruction;
       if (!instruction) return null;
-      return `<tool_instruction id="${m.id}" name="${m.name}">\n${instruction}\n</tool_instruction>`;
+      return `<tool_instruction id="${capability.id}" name="${capability.name}">\n${instruction}\n</tool_instruction>`;
     })
     .filter(Boolean);
 

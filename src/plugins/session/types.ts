@@ -5,6 +5,7 @@ export interface SessionState {
   name: string;
   model: string;
   agentId: string;
+  activeToolIds: string[];
   activeMcpIds: string[];
   systemPrompt: string;
   reasoningEffort?: ReasoningEffort;
@@ -25,6 +26,7 @@ export interface SessionMessage {
 export interface CreateSessionBody {
   agentId: string;
   model?: string;
+  activeToolIds?: string[];
   activeMcpIds?: string[];
   reasoningEffort?: ReasoningEffort;
   temperature?: number;
@@ -33,6 +35,7 @@ export interface CreateSessionBody {
 export interface PatchSessionBody {
   agentId?: string;
   model?: string;
+  activeToolIds?: string[];
   activeMcpIds?: string[];
   reasoningEffort?: ReasoningEffort;
   temperature?: number;

@@ -1,6 +1,6 @@
 import {
   buildPrompt as build,
-  buildMcpInstructions as buildMcpInstr,
+  buildCapabilityInstructions as buildCapabilityInstr,
   type PromptBuildContext,
 } from "./lib/builder.js";
 import { getSystemVariables } from "./lib/builder.js";
@@ -16,11 +16,11 @@ export function buildPrompt(
   return build(agentBasePrompt, mcpInstructions, variables, context);
 }
 
-export function buildMcpInstructions(
-  activeMcpIds: string[],
-  agentMcpInstructions?: Record<string, string>,
+export function buildCapabilityInstructions(
+  activeCapabilityIds: string[],
+  agentInstructions?: Record<string, string>,
 ): string {
-  return buildMcpInstr(activeMcpIds, agentMcpInstructions);
+  return buildCapabilityInstr(activeCapabilityIds, agentInstructions);
 }
 
 export { getSystemVariables };

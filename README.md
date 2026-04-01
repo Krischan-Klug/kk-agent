@@ -29,9 +29,11 @@ Runtime-State liegt unter `state/`:
 - `defaults.json`
 - `mcps.json`
 - `provider.json`
-- `sessions.json`
 - `system-mcps.json`
 - `user-memory.json`
+
+Hinweis:
+- Sessions sind aktuell reiner Runtime-State im Speicher und werden nicht nach `state/` persistiert.
 
 ## Wie der Loop funktioniert
 
@@ -88,6 +90,11 @@ Nach aussen bleiben beide getrennt:
 - `/tools` -> interne Tools
 - `/mcp` -> externe MCPs
 
+Intern werden Agenten und Sessions ebenfalls getrennt modelliert:
+
+- Agent: `toolIds` und `mcpIds`
+- Session: `activeToolIds` und `activeMcpIds`
+
 ## Reasoning und Streaming
 
 Assistant-Nachrichten koennen getrenntes `content` und `reasoning` enthalten.
@@ -127,7 +134,7 @@ SSE liefert aktuell folgende Events:
 | GET | `/session` | Sessions listen |
 | GET | `/session/:id` | Session laden |
 | DELETE | `/session/:id` | Session loeschen |
-| PATCH | `/session/:id` | Agent, Model, MCPs, Reasoning, Temperature aendern |
+| PATCH | `/session/:id` | Agent, Model, Tools, MCPs, Reasoning, Temperature aendern |
 | POST | `/session/:id/chat` | Non-Streaming Chat |
 | POST | `/session/:id/chat/stream` | SSE-Chat |
 | GET | `/session/:id/prompt` | Aktuellen aufgeloesten System-Prompt lesen |

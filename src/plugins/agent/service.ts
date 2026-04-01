@@ -6,13 +6,19 @@ import { getSystemVariableNames } from "../systemprompt/lib/builder.js";
 
 function normalizeAgent(agent: AgentDefinition): AgentDefinition {
   const defaults = getDefaults();
+  const toolIds = [...new Set((agent.toolIds ?? []).map(normalizeMcpId))];
   const mcpIds = [...new Set((agent.mcpIds ?? []).map(normalizeMcpId))];
+  const toolInstructions = Object.fromEntries(
+    Object.entries(agent.toolInstructions ?? {}).map(([id, instruction]) => [normalizeMcpId(id), instruction]),
+  );
   const mcpInstructions = Object.fromEntries(
     Object.entries(agent.mcpInstructions ?? {}).map(([id, instruction]) => [normalizeMcpId(id), instruction]),
   );
   return {
     ...agent,
+    toolIds,
     mcpIds,
+    toolInstructions,
     mcpInstructions,
     loopMode: agent.loopMode ?? defaults.agent.loopMode,
     phasePrompts: agent.phasePrompts ?? {},
@@ -48,7 +54,11 @@ export async function createAgent(body: CreateAgentBody): Promise<AgentDefinitio
     description: body.description ?? "",
     systemPrompt: body.systemPrompt ?? "",
     maxIterations: body.maxIterations ?? getDefaults().agent.maxIterations,
+    toolIds: (body.toolIds ?? []).map(normalizeMcpId),
     mcpIds: (body.mcpIds ?? []).map(normalizeMcpId),
+    toolInstructions: Object.fromEntries(
+      Object.entries(body.toolInstructions ?? {}).map(([toolId, instruction]) => [normalizeMcpId(toolId), instruction]),
+    ),
     mcpInstructions: Object.fromEntries(
       Object.entries(body.mcpInstructions ?? {}).map(([mcpId, instruction]) => [normalizeMcpId(mcpId), instruction]),
     ),
@@ -71,7 +81,13 @@ export async function updateAgent(id: string, body: UpdateAgentBody): Promise<Ag
   if (body.description !== undefined) patch.description = body.description;
   if (body.systemPrompt !== undefined) patch.systemPrompt = body.systemPrompt;
   if (body.maxIterations !== undefined) patch.maxIterations = body.maxIterations;
+  if (body.toolIds !== undefined) patch.toolIds = body.toolIds.map(normalizeMcpId);
   if (body.mcpIds !== undefined) patch.mcpIds = body.mcpIds.map(normalizeMcpId);
+  if (body.toolInstructions !== undefined) {
+    patch.toolInstructions = Object.fromEntries(
+      Object.entries(body.toolInstructions).map(([toolId, instruction]) => [normalizeMcpId(toolId), instruction]),
+    );
+  }
   if (body.mcpInstructions !== undefined) {
     patch.mcpInstructions = Object.fromEntries(
       Object.entries(body.mcpInstructions).map(([mcpId, instruction]) => [normalizeMcpId(mcpId), instruction]),
@@ -101,6 +117,22 @@ export async function removeMcpFromAgents(mcpId: string): Promise<void> {
       await store.updateAgent(agent.id, {
         mcpIds: nextMcpIds,
         mcpInstructions: nextInstructions,
+      });
+    });
+
+  await Promise.all(updates);
+}
+
+export async function removeToolFromAgents(toolId: string): Promise<void> {
+  const updates = listAgents()
+    .filter((agent) => agent.toolIds.includes(toolId) || agent.toolInstructions[toolId] !== undefined)
+    .map(async (agent) => {
+      const nextToolIds = agent.toolIds.filter((id) => id !== toolId);
+      const nextInstructions = { ...agent.toolInstructions };
+      delete nextInstructions[toolId];
+      await store.updateAgent(agent.id, {
+        toolIds: nextToolIds,
+        toolInstructions: nextInstructions,
       });
     });
 

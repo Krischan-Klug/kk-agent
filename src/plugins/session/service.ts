@@ -1,6 +1,6 @@
 import type { SessionState, CreateSessionBody, SSEEvent } from "./types.js";
 import * as store from "./lib/store.js";
-import { buildMcpInstructions, buildPrompt, getSystemVariables } from "../systemprompt/service.js";
+import { buildCapabilityInstructions, buildPrompt, getSystemVariables } from "../systemprompt/service.js";
 import { getActiveModel, getModelSettings } from "../provider/service.js";
 import type { ReasoningLevelConfig } from "../provider/types.js";
 import { REASONING_LEVEL_DEFAULTS } from "../provider/defaults.js";
@@ -61,24 +61,30 @@ function fromLoopMessages(messages: LoopMessage[]): SessionState["messages"] {
 }
 
 function sanitizeMcpIds(mcpIds: string[]): string[] {
-  const knownIds = new Set([...getKnownMcpIds(), ...getKnownSystemMcpIds()]);
+  const knownIds = new Set(getKnownMcpIds());
   return [...new Set(mcpIds.map(normalizeMcpId))].filter((id) => knownIds.has(id));
 }
 
-function getSessionRunnableMcpIds(activeMcpIds: string[]): string[] {
+function sanitizeToolIds(toolIds: string[]): string[] {
+  const knownIds = new Set(getKnownSystemMcpIds());
+  return [...new Set(toolIds.map(normalizeMcpId))].filter((id) => knownIds.has(id));
+}
+
+function getSessionRunnableMcpIds(activeToolIds: string[], activeMcpIds: string[]): string[] {
   const runnable = new Set([...getRunnableMcpIds(), ...getRunnableSystemMcpIds()]);
-  return activeMcpIds.filter((id) => runnable.has(id));
+  return [...activeToolIds, ...activeMcpIds].filter((id) => runnable.has(id));
 }
 
 function buildRunnableMcpInstructions(
+  activeToolIds: string[],
   activeMcpIds: string[],
-  agentMcpInstructions: Record<string, string>,
+  agentInstructions: Record<string, string>,
 ): string {
-  return buildMcpInstructions(getSessionRunnableMcpIds(activeMcpIds), agentMcpInstructions);
+  return buildCapabilityInstructions(getSessionRunnableMcpIds(activeToolIds, activeMcpIds), agentInstructions);
 }
 
-function getCombinedToolDefinitions(activeMcpIds: string[]) {
-  return [...getSystemToolDefinitionsForActive(activeMcpIds), ...getToolDefinitions(activeMcpIds)];
+function getCombinedToolDefinitions(activeToolIds: string[], activeMcpIds: string[]) {
+  return [...getSystemToolDefinitionsForActive(activeToolIds), ...getToolDefinitions(activeMcpIds)];
 }
 
 async function executeCombinedTool(toolName: string, args: Record<string, unknown>) {
@@ -89,10 +95,14 @@ async function executeCombinedTool(toolName: string, args: Record<string, unknow
 
 function buildCurrentSystemPrompt(
   sessionId: string,
-  session: Pick<SessionState, "activeMcpIds" | "systemPrompt" | "model">,
+  session: Pick<SessionState, "activeToolIds" | "activeMcpIds" | "systemPrompt" | "model">,
   agent: ReturnType<typeof getAgent>,
 ): string {
-  const mcpInstr = buildRunnableMcpInstructions(session.activeMcpIds, agent.mcpInstructions);
+  const mcpInstr = buildRunnableMcpInstructions(
+    session.activeToolIds,
+    session.activeMcpIds,
+    { ...agent.toolInstructions, ...agent.mcpInstructions },
+  );
 
   const variables: Record<string, string> = {
     ...getSystemVariables({ CURRENT_MODEL: session.model }),
@@ -107,15 +117,24 @@ function buildCurrentSystemPrompt(
   });
 }
 
+function resolveSessionToolIds(
+  agent: ReturnType<typeof getAgent>,
+  activeToolIds?: string[],
+): string[] {
+  if (activeToolIds !== undefined) return sanitizeToolIds(activeToolIds);
+  return sanitizeToolIds(agent.toolIds ?? []);
+}
+
 function resolveSessionMcpIds(agent: ReturnType<typeof getAgent>, activeMcpIds?: string[]): string[] {
   return sanitizeMcpIds(activeMcpIds ?? agent.mcpIds ?? []);
 }
 
 function resolveSessionDefaults(
   agent: ReturnType<typeof getAgent>,
-  body: Pick<CreateSessionBody, "activeMcpIds" | "model" | "reasoningEffort" | "temperature">,
+  body: Pick<CreateSessionBody, "activeToolIds" | "activeMcpIds" | "model" | "reasoningEffort" | "temperature">,
 ) {
   return {
+    activeToolIds: resolveSessionToolIds(agent, body.activeToolIds),
     activeMcpIds: resolveSessionMcpIds(agent, body.activeMcpIds),
     model: body.model ?? agent.defaultModel ?? getActiveModel(),
     reasoningEffort: body.reasoningEffort ?? agent.reasoningEffort,
@@ -129,6 +148,7 @@ export function createSession(body: CreateSessionBody): SessionState {
   const session = store.createSession({
     agentId: body.agentId,
     model: defaults.model,
+    activeToolIds: defaults.activeToolIds,
     activeMcpIds: defaults.activeMcpIds,
     systemPrompt: agent.systemPrompt,
     reasoningEffort: defaults.reasoningEffort,
@@ -187,9 +207,13 @@ function prepareLoopRun(sessionId: string, message: string) {
     session,
     agent,
     messages,
-    tools: getCombinedToolDefinitions(session.activeMcpIds),
+    tools: getCombinedToolDefinitions(session.activeToolIds, session.activeMcpIds),
     reasoning: resolveReasoningConfig(session),
-    mcpInstructions: buildRunnableMcpInstructions(session.activeMcpIds, agent.mcpInstructions),
+    mcpInstructions: buildRunnableMcpInstructions(
+      session.activeToolIds,
+      session.activeMcpIds,
+      { ...agent.toolInstructions, ...agent.mcpInstructions },
+    ),
   };
 }
 
@@ -298,7 +322,14 @@ export async function chatStream(
 
 export function patchSession(
   id: string,
-  update: { agentId?: string; model?: string; activeMcpIds?: string[]; reasoningEffort?: string; temperature?: number },
+  update: {
+    agentId?: string;
+    model?: string;
+    activeToolIds?: string[];
+    activeMcpIds?: string[];
+    reasoningEffort?: string;
+    temperature?: number;
+  },
 ): SessionState {
   const patch: Partial<SessionState> = {};
   if (update.agentId !== undefined) {
@@ -306,6 +337,9 @@ export function patchSession(
     const defaults = resolveSessionDefaults(agent, update);
     patch.agentId = update.agentId;
     patch.systemPrompt = agent.systemPrompt;
+    if (update.activeToolIds === undefined) {
+      patch.activeToolIds = defaults.activeToolIds;
+    }
     if (update.activeMcpIds === undefined) {
       patch.activeMcpIds = defaults.activeMcpIds;
     }
@@ -320,6 +354,9 @@ export function patchSession(
     }
   }
   if (update.model) patch.model = update.model;
+  if (update.activeToolIds !== undefined) {
+    patch.activeToolIds = sanitizeToolIds(update.activeToolIds);
+  }
   if (update.activeMcpIds !== undefined) {
     patch.activeMcpIds = sanitizeMcpIds(update.activeMcpIds);
   }
@@ -338,6 +375,16 @@ export function removeMcpFromSessions(mcpId: string): void {
     const nextMcpIds = session.activeMcpIds.filter((id) => id !== mcpId);
     store.updateSession(session.id, {
       activeMcpIds: nextMcpIds,
+    });
+  }
+}
+
+export function removeToolFromSessions(toolId: string): void {
+  for (const session of listSessions()) {
+    if (!session.activeToolIds.includes(toolId)) continue;
+    const nextToolIds = session.activeToolIds.filter((id) => id !== toolId);
+    store.updateSession(session.id, {
+      activeToolIds: nextToolIds,
     });
   }
 }

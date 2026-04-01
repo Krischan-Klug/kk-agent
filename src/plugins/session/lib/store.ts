@@ -6,6 +6,7 @@ const sessions = new Map<string, SessionState>();
 export function createSession(data: {
   agentId: string;
   model: string;
+  activeToolIds: string[];
   activeMcpIds: string[];
   systemPrompt: string;
   reasoningEffort?: SessionState["reasoningEffort"];
@@ -17,6 +18,7 @@ export function createSession(data: {
     name: "",
     model: data.model,
     agentId: data.agentId,
+    activeToolIds: data.activeToolIds,
     activeMcpIds: data.activeMcpIds,
     systemPrompt: data.systemPrompt,
     reasoningEffort: data.reasoningEffort,

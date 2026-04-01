@@ -81,7 +81,6 @@ export default function ChatPage() {
   const [debugOpen, setDebugOpen] = useState(false);
   const [debugTab, setDebugTab] = useState<ChatDebugTab | null>("prompt");
   const [debugPrompt, setDebugPrompt] = useState<string | null>(null);
-  const [debugTools, setDebugTools] = useState<McpListItem[]>([]);
   const [tasks, setTasks] = useState<TaskItem[]>([]);
   const [sessionFacts, setSessionFacts] = useState<MemoryFact[]>([]);
   const [userFacts, setUserFacts] = useState<MemoryFact[]>([]);
@@ -148,7 +147,6 @@ export default function ChatPage() {
     sessionApi.getPrompt(sessionId).then((result) => setDebugPrompt(result.systemPrompt)).catch(() => setDebugPrompt("[Fehler beim Laden]"));
     loadAvailableMcps()
       .then(({ tools, mcps }) => {
-        setDebugTools([...tools, ...mcps]);
         setToolMcps(tools);
         setMcps(mcps);
       })
@@ -425,7 +423,6 @@ export default function ChatPage() {
         session={session}
         loopState={loopState}
         debugPrompt={debugPrompt}
-        debugTools={debugTools}
         internalTools={toolMcps}
         debugMcps={mcps}
         debugTasks={tasks}

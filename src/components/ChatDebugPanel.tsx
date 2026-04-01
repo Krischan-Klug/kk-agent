@@ -8,7 +8,7 @@ import TextArea from "@/components/TextArea";
 import ModelSelect from "@/components/ModelSelect";
 import McpSelect from "@/components/McpSelect";
 
-export type ChatDebugTab = "prompt" | "tools" | "session" | "messages" | "tasks" | "memory";
+export type ChatDebugTab = "prompt" | "tools" | "mcps" | "session" | "messages" | "tasks" | "memory";
 
 const DebugPanel = styled.div`
   border: 1px solid var(--border);
@@ -120,7 +120,6 @@ type Props = {
   session: SessionState | null;
   loopState: AgentLoopState | null;
   debugPrompt: string | null;
-  debugTools: McpListItem[];
   internalTools: McpListItem[];
   debugMcps: McpListItem[];
   debugTasks: TaskItem[];
@@ -152,7 +151,6 @@ export default function ChatDebugPanel({
   session,
   loopState,
   debugPrompt,
-  debugTools,
   internalTools,
   debugMcps,
   debugTasks,
@@ -175,6 +173,7 @@ export default function ChatDebugPanel({
   useEffect(() => setUserMemoryDraft(toFactDraft(debugUserFacts)), [debugUserFacts]);
 
   if (!open || !session) return null;
+  const activeMcpIds = session.activeMcpIds;
 
   function updateTask(index: number, patch: Partial<TaskItem>) {
     setTaskDraft((prev) => prev.map((task, i) => (i === index ? { ...task, ...patch } : task)));
@@ -217,15 +216,13 @@ export default function ChatDebugPanel({
 
   let content = "";
 
-  if (debugTab === "prompt") {
-    content = debugPrompt ?? "Lade...";
-  } else if (debugTab === "tools") {
-    const activeTools = debugTools.filter((m) => session.activeMcpIds.includes(m.id));
-    content = activeTools.length === 0
-      ? "Keine aktiven Tools."
-      : activeTools
+  function renderDefinitions(items: McpListItem[], emptyLabel: string): string {
+    const activeItems = items.filter((m) => activeMcpIds.includes(m.id));
+    return activeItems.length === 0
+      ? emptyLabel
+      : activeItems
           .map((m) => {
-            const header = `-- ${m.emoji || "Tool"} ${m.name} (${m.id}) --`;
+            const header = `-- ${m.emoji || "🛠️"} ${m.name} (${m.id}) --`;
             const tools = m.tools.map((t) => {
               const params = t.inputSchema?.properties
                 ? Object.entries(t.inputSchema.properties as Record<string, { type?: string; description?: string }>)
@@ -237,6 +234,14 @@ export default function ChatDebugPanel({
             return `${header}\n${tools.join("\n\n")}`;
           })
           .join("\n\n");
+  }
+
+  if (debugTab === "prompt") {
+    content = debugPrompt ?? "Lade...";
+  } else if (debugTab === "tools") {
+    content = renderDefinitions(internalTools, "Keine aktiven Tools.");
+  } else if (debugTab === "mcps") {
+    content = renderDefinitions(debugMcps, "Keine aktiven MCPs.");
   } else if (debugTab === "session") {
     content = JSON.stringify(
       {
@@ -278,6 +283,7 @@ export default function ChatDebugPanel({
       <DebugTabs>
         <DebugTab $active={debugTab === "prompt"} onClick={() => toggleTab("prompt")}>System Prompt</DebugTab>
         <DebugTab $active={debugTab === "tools"} onClick={() => toggleTab("tools")}>Tools</DebugTab>
+        <DebugTab $active={debugTab === "mcps"} onClick={() => toggleTab("mcps")}>MCPs</DebugTab>
         <DebugTab $active={debugTab === "session"} onClick={() => toggleTab("session")}>Session</DebugTab>
         <DebugTab $active={debugTab === "messages"} onClick={() => toggleTab("messages")}>Messages</DebugTab>
         <DebugTab $active={debugTab === "tasks"} onClick={() => toggleTab("tasks")}>Tasks</DebugTab>
@@ -306,13 +312,12 @@ export default function ChatDebugPanel({
         </DebugControls>
       </DebugTabs>
 
-      {(debugTab === "prompt" || debugTab === "tools" || debugTab === "session" || debugTab === "messages") && (
+      {(debugTab === "prompt" || debugTab === "tools" || debugTab === "mcps" || debugTab === "session" || debugTab === "messages") && (
         <DebugContent>{content}</DebugContent>
       )}
 
       {debugTab === "tasks" && (
         <EditorWrap>
-          <Hint>Tasks nur im Debug pflegen, damit der normale Chat sauber bleibt.</Hint>
           {taskDraft.map((task, index) => (
             <TaskRow key={task.id}>
               <Input
@@ -349,9 +354,7 @@ export default function ChatDebugPanel({
 
       {debugTab === "memory" && (
         <EditorWrap>
-          <Hint>Session und User Memory liegen nur noch im Debug-Bereich.</Hint>
           <div>
-            <Hint>Session Memory, eine Zeile pro Fakt.</Hint>
             <TextArea
               value={sessionMemoryDraft}
               onChange={(e) => setSessionMemoryDraft(e.target.value)}
@@ -364,7 +367,6 @@ export default function ChatDebugPanel({
             </RowActions>
           </div>
           <div>
-            <Hint>User Memory, eine Zeile pro Fakt.</Hint>
             <TextArea
               value={userMemoryDraft}
               onChange={(e) => setUserMemoryDraft(e.target.value)}

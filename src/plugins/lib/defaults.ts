@@ -36,6 +36,9 @@ export interface AppDefaults {
   reasoning: {
     defaultEffort: string;
   };
+  attachment: {
+    visionNotSupportedInstruction: string;
+  };
 }
 
 /* ── Code-Fallbacks ── */
@@ -169,6 +172,9 @@ NACHFRAGEN:
   },
   reasoning: {
     defaultEffort: "medium",
+  },
+  attachment: {
+    visionNotSupportedInstruction: "Der Nutzer hat ein Bild angehaengt, aber das aktuelle Modell unterstuetzt keine Bilderkennung. Informiere den Nutzer darueber und schlage vor, ein vision-faehiges Modell zu verwenden.",
   },
 };
 

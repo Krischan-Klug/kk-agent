@@ -1,4 +1,5 @@
-import type { UnifiedMessage, UnifiedToolDefinition } from "../../provider/lib/types.js";
+import type { UnifiedMessage, UnifiedToolDefinition, ContentBlock } from "../../provider/lib/types.js";
+import { getTextContent } from "../../provider/lib/types.js";
 import type { LoopOptions, LoopResult, LoopMessage } from "../types.js";
 import type { AgentLoopMode, AgentLoopPhase, AgentLoopState } from "../../agent/types.js";
 import { callProviderStream } from "../../provider/service.js";
@@ -19,13 +20,14 @@ const INVALID_TOOL_CALL_PATTERNS = [
   /<\/tool_call>/i,
 ];
 
-function looksLikeInvalidToolAttempt(content: string, reasoning?: string): boolean {
-  const combined = `${content}\n${reasoning ?? ""}`;
+function looksLikeInvalidToolAttempt(content: string | ContentBlock[], reasoning?: string): boolean {
+  const text = getTextContent(content);
+  const combined = `${text}\n${reasoning ?? ""}`;
   return INVALID_TOOL_CALL_PATTERNS.some((pattern) => pattern.test(combined));
 }
 
-function hasVisibleContent(content: string): boolean {
-  return content.trim().length > 0;
+function hasVisibleContent(content: string | ContentBlock[]): boolean {
+  return getTextContent(content).trim().length > 0;
 }
 
 function toUnifiedTools(tools: LoopOptions["allTools"]): UnifiedToolDefinition[] {
@@ -205,7 +207,8 @@ export async function runAgentLoop(opts: LoopOptions): Promise<LoopResult> {
     iteration++;
     emitLoopState(loopState, opts, { iteration, phase, status: "running" });
 
-    const response = await runModelPass(opts, messages, phase, latestFeedback, retryInstruction);
+    const extraSys = iteration === 1 ? opts.extraSystemMessages : undefined;
+    const response = await runModelPass(opts, messages, phase, latestFeedback, retryInstruction, extraSys);
     retryInstruction = undefined;
 
     const messageContent = response.content.trim();

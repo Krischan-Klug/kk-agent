@@ -1,4 +1,4 @@
-import type { UnifiedToolCall, TokenStats } from "../provider/lib/types.js";
+import type { UnifiedToolCall, TokenStats, ContentBlock } from "../provider/lib/types.js";
 import type { AgentLoopMode, AgentLoopPhase, AgentLoopState, AgentPhasePrompts } from "../agent/types.js";
 
 export interface ToolDefinition {
@@ -15,7 +15,7 @@ export interface ToolResult {
 
 export interface LoopMessage {
   role: "user" | "assistant" | "tool" | "system";
-  content: string;
+  content: string | ContentBlock[];
   reasoning?: string;
   tool_call_id?: string;
   tool_calls?: UnifiedToolCall[];
@@ -41,6 +41,7 @@ export interface LoopOptions {
   phasePrompts: AgentPhasePrompts;
   mcpInstructions: string;
   agentVariables: Record<string, string>;
+  extraSystemMessages?: string[];
   phase: AgentLoopPhase;
   allTools: ToolDefinition[];
   executeTool: ExecuteToolFn;

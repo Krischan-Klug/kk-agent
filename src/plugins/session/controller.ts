@@ -11,6 +11,7 @@ import {
 } from "./service.js";
 import type { CreateSessionBody, ChatBody, PatchSessionBody } from "./types.js";
 import { resolvePrompt } from "../tools/lib/user-interaction/interaction-store.js";
+import { storeAttachment } from "./lib/attachments.js";
 
 export async function doCreate(req: Request, res: Response): Promise<Response> {
   try {
@@ -45,11 +46,28 @@ export async function doDelete(req: Request, res: Response): Promise<Response> {
   }
 }
 
+export async function doUploadAttachment(req: Request, res: Response): Promise<Response> {
+  try {
+    const file = (req as Request & { file?: Express.Multer.File }).file;
+    if (!file) return res.status(400).json({ error: "No file uploaded" });
+
+    // Validate session exists
+    getSession(req.params.id);
+
+    const meta = await storeAttachment(req.params.id, file);
+    return res.status(201).json(meta);
+  } catch (err) {
+    const message = (err as Error).message;
+    const status = message.includes("not found") ? 404 : message.includes("Unsupported") || message.includes("too large") ? 400 : 500;
+    return res.status(status).json({ error: message });
+  }
+}
+
 export async function doChat(req: Request, res: Response): Promise<Response> {
   try {
-    const { message } = req.body as ChatBody;
+    const { message, attachmentIds } = req.body as ChatBody;
     if (!message) return res.status(400).json({ error: "message is required" });
-    const result = await chat(req.params.id, message);
+    const result = await chat(req.params.id, message, attachmentIds);
     return res.json(result);
   } catch (err) {
     return res.status(500).json({ error: (err as Error).message });
@@ -58,7 +76,7 @@ export async function doChat(req: Request, res: Response): Promise<Response> {
 
 export async function doChatStream(req: Request, res: Response): Promise<void> {
   try {
-    const { message } = req.body as ChatBody;
+    const { message, attachmentIds } = req.body as ChatBody;
     if (!message) {
       res.status(400).json({ error: "message is required" });
       return;
@@ -72,7 +90,7 @@ export async function doChatStream(req: Request, res: Response): Promise<void> {
 
     await chatStream(req.params.id, message, (event) => {
       res.write(`data: ${JSON.stringify(event)}\n\n`);
-    });
+    }, attachmentIds);
 
     res.end();
   } catch (err) {

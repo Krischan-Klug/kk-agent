@@ -53,6 +53,7 @@ function createCapabilities(
     return {
       supportsTools: true,
       supportsReasoning: true,
+      supportsVision: false,
       reasoningSource: "declared",
       supportsStreaming: true,
       supportedEndpoints: ["chat-completions", "responses"],
@@ -66,6 +67,7 @@ function createCapabilities(
     return {
       supportsTools: true,
       supportsReasoning: false,
+      supportsVision: false,
       reasoningSource: "none",
       supportsStreaming: true,
       supportedEndpoints: ["chat-completions"],
@@ -78,6 +80,7 @@ function createCapabilities(
   return {
     supportsTools: true,
     supportsReasoning: false,
+    supportsVision: false,
     reasoningSource: "none",
     supportsStreaming: true,
     supportedEndpoints: ["chat-completions"],
@@ -90,14 +93,16 @@ function createCapabilities(
 function buildLmStudioCapabilities(model: {
   max_context_length?: number;
   loaded_instances?: Array<{ config?: { context_length?: number } }>;
-  capabilities?: { reasoning?: { allowed_options?: string[] } };
+  capabilities?: { reasoning?: { allowed_options?: string[] }; vision?: unknown };
 }): ModelCapabilities {
   const contextWindow = model.loaded_instances?.[0]?.config?.context_length ?? model.max_context_length;
   const supportsReasoning = !!model.capabilities?.reasoning;
+  const supportsVision = !!model.capabilities?.vision;
 
   return {
     supportsTools: true,
     supportsReasoning,
+    supportsVision,
     reasoningSource: supportsReasoning ? "declared" : "none",
     supportsStreaming: true,
     supportedEndpoints: ["chat-completions", "responses"],
@@ -116,7 +121,7 @@ async function detectModels(baseUrl: string, headers: Record<string, string>, pr
           key: string;
           max_context_length?: number;
           loaded_instances?: Array<{ config?: { context_length?: number } }>;
-          capabilities?: { reasoning?: { allowed_options?: string[] } };
+          capabilities?: { reasoning?: { allowed_options?: string[] }; vision?: unknown };
         }>;
       };
       return {

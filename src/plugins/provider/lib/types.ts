@@ -1,8 +1,21 @@
+export type ContentBlock =
+  | { type: "text"; text: string }
+  | { type: "image_url"; image_url: { url: string } };
+
 export interface UnifiedMessage {
   role: "system" | "user" | "assistant" | "tool";
-  content: string;
+  content: string | ContentBlock[];
   tool_call_id?: string;
   tool_calls?: UnifiedToolCall[];
+}
+
+/** Extract plain text from content that may be string or ContentBlock[] */
+export function getTextContent(content: string | ContentBlock[]): string {
+  if (typeof content === "string") return content;
+  return content
+    .filter((b): b is { type: "text"; text: string } => b.type === "text")
+    .map((b) => b.text)
+    .join("");
 }
 
 export interface UnifiedToolCall {

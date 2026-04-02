@@ -17,6 +17,9 @@ import { taskTools } from "./task/tools.js";
 import { memoryDefinition } from "./memory/definition.js";
 import { executeMemoryTool } from "./memory/runtime.js";
 import { memoryTools } from "./memory/tools.js";
+import { attachmentDefinition } from "./attachment/definition.js";
+import { executeAttachmentTool } from "./attachment/runtime.js";
+import { attachmentTools } from "./attachment/tools.js";
 
 type SystemToolModule = {
   definition: McpServerConfig;
@@ -54,6 +57,11 @@ const SYSTEM_TOOL_MODULES: Record<SystemMcpKey, SystemToolModule> = {
     definition: memoryDefinition,
     tools: memoryTools,
     execute: executeMemoryTool,
+  },
+  attachment: {
+    definition: attachmentDefinition,
+    tools: attachmentTools,
+    execute: executeAttachmentTool,
   },
 };
 

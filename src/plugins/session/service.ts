@@ -1,8 +1,11 @@
 import type { SessionState, CreateSessionBody, SSEEvent } from "./types.js";
+import type { AttachmentDisplayMeta } from "./lib/attachment-types.js";
 import * as store from "./lib/store.js";
+import { clearSessionAttachments, getSessionAttachmentsByIds, readAttachmentData } from "./lib/attachments.js";
 import { buildCapabilityInstructions, buildPrompt, getSystemVariables } from "../systemprompt/service.js";
-import { getModelSettings, getActiveProviderId, resolveProviderModel } from "../provider/service.js";
+import { getModelSettings, getActiveProviderId, resolveProviderModel, getModelCapabilities } from "../provider/service.js";
 import type { ReasoningLevelConfig } from "../provider/types.js";
+import { getTextContent, type ContentBlock } from "../provider/lib/types.js";
 import { REASONING_LEVEL_DEFAULTS } from "../provider/defaults.js";
 import { getToolDefinitions, executeTool, getKnownMcpIds, getRunnableMcpIds } from "../mcp/service.js";
 import {
@@ -22,6 +25,8 @@ import {
   unregisterSession,
   runWithSessionId,
 } from "../tools/lib/user-interaction/interaction-store.js";
+
+const REQUIRED_SESSION_TOOL_IDS = ["attachment"];
 
 function generateSessionName(content: string): string {
   const clean = content.trim();
@@ -49,7 +54,7 @@ function toLoopMessages(messages: SessionState["messages"]): LoopMessage[] {
 function fromLoopMessages(messages: LoopMessage[]): SessionState["messages"] {
   return messages.map((message) => ({
     role: message.role,
-    content: message.content,
+    content: typeof message.content === "string" ? message.content : getTextContent(message.content),
     reasoning: message.reasoning,
     tool_call_id: message.tool_call_id,
     tool_calls: message.tool_calls?.map((toolCall) => ({
@@ -60,6 +65,24 @@ function fromLoopMessages(messages: LoopMessage[]): SessionState["messages"] {
   }));
 }
 
+function mergeMessageDisplayState(
+  nextMessages: SessionState["messages"],
+  previousMessages: SessionState["messages"],
+): SessionState["messages"] {
+  return nextMessages.map((message, index) => {
+    const previous = previousMessages[index];
+    if (!previous || previous.role !== message.role || !previous.attachments?.length) {
+      return message;
+    }
+
+    return {
+      ...message,
+      content: previous.content,
+      attachments: previous.attachments,
+    };
+  });
+}
+
 function sanitizeMcpIds(mcpIds: string[]): string[] {
   const knownIds = new Set(getKnownMcpIds());
   return [...new Set(mcpIds.map(normalizeMcpId))].filter((id) => knownIds.has(id));
@@ -67,7 +90,7 @@ function sanitizeMcpIds(mcpIds: string[]): string[] {
 
 function sanitizeToolIds(toolIds: string[]): string[] {
   const knownIds = new Set(getKnownSystemMcpIds());
-  return [...new Set(toolIds.map(normalizeMcpId))].filter((id) => knownIds.has(id));
+  return [...new Set([...toolIds, ...REQUIRED_SESSION_TOOL_IDS].map(normalizeMcpId))].filter((id) => knownIds.has(id));
 }
 
 function getSessionRunnableMcpIds(activeToolIds: string[], activeMcpIds: string[]): string[] {
@@ -145,6 +168,12 @@ async function resolveSessionDefaults(
   };
 }
 
+function formatAttachmentSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
 export async function createSession(body: CreateSessionBody): Promise<SessionState> {
   const agent = getAgent(body.agentId);
   const defaults = await resolveSessionDefaults(agent, body, getActiveProviderId());
@@ -175,6 +204,7 @@ export function deleteSession(id: string): void {
   clearLoopState(id);
   clearTasks(id);
   clearSessionFacts(id);
+  clearSessionAttachments(id);
 }
 
 export function getCurrentSystemPrompt(sessionId: string): string {
@@ -200,16 +230,88 @@ function resolveReasoningConfig(session: SessionState): {
   };
 }
 
-function prepareLoopRun(sessionId: string, message: string) {
+async function prepareLoopRun(sessionId: string, message: string, attachmentIds?: string[]) {
   const session = getSession(sessionId);
   const agent = getAgent(session.agentId);
-  const messages = [...session.messages, { role: "user" as const, content: message }];
+
+  let userContent: string | ContentBlock[] = message;
+  let attachmentsMeta: AttachmentDisplayMeta[] | undefined;
+  const extraSystemMessages: string[] = [];
+
+  if (attachmentIds?.length) {
+    const attachments = await getSessionAttachmentsByIds(sessionId, attachmentIds);
+    if (attachments.length > 0) {
+      const textParts: string[] = [message];
+      const imageBlocks: ContentBlock[] = [];
+      const displayMetas: AttachmentDisplayMeta[] = [];
+      const attachmentHints: string[] = [];
+
+      for (const att of attachments) {
+        const displayMeta: AttachmentDisplayMeta = {
+          filename: att.filename,
+          mimeType: att.mimeType,
+          category: att.category,
+          size: att.size,
+        };
+
+        attachmentHints.push(
+          `- ${att.filename} [id=${att.id}, type=${att.category}, size=${formatAttachmentSize(att.size)}]`,
+        );
+
+        if (att.category === "image") {
+          const base64 = (await readAttachmentData(att)).toString("base64");
+          const dataUrl = `data:${att.mimeType};base64,${base64}`;
+          imageBlocks.push({ type: "image_url", image_url: { url: dataUrl } });
+          displayMeta.previewDataUrl = dataUrl;
+        }
+
+        displayMetas.push(displayMeta);
+      }
+
+      textParts.push(
+        [
+          "",
+          "[Chat attachments]",
+          "Use the attachment tool for uploaded files from this session instead of searching the main filesystem.",
+          ...attachmentHints,
+        ].join("\n"),
+      );
+
+      if (imageBlocks.length > 0) {
+        const capabilities = getModelCapabilities(session.providerId, session.model);
+        if (capabilities && !capabilities.supportsVision) {
+          const defaults = getDefaults();
+          extraSystemMessages.push(defaults.attachment.visionNotSupportedInstruction);
+          userContent = textParts.join("");
+        } else {
+          userContent = [
+            { type: "text" as const, text: textParts.join("") },
+            ...imageBlocks,
+          ];
+        }
+      } else {
+        userContent = textParts.join("");
+      }
+
+      attachmentsMeta = displayMetas;
+    }
+  }
+
+  const userMessage: SessionState["messages"][number] = {
+    role: "user" as const,
+    content: message,
+    ...(attachmentsMeta?.length ? { attachments: attachmentsMeta } : {}),
+  };
+
+  const messages = [...session.messages, userMessage];
   store.updateSession(sessionId, { messages });
 
   return {
     session,
     agent,
     messages,
+    userContent,
+    extraSystemMessages,
     tools: getCombinedToolDefinitions(session.activeToolIds, session.activeMcpIds),
     reasoning: resolveReasoningConfig(session),
     mcpInstructions: buildRunnableMcpInstructions(
@@ -223,10 +325,11 @@ function prepareLoopRun(sessionId: string, message: string) {
 function finalizeLoopSession(
   sessionId: string,
   session: SessionState,
+  previousMessages: SessionState["messages"],
   messages: LoopMessage[],
   finalResponse: string,
 ): SessionState {
-  const nextMessages = fromLoopMessages(messages);
+  const nextMessages = mergeMessageDisplayState(fromLoopMessages(messages), previousMessages);
   const patch: Partial<SessionState> = { messages: nextMessages };
   if (!session.name && finalResponse) {
     const name = generateSessionName(finalResponse);
@@ -236,15 +339,27 @@ function finalizeLoopSession(
 }
 
 function buildLoopRequest(
-  prepared: ReturnType<typeof prepareLoopRun>,
+  prepared: Awaited<ReturnType<typeof prepareLoopRun>>,
   sessionId: string,
   handlers: Parameters<typeof runLoop>[0] extends infer T ? Partial<T> : never = {},
 ) {
+  // Build loop messages, substituting the last visible user message with provider-facing content.
+  const loopMessages = toLoopMessages(prepared.messages);
+  if (loopMessages.length > 0) {
+    for (let i = loopMessages.length - 1; i >= 0; i--) {
+      if (loopMessages[i].role === "user") {
+        loopMessages[i].content = prepared.userContent;
+        break;
+      }
+    }
+  }
+
   return {
     agentId: prepared.session.agentId,
     sessionId,
     providerId: prepared.session.providerId,
-    messages: toLoopMessages(prepared.messages),
+    messages: loopMessages,
+    extraSystemMessages: prepared.extraSystemMessages,
     model: prepared.session.model,
     reasoningEffort: prepared.reasoning.reasoningEffort,
     temperature: prepared.reasoning.temperature,
@@ -265,12 +380,13 @@ function buildLoopRequest(
 export async function chat(
   sessionId: string,
   message: string,
+  attachmentIds?: string[],
 ): Promise<{ response: string; session: SessionState }> {
-  const prepared = prepareLoopRun(sessionId, message);
+  const prepared = await prepareLoopRun(sessionId, message, attachmentIds);
   const result = await runLoop(buildLoopRequest(prepared, sessionId));
   return {
     response: result.finalResponse,
-    session: finalizeLoopSession(sessionId, prepared.session, result.messages, result.finalResponse),
+    session: finalizeLoopSession(sessionId, prepared.session, prepared.messages, result.messages, result.finalResponse),
   };
 }
 
@@ -278,8 +394,9 @@ export async function chatStream(
   sessionId: string,
   message: string,
   emit: (event: SSEEvent) => void,
+  attachmentIds?: string[],
 ): Promise<void> {
-  const prepared = prepareLoopRun(sessionId, message);
+  const prepared = await prepareLoopRun(sessionId, message, attachmentIds);
 
   registerSession(sessionId, (payload) => {
     emit({
@@ -315,7 +432,13 @@ export async function chatStream(
           }),
       })),
     );
-    const updatedSession = finalizeLoopSession(sessionId, prepared.session, result.messages, result.finalResponse);
+    const updatedSession = finalizeLoopSession(
+      sessionId,
+      prepared.session,
+      prepared.messages,
+      result.messages,
+      result.finalResponse,
+    );
     emit({ type: "done", session: updatedSession });
   } catch (err) {
     emit({ type: "error", message: (err as Error).message });

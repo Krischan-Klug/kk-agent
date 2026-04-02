@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import type { UnifiedRequest, UnifiedResponse, OnChunkFn, TokenStats } from "./lib/types.js";
 import type {
   EndpointType,
+  ModelCapabilities,
   ModelInfo,
   ModelSettings,
   ProviderConfig,
@@ -279,6 +280,11 @@ export async function estimateProviderTokens(request: UnifiedRequest): Promise<T
     ...normalizeRequestOptions(model, settings, request),
   };
   return estimateRequestTokens(mapped, provider.baseUrl);
+}
+
+export function getModelCapabilities(providerId: string, modelId: string): ModelCapabilities | undefined {
+  const models = modelsCache.get(providerId);
+  return models?.find((m) => m.id === modelId)?.capabilities;
 }
 
 export function getActiveProviderId(): string {

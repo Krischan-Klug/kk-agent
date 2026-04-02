@@ -21,7 +21,17 @@ function buildInput(messages: UnifiedMessage[]) {
     if (m.role === "system") {
       input.push({ type: "message", role: "system", content: m.content });
     } else if (m.role === "user") {
-      input.push({ type: "message", role: "user", content: m.content });
+      // Handle multimodal content blocks for Responses API
+      if (Array.isArray(m.content)) {
+        const mapped = m.content.map((block) => {
+          if (block.type === "text") return { type: "input_text", text: block.text };
+          if (block.type === "image_url") return { type: "input_image", image_url: block.image_url.url };
+          return block;
+        });
+        input.push({ type: "message", role: "user", content: mapped });
+      } else {
+        input.push({ type: "message", role: "user", content: m.content });
+      }
     } else if (m.role === "assistant") {
       if (m.content) {
         input.push({ type: "message", role: "assistant", content: m.content });

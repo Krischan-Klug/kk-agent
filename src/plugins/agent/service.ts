@@ -4,9 +4,15 @@ import { getDefaults } from "../lib/defaults.js";
 import { createSlugId, normalizeMcpId } from "../lib/ids.js";
 import { getSystemVariableNames } from "../systemprompt/lib/builder.js";
 
+const REQUIRED_TOOL_IDS = ["attachment"];
+
+function ensureRequiredToolIds(toolIds: string[]): string[] {
+  return [...new Set([...toolIds, ...REQUIRED_TOOL_IDS].map(normalizeMcpId))];
+}
+
 function normalizeAgent(agent: AgentDefinition): AgentDefinition {
   const defaults = getDefaults();
-  const toolIds = [...new Set((agent.toolIds ?? []).map(normalizeMcpId))];
+  const toolIds = ensureRequiredToolIds(agent.toolIds ?? []);
   const mcpIds = [...new Set((agent.mcpIds ?? []).map(normalizeMcpId))];
   const toolInstructions = Object.fromEntries(
     Object.entries(agent.toolInstructions ?? {}).map(([id, instruction]) => [normalizeMcpId(id), instruction]),
@@ -54,7 +60,7 @@ export async function createAgent(body: CreateAgentBody): Promise<AgentDefinitio
     description: body.description ?? "",
     systemPrompt: body.systemPrompt ?? "",
     maxIterations: body.maxIterations ?? getDefaults().agent.maxIterations,
-    toolIds: (body.toolIds ?? []).map(normalizeMcpId),
+    toolIds: ensureRequiredToolIds(body.toolIds ?? []),
     mcpIds: (body.mcpIds ?? []).map(normalizeMcpId),
     toolInstructions: Object.fromEntries(
       Object.entries(body.toolInstructions ?? {}).map(([toolId, instruction]) => [normalizeMcpId(toolId), instruction]),
@@ -81,7 +87,7 @@ export async function updateAgent(id: string, body: UpdateAgentBody): Promise<Ag
   if (body.description !== undefined) patch.description = body.description;
   if (body.systemPrompt !== undefined) patch.systemPrompt = body.systemPrompt;
   if (body.maxIterations !== undefined) patch.maxIterations = body.maxIterations;
-  if (body.toolIds !== undefined) patch.toolIds = body.toolIds.map(normalizeMcpId);
+  if (body.toolIds !== undefined) patch.toolIds = ensureRequiredToolIds(body.toolIds);
   if (body.mcpIds !== undefined) patch.mcpIds = body.mcpIds.map(normalizeMcpId);
   if (body.toolInstructions !== undefined) {
     patch.toolInstructions = Object.fromEntries(

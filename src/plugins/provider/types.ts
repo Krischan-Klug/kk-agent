@@ -32,6 +32,7 @@ export interface ProvidersState {
 export interface ModelCapabilities {
   supportsTools: boolean;
   supportsReasoning: boolean;
+  supportsVision: boolean;
   reasoningSource: ReasoningSource;
   supportsStreaming: boolean;
   supportedEndpoints: EndpointType[];

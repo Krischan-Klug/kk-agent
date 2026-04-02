@@ -11,7 +11,7 @@ export function getDefaultAgent(): AgentDefinition {
     maxIterations: d.agent.maxIterations,
     loopMode: d.agent.loopMode,
     phasePrompts: {},
-    toolIds: ["filesystem", "web-search", "terminal", "user-interaction", "task", "memory"],
+    toolIds: ["filesystem", "web-search", "terminal", "user-interaction", "task", "memory", "attachment"],
     mcpIds: [],
     toolInstructions: {},
     mcpInstructions: {},

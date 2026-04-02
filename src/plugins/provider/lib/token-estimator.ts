@@ -9,6 +9,7 @@ import {
   type LLMTool,
 } from "@lmstudio/sdk";
 import type { UnifiedMessage, UnifiedRequest, UnifiedToolDefinition, TokenStats } from "./types.js";
+import { getTextContent } from "./types.js";
 
 const clientCache = new Map<string, LMStudioClient>();
 
@@ -36,7 +37,7 @@ function toSdkHistory(messages: UnifiedMessage[]): ChatHistoryData {
       if (message.role === "assistant") {
         const content: Array<ChatMessagePartTextData | ChatMessagePartToolCallRequestData> = [];
         if (message.content) {
-          content.push({ type: "text", text: message.content });
+          content.push({ type: "text", text: getTextContent(message.content) });
         }
         if (message.tool_calls?.length) {
           for (const toolCall of message.tool_calls) {
@@ -58,7 +59,7 @@ function toSdkHistory(messages: UnifiedMessage[]): ChatHistoryData {
       if (message.role === "tool") {
         const content: ChatMessagePartToolCallResultData[] = [{
           type: "toolCallResult",
-          content: message.content,
+          content: getTextContent(message.content),
           toolCallId: message.tool_call_id,
         }];
         return {
@@ -67,7 +68,7 @@ function toSdkHistory(messages: UnifiedMessage[]): ChatHistoryData {
         };
       }
 
-      const content: ChatMessagePartTextData[] = [{ type: "text", text: message.content }];
+      const content: ChatMessagePartTextData[] = [{ type: "text", text: getTextContent(message.content) }];
       return {
         role: message.role,
         content,
@@ -92,7 +93,7 @@ function buildEstimationText(request: UnifiedRequest): string {
   for (const message of request.messages) {
     parts.push(`[${message.role}]`);
     if (message.content) {
-      parts.push(message.content);
+      parts.push(getTextContent(message.content));
     }
     if (message.tool_call_id) {
       parts.push(`[tool_call_id:${message.tool_call_id}]`);

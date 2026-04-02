@@ -1,4 +1,5 @@
 import type { AgentLoopState, ReasoningEffort } from "../agent/types.js";
+import type { AttachmentDisplayMeta } from "./lib/attachment-types.js";
 
 export interface SessionState {
   id: string;
@@ -22,6 +23,7 @@ export interface SessionMessage {
   reasoning?: string;
   tool_call_id?: string;
   tool_calls?: Array<{ id: string; name: string; arguments: Record<string, unknown> }>;
+  attachments?: AttachmentDisplayMeta[];
 }
 
 export interface CreateSessionBody {
@@ -44,6 +46,7 @@ export interface PatchSessionBody {
 
 export interface ChatBody {
   message: string;
+  attachmentIds?: string[];
 }
 
 export type SSEEvent =

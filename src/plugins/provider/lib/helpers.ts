@@ -56,7 +56,7 @@ export function parseThinkTags(
 export function buildMessages(messages: UnifiedMessage[]) {
   return messages.map((m) => {
     if (m.role === "tool") {
-      return { role: "tool" as const, content: m.content, tool_call_id: m.tool_call_id };
+      return { role: "tool" as const, content: m.content as string, tool_call_id: m.tool_call_id };
     }
     if (m.role === "assistant" && m.tool_calls?.length) {
       return {
@@ -69,6 +69,7 @@ export function buildMessages(messages: UnifiedMessage[]) {
         })),
       };
     }
+    // Content blocks (arrays) are passed through -- OpenAI Chat Completions API accepts them natively
     return { role: m.role, content: m.content };
   });
 }

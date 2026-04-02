@@ -1,4 +1,4 @@
-export type SystemToolKey = "filesystem" | "web-search" | "terminal" | "user-interaction" | "task" | "memory";
+export type SystemToolKey = "filesystem" | "web-search" | "terminal" | "user-interaction" | "task" | "memory" | "attachment";
 
 export interface ToolResultOptions {
   maxContextChars?: number;

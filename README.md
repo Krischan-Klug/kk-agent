@@ -13,7 +13,7 @@ Der aktuelle Fokus ist ein schlanker Agent-Loop:
 ```text
 core          -> technisches Bootstrap-Minimum fuer den Plugin-Loader
 provider      -> Modellzugriff, Streaming, Model-Settings
-tools         -> Interne Tools und interner Tool-State (filesystem, web-search, terminal, user-interaction, task, memory)
+tools         -> Interne Tools und interner Tool-State (filesystem, web-search, terminal, user-interaction, task, memory, attachment)
 mcp           -> Externe / custom MCP-Server
 agent         -> Agent-Definitionen und Loop-State
 systemprompt  -> Prompt-Building mit Variablen und Tool-Instructions
@@ -30,6 +30,7 @@ Runtime-State liegt unter `state/`:
 - `mcps.json`
 - `providers.json`
 - `system-mcps.json`
+- `session-attachments/`
 - `user-memory.json`
 
 Hinweis:
@@ -83,6 +84,7 @@ Es gibt zwei Tool-Quellen:
   - `user-interaction`
   - `task`
   - `memory`
+  - `attachment`
 - `mcp`: externe / custom MCP-Server
 
 Nach aussen bleiben beide getrennt:

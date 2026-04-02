@@ -131,6 +131,7 @@ type CodeProps = ComponentProps<"code"> & {
   inline?: boolean;
   className?: string;
   children?: React.ReactNode;
+  node?: unknown;
 };
 
 export default function MarkdownMessage({ content }: MarkdownMessageProps) {
@@ -160,7 +161,9 @@ export default function MarkdownMessage({ content }: MarkdownMessageProps) {
             }
             return <SimpleBlock>{code}</SimpleBlock>;
           },
-          code({ children, ...rest }: CodeProps) {
+          code(props: CodeProps) {
+            const { children, node, ...rest } = props;
+            void node;
             return <InlineCode {...rest}>{children}</InlineCode>;
           },
         }}

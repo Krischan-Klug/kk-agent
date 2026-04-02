@@ -6,10 +6,10 @@ import type { SessionState } from "@/types/api";
 import { addAppEventListener, emitAppEvent, SESSION_CHANGED_EVENT } from "@/lib/appEvents";
 import {
   clearActiveSessionId,
-  getActiveSessionId,
-  getSidebarCollapsed,
   setActiveSessionId as persistActiveSessionId,
   setSidebarCollapsed as persistSidebarCollapsed,
+  useStoredActiveSessionId,
+  useStoredSidebarCollapsed,
 } from "@/lib/sessionState";
 import { createAndActivateSession, resolveDefaultSessionAgentId } from "@/lib/sessionFactory";
 import { logUiError } from "@/lib/uiLogger";
@@ -52,8 +52,8 @@ function isNavActive(pathname: string, href: string): boolean {
 export default function Sidebar() {
   const router = useRouter();
   const [sessions, setSessions] = useState<SessionState[]>([]);
-  const [activeSessionId, setActiveSessionIdState] = useState<string | null>(() => getActiveSessionId());
-  const [collapsed, setCollapsed] = useState(() => getSidebarCollapsed());
+  const activeSessionId = useStoredActiveSessionId();
+  const collapsed = useStoredSidebarCollapsed();
 
   const loadSessions = useCallback(async () => {
     try {
@@ -65,7 +65,6 @@ export default function Sidebar() {
 
   const syncSessionState = useCallback(() => {
     void loadSessions();
-    setActiveSessionIdState(getActiveSessionId());
   }, [loadSessions]);
 
   useEffect(() => {
@@ -83,13 +82,11 @@ export default function Sidebar() {
   }, [loadSessions, syncSessionState]);
 
   function updateSidebarCollapsed(next: boolean) {
-    setCollapsed(next);
     persistSidebarCollapsed(next);
   }
 
   function selectSession(id: string) {
     persistActiveSessionId(id);
-    setActiveSessionIdState(id);
     emitAppEvent(SESSION_CHANGED_EVENT);
     void router.push("/chat");
   }
@@ -100,8 +97,7 @@ export default function Sidebar() {
         [],
         sessions.find((session) => session.id === activeSessionId)?.agentId ?? sessions[0]?.agentId,
       );
-      const newSession = await createAndActivateSession([], fallbackAgentId);
-      setActiveSessionIdState(newSession.id);
+      await createAndActivateSession([], fallbackAgentId);
       await loadSessions();
       await router.push("/chat");
     } catch (err) {
@@ -112,9 +108,8 @@ export default function Sidebar() {
   async function deleteSession(id: string) {
     try {
       await sessionApi.delete(id);
-      if (getActiveSessionId() === id) {
+      if (activeSessionId === id) {
         clearActiveSessionId();
-        setActiveSessionIdState(null);
       }
       emitAppEvent(SESSION_CHANGED_EVENT);
       await loadSessions();

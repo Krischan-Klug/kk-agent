@@ -73,6 +73,26 @@ const SectionBody = styled.div`
   padding: var(--space-md);
 `;
 
+const SubSection = styled.div`
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  padding-bottom: var(--space-md);
+  border-bottom: 1px solid var(--border);
+
+  &:last-child {
+    padding-bottom: 0;
+    border-bottom: none;
+  }
+`;
+
+const SubSectionTitle = styled.h3`
+  margin: 0;
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+  color: var(--text-primary);
+`;
+
 const FieldLabel = styled.label`
   font-size: var(--font-size-sm);
   color: var(--text-secondary);
@@ -175,6 +195,43 @@ export default function DefaultsPage() {
     setDraft((prev) => prev ? { ...prev, [section]: { ...prev[section], [field]: value } } : prev);
   }
 
+  function updateAgentNested<
+    K extends keyof AppDefaults["agent"],
+    F extends keyof AppDefaults["agent"][K],
+  >(
+    section: K,
+    field: F,
+    value: AppDefaults["agent"][K][F],
+  ) {
+    setDraft((prev) => prev ? {
+      ...prev,
+      agent: {
+        ...prev.agent,
+        [section]: {
+          ...prev.agent[section],
+          [field]: value,
+        },
+      },
+    } : prev);
+  }
+
+  function updateTopLevelNested<
+    K extends Exclude<keyof AppDefaults, "agent">,
+    F extends keyof AppDefaults[K],
+  >(
+    section: K,
+    field: F,
+    value: AppDefaults[K][F],
+  ) {
+    setDraft((prev) => prev ? {
+      ...prev,
+      [section]: {
+        ...prev[section],
+        [field]: value,
+      },
+    } : prev);
+  }
+
   return (
     <SettingsLayout>
       <PageWrapper>
@@ -184,13 +241,13 @@ export default function DefaultsPage() {
 
           <SectionCard open>
             <SectionSummary>
-              <span>Agent Basis</span>
-              <SummaryMeta>System-Prompt, Max Iterations, Loop Mode</SummaryMeta>
+              <span>Core Behavior</span>
+              <SummaryMeta>System-Prompt, Iterationen, Loop-Modus</SummaryMeta>
             </SectionSummary>
             <SectionBody>
               <FieldLabel>System-Prompt</FieldLabel>
               <TextArea
-                rows={5}
+                rows={10}
                 value={draft.agent.systemPrompt}
                 onChange={(e) => update("agent", "systemPrompt", e.target.value)}
               />
@@ -222,101 +279,63 @@ export default function DefaultsPage() {
 
           <SectionCard>
             <SectionSummary>
-              <span>Phase Prompts</span>
-              <SummaryMeta>planning, executing, verifying</SummaryMeta>
+              <span>Phases</span>
+              <SummaryMeta>Planning, Executing, Verifying</SummaryMeta>
             </SectionSummary>
             <SectionBody>
-              <FieldLabel>Planning Prompt</FieldLabel>
-              <TextArea
-                rows={4}
-                value={draft.agent.phasePrompts.planningPrompt}
-                onChange={(e) => setDraft((prev) => prev ? {
-                  ...prev,
-                  agent: {
-                    ...prev.agent,
-                    phasePrompts: { ...prev.agent.phasePrompts, planningPrompt: e.target.value },
-                  },
-                } : prev)}
-              />
+              <SubSection>
+                <SubSectionTitle>Planning</SubSectionTitle>
+                <FieldLabel>Prompt</FieldLabel>
+                <TextArea
+                  rows={4}
+                  value={draft.agent.phasePrompts.planningPrompt}
+                  onChange={(e) => updateAgentNested("phasePrompts", "planningPrompt", e.target.value)}
+                />
+                <FieldLabel>Guidance</FieldLabel>
+                <TextArea
+                  rows={3}
+                  value={draft.agent.phaseGuidance.planning}
+                  onChange={(e) => updateAgentNested("phaseGuidance", "planning", e.target.value)}
+                />
+              </SubSection>
 
-              <FieldLabel>Executing Prompt</FieldLabel>
-              <TextArea
-                rows={4}
-                value={draft.agent.phasePrompts.executingPrompt}
-                onChange={(e) => setDraft((prev) => prev ? {
-                  ...prev,
-                  agent: {
-                    ...prev.agent,
-                    phasePrompts: { ...prev.agent.phasePrompts, executingPrompt: e.target.value },
-                  },
-                } : prev)}
-              />
+              <SubSection>
+                <SubSectionTitle>Executing</SubSectionTitle>
+                <FieldLabel>Prompt</FieldLabel>
+                <TextArea
+                  rows={4}
+                  value={draft.agent.phasePrompts.executingPrompt}
+                  onChange={(e) => updateAgentNested("phasePrompts", "executingPrompt", e.target.value)}
+                />
+                <FieldLabel>Guidance</FieldLabel>
+                <TextArea
+                  rows={3}
+                  value={draft.agent.phaseGuidance.executing}
+                  onChange={(e) => updateAgentNested("phaseGuidance", "executing", e.target.value)}
+                />
+              </SubSection>
 
-              <FieldLabel>Verifying Prompt</FieldLabel>
-              <TextArea
-                rows={4}
-                value={draft.agent.phasePrompts.verifyingPrompt}
-                onChange={(e) => setDraft((prev) => prev ? {
-                  ...prev,
-                  agent: {
-                    ...prev.agent,
-                    phasePrompts: { ...prev.agent.phasePrompts, verifyingPrompt: e.target.value },
-                  },
-                } : prev)}
-              />
+              <SubSection>
+                <SubSectionTitle>Verifying</SubSectionTitle>
+                <FieldLabel>Prompt</FieldLabel>
+                <TextArea
+                  rows={4}
+                  value={draft.agent.phasePrompts.verifyingPrompt}
+                  onChange={(e) => updateAgentNested("phasePrompts", "verifyingPrompt", e.target.value)}
+                />
+                <FieldLabel>Guidance</FieldLabel>
+                <TextArea
+                  rows={3}
+                  value={draft.agent.phaseGuidance.verifying}
+                  onChange={(e) => updateAgentNested("phaseGuidance", "verifying", e.target.value)}
+                />
+              </SubSection>
             </SectionBody>
           </SectionCard>
 
           <SectionCard>
             <SectionSummary>
-              <span>Phase Guidance</span>
-              <SummaryMeta>planning, executing, verifying</SummaryMeta>
-            </SectionSummary>
-            <SectionBody>
-              <FieldLabel>Planning Guidance</FieldLabel>
-              <TextArea
-                rows={3}
-                value={draft.agent.phaseGuidance.planning}
-                onChange={(e) => setDraft((prev) => prev ? {
-                  ...prev,
-                  agent: {
-                    ...prev.agent,
-                    phaseGuidance: { ...prev.agent.phaseGuidance, planning: e.target.value },
-                  },
-                } : prev)}
-              />
-
-              <FieldLabel>Executing Guidance</FieldLabel>
-              <TextArea
-                rows={3}
-                value={draft.agent.phaseGuidance.executing}
-                onChange={(e) => setDraft((prev) => prev ? {
-                  ...prev,
-                  agent: {
-                    ...prev.agent,
-                    phaseGuidance: { ...prev.agent.phaseGuidance, executing: e.target.value },
-                  },
-                } : prev)}
-              />
-
-              <FieldLabel>Verifying Guidance</FieldLabel>
-              <TextArea
-                rows={3}
-                value={draft.agent.phaseGuidance.verifying}
-                onChange={(e) => setDraft((prev) => prev ? {
-                  ...prev,
-                  agent: {
-                    ...prev.agent,
-                    phaseGuidance: { ...prev.agent.phaseGuidance, verifying: e.target.value },
-                  },
-                } : prev)}
-              />
-            </SectionBody>
-          </SectionCard>
-
-          <SectionCard>
-            <SectionSummary>
-              <span>Prompt Sections</span>
+              <span>Context Blocks</span>
               <SummaryMeta>Task, Memory, Tool Rules</SummaryMeta>
             </SectionSummary>
             <SectionBody>
@@ -324,77 +343,47 @@ export default function DefaultsPage() {
               <TextArea
                 rows={3}
                 value={draft.agent.promptSections.taskWithSession}
-                onChange={(e) => setDraft((prev) => prev ? {
-                  ...prev,
-                  agent: {
-                    ...prev.agent,
-                    promptSections: { ...prev.agent.promptSections, taskWithSession: e.target.value },
-                  },
-                } : prev)}
+                onChange={(e) => updateAgentNested("promptSections", "taskWithSession", e.target.value)}
               />
 
               <FieldLabel>Memory Prompt mit Session</FieldLabel>
               <TextArea
                 rows={3}
                 value={draft.agent.promptSections.memoryWithSession}
-                onChange={(e) => setDraft((prev) => prev ? {
-                  ...prev,
-                  agent: {
-                    ...prev.agent,
-                    promptSections: { ...prev.agent.promptSections, memoryWithSession: e.target.value },
-                  },
-                } : prev)}
+                onChange={(e) => updateAgentNested("promptSections", "memoryWithSession", e.target.value)}
               />
 
               <FieldLabel>Tool Rules mit Session</FieldLabel>
               <TextArea
                 rows={4}
                 value={draft.agent.promptSections.toolRulesWithSession}
-                onChange={(e) => setDraft((prev) => prev ? {
-                  ...prev,
-                  agent: {
-                    ...prev.agent,
-                    promptSections: { ...prev.agent.promptSections, toolRulesWithSession: e.target.value },
-                  },
-                } : prev)}
+                onChange={(e) => updateAgentNested("promptSections", "toolRulesWithSession", e.target.value)}
               />
             </SectionBody>
           </SectionCard>
 
           <SectionCard>
             <SectionSummary>
-              <span>Loop Verify</span>
-              <SummaryMeta><PlaceholderHint>{`{{TASK_SUMMARY}}`} / {`{{FEEDBACK}}`}</PlaceholderHint></SummaryMeta>
+              <span>Error Handling</span>
+              <SummaryMeta>Retry, Verify, Vision-Fallback</SummaryMeta>
             </SectionSummary>
             <SectionBody>
               <FieldLabel>Verification Instruction</FieldLabel>
               <TextArea
                 rows={6}
                 value={draft.loop.verificationInstruction}
-                onChange={(e) => setDraft((prev) => prev ? {
-                  ...prev,
-                  loop: { ...prev.loop, verificationInstruction: e.target.value },
-                } : prev)}
+                onChange={(e) => updateTopLevelNested("loop", "verificationInstruction", e.target.value)}
               />
+              <Hint><PlaceholderHint>{`{{TASK_SUMMARY}}`}</PlaceholderHint></Hint>
 
               <FieldLabel>Verification Retry Message</FieldLabel>
               <TextArea
                 rows={3}
                 value={draft.loop.verificationRetryMessage}
-                onChange={(e) => setDraft((prev) => prev ? {
-                  ...prev,
-                  loop: { ...prev.loop, verificationRetryMessage: e.target.value },
-                } : prev)}
+                onChange={(e) => updateTopLevelNested("loop", "verificationRetryMessage", e.target.value)}
               />
-            </SectionBody>
-          </SectionCard>
+              <Hint><PlaceholderHint>{`{{FEEDBACK}}`}</PlaceholderHint></Hint>
 
-          <SectionCard>
-            <SectionSummary>
-              <span>Retry Instructions</span>
-              <SummaryMeta>empty response, invalid tool call</SummaryMeta>
-            </SectionSummary>
-            <SectionBody>
               <FieldLabel>Leere Antwort</FieldLabel>
               <TextArea
                 rows={3}
@@ -408,13 +397,20 @@ export default function DefaultsPage() {
                 value={draft.retry.invalidToolInstruction}
                 onChange={(e) => update("retry", "invalidToolInstruction", e.target.value)}
               />
+
+              <FieldLabel>Vision Fallback</FieldLabel>
+              <TextArea
+                rows={4}
+                value={draft.attachment.visionNotSupportedInstruction}
+                onChange={(e) => updateTopLevelNested("attachment", "visionNotSupportedInstruction", e.target.value)}
+              />
             </SectionBody>
           </SectionCard>
 
           <SectionCard>
             <SectionSummary>
-              <span>Reasoning</span>
-              <SummaryMeta>global fallback effort</SummaryMeta>
+              <span>Model Defaults</span>
+              <SummaryMeta>globaler Fallback fuer Reasoning</SummaryMeta>
             </SectionSummary>
             <SectionBody>
               <Field $width="180px">

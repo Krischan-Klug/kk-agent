@@ -3,10 +3,8 @@ import type { AttachmentDisplayMeta } from "./lib/attachment-types.js";
 import * as store from "./lib/store.js";
 import { clearSessionAttachments, getSessionAttachmentsByIds, readAttachmentData } from "./lib/attachments.js";
 import { buildCapabilityInstructions, buildPrompt, getSystemVariables } from "../systemprompt/service.js";
-import { getModelSettings, getActiveProviderId, resolveProviderModel, getModelCapabilities } from "../provider/service.js";
-import type { ReasoningLevelConfig } from "../provider/types.js";
-import { getTextContent, type ContentBlock } from "../provider/lib/types.js";
-import { REASONING_LEVEL_DEFAULTS } from "../provider/defaults.js";
+import { getActiveProviderId, resolveProviderModel, getModelCapabilities } from "../provider/service.js";
+import type { ContentBlock } from "../provider/lib/types.js";
 import { getToolDefinitions, executeTool, getKnownMcpIds, getRunnableMcpIds } from "../mcp/service.js";
 import {
   executeSystemToolByName,
@@ -18,93 +16,26 @@ import { runLoop } from "../loop/service.js";
 import type { LoopMessage } from "../loop/types.js";
 import { getAgent, setLoopState, clearLoopState } from "../agent/service.js";
 import { getDefaults } from "../lib/defaults.js";
-import { normalizeMcpId } from "../lib/ids.js";
 import { clearSessionFacts, clearTasks } from "../tools/service.js";
 import {
   registerSession,
   unregisterSession,
   runWithSessionId,
 } from "../tools/lib/user-interaction/interaction-store.js";
-
-const REQUIRED_SESSION_TOOL_IDS = ["attachment"];
-
-function generateSessionName(content: string): string {
-  const clean = content.trim();
-  if (!clean) return "";
-  if (clean.length <= 40) return clean.split("\n")[0];
-  const cut = clean.slice(0, 40);
-  const lastSpace = cut.lastIndexOf(" ");
-  return (lastSpace > 20 ? cut.slice(0, lastSpace) : cut) + "...";
-}
-
-function toLoopMessages(messages: SessionState["messages"]): LoopMessage[] {
-  return messages.map((message) => ({
-    role: message.role,
-    content: message.content,
-    reasoning: message.reasoning,
-    tool_call_id: message.tool_call_id,
-    tool_calls: message.tool_calls?.map((toolCall) => ({
-      id: toolCall.id,
-      name: toolCall.name,
-      arguments: toolCall.arguments,
-    })),
-  }));
-}
-
-function fromLoopMessages(messages: LoopMessage[]): SessionState["messages"] {
-  return messages.map((message) => ({
-    role: message.role,
-    content: typeof message.content === "string" ? message.content : getTextContent(message.content),
-    reasoning: message.reasoning,
-    tool_call_id: message.tool_call_id,
-    tool_calls: message.tool_calls?.map((toolCall) => ({
-      id: toolCall.id,
-      name: toolCall.name,
-      arguments: toolCall.arguments,
-    })),
-  }));
-}
-
-function mergeMessageDisplayState(
-  nextMessages: SessionState["messages"],
-  previousMessages: SessionState["messages"],
-): SessionState["messages"] {
-  return nextMessages.map((message, index) => {
-    const previous = previousMessages[index];
-    if (!previous || previous.role !== message.role || !previous.attachments?.length) {
-      return message;
-    }
-
-    return {
-      ...message,
-      content: previous.content,
-      attachments: previous.attachments,
-    };
-  });
-}
-
-function sanitizeMcpIds(mcpIds: string[]): string[] {
-  const knownIds = new Set(getKnownMcpIds());
-  return [...new Set(mcpIds.map(normalizeMcpId))].filter((id) => knownIds.has(id));
-}
-
-function sanitizeToolIds(toolIds: string[]): string[] {
-  const knownIds = new Set(getKnownSystemMcpIds());
-  return [...new Set([...toolIds, ...REQUIRED_SESSION_TOOL_IDS].map(normalizeMcpId))].filter((id) => knownIds.has(id));
-}
-
-function getSessionRunnableMcpIds(activeToolIds: string[], activeMcpIds: string[]): string[] {
-  const runnable = new Set([...getRunnableMcpIds(), ...getRunnableSystemMcpIds()]);
-  return [...activeToolIds, ...activeMcpIds].filter((id) => runnable.has(id));
-}
-
-function buildRunnableMcpInstructions(
-  activeToolIds: string[],
-  activeMcpIds: string[],
-  agentInstructions: Record<string, string>,
-): string {
-  return buildCapabilityInstructions(getSessionRunnableMcpIds(activeToolIds, activeMcpIds), agentInstructions);
-}
+import {
+  fromLoopMessages,
+  generateSessionName,
+  mergeMessageDisplayState,
+  toLoopMessages,
+} from "./lib/message-state.js";
+import {
+  buildRunnableMcpInstructions,
+  resolveSessionMcpIds,
+  resolveSessionToolIds,
+  sanitizeMcpIds,
+  sanitizeToolIds,
+} from "./lib/tool-selection.js";
+import { resolveReasoningConfig, resolveSessionDefaults } from "./lib/session-resolution.js";
 
 function getCombinedToolDefinitions(activeToolIds: string[], activeMcpIds: string[]) {
   return [...getSystemToolDefinitionsForActive(activeToolIds), ...getToolDefinitions(activeMcpIds)];
@@ -138,34 +69,6 @@ function buildCurrentSystemPrompt(
     phase: "executing",
     phasePrompt: agent.phasePrompts.executing,
   });
-}
-
-function resolveSessionToolIds(
-  agent: ReturnType<typeof getAgent>,
-  activeToolIds?: string[],
-): string[] {
-  if (activeToolIds !== undefined) return sanitizeToolIds(activeToolIds);
-  return sanitizeToolIds(agent.toolIds ?? []);
-}
-
-function resolveSessionMcpIds(agent: ReturnType<typeof getAgent>, activeMcpIds?: string[]): string[] {
-  return sanitizeMcpIds(activeMcpIds ?? agent.mcpIds ?? []);
-}
-
-async function resolveSessionDefaults(
-  agent: ReturnType<typeof getAgent>,
-  body: Pick<CreateSessionBody, "activeToolIds" | "activeMcpIds" | "model" | "reasoningEffort" | "temperature">,
-  providerId: string,
-) {
-  const selection = await resolveProviderModel(providerId, body.model ?? agent.defaultModel);
-  return {
-    providerId: selection.providerId,
-    model: selection.model,
-    activeToolIds: resolveSessionToolIds(agent, body.activeToolIds),
-    activeMcpIds: resolveSessionMcpIds(agent, body.activeMcpIds),
-    reasoningEffort: body.reasoningEffort ?? agent.reasoningEffort,
-    temperature: body.temperature ?? agent.temperature,
-  };
 }
 
 function formatAttachmentSize(bytes: number): string {
@@ -212,22 +115,6 @@ export function getCurrentSystemPrompt(sessionId: string): string {
   if (!session) throw new Error(`Session "${sessionId}" not found`);
   const agent = getAgent(session.agentId);
   return buildCurrentSystemPrompt(sessionId, session, agent);
-}
-
-function resolveReasoningConfig(session: SessionState): {
-  reasoningEffort?: string;
-  temperature?: number;
-  maxOutputTokens?: number;
-} {
-  const ms = getModelSettings(session.providerId, session.model);
-  const effort = session.reasoningEffort ?? ms.reasoningEffort ?? getDefaults().reasoning.defaultEffort;
-  const levelConfig: ReasoningLevelConfig | undefined = ms.levels?.[effort];
-  const defaults = REASONING_LEVEL_DEFAULTS[effort];
-  return {
-    reasoningEffort: effort,
-    temperature: session.temperature ?? levelConfig?.temperature ?? defaults?.temperature,
-    maxOutputTokens: levelConfig?.maxOutputTokens ?? defaults?.maxOutputTokens,
-  };
 }
 
 async function prepareLoopRun(sessionId: string, message: string, attachmentIds?: string[]) {

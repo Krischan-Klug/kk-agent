@@ -139,6 +139,7 @@ SSE liefert aktuell folgende Events:
 | PATCH | `/session/:id` | Agent, Model, Tools, MCPs, Reasoning, Temperature aendern |
 | POST | `/session/:id/chat` | Non-Streaming Chat |
 | POST | `/session/:id/chat/stream` | SSE-Chat |
+| POST | `/session/:id/attachments` | Chat-Upload fuer Bilder, Textdateien und PDFs |
 | GET | `/session/:id/prompt` | Aktuellen aufgeloesten System-Prompt lesen |
 | POST | `/session/:id/prompt/respond` | Antwort fuer `ask_user`-Prompt senden |
 
@@ -171,6 +172,11 @@ SSE liefert aktuell folgende Events:
 | PUT | `/tools/memory/user` | User-Memory ersetzen |
 | GET | `/tools/memory/session/:sessionId` | Session-Memory lesen |
 | PUT | `/tools/memory/session/:sessionId` | Session-Memory ersetzen |
+
+Attachment-Hinweis:
+
+- Uploads werden session-scoped unter `state/session-attachments/` gespeichert.
+- Agenten sollen fuer Chat-Uploads das interne `attachment`-Tool verwenden statt im normalen Filesystem zu suchen.
 
 ### Provider
 

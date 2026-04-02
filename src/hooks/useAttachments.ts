@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import { session as sessionApi } from "@/lib/api";
 import type { AttachmentMeta } from "@/types/api";
 
@@ -32,10 +32,19 @@ function isAccepted(file: File): boolean {
 export function useAttachments() {
   const [pending, setPending] = useState<PendingAttachment[]>([]);
   const [uploading, setUploading] = useState(false);
+  const pendingRef = useRef<PendingAttachment[]>([]);
+
+  const setPendingState = useCallback((next: PendingAttachment[] | ((prev: PendingAttachment[]) => PendingAttachment[])) => {
+    setPending((prev) => {
+      const resolved = typeof next === "function" ? (next as (prev: PendingAttachment[]) => PendingAttachment[])(prev) : next;
+      pendingRef.current = resolved;
+      return resolved;
+    });
+  }, []);
 
   const addFiles = useCallback(async (sessionId: string, files: FileList | File[]) => {
     const fileArray = Array.from(files);
-    const remaining = MAX_ATTACHMENTS - pending.length;
+    const remaining = MAX_ATTACHMENTS - pendingRef.current.length;
     if (remaining <= 0) return;
 
     const accepted = fileArray.filter(isAccepted).slice(0, remaining);
@@ -55,24 +64,24 @@ export function useAttachments() {
         }
       }
       if (results.length > 0) {
-        setPending((prev) => [...prev, ...results]);
+        setPendingState((prev) => [...prev, ...results]);
       }
     } finally {
       setUploading(false);
     }
-  }, [pending.length]);
+  }, [setPendingState]);
 
   const removeAttachment = useCallback((id: string) => {
-    setPending((prev) => {
+    setPendingState((prev) => {
       const removed = prev.find((a) => a.id === id);
       if (removed?.previewUrl) URL.revokeObjectURL(removed.previewUrl);
       return prev.filter((a) => a.id !== id);
     });
-  }, []);
+  }, [setPendingState]);
 
   const clearAttachments = useCallback((options?: { revokeUrls?: boolean }) => {
     const revokeUrls = options?.revokeUrls ?? true;
-    setPending((prev) => {
+    setPendingState((prev) => {
       if (revokeUrls) {
         for (const a of prev) {
           if (a.previewUrl) URL.revokeObjectURL(a.previewUrl);
@@ -80,7 +89,13 @@ export function useAttachments() {
       }
       return [];
     });
-  }, []);
+  }, [setPendingState]);
+
+  const consumePendingAttachments = useCallback((): PendingAttachment[] => {
+    const snapshot = pendingRef.current;
+    setPendingState([]);
+    return snapshot;
+  }, [setPendingState]);
 
   return {
     pendingAttachments: pending,
@@ -88,5 +103,6 @@ export function useAttachments() {
     addFiles,
     removeAttachment,
     clearAttachments,
+    consumePendingAttachments,
   };
 }

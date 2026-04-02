@@ -1,0 +1,328 @@
+import styled from "styled-components";
+
+export const Messages = styled.div`
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+  padding: 0 0 var(--space-md);
+  max-width: 900px;
+  width: 100%;
+  margin: 0 auto;
+  scrollbar-width: none;
+
+  &::-webkit-scrollbar {
+    display: none;
+  }
+`;
+
+export const SystemNotice = styled.div`
+  align-self: center;
+  max-width: 720px;
+  width: 100%;
+  padding: var(--space-sm) var(--space-md);
+  border: 1px dashed var(--border);
+  border-radius: var(--radius-md);
+  background: var(--bg-elevated);
+  color: var(--text-secondary);
+  font-size: var(--font-size-sm);
+  text-align: center;
+`;
+
+export const MessageBubble = styled.div<{ $role: string }>`
+  max-width: 80%;
+  padding: var(--space-md);
+  border-radius: var(--radius-md);
+  align-self: ${(p) => (p.$role === "user" ? "flex-end" : "flex-start")};
+  background: ${(p) =>
+    p.$role === "user"
+      ? "var(--accent-muted)"
+      : p.$role === "tool"
+        ? "var(--bg-elevated)"
+        : "var(--bg-surface)"};
+  border: 1px solid ${(p) => (p.$role === "user" ? "var(--accent)" : "var(--border)")};
+  ${(p) => p.$role === "user" && "white-space: pre-wrap;"}
+  word-break: break-word;
+  font-size: var(--font-size-base);
+`;
+
+export const RoleLabel = styled.div`
+  margin-bottom: var(--space-sm);
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  width: 100%;
+`;
+
+export const RoleMetaGroup = styled.button`
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-sm);
+  margin-left: auto;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  color: inherit;
+  font: inherit;
+`;
+
+export const CollapsibleCard = styled.details`
+  margin-top: var(--space-sm);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+
+  &[open] > summary {
+    border-bottom: 1px solid var(--border);
+  }
+`;
+
+export const ReasoningCard = styled.details`
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  background: color-mix(in srgb, var(--warning) 10%, var(--bg-elevated));
+  border: 1px solid color-mix(in srgb, var(--warning) 30%, var(--border));
+  font-size: 0.85em;
+  margin-bottom: var(--space-sm);
+  display: flex;
+  flex-direction: column-reverse;
+
+  &[open] > summary {
+    border-top: 1px solid color-mix(in srgb, var(--warning) 30%, var(--border));
+  }
+`;
+
+export const ToolCard = styled(CollapsibleCard)`
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+`;
+
+export const CardSummary = styled.summary`
+  cursor: pointer;
+  padding: var(--space-sm) var(--space-md);
+  font-size: var(--font-size-sm);
+  color: var(--text-secondary);
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  user-select: none;
+
+  &::-webkit-details-marker {
+    display: none;
+  }
+
+  &::before {
+    content: "\\25B6";
+    font-size: 10px;
+    transition: transform 0.15s;
+  }
+
+  details[open] > &::before {
+    transform: rotate(90deg);
+  }
+`;
+
+export const ReasoningSummary = styled.summary`
+  cursor: pointer;
+  padding: var(--space-sm) var(--space-md);
+  font-size: var(--font-size-sm);
+  color: var(--text-secondary);
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  user-select: none;
+
+  &::-webkit-details-marker {
+    display: none;
+  }
+
+  &::before {
+    content: "\\25B2";
+    font-size: 10px;
+    transition: transform 0.15s;
+  }
+
+  details:not([open]) > &::before {
+    content: "\\25BC";
+  }
+`;
+
+export const CardContent = styled.div`
+  padding: var(--space-sm) var(--space-md);
+  font-size: var(--font-size-sm);
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-family: var(--font-mono);
+  color: var(--text-secondary);
+  max-height: 300px;
+  overflow-y: auto;
+`;
+
+export const ToolEmoji = styled.span`
+  font-size: 1em;
+`;
+
+export const ToolLabel = styled.span`
+  font-family: var(--font-mono);
+  color: var(--text-primary);
+  font-weight: 500;
+`;
+
+export const ToolBlockLabel = styled.div`
+  color: var(--text-muted);
+  margin-bottom: var(--space-xs);
+`;
+
+export const ToolResultBlock = styled.div<{ $isError: boolean }>`
+  margin-top: var(--space-sm);
+  padding-top: var(--space-sm);
+  border-top: 1px solid var(--border);
+  color: ${(p) => (p.$isError ? "var(--danger)" : "var(--text-secondary)")};
+`;
+
+export const EmptyState = styled.div`
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  flex: 1;
+  gap: var(--space-md);
+  color: var(--text-secondary);
+`;
+
+export const StreamingDot = styled.span`
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+  animation: pulse 1s infinite;
+  margin-left: var(--space-xs);
+  vertical-align: middle;
+
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.3; }
+  }
+`;
+
+export const PromptCard = styled.div`
+  align-self: center;
+  max-width: 720px;
+  width: 100%;
+  padding: var(--space-md);
+  border: 2px solid var(--accent);
+  border-radius: var(--radius-md);
+  background: var(--bg-elevated);
+`;
+
+export const PromptQuestion = styled.div`
+  font-size: var(--font-size-base);
+  font-weight: 500;
+  margin-bottom: var(--space-md);
+  color: var(--text-primary);
+`;
+
+export const ChoiceButton = styled.button`
+  display: block;
+  width: 100%;
+  padding: var(--space-sm) var(--space-md);
+  margin-bottom: var(--space-sm);
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  font-size: var(--font-size-base);
+  cursor: pointer;
+  text-align: left;
+
+  &:hover {
+    border-color: var(--accent);
+    background: var(--accent-muted);
+  }
+
+  &:last-child {
+    margin-bottom: 0;
+  }
+`;
+
+export const CustomInputRow = styled.div`
+  display: flex;
+  gap: var(--space-sm);
+  margin-top: var(--space-sm);
+  padding-top: var(--space-sm);
+  border-top: 1px dashed var(--border);
+`;
+
+export const CustomInput = styled.input`
+  flex: 1;
+  padding: var(--space-sm) var(--space-md);
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  font-size: var(--font-size-base);
+  outline: none;
+
+  &:focus {
+    border-color: var(--border-focus, var(--accent));
+  }
+
+  &::placeholder {
+    color: var(--text-muted);
+  }
+`;
+
+export const IterationPill = styled.span`
+  padding: 1px var(--space-sm);
+  background: var(--accent-muted);
+  color: var(--accent);
+  border-radius: var(--radius-sm);
+  font-size: 11px;
+  font-weight: 500;
+  font-family: var(--font-mono);
+  flex-shrink: 0;
+`;
+
+export const PhasePill = styled.span`
+  padding: 1px var(--space-sm);
+  background: var(--bg-elevated);
+  color: var(--text-secondary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  font-size: 11px;
+  font-weight: 500;
+  font-family: var(--font-mono);
+  flex-shrink: 0;
+`;
+
+export const LoadingWrap = styled.div`
+  align-self: flex-start;
+`;
+
+export const IterationSection = styled.div`
+  padding-left: var(--space-md);
+  border-left: 2px solid var(--border);
+  margin-bottom: var(--space-sm);
+
+  &:last-child {
+    margin-bottom: var(--space-sm);
+  }
+`;
+
+export const IterationHeader = styled.div`
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  margin-bottom: var(--space-xs);
+  font-size: var(--font-size-sm);
+  color: var(--text-muted);
+`;
+
+export const ExpandArrow = styled.span<{ $expanded: boolean }>`
+  margin-left: auto;
+  font-size: 10px;
+  transition: transform 0.15s;
+  transform: rotate(${(p) => (p.$expanded ? "90deg" : "0deg")});
+`;

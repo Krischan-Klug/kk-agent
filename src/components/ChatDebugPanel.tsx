@@ -377,7 +377,7 @@ export default function ChatDebugPanel({
             <TextArea
               value={sessionMemoryDraft}
               onChange={(e) => setSessionMemoryDraft(e.target.value)}
-              placeholder={"Projekt nutzt Plugin-Architektur\nUser will kurze Antworten"}
+              placeholder={"Ein Fakt pro Zeile\nNur session-relevante Infos"}
             />
             <RowActions style={{ marginTop: "var(--space-sm)" }}>
               <Button size="sm" onClick={() => void saveSessionMemory()} disabled={saving === "session"}>
@@ -389,7 +389,7 @@ export default function ChatDebugPanel({
             <TextArea
               value={userMemoryDraft}
               onChange={(e) => setUserMemoryDraft(e.target.value)}
-              placeholder={"User bevorzugt Deutsch\nAntworten bitte knapp halten"}
+              placeholder={"Ein Fakt pro Zeile\nNur laengerfristige Nutzerinfos"}
             />
             <RowActions style={{ marginTop: "var(--space-sm)" }}>
               <Button size="sm" onClick={() => void saveUserMemory()} disabled={saving === "user"}>

@@ -59,7 +59,7 @@ const ComposerActions = styled.div`
   gap: var(--space-sm);
 `;
 
-const ControlGroup = styled.label`
+const ControlGroup = styled.div`
   display: inline-flex;
   align-items: center;
   gap: 6px;
@@ -87,7 +87,6 @@ const ChatInput = styled.textarea`
   padding: 0;
   background: transparent;
   color: var(--text-primary);
-  border: none;
   font-size: var(--font-size-base);
   font-family: inherit;
   outline: none;
@@ -312,6 +311,7 @@ export default function ChatComposer({
             placeholder="Nachricht eingeben..."
             disabled={sending}
             rows={1}
+            aria-label="Chat-Nachricht"
           />
         </ComposerInputWrap>
         <AttachmentPreview attachments={pendingAttachments} onRemove={onRemoveAttachment} />
@@ -324,6 +324,7 @@ export default function ChatComposer({
                   value={resolvedEffort}
                   options={reasoningOptions}
                   onSelect={onReasoningSelect}
+                  direction="up"
                   variant="neutral"
                 />
               </ControlGroup>
@@ -335,10 +336,16 @@ export default function ChatComposer({
                   value={resolvedTemp.toFixed(1)}
                   options={temperatureOptions}
                   onSelect={onTemperatureSelect}
+                  direction="up"
                   variant="neutral"
                 />
               </ControlGroup>
             )}
+            {agents.length > 0 && (
+              <AgentSelect agents={agents} currentAgentId={currentAgentId} onSelect={onAgentSwitch} direction="up" />
+            )}
+          </ComposerMeta>
+          <ComposerActions>
             {maxCtx > 0 && tokenStats && (
               <ContextIndicator
                 title={`Input: ${tokenStats.input.toLocaleString()} | Output: ${tokenStats.output.toLocaleString()} | Reasoning: ${tokenStats.reasoning.toLocaleString()}`}
@@ -347,8 +354,6 @@ export default function ChatComposer({
                 <span>{formatTokens(tokenStats.input)} / {formatTokens(maxCtx)}</span>
               </ContextIndicator>
             )}
-          </ComposerMeta>
-          <ComposerActions>
             <HiddenFileInput
               ref={fileInputRef}
               type="file"
@@ -369,9 +374,6 @@ export default function ChatComposer({
             >
               +
             </AttachIconButton>
-            {agents.length > 0 && (
-              <AgentSelect agents={agents} currentAgentId={currentAgentId} onSelect={onAgentSwitch} direction="up" />
-            )}
             <SendIconButton onClick={onSend} disabled={!canSend} aria-label="Nachricht senden">
               ^
             </SendIconButton>

@@ -7,6 +7,7 @@ import Button from "@/components/Button";
 import Spinner from "@/components/Spinner";
 import MarkdownMessage from "@/components/MarkdownMessage";
 import type { ActiveToolCall, PendingPrompt } from "./types";
+import MessageAttachments from "./MessageAttachments";
 
 /* ── Iteration grouping types & utility ── */
 
@@ -509,6 +510,10 @@ export default function ChatMessages({
         )}
 
         {message.role === "assistant" ? <MarkdownMessage content={message.content} /> : message.content}
+
+        {message.attachments && message.attachments.length > 0 && (
+          <MessageAttachments attachments={message.attachments} />
+        )}
       </MessageBubble>
     );
   }

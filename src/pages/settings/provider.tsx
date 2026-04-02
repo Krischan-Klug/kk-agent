@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import styled from "styled-components";
 import { provider as providerApi } from "@/lib/api";
 import { logUiError } from "@/lib/uiLogger";
@@ -36,11 +36,7 @@ export default function SettingsProviderPage() {
   const [newBaseUrl, setNewBaseUrl] = useState(DEFAULT_PROVIDER_BASE_URL);
   const [newApiKey, setNewApiKey] = useState("");
 
-  useEffect(() => {
-    void loadData();
-  }, []);
-
-  async function loadData() {
+  const loadData = useCallback(async () => {
     try {
       const providerList = await providerApi.listProviders();
       setProviders(providerList);
@@ -57,7 +53,11 @@ export default function SettingsProviderPage() {
     } finally {
       setLoading(false);
     }
-  }
+  }, [activeProviderId]);
+
+  useEffect(() => {
+    void loadData();
+  }, [loadData]);
 
   function resetCreateForm() {
     setNewName("");

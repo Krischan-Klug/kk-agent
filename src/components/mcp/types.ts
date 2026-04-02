@@ -44,6 +44,7 @@ export function getConfigSummary(mcp: McpListItem): string {
     if (mcp.systemKey === "user-interaction") return "Interne User-Interaktion";
     if (mcp.systemKey === "task") return "Interne Task-Steuerung";
     if (mcp.systemKey === "memory") return "Interne Memory-Steuerung";
+    if (mcp.systemKey === "attachment") return "Interne Chat-Attachments";
     return "Internes System-Tool";
   }
 

@@ -52,8 +52,8 @@ function isNavActive(pathname: string, href: string): boolean {
 export default function Sidebar() {
   const router = useRouter();
   const [sessions, setSessions] = useState<SessionState[]>([]);
-  const [activeSessionId, setActiveSessionIdState] = useState<string | null>(null);
-  const [collapsed, setCollapsed] = useState(true);
+  const [activeSessionId, setActiveSessionIdState] = useState<string | null>(() => getActiveSessionId());
+  const [collapsed, setCollapsed] = useState(() => getSidebarCollapsed());
 
   const loadSessions = useCallback(async () => {
     try {
@@ -63,23 +63,24 @@ export default function Sidebar() {
     }
   }, []);
 
-  useEffect(() => {
+  const syncSessionState = useCallback(() => {
     void loadSessions();
     setActiveSessionIdState(getActiveSessionId());
-    setCollapsed(getSidebarCollapsed());
+  }, [loadSessions]);
 
-    function syncSessionState() {
+  useEffect(() => {
+    const loadTimer = window.setTimeout(() => {
       void loadSessions();
-      setActiveSessionIdState(getActiveSessionId());
-    }
+    }, 0);
 
     const unsubscribe = addAppEventListener(SESSION_CHANGED_EVENT, syncSessionState);
     window.addEventListener("storage", syncSessionState);
     return () => {
+      window.clearTimeout(loadTimer);
       unsubscribe();
       window.removeEventListener("storage", syncSessionState);
     };
-  }, [loadSessions]);
+  }, [loadSessions, syncSessionState]);
 
   function updateSidebarCollapsed(next: boolean) {
     setCollapsed(next);

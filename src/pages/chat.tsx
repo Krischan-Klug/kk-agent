@@ -1,7 +1,18 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import styled from "styled-components";
 import { agent as agentApi, mcp as mcpApi, provider as providerApi, session as sessionApi, tools as toolsApi } from "@/lib/api";
-import type { AgentDefinition, AgentLoopState, McpListItem, MemoryFact, ModelInfo, ModelSettings, SessionState, StreamEvent, TaskItem } from "@/types/api";
+import type {
+  AgentDefinition,
+  AgentLoopState,
+  AttachmentDisplayMeta,
+  McpListItem,
+  MemoryFact,
+  ModelInfo,
+  ModelSettings,
+  SessionState,
+  StreamEvent,
+  TaskItem,
+} from "@/types/api";
 import {
   DEFAULT_REASONING_LEVELS,
   buildTemperatureOptions,
@@ -22,6 +33,7 @@ import { clearActiveSessionId, getActiveSessionId } from "@/lib/sessionState";
 import { createAndActivateSession, resolveDefaultSessionAgentId } from "@/lib/sessionFactory";
 import { logUiError } from "@/lib/uiLogger";
 import { useChatAutoScroll } from "@/hooks/useChatAutoScroll";
+import { useAttachments } from "@/hooks/useAttachments";
 
 const ChatWrapper = styled.div`
   display: flex;
@@ -92,7 +104,9 @@ export default function ChatPage() {
   const [tasks, setTasks] = useState<TaskItem[]>([]);
   const [sessionFacts, setSessionFacts] = useState<MemoryFact[]>([]);
   const [userFacts, setUserFacts] = useState<MemoryFact[]>([]);
+  const optimisticPreviewUrlsRef = useRef<string[]>([]);
   const { ref: messagesRef, scrollToBottom, handleScroll } = useChatAutoScroll();
+  const { pendingAttachments, uploading, addFiles, removeAttachment, clearAttachments } = useAttachments();
 
   const loadAvailableMcps = useCallback(async (): Promise<{ tools: McpListItem[]; mcps: McpListItem[] }> => {
     const [internalTools, externalMcps] = await Promise.all([toolsApi.list(), mcpApi.list()]);
@@ -209,13 +223,6 @@ export default function ChatPage() {
       1.0
     )
     : 1.0;
-  const resolvedMaxOutputTokens = session
-    ? (
-      modelSettings?.levels?.[resolvedEffort]?.maxOutputTokens ??
-      resolvedLevelConfig?.maxOutputTokens ??
-      endpointCapabilities.maxOutputTokensRange?.max
-    )
-    : endpointCapabilities.maxOutputTokensRange?.max;
   const temperatureOptions = buildTemperatureOptions(endpointCapabilities.temperatureRange);
   const showReasoningControl = reasoningLevels.length > 0;
   const showTemperatureControl = endpointCapabilities.temperatureSupported && temperatureOptions.length > 0;
@@ -225,9 +232,17 @@ export default function ChatPage() {
     : "assistant";
 
   async function handleSend() {
-    if (!input.trim() || !session || sending) return;
-    const message = input.trim();
+    const hasText = input.trim().length > 0;
+    const hasAttachments = pendingAttachments.length > 0;
+    if ((!hasText && !hasAttachments) || !session || sending) return;
+    const message = input.trim() || " ";
+    const optimisticAttachments = pendingAttachments;
+    const attachmentIds = optimisticAttachments.map((attachment) => attachment.id);
+    optimisticPreviewUrlsRef.current = optimisticAttachments
+      .map((attachment) => attachment.previewUrl)
+      .filter((previewUrl): previewUrl is string => Boolean(previewUrl));
     setInput("");
+    clearAttachments({ revokeUrls: false });
     setSending(true);
     setStreaming(true);
     setStreamContent("");
@@ -237,7 +252,31 @@ export default function ChatPage() {
     setLoopState(null);
     setTokenStats(null);
 
-    setSession((prev) => prev ? { ...prev, messages: [...prev.messages, { role: "user" as const, content: message }] } : prev);
+    setSession((prev) => {
+      if (!prev) return prev;
+
+      const attachments: AttachmentDisplayMeta[] | undefined = optimisticAttachments.length > 0
+        ? optimisticAttachments.map((attachment) => ({
+          filename: attachment.filename,
+          mimeType: attachment.mimeType,
+          category: attachment.category,
+          size: attachment.size,
+          previewDataUrl: attachment.previewUrl,
+        }))
+        : undefined;
+
+      return {
+        ...prev,
+        messages: [
+          ...prev.messages,
+          {
+            role: "user" as const,
+            content: message,
+            ...(attachments ? { attachments } : {}),
+          },
+        ],
+      };
+    });
 
     try {
       await sessionApi.chatStream(session.id, message, (event: StreamEvent) => {
@@ -281,6 +320,11 @@ export default function ChatPage() {
             setPendingPrompt({ promptId: event.promptId, question: event.question, choices: event.choices });
             break;
           case "done":
+            for (const previewUrl of optimisticPreviewUrlsRef.current) {
+              URL.revokeObjectURL(previewUrl);
+            }
+            optimisticPreviewUrlsRef.current = [];
+            clearAttachments();
             setSession(event.session);
             void loadContextData(event.session.id);
             resetStreamingState();
@@ -292,7 +336,7 @@ export default function ChatPage() {
             resetStreamingState();
             break;
         }
-      });
+      }, attachmentIds.length > 0 ? attachmentIds : undefined);
     } catch (err) {
       logUiError("chat-stream", err);
       resetStreamingState();
@@ -426,8 +470,8 @@ export default function ChatPage() {
     }
   }
 
-  function handleKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
-    if (e.key === "Enter") {
+  function handleKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
+    if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
       void handleSend();
     }
@@ -487,7 +531,7 @@ export default function ChatPage() {
       />
       <ChatComposer
         input={input}
-        sending={sending}
+        sending={sending || uploading}
         agents={agents}
         currentAgentId={session.agentId}
         showReasoningControl={showReasoningControl}
@@ -498,12 +542,15 @@ export default function ChatPage() {
         temperatureOptions={temperatureOptions}
         maxCtx={maxCtx}
         tokenStats={tokenStats}
+        pendingAttachments={pendingAttachments}
         onInputChange={setInput}
         onKeyDown={handleKeyDown}
         onReasoningSelect={handleReasoningEffort}
         onTemperatureSelect={handleTemperature}
         onAgentSwitch={handleAgentSwitch}
         onSend={handleSend}
+        onFilesSelected={(files) => { if (session) void addFiles(session.id, files); }}
+        onRemoveAttachment={removeAttachment}
       />
       <FloatingDebugButton
         type="button"

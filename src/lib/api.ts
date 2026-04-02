@@ -20,6 +20,7 @@ import type {
   UpdateSessionBody,
   TaskItem,
   MemoryFact,
+  AttachmentMeta,
 } from "@/types/api";
 
 const BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3001";
@@ -282,15 +283,30 @@ export const session = {
       body: JSON.stringify({ promptId, selectedKey }),
     }),
 
+  uploadAttachment: async (sessionId: string, file: File): Promise<AttachmentMeta> => {
+    const form = new FormData();
+    form.append("file", file);
+    const res = await fetch(`${BASE}/session/${sessionId}/attachments`, {
+      method: "POST",
+      body: form,
+    });
+    if (!res.ok) {
+      const text = await res.text();
+      throw new Error(`${res.status}: ${text}`);
+    }
+    return res.json() as Promise<AttachmentMeta>;
+  },
+
   chatStream: async (
     id: string,
     message: string,
     onEvent: (event: StreamEvent) => void,
+    attachmentIds?: string[],
   ): Promise<void> => {
     const res = await fetch(`${BASE}/session/${id}/chat/stream`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ message }),
+      body: JSON.stringify({ message, attachmentIds }),
     });
 
     if (!res.ok) {

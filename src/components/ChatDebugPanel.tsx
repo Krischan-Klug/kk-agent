@@ -108,11 +108,6 @@ const RowActions = styled.div`
   flex-wrap: wrap;
 `;
 
-const Hint = styled.div`
-  font-size: var(--font-size-sm);
-  color: var(--text-secondary);
-`;
-
 type Props = {
   open: boolean;
   debugTab: ChatDebugTab | null;

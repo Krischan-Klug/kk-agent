@@ -16,12 +16,29 @@ export interface SessionState {
   updatedAt: string;
 }
 
+export interface AttachmentMeta {
+  id: string;
+  filename: string;
+  mimeType: string;
+  category: "image" | "text" | "pdf";
+  size: number;
+}
+
+export interface AttachmentDisplayMeta {
+  filename: string;
+  mimeType: string;
+  category: "image" | "text" | "pdf";
+  size: number;
+  previewDataUrl?: string;
+}
+
 export interface SessionMessage {
   role: "user" | "assistant" | "tool" | "system";
   content: string;
   reasoning?: string;
   tool_call_id?: string;
   tool_calls?: ToolCall[];
+  attachments?: AttachmentDisplayMeta[];
 }
 
 export interface ToolCall {
@@ -71,7 +88,7 @@ export interface McpServerConfig {
   instruction: string;
   emoji?: string;
   source?: "system" | "custom";
-  systemKey?: "filesystem" | "web-search" | "terminal" | "user-interaction" | "task" | "memory";
+  systemKey?: "filesystem" | "web-search" | "terminal" | "user-interaction" | "task" | "memory" | "attachment";
   systemConfig?: {
     rootPath?: string;
     workingDirectory?: string;
@@ -113,6 +130,7 @@ export interface ModelInfo {
   capabilities: {
     supportsTools: boolean;
     supportsReasoning: boolean;
+    supportsVision: boolean;
     reasoningSource: "none" | "declared" | "observed";
     supportsStreaming: boolean;
     supportedEndpoints: EndpointType[];
@@ -299,6 +317,9 @@ export interface AppDefaults {
   };
   reasoning: {
     defaultEffort: string;
+  };
+  attachment: {
+    visionNotSupportedInstruction: string;
   };
 }
 

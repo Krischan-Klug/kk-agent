@@ -1,7 +1,10 @@
+import { useRef, useState, useCallback, useLayoutEffect } from "react";
 import styled from "styled-components";
 import type { AgentDefinition } from "@/types/api";
+import type { PendingAttachment } from "@/hooks/useAttachments";
 import AgentSelect from "@/components/AgentSelect";
 import SelectMenu, { type SelectMenuOption } from "@/components/SelectMenu";
+import AttachmentPreview from "./AttachmentPreview";
 import type { TokenDisplayStats } from "./types";
 
 const InputArea = styled.div`
@@ -20,13 +23,14 @@ const InputArea = styled.div`
   }
 `;
 
-const Composer = styled.div`
+const Composer = styled.div<{ $dragOver?: boolean }>`
   width: 100%;
   background: var(--bg-elevated);
-  border: 1px solid var(--border);
+  border: 1px solid ${(p) => (p.$dragOver ? "var(--accent)" : "var(--border)")};
   border-radius: 20px;
   box-shadow: 0 10px 30px rgba(0, 0, 0, 0.14);
   overflow: visible;
+  transition: border-color 0.15s;
 `;
 
 const ComposerInputWrap = styled.div`
@@ -76,7 +80,7 @@ const ContextIndicator = styled.div`
   flex-shrink: 0;
 `;
 
-const ChatInput = styled.input`
+const ChatInput = styled.textarea`
   flex: 1;
   width: 100%;
   min-width: 0;
@@ -87,14 +91,20 @@ const ChatInput = styled.input`
   font-size: var(--font-size-base);
   font-family: inherit;
   outline: none;
-  height: 24px;
+  line-height: 24px;
+  min-height: 24px;
+  max-height: 192px;
+  border: none;
+  resize: none;
+  overflow-y: auto;
+  field-sizing: content;
 
   &::placeholder {
     color: var(--text-muted);
   }
 `;
 
-const SendIconButton = styled.button`
+const IconButton = styled.button`
   width: 36px;
   height: 36px;
   display: inline-flex;
@@ -102,8 +112,6 @@ const SendIconButton = styled.button`
   justify-content: center;
   border: none;
   border-radius: 50%;
-  background: var(--accent);
-  color: var(--bg-base);
   cursor: pointer;
   font-size: 16px;
   font-weight: 700;
@@ -118,6 +126,38 @@ const SendIconButton = styled.button`
     cursor: not-allowed;
   }
 `;
+
+const SendIconButton = styled(IconButton)`
+  background: var(--accent);
+  color: var(--bg-base);
+`;
+
+const AttachIconButton = styled(IconButton)`
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text-secondary);
+  font-size: 18px;
+  font-weight: 400;
+
+  &:hover:not(:disabled) {
+    border-color: var(--accent);
+    color: var(--accent);
+    filter: none;
+  }
+`;
+
+const HiddenFileInput = styled.input`
+  display: none;
+`;
+
+const ACCEPTED_FILES = [
+  "image/png", "image/jpeg", "image/gif", "image/webp",
+  "application/pdf", "application/json",
+  "text/plain", "text/markdown", "text/csv", "text/xml", "text/html",
+  ".txt", ".md", ".json", ".csv", ".xml", ".yaml", ".yml", ".html", ".css",
+  ".js", ".ts", ".tsx", ".jsx", ".py", ".rs", ".go", ".java", ".c", ".cpp", ".h",
+  ".sh", ".sql", ".toml", ".ini", ".log", ".pdf",
+].join(",");
 
 function ContextRing({ used, max }: { used: number; max: number }) {
   const pct = max > 0 ? Math.min(used / max, 1) : 0;
@@ -161,12 +201,15 @@ type Props = {
   temperatureOptions: SelectMenuOption[];
   maxCtx: number;
   tokenStats: TokenDisplayStats | null;
+  pendingAttachments: PendingAttachment[];
   onInputChange: (value: string) => void;
-  onKeyDown: (e: React.KeyboardEvent<HTMLInputElement>) => void;
+  onKeyDown: (e: React.KeyboardEvent<HTMLTextAreaElement>) => void;
   onReasoningSelect: (value: string) => void;
   onTemperatureSelect: (value: string) => void;
   onAgentSwitch: (agentId: string) => void;
   onSend: () => void;
+  onFilesSelected: (files: FileList) => void;
+  onRemoveAttachment: (id: string) => void;
 };
 
 export default function ChatComposer({
@@ -182,26 +225,96 @@ export default function ChatComposer({
   temperatureOptions,
   maxCtx,
   tokenStats,
+  pendingAttachments,
   onInputChange,
   onKeyDown,
   onReasoningSelect,
   onTemperatureSelect,
   onAgentSwitch,
   onSend,
+  onFilesSelected,
+  onRemoveAttachment,
 }: Props) {
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const textAreaRef = useRef<HTMLTextAreaElement>(null);
+  const [dragOver, setDragOver] = useState(false);
+
+  const canSend = !sending && (input.trim().length > 0 || pendingAttachments.length > 0);
+
+  const handleDragOver = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setDragOver(true);
+  }, []);
+
+  const handleDragLeave = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setDragOver(false);
+  }, []);
+
+  const handleDrop = useCallback(
+    (e: React.DragEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      setDragOver(false);
+      if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+        onFilesSelected(e.dataTransfer.files);
+      }
+    },
+    [onFilesSelected],
+  );
+
+  const handlePaste = useCallback(
+    (e: React.ClipboardEvent) => {
+      const items = e.clipboardData?.items;
+      if (!items) return;
+      const files: File[] = [];
+      for (let i = 0; i < items.length; i++) {
+        if (items[i].kind === "file") {
+          const file = items[i].getAsFile();
+          if (file) files.push(file);
+        }
+      }
+      if (files.length > 0) {
+        e.preventDefault();
+        const dt = new DataTransfer();
+        files.forEach((f) => dt.items.add(f));
+        onFilesSelected(dt.files);
+      }
+    },
+    [onFilesSelected],
+  );
+
+  useLayoutEffect(() => {
+    const element = textAreaRef.current;
+    if (!element) return;
+    element.style.height = "24px";
+    element.style.height = `${Math.min(element.scrollHeight, 192)}px`;
+  }, [input]);
+
   return (
     <InputArea>
-      <Composer>
+      <Composer
+        $dragOver={dragOver}
+        onDragOver={handleDragOver}
+        onDragEnter={handleDragOver}
+        onDragLeave={handleDragLeave}
+        onDrop={handleDrop}
+      >
         <ComposerInputWrap>
           <ChatInput
-            type="text"
+            ref={textAreaRef}
             value={input}
             onChange={(e) => onInputChange(e.target.value)}
             onKeyDown={onKeyDown}
+            onPaste={handlePaste}
             placeholder="Nachricht eingeben..."
             disabled={sending}
+            rows={1}
           />
         </ComposerInputWrap>
+        <AttachmentPreview attachments={pendingAttachments} onRemove={onRemoveAttachment} />
         <ComposerFooter>
           <ComposerMeta>
             {showReasoningControl && (
@@ -236,10 +349,30 @@ export default function ChatComposer({
             )}
           </ComposerMeta>
           <ComposerActions>
+            <HiddenFileInput
+              ref={fileInputRef}
+              type="file"
+              multiple
+              accept={ACCEPTED_FILES}
+              onChange={(e) => {
+                if (e.target.files && e.target.files.length > 0) {
+                  onFilesSelected(e.target.files);
+                  e.target.value = "";
+                }
+              }}
+            />
+            <AttachIconButton
+              onClick={() => fileInputRef.current?.click()}
+              disabled={sending}
+              aria-label="Datei anhaengen"
+              title="Datei anhaengen"
+            >
+              +
+            </AttachIconButton>
             {agents.length > 0 && (
               <AgentSelect agents={agents} currentAgentId={currentAgentId} onSelect={onAgentSwitch} direction="up" />
             )}
-            <SendIconButton onClick={onSend} disabled={sending || !input.trim()} aria-label="Nachricht senden">
+            <SendIconButton onClick={onSend} disabled={!canSend} aria-label="Nachricht senden">
               ^
             </SendIconButton>
           </ComposerActions>

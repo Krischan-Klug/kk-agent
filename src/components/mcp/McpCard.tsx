@@ -10,7 +10,6 @@ import {
   ActionsRow,
   FieldLabel,
   FormField,
-  FormRow,
   Section,
   SectionTitle,
 } from "@/components/PageForm";
@@ -220,7 +219,8 @@ export default function McpCard({
               {(mcp.systemKey === "web-search" ||
                 mcp.systemKey === "user-interaction" ||
                 mcp.systemKey === "task" ||
-                mcp.systemKey === "memory") && <ConfigDetail>Keine weitere System-Konfiguration in v1.</ConfigDetail>}
+                mcp.systemKey === "memory" ||
+                mcp.systemKey === "attachment") && <ConfigDetail>Keine weitere System-Konfiguration in v1.</ConfigDetail>}
             </>
           ) : mcp.transport === "stdio" ? (
             <>

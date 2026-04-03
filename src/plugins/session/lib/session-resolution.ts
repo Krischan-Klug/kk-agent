@@ -4,15 +4,12 @@ import { REASONING_LEVEL_DEFAULTS } from "../../provider/defaults.js";
 import { getDefaults } from "../../lib/defaults.js";
 import { getModelSettings, resolveProviderModel } from "../../provider/service.js";
 import { resolveSessionMcpIds, resolveSessionToolIds } from "./tool-selection.js";
-import type { ChatMode } from "../../agent/types.js";
+import type { AgentDefinition } from "../../agent/types.js";
 
-type SessionLikeAgent = {
-  defaultModel?: string;
-  defaultChatMode?: ChatMode;
-  modeConfigs?: Partial<Record<"plan" | "edit", { toolIds?: string[]; mcpIds?: string[] }>>;
-  reasoningEffort?: string;
-  temperature?: number;
-};
+type SessionLikeAgent = Pick<
+  AgentDefinition,
+  "defaultModel" | "defaultChatMode" | "modeConfigs" | "reasoningEffort" | "temperature"
+>;
 
 export async function resolveSessionDefaults(
   agent: SessionLikeAgent,

@@ -1,5 +1,4 @@
 import { getDefaults } from "../../lib/defaults.js";
-import { normalizeMcpId } from "../../lib/ids.js";
 import type {
   AgentDefinition,
   AgentModeConfig,
@@ -13,23 +12,21 @@ import { getChatModes } from "./modes.js";
 const REQUIRED_TOOL_IDS = ["attachment"];
 
 function normalizeToolIds(toolIds: string[]): string[] {
-  return [...new Set([...toolIds, ...REQUIRED_TOOL_IDS].map(normalizeMcpId))];
+  return [...new Set([...toolIds, ...REQUIRED_TOOL_IDS])];
 }
 
 function normalizeMcpIds(mcpIds: string[]): string[] {
-  return [...new Set(mcpIds.map(normalizeMcpId))];
+  return [...new Set(mcpIds)];
 }
 
 function normalizeInstructions(instructions: Record<string, string> = {}): Record<string, string> {
-  return Object.fromEntries(
-    Object.entries(instructions).map(([id, instruction]) => [normalizeMcpId(id), instruction]),
-  );
+  return { ...instructions };
 }
 
 function normalizeToolAccessScopes(scopes: Record<string, ToolAccessScope> = {}): Record<string, ToolAccessScope> {
   return Object.fromEntries(
     Object.entries(scopes)
-      .map(([id, scope]) => [normalizeMcpId(id), scope === "system" ? "system" : "user"]),
+      .map(([id, scope]) => [id, scope === "system" ? "system" : "user"]),
   );
 }
 
@@ -155,6 +152,6 @@ export function applyModeConfigPatch(
   };
 }
 
-export function getModeConfig(agent: AgentDefinition, mode: ChatMode): AgentModeConfig {
+export function getModeConfig(agent: Pick<AgentDefinition, "modeConfigs">, mode: ChatMode): AgentModeConfig {
   return normalizeModeConfig(mode, agent.modeConfigs[mode]);
 }

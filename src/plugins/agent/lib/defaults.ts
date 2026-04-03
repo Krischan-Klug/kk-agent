@@ -51,7 +51,7 @@ export function getBundledAgents(): AgentDefinition[] {
     buildAgent(
       "coding-agent",
       "Musti - Coding Agent",
-      "Arbeitsagent mit manuell schaltbaren Modes fuer Planen und Editieren.",
+      "Coding-Agent mit manuell schaltbaren Chat-Modes fuer Planen und Editieren.",
       "edit",
       "qwen3.5-27b-claude-4.6-opus-reasoning-distilled-v2",
       50,

@@ -1,29 +1,66 @@
 # kk-agent-backend
 
-Modulares Backend fuer lokale oder selbst gehostete LLM-Agents.
-
-Der aktuelle Fokus ist ein schlanker Agent-Loop:
-- System-Prompt bauen
-- Modell aufrufen
-- strukturierte Tool-Calls ausfuehren
-- wiederholen bis Antwort oder `maxIterations`
+Modulares Backend fuer lokale oder selbst gehostete LLM-Agenten.
 
 ## Plugins
 
 ```text
 core          -> technisches Bootstrap-Minimum fuer den Plugin-Loader
-provider      -> Modellzugriff, Streaming, Model-Settings
-tools         -> Interne Tools und interner Tool-State (filesystem, web-search, terminal, user-interaction, task, memory, attachment)
+provider      -> Provider, Modelle, Capabilities, Streaming
+tools         -> Interne Tools und interner Tool-State
 mcp           -> Externe / custom MCP-Server
-agent         -> Agent-Definitionen und Loop-State
-systemprompt  -> Prompt-Building mit Variablen und Tool-Instructions
-loop          -> Iterativer Agent-Loop mit Retry-Guards
-session       -> Sessions, Chat, SSE-Streaming
+agent         -> Agent-Definitionen, Mode-Konfiguration, Loop-State
+systemprompt  -> XML-Prompt-Building mit Variablen und Runtime-Kontext
+loop          -> Iterativer Agent-Loop
+session       -> Sessions, Chat, SSE-Streaming, Uploads
 ```
+
+## Zentrales Modell
+
+- Chat-Modes: `plan` und `edit`
+- Interne Tools und externe MCPs bleiben getrennt
+- Agenten halten `toolIds` und `mcpIds` getrennt
+- Sessions halten `activeToolIds` und `activeMcpIds` getrennt
+- Task und Memory leben nur im `tools`-Plugin
+- Attachments laufen ueber das interne `attachment`-Tool
+
+## Prompt und Runtime
+
+Der finale System-Prompt wird aus vier Ebenen gebaut:
+
+1. globalen Prompt-Defaults
+2. agent- und mode-spezifischen Overrides
+3. Laufzeitsektionen wie Mode, Iteration, Tasks und Memory
+4. `tool_access_context` fuer effektiven Filesystem-/Terminal-Zugriff
+
+Wichtige Runtime-Variablen:
+
+- `{{CURRENT_DATE}}`
+- `{{CURRENT_TIME}}`
+- `{{CURRENT_TIMESTAMP}}`
+- `{{CURRENT_MODEL}}`
+- `{{iteration}}`
+- `{{maxIterations}}`
+
+Agents koennen zusaetzlich eigene Variablen definieren.
+
+## Interne Tools
+
+System-Tools:
+
+- `filesystem`
+- `web-search`
+- `terminal`
+- `user-interaction`
+- `task`
+- `memory`
+- `attachment`
+
+Fuer `filesystem` und `terminal` gibt es global konfigurierbare System-Defaults. Agenten koennen diese pro Mode ueber `toolAccessScopes` und `toolInstructions` ueberschreiben.
 
 ## State
 
-Runtime-State liegt unter `state/`:
+Persistenter State liegt unter `state/`:
 
 - `agents.json`
 - `defaults.json`
@@ -33,75 +70,9 @@ Runtime-State liegt unter `state/`:
 - `session-attachments/`
 - `user-memory.json`
 
-Hinweis:
-- Sessions sind aktuell reiner Runtime-State im Speicher und werden nicht nach `state/` persistiert.
+Sessions sind aktuell nur Runtime-State im Speicher.
 
-## Wie der Loop funktioniert
-
-Je nach `mode` arbeitet der Agent als:
-
-1. `simple` -> direkt `executing`
-2. `read_only` -> nur `executing` mit read-only Tool-Policy
-3. `verify` -> nur `verifying` mit read-only Verify-Policy
-4. `read_execute_verify` -> `planning` -> `executing` -> `verifying`
-
-Jede Iteration besteht aus:
-
-1. System-Prompt aus Agent-Prompt, Tool-Instructions und Variablen bauen
-2. Modell mit bisheriger Message-History und Tool-Definitionen aufrufen
-3. Bei `tool_calls`: Tools ausfuehren und Tool-Ergebnisse an die History haengen
-4. Bei normaler Antwort: Loop beenden
-
-`maxIterations` ist nur eine Sicherheitsgrenze gegen endlose Tool-Loops.
-
-## Prompt-Building
-
-Verfuegbare Runtime-Variablen:
-
-- `{{CURRENT_DATE}}`
-- `{{CURRENT_TIME}}`
-- `{{CURRENT_TIMESTAMP}}`
-- `{{CURRENT_MODEL}}`
-- `{{iteration}}`
-- `{{maxIterations}}`
-- `{{phase}}`
-- `{{TASK_SUMMARY}}`
-- `{{FEEDBACK}}`
-
-Agents koennen zusaetzlich eigene Variablen definieren.
-
-Hinweis:
-- `core` ist kein fachliches HTTP-Plugin mehr, sondern nur technisches Bootstrap-Minimum.
-- `src/plugins/lib` enthaelt nur noch gemeinsame Utilities wie Defaults/State-Helper, kein eigenes Plugin.
-
-## Tools
-
-Es gibt zwei Tool-Quellen:
-
-- `tools`: eingebaute System-Tools
-  - `filesystem`
-  - `web-search`
-  - `terminal`
-  - `user-interaction`
-  - `task`
-  - `memory`
-  - `attachment`
-- `mcp`: externe / custom MCP-Server
-
-Nach aussen bleiben beide getrennt:
-
-- `/tools` -> interne Tools
-- `/mcp` -> externe MCPs
-
-Intern werden Agenten und Sessions ebenfalls getrennt modelliert:
-
-- Agent: `toolIds` und `mcpIds`
-- Session: `activeToolIds` und `activeMcpIds`
-
-## Reasoning und Streaming
-
-Assistant-Nachrichten koennen getrenntes `content` und `reasoning` enthalten.
-SSE liefert aktuell folgende Events:
+## SSE-Events
 
 - `content`
 - `reasoning`
@@ -125,7 +96,7 @@ SSE liefert aktuell folgende Events:
 | GET | `/agent/:id` | Agent laden |
 | PUT | `/agent/:id` | Agent updaten |
 | DELETE | `/agent/:id` | Agent loeschen |
-| GET | `/agent/system-variables` | Verfuegbare System-Variablen |
+| GET | `/agent/system-variables` | Verfuegbare Prompt-Variablen |
 | GET | `/agent/loop-state/:sessionId` | Aktueller Loop-State |
 | GET | `/agent/loop-state/:sessionId/stream` | Loop-State als SSE |
 
@@ -136,27 +107,13 @@ SSE liefert aktuell folgende Events:
 | POST | `/session` | Session erstellen |
 | GET | `/session` | Sessions listen |
 | GET | `/session/:id` | Session laden |
+| PATCH | `/session/:id` | Session-Mode, Modell, Tools, MCPs oder Defaults aendern |
 | DELETE | `/session/:id` | Session loeschen |
-| PATCH | `/session/:id` | Agent, Model, Tools, MCPs, Reasoning, Temperature aendern |
 | POST | `/session/:id/chat` | Non-Streaming Chat |
 | POST | `/session/:id/chat/stream` | SSE-Chat |
-| POST | `/session/:id/attachments` | Chat-Upload fuer Bilder, Textdateien und PDFs |
-| GET | `/session/:id/prompt` | Aktuellen aufgeloesten System-Prompt lesen |
-| POST | `/session/:id/prompt/respond` | Antwort fuer `ask_user`-Prompt senden |
-
-### MCP
-
-| Methode | Route | Beschreibung |
-|---|---|---|
-| GET | `/mcp` | Nur externe MCPs listen |
-| POST | `/mcp` | Custom-MCP erstellen |
-| POST | `/mcp/:id/toggle` | MCP aktivieren/deaktivieren |
-| POST | `/mcp/:id/start` | MCP starten |
-| POST | `/mcp/:id/stop` | MCP stoppen |
-| PUT | `/mcp/:id` | MCP updaten |
-| PUT | `/mcp/:id/instruction` | Instruction updaten |
-| DELETE | `/mcp/:id` | Custom-MCP loeschen |
-| GET | `/mcp/:id/tools` | Tools eines MCPs |
+| POST | `/session/:id/attachments` | Upload fuer Bilder, Textdateien und PDFs |
+| GET | `/session/:id/prompt` | Aktuellen finalen System-Prompt lesen |
+| POST | `/session/:id/prompt/respond` | Antwort fuer `ask_user` senden |
 
 ### Tools
 
@@ -165,8 +122,8 @@ SSE liefert aktuell folgende Events:
 | GET | `/tools` | Interne Tools listen |
 | GET | `/tools/:id/tools` | Tool-Definitionen eines internen Tools |
 | POST | `/tools/:id/toggle` | Internes Tool aktivieren/deaktivieren |
-| PUT | `/tools/:id/instruction` | Tool-Instruktion updaten |
-| PUT | `/tools/:id` | Interne Tool-Konfig updaten |
+| PUT | `/tools/:id/instruction` | Tool-Instruction updaten |
+| PUT | `/tools/:id` | Tool-Konfiguration updaten |
 | GET | `/tools/task/session/:sessionId` | Session-Tasks lesen |
 | PUT | `/tools/task/session/:sessionId` | Session-Tasks ersetzen |
 | GET | `/tools/memory/user` | User-Memory lesen |
@@ -174,16 +131,25 @@ SSE liefert aktuell folgende Events:
 | GET | `/tools/memory/session/:sessionId` | Session-Memory lesen |
 | PUT | `/tools/memory/session/:sessionId` | Session-Memory ersetzen |
 
-Attachment-Hinweis:
+### MCP
 
-- Uploads werden session-scoped unter `state/session-attachments/` gespeichert.
-- Agenten sollen fuer Chat-Uploads das interne `attachment`-Tool verwenden statt im normalen Filesystem zu suchen.
+| Methode | Route | Beschreibung |
+|---|---|---|
+| GET | `/mcp` | Externe MCPs listen |
+| POST | `/mcp` | Custom-MCP erstellen |
+| PUT | `/mcp/:id` | MCP updaten |
+| PUT | `/mcp/:id/instruction` | MCP-Instruction updaten |
+| POST | `/mcp/:id/toggle` | MCP aktivieren/deaktivieren |
+| POST | `/mcp/:id/start` | MCP starten |
+| POST | `/mcp/:id/stop` | MCP stoppen |
+| DELETE | `/mcp/:id` | MCP loeschen |
+| GET | `/mcp/:id/tools` | Tools eines MCPs |
 
 ### Provider
 
 | Methode | Route | Beschreibung |
 |---|---|---|
-| GET | `/provider/models` | Verfuegbare Modelle |
+| GET | `/provider/models` | Verfuegbare Modelle und Model-Settings |
 | PUT | `/provider/models/:modelId/settings` | Model-Settings speichern |
 | GET | `/provider/providers` | Provider listen |
 | POST | `/provider/providers` | Provider erstellen |
@@ -194,28 +160,12 @@ Attachment-Hinweis:
 
 ## Provider-Modell
 
-- Provider sind jetzt nur noch:
-  - `name`
-  - `baseUrl`
-  - optional `apiKey`
-- Keine Provider-Typen mehr im Datenmodell oder UI.
-- Discovery erfolgt automatisch ueber lokale Endpoints:
-  - `/api/v1/models`
-  - `/api/tags`
-  - `/v1/models`
-- Es gibt kein globales `activeModel` mehr.
-- Sessions speichern zusaetzlich `providerId`, damit laufende Chats am richtigen Backend bleiben.
-- Session-Fallback fuer das Modell:
-  1. explizites Session-Modell
-  2. `agent.defaultModel`, falls beim Session-Provider vorhanden
-  3. erstes verfuegbares Modell des Session-Providers
-- Model-Capabilities steuern intern und im Frontend:
-  - `supportsTools`
-  - `supportsReasoning`
-  - `supportsStreaming`
-  - `supportedEndpoints`
+- Provider werden nur ueber `name`, `baseUrl` und optional `apiKey` gepflegt.
+- Discovery erfolgt ueber lokale Endpoints wie `/api/v1/models`, `/api/tags` oder `/v1/models`.
+- Modelle melden Capabilities wie Tools, Reasoning, Streaming, Vision und Endpoint-Unterstuetzung.
+- Sessions speichern `providerId`, damit laufende Chats am richtigen Backend bleiben.
 
-## Quick Start
+## Start
 
 ```bash
 npm install

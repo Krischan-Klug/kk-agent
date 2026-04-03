@@ -4,7 +4,3 @@ export function createSlugId(value: string): string {
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-|-$/g, "");
 }
-
-export function normalizeMcpId(id: string): string {
-  return id === "commands" ? "terminal" : id;
-}

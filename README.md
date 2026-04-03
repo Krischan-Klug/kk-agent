@@ -4,33 +4,38 @@ Frontend fuer `kk-agent-backend`.
 
 ## Seiten
 
-- `/chat` -> Streaming-Chat mit Markdown-Rendering, Tool-Cards und Loop-State
-- `/agent` -> Agent-Editor fuer Modus, Prompt-Sektionen, Tool-/MCP-Zuordnung und Variablen
-- `/tools` -> interne Tools anzeigen und konfigurieren
-- `/mcp` -> nur externe Nutzer-MCPs anzeigen und konfigurieren
-- `/provider` -> lokale LLM-Provider und Modelle
-- `/settings/defaults` -> globale Prompt-, Modus- und Runtime-Defaults
+- `/chat` -> Chat, Streaming, Tool-Cards, Prompt-Debug, Tasks
+- `/agent` -> Agent-Editor fuer Prompt, Modes, Tools, MCPs und Variablen
+- `/tools` -> Interne Tools anzeigen und konfigurieren
+- `/mcp` -> Externe Nutzer-MCPs anzeigen und konfigurieren
+- `/provider` -> Lokale LLM-Provider und Modelle
+- `/settings/defaults` -> Globale Prompt-, Mode- und Runtime-Defaults
 
-## Aktueller API-Vertrag
+## Wichtige UI-Regeln
 
-Wichtige Punkte:
+- Interne Tools und externe MCPs bleiben getrennt.
+- Agents arbeiten nur mit `plan` und `edit`.
+- Agenten kommen aus der API bereits mit normalisierten `modeConfigs`.
+- Der Agent-Editor zeigt Defaults und echte Overrides getrennt an.
+- Provider-Optionen richten sich nach gemeldeten Modell-Capabilities.
 
-- Assistant-Messages trennen `content` und `reasoning`
-- Nur strukturierte `tool_calls` sind echte Tool-Aufrufe
-- Das Chatfenster rendert Assistant-Text als Markdown
-- `/tools` und `/mcp` sind getrennt
-- `/provider` ist capability-basiert: Reasoning-Optionen erscheinen nur, wenn das Modell sie unterstuetzt
-- Provider werden nur ueber `name`, `baseUrl` und optionalen `apiKey` gepflegt
-
-### Relevante Typen
+## Relevante Typen
 
 ```ts
 type SessionMessage = {
   role: "user" | "assistant" | "tool" | "system";
   content: string;
+  isError?: boolean;
   reasoning?: string;
   tool_call_id?: string;
   tool_calls?: Array<{ id: string; name: string; arguments: Record<string, unknown> }>;
+  attachments?: Array<{
+    filename: string;
+    mimeType: string;
+    category: "image" | "text" | "pdf";
+    size: number;
+    previewDataUrl?: string;
+  }>;
 };
 
 type AgentDefinition = {
@@ -49,6 +54,7 @@ type AgentDefinition = {
     modeInstruction: string;
     toolIds: string[];
     mcpIds: string[];
+    toolAccessScopes: Record<string, "user" | "system">;
     toolInstructions: Record<string, string>;
     mcpInstructions: Record<string, string>;
     allowedToolNames: string[];
@@ -62,37 +68,17 @@ type AgentDefinition = {
   updatedAt: string;
 };
 
-type SessionState = {
-  id: string;
-  agentId: string;
-  providerId: string;
-  activeToolIds: string[];
-  activeMcpIds: string[];
-  messages: SessionMessage[];
-};
-
-type ModelInfo = {
-  id: string;
-  providerId: string;
-  capabilities: {
-    supportsTools: boolean;
-    supportsReasoning: boolean;
-    supportsStreaming: boolean;
-    supportedEndpoints: Array<"chat-completions" | "responses">;
-  };
-};
-
 type McpListItem = {
   id: string;
   name: string;
   active: boolean;
   running: boolean;
   source?: "system" | "custom";
-  systemKey?: "filesystem" | "web-search" | "terminal" | "user-interaction" | "task" | "memory";
+  systemKey?: "filesystem" | "web-search" | "terminal" | "user-interaction" | "task" | "memory" | "attachment";
 };
 ```
 
-## SSE-Events im Chat
+## SSE-Events
 
 - `content`
 - `reasoning`
@@ -102,10 +88,11 @@ type McpListItem = {
 - `tool_result`
 - `loop_state`
 - `stats`
+- `user_prompt`
 - `done`
 - `error`
 
-## Quick Start
+## Start
 
 ```bash
 npm install
@@ -114,5 +101,4 @@ npm run dev
 
 Standard-Port: `3000`
 
-Per Default wird das Backend unter `http://localhost:3001` erwartet.
-Ueberschreiben ueber `NEXT_PUBLIC_API_URL`.
+Per Default wird das Backend unter `http://localhost:3001` erwartet. Ueberschreiben ueber `NEXT_PUBLIC_API_URL`.

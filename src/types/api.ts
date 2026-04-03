@@ -250,7 +250,7 @@ export interface AgentDefinition {
   name: string;
   description: string;
   defaultChatMode: ChatMode;
-  modeConfigs: Partial<Record<ChatMode, AgentModeConfig>>;
+  modeConfigs: Record<ChatMode, AgentModeConfig>;
   maxIterations: number;
   variables: Record<string, string>;
   defaultModel?: string;

@@ -228,33 +228,6 @@ type Props = {
   onDelete: () => void;
 };
 
-function createDefaultModeConfig(
-  defaults: AppDefaults | null,
-  mode: ChatMode,
-  reference?: AgentModeConfig,
-): AgentModeConfig {
-  const defaultToolIds = defaults?.agent.modeToolIds[mode] ?? [];
-  const defaultAllowedToolNames = defaults?.agent.modeAllowedToolNames[mode] ?? [];
-  return {
-    promptSections: {
-      ...(reference?.promptSections ?? defaults?.agent.promptSections ?? {
-        identity: "",
-        system: "",
-        riskyActions: "",
-        toolUsage: "",
-        communication: "",
-      }),
-    },
-    modeInstruction: reference?.modeInstruction ?? defaults?.agent.modeInstructions[mode] ?? "",
-    toolIds: [...new Set(reference?.toolIds ?? defaultToolIds)],
-    mcpIds: [...new Set(reference?.mcpIds ?? [])],
-    toolAccessScopes: { ...(reference?.toolAccessScopes ?? {}) },
-    toolInstructions: { ...(reference?.toolInstructions ?? {}) },
-    mcpInstructions: { ...(reference?.mcpInstructions ?? {}) },
-    allowedToolNames: [...new Set(reference?.allowedToolNames ?? defaultAllowedToolNames)],
-  };
-}
-
 function getConcreteInternalTools(modeConfig: AgentModeConfig, internalTools: McpListItem[]) {
   const capabilityMap = new Map(internalTools.map((entry) => [entry.id, entry]));
   return modeConfig.toolIds
@@ -335,7 +308,7 @@ export default function AgentEditor({
   const showReasoning = reasoningLevels.length > 0;
   const showTemperature = endpointCapabilities.temperatureSupported;
   const temperatureOptions = buildTemperatureOptions(endpointCapabilities.temperatureRange);
-  const selectedModeConfig = currentAgent.modeConfigs[effectiveSelectedMode] ?? createDefaultModeConfig(defaults, effectiveSelectedMode);
+  const selectedModeConfig = currentAgent.modeConfigs[effectiveSelectedMode];
   const concreteTools = getConcreteInternalTools(selectedModeConfig, internalTools);
   const defaultModeInstruction = defaults?.agent.modeInstructions[effectiveSelectedMode] ?? "";
   const isCustomizedModeInstruction = selectedModeConfig.modeInstruction.trim() !== defaultModeInstruction.trim();

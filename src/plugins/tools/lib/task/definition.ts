@@ -1,5 +1,6 @@
 import type { McpServerConfig } from "../../../mcp/types.js";
 
+// Base capability guidance only. Mode-specific workflow rules live in defaults.
 export const taskDefinition: McpServerConfig = {
   id: "task",
   name: "Tasks",

@@ -24,7 +24,7 @@ export interface ResolvedSystemToolRuntime {
   toolDefinitions: UnifiedToolDefinition[];
   instructionsById: Record<string, string>;
   toolTargetsByName: Record<string, ResolvedSystemToolTarget>;
-  toolAccessContext: string;
+  runtimeVariables: Record<string, string>;
 }
 
 function normalizeSystemConfigForMcp(id: string, systemConfig?: McpServerConfig["systemConfig"]) {
@@ -33,52 +33,29 @@ function normalizeSystemConfigForMcp(id: string, systemConfig?: McpServerConfig[
   return systemConfig ? { ...systemConfig } : undefined;
 }
 
-function buildScopedInstruction(baseInstruction: string, mcp: McpServerConfig): string {
+function buildRuntimeVariablesForMcp(mcp: McpServerConfig): Record<string, string> {
   if (mcp.systemKey === "filesystem") {
     const config = resolveFilesystemSystemConfig(mcp.systemConfig);
     const allowedRoot = getDefaultPathForScope(resolveAccessScope(config.accessScope));
-    return [
-      baseInstruction,
-      `Aktueller Zugriff: scope=${resolveAccessScope(config.accessScope)}, basePath=${config.basePath}, allowedRoot=${allowedRoot}.`,
-    ].join(" ");
+    return {
+      FILESYSTEM_ACCESS_SCOPE: resolveAccessScope(config.accessScope),
+      FILESYSTEM_BASE_PATH: config.basePath ?? getDefaultPathForScope(resolveAccessScope(config.accessScope)),
+      FILESYSTEM_ALLOWED_ROOT: allowedRoot,
+    };
   }
 
   if (mcp.systemKey === "terminal") {
     const config = resolveTerminalSystemConfig(mcp.systemConfig);
     const allowedRoot = getDefaultPathForScope(resolveAccessScope(config.accessScope));
-    return [
-      baseInstruction,
-      `Aktueller Zugriff: scope=${resolveAccessScope(config.accessScope)}, workingDirectory=${config.workingDirectory}, allowedRoot=${allowedRoot}, elevation=${getTerminalElevationLabel(config.accessScope)}.`,
-    ].join(" ");
+    return {
+      TERMINAL_ACCESS_SCOPE: resolveAccessScope(config.accessScope),
+      TERMINAL_WORKING_DIRECTORY: config.workingDirectory ?? getDefaultPathForScope(resolveAccessScope(config.accessScope)),
+      TERMINAL_ALLOWED_ROOT: allowedRoot,
+      TERMINAL_ELEVATION: getTerminalElevationLabel(config.accessScope),
+    };
   }
 
-  return baseInstruction;
-}
-
-function buildAccessContext(mcp: McpServerConfig): string | undefined {
-  if (mcp.systemKey === "filesystem") {
-    const config = resolveFilesystemSystemConfig(mcp.systemConfig);
-    const allowedRoot = getDefaultPathForScope(resolveAccessScope(config.accessScope));
-    return [
-      `<filesystem access_scope="${resolveAccessScope(config.accessScope)}">`,
-      `<base_path>${config.basePath}</base_path>`,
-      `<allowed_root>${allowedRoot}</allowed_root>`,
-      "</filesystem>",
-    ].join("\n");
-  }
-
-  if (mcp.systemKey === "terminal") {
-    const config = resolveTerminalSystemConfig(mcp.systemConfig);
-    const allowedRoot = getDefaultPathForScope(resolveAccessScope(config.accessScope));
-    return [
-      `<terminal access_scope="${resolveAccessScope(config.accessScope)}" elevation="${getTerminalElevationLabel(config.accessScope)}">`,
-      `<working_directory>${config.workingDirectory}</working_directory>`,
-      `<allowed_root>${allowedRoot}</allowed_root>`,
-      "</terminal>",
-    ].join("\n");
-  }
-
-  return undefined;
+  return {};
 }
 
 function setSystemMcp(mcp: McpServerConfig): void {
@@ -116,9 +93,8 @@ function resolveSystemMcp(
 
   return {
     mcp,
-    instruction: buildScopedInstruction(instructionOverride ?? mcp.instruction, mcp),
+    instruction: instructionOverride ?? mcp.instruction,
     tools: getSystemToolsForMcp(id),
-    accessContext: buildAccessContext(mcp),
   };
 }
 
@@ -146,7 +122,7 @@ export function getRunnableSystemMcpIds(): string[] {
 export function getActiveToolInstructions(): { id: string; name: string; instruction: string }[] {
   return cachedSystemMcps
     .filter((mcp) => mcp.active)
-    .map((mcp) => ({ id: mcp.id, name: mcp.name, instruction: buildScopedInstruction(mcp.instruction, mcp) }));
+    .map((mcp) => ({ id: mcp.id, name: mcp.name, instruction: mcp.instruction }));
 }
 
 export function getInternalToolState(sessionId: string): { tasks: TaskItem[]; sessionFacts: MemoryFact[]; userFacts: MemoryFact[] } {
@@ -187,14 +163,14 @@ export function buildResolvedSystemToolRuntime(
   const toolDefinitions: UnifiedToolDefinition[] = [];
   const instructionsById: Record<string, string> = {};
   const toolTargetsByName: Record<string, ResolvedSystemToolTarget> = {};
-  const toolAccessContext: string[] = [];
+  const runtimeVariables: Record<string, string> = {};
 
   for (const toolId of activeToolIds) {
     const resolved = resolveSystemMcp(toolId, accessScopeOverrides[toolId], instructionOverrides[toolId]);
     if (!resolved || !resolved.mcp.active) continue;
 
     instructionsById[toolId] = resolved.instruction;
-    if (resolved.accessContext) toolAccessContext.push(resolved.accessContext);
+    Object.assign(runtimeVariables, buildRuntimeVariablesForMcp(resolved.mcp));
 
     for (const tool of resolved.tools) {
       toolDefinitions.push({
@@ -213,7 +189,7 @@ export function buildResolvedSystemToolRuntime(
     toolDefinitions,
     instructionsById,
     toolTargetsByName,
-    toolAccessContext: toolAccessContext.join("\n"),
+    runtimeVariables,
   };
 }
 

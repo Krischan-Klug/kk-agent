@@ -26,7 +26,7 @@ export interface ModeRuntimeConfig {
   promptSections: AgentPromptSections;
   modeInstruction: string;
   mcpInstructions: string;
-  toolAccessContext?: string;
+  runtimeVariables?: Record<string, string>;
   allTools: UnifiedToolDefinition[];
 }
 

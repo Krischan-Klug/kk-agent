@@ -92,6 +92,7 @@ async function runModelPass(
 
   const variables: Record<string, string> = {
     ...getSystemVariables({ CURRENT_MODEL: opts.model }),
+    ...(modeConfig.runtimeVariables ?? {}),
     iteration: String(messages.filter((message) => message.role === "assistant").length + 1),
     maxIterations: String(opts.maxIterations),
     mode: opts.activeMode,
@@ -103,7 +104,12 @@ async function runModelPass(
     modeConfig.modeInstruction,
     modeConfig.mcpInstructions,
     variables,
-    { sessionId: opts.sessionId, mode: opts.activeMode },
+    {
+      sessionId: opts.sessionId,
+      mode: opts.activeMode,
+      iteration: Number(variables.iteration),
+      maxIterations: opts.maxIterations,
+    }
   );
 
   const messagesWithSystem = buildModelMessages(systemPrompt, messages, retryInstruction, extraSystemMessages);

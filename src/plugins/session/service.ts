@@ -13,7 +13,7 @@ import {
 } from "../tools/service.js";
 import { runLoop } from "../loop/service.js";
 import type { LoopMessage, ModeRuntimeConfig } from "../loop/types.js";
-import { getAgent, setLoopState, clearLoopState } from "../agent/service.js";
+import { getAgent, getLoopState, setLoopState, clearLoopState } from "../agent/service.js";
 import { getDefaults } from "../lib/defaults.js";
 import { clearSessionFacts, clearTasks } from "../tools/service.js";
 import {
@@ -99,7 +99,7 @@ function buildModeRuntimeConfig(
       activeMcpIds,
       effectiveInstructions,
     ),
-    toolAccessContext: systemToolRuntime.toolAccessContext,
+    runtimeVariables: systemToolRuntime.runtimeVariables,
     allTools: getCombinedToolDefinitions(systemToolRuntime.toolDefinitions, activeMcpIds, config.allowedToolNames),
     allowedToolNames: config.allowedToolNames,
     toolTargetsByName: systemToolRuntime.toolTargetsByName,
@@ -112,8 +112,10 @@ function buildCurrentSystemPrompt(
   agent: AgentDefinition,
 ): string {
   const modeRuntimeConfig = buildModeRuntimeConfig(session, agent, session.activeMode);
+  const loopState = getLoopState(sessionId);
   const variables: Record<string, string> = {
     ...getSystemVariables({ CURRENT_MODEL: session.model }),
+    ...modeRuntimeConfig.runtimeVariables,
     ...agent.variables,
   };
 
@@ -125,7 +127,8 @@ function buildCurrentSystemPrompt(
     {
       sessionId,
       mode: session.activeMode,
-      toolAccessContext: modeRuntimeConfig.toolAccessContext,
+      iteration: loopState?.iteration ?? 1,
+      maxIterations: agent.maxIterations,
     },
   );
 }

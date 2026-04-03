@@ -5,7 +5,7 @@ export type ToolAccessScope = "user" | "system";
 export interface AgentPromptSections {
   identity: string;
   system: string;
-  riskyActions: string;
+  security: string;
   toolUsage: string;
   communication: string;
 }

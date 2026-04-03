@@ -5,10 +5,6 @@
     "moduleResolution": "NodeNext",
     "outDir": "dist",
     "rootDir": ".",
-    "baseUrl": ".",
-    "paths": {
-      "plugin-*": ["src/plugins/*/index.ts", "src/plugins/*"]
-    },
     "strict": true,
     "esModuleInterop": true,
     "forceConsistentCasingInFileNames": true,
@@ -17,4 +13,3 @@
   "include": ["src/**/*", "index.ts"],
   "exclude": ["node_modules"]
 }
-

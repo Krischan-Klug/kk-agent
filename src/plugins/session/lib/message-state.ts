@@ -15,6 +15,7 @@ export function toLoopMessages(messages: SessionState["messages"]): LoopMessage[
   return messages.map((message) => ({
     role: message.role,
     content: message.content,
+    isError: message.isError,
     reasoning: message.reasoning,
     tool_call_id: message.tool_call_id,
     tool_calls: message.tool_calls?.map((toolCall) => ({
@@ -29,6 +30,7 @@ export function fromLoopMessages(messages: LoopMessage[]): SessionState["message
   return messages.map((message) => ({
     role: message.role,
     content: typeof message.content === "string" ? message.content : getTextContent(message.content),
+    isError: message.isError,
     reasoning: message.reasoning,
     tool_call_id: message.tool_call_id,
     tool_calls: message.tool_calls?.map((toolCall) => ({

@@ -4,6 +4,7 @@ import type { ChatMode, AgentPromptSections } from "../agent/types.js";
 export interface LoopMessage {
   role: "user" | "assistant" | "tool" | "system";
   content: string | ContentBlock[];
+  isError?: boolean;
   reasoning?: string;
   tool_call_id?: string;
   tool_calls?: UnifiedToolCall[];

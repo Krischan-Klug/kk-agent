@@ -238,6 +238,7 @@ export async function runAgentLoop(opts: LoopOptions): Promise<LoopResult> {
         messages.push({
           role: "tool",
           content: result.contextContent ?? result.content,
+          isError: result.isError,
           tool_call_id: toolCall.id,
         });
       }

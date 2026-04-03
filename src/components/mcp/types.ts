@@ -7,7 +7,8 @@ export type EditForm = {
   args: string;
   url: string;
   env: Record<string, string>;
-  rootPath: string;
+  accessScope: "user" | "system";
+  basePath: string;
   workingDirectory: string;
 };
 
@@ -31,15 +32,20 @@ export function buildEditForm(mcp: McpListItem): EditForm {
     args: (server.args ?? []).join("\n"),
     url: server.url ?? "",
     env: server.env ?? {},
-    rootPath: mcp.systemConfig?.rootPath ?? "",
+    accessScope: mcp.systemConfig?.accessScope ?? "user",
+    basePath: mcp.systemConfig?.basePath ?? "",
     workingDirectory: mcp.systemConfig?.workingDirectory ?? "",
   };
 }
 
 export function getConfigSummary(mcp: McpListItem): string {
   if (mcp.source === "system") {
-    if (mcp.systemKey === "filesystem") return `rootPath: ${mcp.systemConfig?.rootPath ?? "-"}`;
-    if (mcp.systemKey === "terminal") return `workingDirectory: ${mcp.systemConfig?.workingDirectory ?? "-"}`;
+    if (mcp.systemKey === "filesystem") {
+      return `scope: ${mcp.systemConfig?.accessScope ?? "user"} | basePath: ${mcp.systemConfig?.basePath ?? "-"}`;
+    }
+    if (mcp.systemKey === "terminal") {
+      return `scope: ${mcp.systemConfig?.accessScope ?? "user"} | workingDirectory: ${mcp.systemConfig?.workingDirectory ?? "-"}`;
+    }
     if (mcp.systemKey === "web-search") return "Interne Web-Suche";
     if (mcp.systemKey === "user-interaction") return "Interne User-Interaktion";
     if (mcp.systemKey === "task") return "Interne Task-Steuerung";

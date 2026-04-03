@@ -93,6 +93,21 @@ const ToolItem = styled.div`
   }
 `;
 
+const ScopeSelect = styled.select`
+  padding: 6px 10px;
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  font-size: var(--font-size-sm);
+  font-family: inherit;
+  outline: none;
+
+  &:focus {
+    border-color: var(--accent);
+  }
+`;
+
 type Props = {
   mcp: McpListItem;
   instruction: string;
@@ -202,19 +217,53 @@ export default function McpCard({
           {mcp.source === "system" ? (
             <>
               {mcp.systemKey === "filesystem" && (
-                <FormField>
-                  <FieldLabel>Root Path</FieldLabel>
-                  <Input value={editForm.rootPath} onChange={(e) => onEditFormChange({ ...editForm, rootPath: e.target.value })} />
-                </FormField>
+                <>
+                  <FormField>
+                    <FieldLabel>Access Scope</FieldLabel>
+                    <ScopeSelect
+                      value={editForm.accessScope}
+                      onChange={(e) => onEditFormChange({ ...editForm, accessScope: e.target.value as "user" | "system", basePath: "" })}
+                    >
+                      <option value="user">user</option>
+                      <option value="system">system</option>
+                    </ScopeSelect>
+                  </FormField>
+                  <FormField>
+                    <FieldLabel>Base Path</FieldLabel>
+                    <Input
+                      value={editForm.basePath}
+                      placeholder="Leer lassen fuer automatischen Scope-Default"
+                      onChange={(e) => onEditFormChange({ ...editForm, basePath: e.target.value })}
+                    />
+                  </FormField>
+                </>
               )}
               {mcp.systemKey === "terminal" && (
-                <FormField>
-                  <FieldLabel>Working Directory</FieldLabel>
-                  <Input
-                    value={editForm.workingDirectory}
-                    onChange={(e) => onEditFormChange({ ...editForm, workingDirectory: e.target.value })}
-                  />
-                </FormField>
+                <>
+                  <FormField>
+                    <FieldLabel>Access Scope</FieldLabel>
+                    <ScopeSelect
+                      value={editForm.accessScope}
+                      onChange={(e) => onEditFormChange({ ...editForm, accessScope: e.target.value as "user" | "system", workingDirectory: "" })}
+                    >
+                      <option value="user">user</option>
+                      <option value="system">system</option>
+                    </ScopeSelect>
+                  </FormField>
+                  <FormField>
+                    <FieldLabel>Working Directory</FieldLabel>
+                    <Input
+                      value={editForm.workingDirectory}
+                      placeholder="Leer lassen fuer automatischen Scope-Default"
+                      onChange={(e) => onEditFormChange({ ...editForm, workingDirectory: e.target.value })}
+                    />
+                  </FormField>
+                  <ConfigDetail>
+                    {editForm.accessScope === "system"
+                      ? "system erlaubt systemweiten Terminal-Zugriff mit erhoehter Ausfuehrung."
+                      : "user erlaubt nur Terminal-Zugriff innerhalb des aktuellen Nutzerbereichs."}
+                  </ConfigDetail>
+                </>
               )}
               {(mcp.systemKey === "web-search" ||
                 mcp.systemKey === "user-interaction" ||

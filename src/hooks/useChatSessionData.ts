@@ -242,6 +242,15 @@ export function useChatSessionData({ onDebugOpen, setDebugOpen }: Options) {
     }
   }, [session, updateSessionAndSet]);
 
+  const handleModeSwitch = useCallback(async (activeMode: SessionState["activeMode"]) => {
+    if (!session || activeMode === session.activeMode) return;
+    try {
+      await updateSessionAndSet({ activeMode });
+    } catch (err) {
+      logUiError("chat-mode-switch", err);
+    }
+  }, [session, updateSessionAndSet]);
+
   const handleNewSession = useCallback(async () => {
     try {
       const newSession = await createAndActivateSession(agents, resolveDefaultSessionAgentId(agents));
@@ -307,6 +316,7 @@ export function useChatSessionData({ onDebugOpen, setDebugOpen }: Options) {
     handleReasoningEffort,
     handleTemperature,
     handleAgentSwitch,
+    handleModeSwitch,
     handleNewSession,
     handleSaveTasks,
     handleSaveSessionFacts,

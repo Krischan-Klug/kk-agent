@@ -39,6 +39,7 @@ export function useChatStreaming({
   const [pendingPrompt, setPendingPrompt] = useState<PendingPrompt | null>(null);
   const [customAnswer, setCustomAnswer] = useState("");
   const optimisticPreviewUrlsRef = useRef<string[]>([]);
+  const toolCallNameMapRef = useRef<Map<string, string>>(new Map());
 
   const resetStreamingState = useCallback(() => {
     setStreaming(false);
@@ -48,6 +49,7 @@ export function useChatStreaming({
     setStreamRetryNotices([]);
     setLoopState(null);
     setPendingPrompt(null);
+    toolCallNameMapRef.current.clear();
   }, []);
 
   const handleSend = useCallback(async () => {
@@ -116,6 +118,7 @@ export function useChatStreaming({
             setStreamRetryNotices((previous) => [...previous, event.message]);
             break;
           case "tool_call":
+            toolCallNameMapRef.current.set(event.toolCall.id, event.toolCall.name);
             setStreamToolCalls((previous) => [
               ...previous,
               { id: event.toolCall.id, name: event.toolCall.name, arguments: event.toolCall.arguments },
@@ -124,9 +127,12 @@ export function useChatStreaming({
           case "tool_result":
             setStreamToolCalls((previous) => previous.map((toolCall) => (
               toolCall.id === event.toolCallId
-                ? { ...toolCall, result: { content: event.content, isError: event.isError } }
+                ? { ...toolCall, result: { content: event.content, isError: event.isError ?? false } }
                 : toolCall
             )));
+            if (["create_tasks", "update_tasks", "solve_tasks"].includes(toolCallNameMapRef.current.get(event.toolCallId) ?? "")) {
+              await loadContextData(session.id);
+            }
             break;
           case "loop_state":
             setLoopState(event.state);

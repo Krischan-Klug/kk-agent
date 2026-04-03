@@ -85,7 +85,8 @@ export default function SettingsToolsPage() {
         name: form.name,
         emoji: form.emoji || undefined,
         systemConfig: {
-          ...(tool.systemKey === "filesystem" ? { rootPath: form.rootPath } : {}),
+          ...((tool.systemKey === "filesystem" || tool.systemKey === "terminal") ? { accessScope: form.accessScope } : {}),
+          ...(tool.systemKey === "filesystem" ? { basePath: form.basePath } : {}),
           ...(tool.systemKey === "terminal" ? { workingDirectory: form.workingDirectory } : {}),
         },
       });

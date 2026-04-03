@@ -135,7 +135,7 @@ export default function McpPage() {
         ...(mcp.source === "system"
           ? {
               systemConfig: {
-                ...(mcp.systemKey === "filesystem" ? { rootPath: form.rootPath } : {}),
+                ...(mcp.systemKey === "filesystem" ? { basePath: form.basePath } : {}),
                 ...(mcp.systemKey === "terminal" ? { workingDirectory: form.workingDirectory } : {}),
               },
             }

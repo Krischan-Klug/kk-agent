@@ -5,11 +5,11 @@ Frontend fuer `kk-agent-backend`.
 ## Seiten
 
 - `/chat` -> Streaming-Chat mit Markdown-Rendering, Tool-Cards und Loop-State
-- `/agent` -> Agent-Editor fuer Prompt, Loop-Mode, Phase-Overrides, MCP-/Tool-Zuordnung und Variablen
+- `/agent` -> Agent-Editor fuer Modus, Prompt-Sektionen, Tool-/MCP-Zuordnung und Variablen
 - `/tools` -> interne Tools anzeigen und konfigurieren
 - `/mcp` -> nur externe Nutzer-MCPs anzeigen und konfigurieren
 - `/provider` -> lokale LLM-Provider und Modelle
-- `/settings/defaults` -> globale LLM-/Loop-Defaults
+- `/settings/defaults` -> globale Prompt-, Modus- und Runtime-Defaults
 
 ## Aktueller API-Vertrag
 
@@ -37,18 +37,27 @@ type AgentDefinition = {
   id: string;
   name: string;
   description: string;
-  systemPrompt: string;
+  defaultChatMode: "plan" | "edit";
+  modeConfigs: Record<"plan" | "edit", {
+    promptSections: {
+      identity: string;
+      system: string;
+      riskyActions: string;
+      toolUsage: string;
+      communication: string;
+    };
+    modeInstruction: string;
+    toolIds: string[];
+    mcpIds: string[];
+    toolInstructions: Record<string, string>;
+    mcpInstructions: Record<string, string>;
+    allowedToolNames: string[];
+  }>;
   maxIterations: number;
-  toolIds: string[];
-  mcpIds: string[];
-  toolInstructions: Record<string, string>;
-  mcpInstructions: Record<string, string>;
   variables: Record<string, string>;
   defaultModel?: string;
   reasoningEffort?: string;
   temperature?: number;
-  loopMode: "simple" | "plan_execute" | "full_verify";
-  phasePrompts: { planning?: string; executing?: string; verifying?: string };
   createdAt: string;
   updatedAt: string;
 };

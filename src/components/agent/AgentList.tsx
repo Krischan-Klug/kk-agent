@@ -55,7 +55,12 @@ export default function AgentList({ agents, mcps, selectedId, onSelect, onCreate
         Neuer Agent
       </Button>
       {agents.map((agent) => {
-        const capabilityIds = [...agent.toolIds, ...agent.mcpIds];
+        const capabilityIds = [
+          ...new Set(
+            Object.values(agent.modeConfigs ?? {})
+              .flatMap((mode) => [...(mode?.toolIds ?? []), ...(mode?.mcpIds ?? [])]),
+          ),
+        ];
         return (
           <Item key={agent.id} $active={agent.id === selectedId} onClick={() => onSelect(agent.id)}>
             <Name>{agent.name}</Name>

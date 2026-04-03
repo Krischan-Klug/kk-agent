@@ -1,6 +1,6 @@
 import { useRef, useState, useCallback, useLayoutEffect } from "react";
 import styled from "styled-components";
-import type { AgentDefinition } from "@/types/api";
+import type { AgentDefinition, AgentLoopState, ChatMode, TaskItem } from "@/types/api";
 import type { PendingAttachment } from "@/hooks/useAttachments";
 import AgentSelect from "@/components/AgentSelect";
 import SelectMenu, { type SelectMenuOption } from "@/components/SelectMenu";
@@ -13,9 +13,7 @@ const InputArea = styled.div`
   padding-top: var(--space-md);
   border-top: 1px solid var(--border);
   flex-shrink: 0;
-  max-width: 900px;
   width: 100%;
-  margin: 0 auto;
   scrollbar-width: none;
 
   &::-webkit-scrollbar {
@@ -31,6 +29,162 @@ const Composer = styled.div<{ $dragOver?: boolean }>`
   box-shadow: 0 10px 30px rgba(0, 0, 0, 0.14);
   overflow: visible;
   transition: border-color 0.15s;
+`;
+
+const ComposerLayout = styled.div`
+  width: 100%;
+  display: grid;
+  grid-template-columns: max-content minmax(0, 900px) 280px;
+  justify-content: center;
+  align-items: end;
+  gap: 6px;
+  padding: 0 var(--space-md);
+
+  @media (max-width: 1360px) {
+    grid-template-columns: max-content minmax(0, 900px) 240px;
+  }
+
+  @media (max-width: 1180px) {
+    grid-template-columns: 1fr;
+  }
+`;
+
+const ModeStrip = styled.div`
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: var(--space-xs);
+  flex-shrink: 0;
+  align-self: center;
+
+  @media (max-width: 1180px) {
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-self: stretch;
+  }
+`;
+
+const ModeButton = styled.button<{ $active: boolean; $mode: ChatMode }>`
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-width: 72px;
+  min-height: 38px;
+  padding: 8px 14px;
+  border-radius: 12px;
+  border: 1px solid ${({ $active, $mode }) => {
+    if (!$active) return "var(--border)";
+    return $mode === "plan" ? "rgba(59, 130, 246, 0.45)" : "var(--accent)";
+  }};
+  background: ${({ $active, $mode }) => {
+    if (!$active) return "var(--bg-elevated)";
+    return $mode === "plan" ? "rgba(59, 130, 246, 0.14)" : "var(--accent-muted)";
+  }};
+  color: ${({ $active, $mode }) => {
+    if (!$active) return "var(--text-secondary)";
+    return $mode === "plan" ? "rgb(37, 99, 235)" : "var(--accent)";
+  }};
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+  cursor: pointer;
+  box-shadow: ${({ $active }) => ($active ? "0 8px 20px rgba(0, 0, 0, 0.08)" : "none")};
+
+  &:hover {
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+`;
+
+const TasksCard = styled.div`
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 10px 12px;
+  background: color-mix(in srgb, var(--bg-elevated) 88%, white 12%);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  box-shadow: 0 8px 18px rgba(0, 0, 0, 0.08);
+  align-self: end;
+`;
+
+const TasksHeader = styled.div`
+  display: inline-flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+`;
+
+const TasksTitle = styled.div`
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+`;
+
+const ModeBadge = styled.div<{ $mode: ChatMode }>`
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  border-radius: 10px;
+  border: 1px solid ${({ $mode }) => (
+    $mode === "plan" ? "rgba(59, 130, 246, 0.35)" : "rgba(245, 158, 11, 0.35)"
+  )};
+  background: ${({ $mode }) => (
+    $mode === "plan" ? "rgba(59, 130, 246, 0.12)" : "rgba(245, 158, 11, 0.12)"
+  )};
+  color: var(--text-primary);
+  font-size: 12px;
+  font-weight: 600;
+`;
+
+const TasksList = styled.div`
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+`;
+
+const TaskRow = styled.div<{ $status: TaskItem["status"] }>`
+  display: grid;
+  grid-template-columns: 10px minmax(0, 1fr);
+  align-items: start;
+  gap: 8px;
+  padding: 4px 0;
+  color: ${({ $status }) => (
+    $status === "completed" ? "var(--text-muted)" : "var(--text-primary)"
+  )};
+`;
+
+const TaskStatusDot = styled.span<{ $status: TaskItem["status"] }>`
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  background: ${({ $status }) => (
+    $status === "completed" ? "var(--success)"
+      : $status === "in_progress" ? "var(--warning)"
+        : "var(--text-muted)"
+  )};
+  margin-top: 6px;
+`;
+
+const TaskText = styled.span`
+  display: block;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.35;
+`;
+
+const TaskNotes = styled.span`
+  display: block;
+  margin-top: 2px;
+  font-size: 12px;
+  line-height: 1.35;
+  color: var(--text-muted);
 `;
 
 const ComposerInputWrap = styled.div`
@@ -187,11 +341,16 @@ function formatTokens(n: number): string {
   return String(n);
 }
 
+function formatModeLabel(mode: ChatMode): string {
+  return mode === "plan" ? "Plan" : "Edit";
+}
+
 type Props = {
   input: string;
   sending: boolean;
   agents: AgentDefinition[];
   currentAgentId: string;
+  activeMode: ChatMode;
   showReasoningControl: boolean;
   showTemperatureControl: boolean;
   resolvedEffort: string;
@@ -200,12 +359,15 @@ type Props = {
   temperatureOptions: SelectMenuOption[];
   maxCtx: number;
   tokenStats: TokenDisplayStats | null;
+  tasks: TaskItem[];
+  loopState: AgentLoopState | null;
   pendingAttachments: PendingAttachment[];
   onInputChange: (value: string) => void;
   onKeyDown: (e: React.KeyboardEvent<HTMLTextAreaElement>) => void;
   onReasoningSelect: (value: string) => void;
   onTemperatureSelect: (value: string) => void;
   onAgentSwitch: (agentId: string) => void;
+  onModeSwitch: (mode: ChatMode) => void;
   onSend: () => void;
   onFilesSelected: (files: FileList) => void;
   onRemoveAttachment: (id: string) => void;
@@ -216,6 +378,7 @@ export default function ChatComposer({
   sending,
   agents,
   currentAgentId,
+  activeMode,
   showReasoningControl,
   showTemperatureControl,
   resolvedEffort,
@@ -224,12 +387,15 @@ export default function ChatComposer({
   temperatureOptions,
   maxCtx,
   tokenStats,
+  tasks,
+  loopState,
   pendingAttachments,
   onInputChange,
   onKeyDown,
   onReasoningSelect,
   onTemperatureSelect,
   onAgentSwitch,
+  onModeSwitch,
   onSend,
   onFilesSelected,
   onRemoveAttachment,
@@ -294,92 +460,134 @@ export default function ChatComposer({
 
   return (
     <InputArea>
-      <Composer
-        $dragOver={dragOver}
-        onDragOver={handleDragOver}
-        onDragEnter={handleDragOver}
-        onDragLeave={handleDragLeave}
-        onDrop={handleDrop}
-      >
-        <ComposerInputWrap>
-          <ChatInput
-            ref={textAreaRef}
-            value={input}
-            onChange={(e) => onInputChange(e.target.value)}
-            onKeyDown={onKeyDown}
-            onPaste={handlePaste}
-            placeholder="Nachricht eingeben..."
-            disabled={sending}
-            rows={1}
-            aria-label="Chat-Nachricht"
-          />
-        </ComposerInputWrap>
-        <AttachmentPreview attachments={pendingAttachments} onRemove={onRemoveAttachment} />
-        <ComposerFooter>
-          <ComposerMeta>
-            {showReasoningControl && (
-              <ControlGroup>
-                <ControlEmoji>🧠</ControlEmoji>
-                <SelectMenu
-                  value={resolvedEffort}
-                  options={reasoningOptions}
-                  onSelect={onReasoningSelect}
-                  direction="up"
-                  variant="neutral"
-                />
-              </ControlGroup>
-            )}
-            {showTemperatureControl && (
-              <ControlGroup>
-                <ControlEmoji>🔥</ControlEmoji>
-                <SelectMenu
-                  value={resolvedTemp.toFixed(1)}
-                  options={temperatureOptions}
-                  onSelect={onTemperatureSelect}
-                  direction="up"
-                  variant="neutral"
-                />
-              </ControlGroup>
-            )}
-            {agents.length > 0 && (
-              <AgentSelect agents={agents} currentAgentId={currentAgentId} onSelect={onAgentSwitch} direction="up" />
-            )}
-          </ComposerMeta>
-          <ComposerActions>
-            {maxCtx > 0 && tokenStats && (
-              <ContextIndicator
-                title={`Input: ${tokenStats.input.toLocaleString()} | Output: ${tokenStats.output.toLocaleString()} | Reasoning: ${tokenStats.reasoning.toLocaleString()}`}
-              >
-                <ContextRing used={tokenStats.input} max={maxCtx} />
-                <span>{formatTokens(tokenStats.input)} / {formatTokens(maxCtx)}</span>
-              </ContextIndicator>
-            )}
-            <HiddenFileInput
-              ref={fileInputRef}
-              type="file"
-              multiple
-              accept={ACCEPTED_FILES}
-              onChange={(e) => {
-                if (e.target.files && e.target.files.length > 0) {
-                  onFilesSelected(e.target.files);
-                  e.target.value = "";
-                }
-              }}
-            />
-            <AttachIconButton
-              onClick={() => fileInputRef.current?.click()}
+      <ComposerLayout>
+        <ModeStrip>
+          {(["plan", "edit"] as ChatMode[]).map((mode) => (
+            <ModeButton
+              key={mode}
+              type="button"
+              $active={activeMode === mode}
+              $mode={mode}
+              onClick={() => onModeSwitch(mode)}
               disabled={sending}
-              aria-label="Datei anhaengen"
-              title="Datei anhaengen"
             >
-              +
-            </AttachIconButton>
-            <SendIconButton onClick={onSend} disabled={!canSend} aria-label="Nachricht senden">
-              ^
-            </SendIconButton>
-          </ComposerActions>
-        </ComposerFooter>
-      </Composer>
+              {formatModeLabel(mode)}
+            </ModeButton>
+          ))}
+        </ModeStrip>
+        <Composer
+          $dragOver={dragOver}
+          onDragOver={handleDragOver}
+          onDragEnter={handleDragOver}
+          onDragLeave={handleDragLeave}
+          onDrop={handleDrop}
+        >
+          <ComposerInputWrap>
+            <ChatInput
+              ref={textAreaRef}
+              value={input}
+              onChange={(e) => onInputChange(e.target.value)}
+              onKeyDown={onKeyDown}
+              onPaste={handlePaste}
+              placeholder="Nachricht eingeben..."
+              disabled={sending}
+              rows={1}
+              aria-label="Chat-Nachricht"
+            />
+          </ComposerInputWrap>
+          <AttachmentPreview attachments={pendingAttachments} onRemove={onRemoveAttachment} />
+          <ComposerFooter>
+            <ComposerMeta>
+              {showReasoningControl && (
+                <ControlGroup>
+                  <ControlEmoji>🧠</ControlEmoji>
+                  <SelectMenu
+                    value={resolvedEffort}
+                    options={reasoningOptions}
+                    onSelect={onReasoningSelect}
+                    direction="up"
+                    variant="neutral"
+                  />
+                </ControlGroup>
+              )}
+              {showTemperatureControl && (
+                <ControlGroup>
+                  <ControlEmoji>🔥</ControlEmoji>
+                  <SelectMenu
+                    value={resolvedTemp.toFixed(1)}
+                    options={temperatureOptions}
+                    onSelect={onTemperatureSelect}
+                    direction="up"
+                    variant="neutral"
+                  />
+                </ControlGroup>
+              )}
+              {agents.length > 0 && (
+                <AgentSelect agents={agents} currentAgentId={currentAgentId} onSelect={onAgentSwitch} direction="up" />
+              )}
+            </ComposerMeta>
+            <ComposerActions>
+              {maxCtx > 0 && tokenStats && (
+                <ContextIndicator
+                  title={`Input: ${tokenStats.input.toLocaleString()} | Output: ${tokenStats.output.toLocaleString()} | Reasoning: ${tokenStats.reasoning.toLocaleString()}`}
+                >
+                  <ContextRing used={tokenStats.input} max={maxCtx} />
+                  <span>{formatTokens(tokenStats.input)} / {formatTokens(maxCtx)}</span>
+                </ContextIndicator>
+              )}
+              <HiddenFileInput
+                ref={fileInputRef}
+                type="file"
+                multiple
+                accept={ACCEPTED_FILES}
+                onChange={(e) => {
+                  if (e.target.files && e.target.files.length > 0) {
+                    onFilesSelected(e.target.files);
+                    e.target.value = "";
+                  }
+                }}
+              />
+              <AttachIconButton
+                onClick={() => fileInputRef.current?.click()}
+                disabled={sending}
+                aria-label="Datei anhaengen"
+                title="Datei anhaengen"
+              >
+                +
+              </AttachIconButton>
+              <SendIconButton onClick={onSend} disabled={!canSend} aria-label="Nachricht senden">
+                ^
+              </SendIconButton>
+            </ComposerActions>
+          </ComposerFooter>
+        </Composer>
+        {(tasks.length > 0 || loopState) && (
+          <TasksCard>
+            <TasksHeader>
+              <TasksTitle>Tasks</TasksTitle>
+              {loopState && (
+                <ModeBadge $mode={loopState.mode}>
+                  {formatModeLabel(loopState.mode)}
+                  <span>{loopState.iteration}/{loopState.maxIterations}</span>
+                </ModeBadge>
+              )}
+            </TasksHeader>
+            {tasks.length > 0 && (
+              <TasksList>
+                {tasks.map((task) => (
+                  <TaskRow key={task.id} $status={task.status} title={task.notes ? `${task.title} - ${task.notes}` : task.title}>
+                    <TaskStatusDot $status={task.status} />
+                    <div>
+                      <TaskText>{task.title}</TaskText>
+                      {task.notes && <TaskNotes>{task.notes}</TaskNotes>}
+                    </div>
+                  </TaskRow>
+                ))}
+              </TasksList>
+            )}
+          </TasksCard>
+        )}
+      </ComposerLayout>
     </InputArea>
   );
 }

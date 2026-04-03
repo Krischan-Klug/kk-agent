@@ -122,7 +122,7 @@ export default function ChatMessages({
             <Badge variant="info">{currentAgentName}</Badge>
             <StreamingDot />
             {loopState && <IterationPill>Iteration {loopState.iteration}/{loopState.maxIterations}</IterationPill>}
-            {loopState && <PhasePill>{loopState.phase}</PhasePill>}
+            {loopState && <PhasePill>{loopState.mode}</PhasePill>}
           </RoleLabel>
 
           {streamReasoning && (

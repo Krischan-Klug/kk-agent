@@ -133,6 +133,8 @@ export default function ChatPage() {
     );
   }
 
+  const activeSession = sessionData.session;
+
   return (
     <ChatWrapper>
       <ChatDebugPanel
@@ -176,7 +178,8 @@ export default function ChatPage() {
         input={streaming.input}
         sending={streaming.sending || attachments.uploading}
         agents={sessionData.agents}
-        currentAgentId={sessionData.session.agentId}
+        currentAgentId={activeSession.agentId}
+        activeMode={activeSession.activeMode}
         showReasoningControl={showReasoningControl}
         showTemperatureControl={showTemperatureControl}
         resolvedEffort={resolvedEffort}
@@ -185,14 +188,17 @@ export default function ChatPage() {
         temperatureOptions={temperatureOptions}
         maxCtx={maxCtx}
         tokenStats={streaming.tokenStats}
+        tasks={sessionData.tasks}
+        loopState={streaming.loopState}
         pendingAttachments={attachments.pendingAttachments}
         onInputChange={streaming.setInput}
         onKeyDown={streaming.handleKeyDown}
         onReasoningSelect={sessionData.handleReasoningEffort}
         onTemperatureSelect={sessionData.handleTemperature}
         onAgentSwitch={(agentId) => void streaming.handleAgentSwitch(agentId, sessionData.handleAgentSwitch)}
+        onModeSwitch={(mode) => void sessionData.handleModeSwitch(mode)}
         onSend={() => void streaming.handleSend()}
-        onFilesSelected={(files) => { void attachments.addFiles(sessionData.session.id, files); }}
+        onFilesSelected={(files) => { void attachments.addFiles(activeSession.id, files); }}
         onRemoveAttachment={attachments.removeAttachment}
       />
       <FloatingDebugButton

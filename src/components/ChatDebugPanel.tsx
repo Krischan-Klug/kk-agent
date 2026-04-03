@@ -269,10 +269,11 @@ export default function ChatDebugPanel({
         agentId: session.agentId,
         activeToolIds: session.activeToolIds,
         activeMcpIds: session.activeMcpIds,
+        activeMode: session.activeMode,
         reasoningEffort: session.reasoningEffort ?? "default",
         temperature: session.temperature ?? "default",
         messageCount: session.messages.length,
-        loopPhase: loopState?.phase ?? null,
+        loopMode: loopState?.mode ?? null,
         loopStatus: loopState?.status ?? null,
         createdAt: session.createdAt,
       },
@@ -308,7 +309,7 @@ export default function ChatDebugPanel({
         <DebugTab $active={debugTab === "tasks"} onClick={() => toggleTab("tasks")}>Tasks</DebugTab>
         <DebugTab $active={debugTab === "memory"} onClick={() => toggleTab("memory")}>Memory</DebugTab>
         <DebugControls>
-          {loopState && <Badge variant="info">{loopState.phase}</Badge>}
+          {loopState && <Badge variant="info">{loopState.mode}</Badge>}
           {models.length > 0 ? (
             <ModelSelect models={models} currentModel={session.model} onSelect={onModelSwitch} />
           ) : (

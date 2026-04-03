@@ -6,9 +6,9 @@ export interface SessionState {
   providerId: string;
   model: string;
   agentId: string;
+  activeMode: ChatMode;
   activeToolIds: string[];
   activeMcpIds: string[];
-  systemPrompt: string;
   reasoningEffort?: ReasoningEffort;
   temperature?: number;
   messages: SessionMessage[];
@@ -49,6 +49,7 @@ export interface ToolCall {
 
 export interface CreateSessionBody {
   agentId: string;
+  activeMode?: ChatMode;
   model?: string;
   activeToolIds?: string[];
   activeMcpIds?: string[];
@@ -58,6 +59,7 @@ export interface CreateSessionBody {
 
 export interface UpdateSessionBody {
   agentId?: string;
+  activeMode?: ChatMode;
   model?: string;
   activeToolIds?: string[];
   activeMcpIds?: string[];
@@ -90,7 +92,8 @@ export interface McpServerConfig {
   source?: "system" | "custom";
   systemKey?: "filesystem" | "web-search" | "terminal" | "user-interaction" | "task" | "memory" | "attachment";
   systemConfig?: {
-    rootPath?: string;
+    accessScope?: "user" | "system";
+    basePath?: string;
     workingDirectory?: string;
   };
   transport: "stdio" | "sse";
@@ -199,7 +202,8 @@ export interface UpdateMcpBody {
   instruction?: string;
   emoji?: string;
   systemConfig?: {
-    rootPath?: string;
+    accessScope?: "user" | "system";
+    basePath?: string;
     workingDirectory?: string;
   };
 }
@@ -207,30 +211,50 @@ export interface UpdateMcpBody {
 /* Agent */
 
 export type ReasoningEffort = string;
-export type AgentLoopMode = "simple" | "plan_execute" | "full_verify";
+export type ChatMode = "plan" | "edit";
+export type ToolAccessScope = "user" | "system";
 
-export interface AgentPhasePrompts {
-  planning?: string;
-  executing?: string;
-  verifying?: string;
+export interface AgentPromptSections {
+  identity: string;
+  system: string;
+  riskyActions: string;
+  toolUsage: string;
+  communication: string;
+}
+
+export interface AgentModeConfig {
+  promptSections: AgentPromptSections;
+  modeInstruction: string;
+  toolIds: string[];
+  mcpIds: string[];
+  toolAccessScopes: Record<string, ToolAccessScope>;
+  toolInstructions: Record<string, string>;
+  mcpInstructions: Record<string, string>;
+  allowedToolNames: string[];
+}
+
+export interface AgentModeConfigPatch {
+  promptSections?: Partial<AgentPromptSections>;
+  modeInstruction?: string;
+  toolIds?: string[];
+  mcpIds?: string[];
+  toolAccessScopes?: Record<string, ToolAccessScope>;
+  toolInstructions?: Record<string, string>;
+  mcpInstructions?: Record<string, string>;
+  allowedToolNames?: string[];
 }
 
 export interface AgentDefinition {
   id: string;
   name: string;
   description: string;
-  systemPrompt: string;
+  defaultChatMode: ChatMode;
+  modeConfigs: Partial<Record<ChatMode, AgentModeConfig>>;
   maxIterations: number;
-  toolIds: string[];
-  mcpIds: string[];
-  toolInstructions: Record<string, string>;
-  mcpInstructions: Record<string, string>;
   variables: Record<string, string>;
   defaultModel?: string;
   reasoningEffort?: ReasoningEffort;
   temperature?: number;
-  loopMode: AgentLoopMode;
-  phasePrompts: AgentPhasePrompts;
   createdAt: string;
   updatedAt: string;
 }
@@ -239,7 +263,7 @@ export interface AgentLoopState {
   sessionId: string;
   agentId: string;
   status: "idle" | "running" | "completed" | "error";
-  phase: "planning" | "executing" | "verifying" | "completed" | "error";
+  mode: ChatMode;
   iteration: number;
   maxIterations: number;
   startedAt: string;
@@ -249,35 +273,25 @@ export interface AgentLoopState {
 export interface CreateAgentBody {
   name: string;
   description?: string;
-  systemPrompt?: string;
+  defaultChatMode?: ChatMode;
+  modeConfigs?: Partial<Record<ChatMode, AgentModeConfigPatch>>;
   maxIterations?: number;
-  toolIds?: string[];
-  mcpIds?: string[];
-  toolInstructions?: Record<string, string>;
-  mcpInstructions?: Record<string, string>;
   variables?: Record<string, string>;
   defaultModel?: string;
   reasoningEffort?: ReasoningEffort;
   temperature?: number;
-  loopMode?: AgentLoopMode;
-  phasePrompts?: AgentPhasePrompts;
 }
 
 export interface UpdateAgentBody {
   name?: string;
   description?: string;
-  systemPrompt?: string;
+  defaultChatMode?: ChatMode;
+  modeConfigs?: Partial<Record<ChatMode, AgentModeConfigPatch>>;
   maxIterations?: number;
-  toolIds?: string[];
-  mcpIds?: string[];
-  toolInstructions?: Record<string, string>;
-  mcpInstructions?: Record<string, string>;
   variables?: Record<string, string>;
   defaultModel?: string;
   reasoningEffort?: ReasoningEffort;
   temperature?: number;
-  loopMode?: AgentLoopMode;
-  phasePrompts?: AgentPhasePrompts;
 }
 
 export interface SystemVariablesResponse {
@@ -288,28 +302,19 @@ export interface SystemVariablesResponse {
 
 export interface AppDefaults {
   agent: {
-    systemPrompt: string;
+    defaultChatMode: ChatMode;
     maxIterations: number;
-    loopMode: AgentLoopMode;
-    phasePrompts: {
-      planningPrompt: string;
-      executingPrompt: string;
-      verifyingPrompt: string;
-    };
-    phaseGuidance: {
-      planning: string;
-      executing: string;
-      verifying: string;
-    };
-    promptSections: {
+    promptSections: AgentPromptSections;
+    modeInstructions: Record<ChatMode, string>;
+    modeToolIds: Record<ChatMode, string[]>;
+    modeAllowedToolNames: Record<ChatMode, string[]>;
+    modeToolInstructions: Record<ChatMode, Record<string, string>>;
+    runtimeSections: {
+      runtimeStatusWithSession: string;
       taskWithSession: string;
       memoryWithSession: string;
       toolRulesWithSession: string;
     };
-  };
-  loop: {
-    verificationInstruction: string;
-    verificationRetryMessage: string;
   };
   retry: {
     emptyResponseInstruction: string;
@@ -331,7 +336,7 @@ export type StreamEvent =
   | { type: "content_reset" }
   | { type: "retry_notice"; message: string }
   | { type: "tool_call"; toolCall: { id: string; name: string; arguments: Record<string, unknown> } }
-  | { type: "tool_result"; toolCallId: string; content: string; isError: boolean }
+  | { type: "tool_result"; toolCallId: string; content: string; isError?: boolean }
   | { type: "loop_state"; state: AgentLoopState }
   | { type: "stats"; inputTokens: number; outputTokens: number; reasoningTokens: number; source: "provider" | "estimated" | "unknown" }
   | { type: "user_prompt"; promptId: string; question: string; choices: { key: string; label: string }[] }

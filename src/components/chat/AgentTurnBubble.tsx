@@ -64,11 +64,12 @@ export default function AgentTurnBubble({ currentAgentName, mcps, turn, turnKey 
           arguments: toolCall.arguments,
           result: iteration.toolResults.get(toolCall.id),
         }));
+        const isFinalIteration = index === iterations.length - 1;
 
         return (
           <IterationSection key={index}>
             <IterationHeader>
-              <IterationPill>#{index + 1}</IterationPill>
+              <IterationPill>{isFinalIteration ? "#final" : `#${index + 1}`}</IterationPill>
               {toolCalls.length > 0 && (
                 <PhasePill>{toolCalls.length} Tool{toolCalls.length > 1 ? "s" : ""}</PhasePill>
               )}
@@ -94,7 +95,7 @@ export default function AgentTurnBubble({ currentAgentName, mcps, turn, turnKey 
         </ReasoningCard>
       )}
 
-      {finalIteration.assistant.content?.trim() && (
+      {!expanded && finalIteration.assistant.content?.trim() && (
         <MarkdownMessage content={finalIteration.assistant.content} />
       )}
     </MessageBubble>

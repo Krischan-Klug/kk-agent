@@ -218,7 +218,7 @@ export type ToolAccessScope = "user" | "system";
 export interface AgentPromptSections {
   identity: string;
   system: string;
-  riskyActions: string;
+  security: string;
   toolUsage: string;
   communication: string;
 }
@@ -310,12 +310,6 @@ export interface AppDefaults {
     modeToolIds: Record<ChatMode, string[]>;
     modeAllowedToolNames: Record<ChatMode, string[]>;
     modeToolInstructions: Record<ChatMode, Record<string, string>>;
-    runtimeSections: {
-      runtimeStatusWithSession: string;
-      taskWithSession: string;
-      memoryWithSession: string;
-      toolRulesWithSession: string;
-    };
   };
   retry: {
     emptyResponseInstruction: string;

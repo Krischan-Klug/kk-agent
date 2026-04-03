@@ -141,30 +141,6 @@ const TasksTitle = styled.div`
   color: var(--text-muted);
 `;
 
-const TasksHeaderActions = styled.div`
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
-`;
-
-const ModeBadge = styled.div<{ $mode: ChatMode }>`
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 4px 8px;
-  border-radius: 10px;
-  border: 1px solid ${({ $mode }) => (
-    $mode === "plan" ? "rgba(59, 130, 246, 0.35)" : "rgba(245, 158, 11, 0.35)"
-  )};
-  background: ${({ $mode }) => (
-    $mode === "plan" ? "rgba(59, 130, 246, 0.12)" : "rgba(245, 158, 11, 0.12)"
-  )};
-  color: var(--text-primary);
-  font-size: 12px;
-  font-weight: 600;
-`;
-
 const TasksToggleButton = styled.button<{ $active: boolean }>`
   display: inline-flex;
   align-items: center;
@@ -525,14 +501,6 @@ export default function ChatComposer({
             <TasksDrawer $open={tasksOpen}>
               <TasksHeader>
                 <TasksTitle>Tasks</TasksTitle>
-                <TasksHeaderActions>
-                  {loopState && (
-                    <ModeBadge $mode={loopState.mode}>
-                      {formatModeLabel(loopState.mode)}
-                      <span>{loopState.iteration}/{loopState.maxIterations}</span>
-                    </ModeBadge>
-                  )}
-                </TasksHeaderActions>
               </TasksHeader>
               {tasks.length > 0 && (
                 <TasksList>

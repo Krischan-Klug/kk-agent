@@ -47,7 +47,7 @@ type AgentDefinition = {
     promptSections: {
       identity: string;
       system: string;
-      riskyActions: string;
+      security: string;
       toolUsage: string;
       communication: string;
     };

@@ -93,7 +93,7 @@ const SectionTitle = styled.h3`
 const PROMPT_SECTION_META: Array<{ key: keyof AgentPromptSections; label: string }> = [
   { key: "identity", label: "🪪 Identity" },
   { key: "system", label: "🧠 System" },
-  { key: "riskyActions", label: "⚠️ Risky Actions" },
+  { key: "security", label: "🔒 Security" },
   { key: "toolUsage", label: "🛠️ Tool Usage" },
   { key: "communication", label: "💬 Communication" },
 ];
@@ -240,64 +240,6 @@ export default function DefaultsPage() {
               </Row>
             </Field>
           ))}
-
-          <SectionTitle>Runtime Context</SectionTitle>
-          <Field>
-            <FieldLabel>Runtime Status Context</FieldLabel>
-            <TextArea
-              rows={3}
-              value={draft.agent.runtimeSections.runtimeStatusWithSession}
-              onChange={(e) => setDraft({
-                ...draft,
-                agent: {
-                  ...draft.agent,
-                  runtimeSections: { ...draft.agent.runtimeSections, runtimeStatusWithSession: e.target.value },
-                },
-              })}
-            />
-          </Field>
-          <Field>
-            <FieldLabel>Task Context</FieldLabel>
-            <TextArea
-              rows={3}
-              value={draft.agent.runtimeSections.taskWithSession}
-              onChange={(e) => setDraft({
-                ...draft,
-                agent: {
-                  ...draft.agent,
-                  runtimeSections: { ...draft.agent.runtimeSections, taskWithSession: e.target.value },
-                },
-              })}
-            />
-          </Field>
-          <Field>
-            <FieldLabel>Memory Context</FieldLabel>
-            <TextArea
-              rows={3}
-              value={draft.agent.runtimeSections.memoryWithSession}
-              onChange={(e) => setDraft({
-                ...draft,
-                agent: {
-                  ...draft.agent,
-                  runtimeSections: { ...draft.agent.runtimeSections, memoryWithSession: e.target.value },
-                },
-              })}
-            />
-          </Field>
-          <Field>
-            <FieldLabel>Tool Rules Context</FieldLabel>
-            <TextArea
-              rows={3}
-              value={draft.agent.runtimeSections.toolRulesWithSession}
-              onChange={(e) => setDraft({
-                ...draft,
-                agent: {
-                  ...draft.agent,
-                  runtimeSections: { ...draft.agent.runtimeSections, toolRulesWithSession: e.target.value },
-                },
-              })}
-            />
-          </Field>
 
           <SectionTitle>Retry</SectionTitle>
           <Field>

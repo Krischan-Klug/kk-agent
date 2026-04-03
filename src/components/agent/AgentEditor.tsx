@@ -205,7 +205,7 @@ const MODE_ORDER: ChatMode[] = ["plan", "edit"];
 const PROMPT_SECTION_META: Array<{ key: keyof AgentModeConfig["promptSections"]; label: string }> = [
   { key: "identity", label: "🪪 Identity" },
   { key: "system", label: "🧠 System" },
-  { key: "riskyActions", label: "⚠️ Risky Actions" },
+  { key: "security", label: "🔒 Security" },
   { key: "toolUsage", label: "🛠️ Tool Usage" },
   { key: "communication", label: "💬 Communication" },
 ];

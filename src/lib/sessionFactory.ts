@@ -4,7 +4,11 @@ import { emitAppEvent, SESSION_CHANGED_EVENT } from "@/lib/appEvents";
 import { setActiveSessionId } from "@/lib/sessionState";
 
 export function resolveDefaultSessionAgentId(agents: Pick<AgentDefinition, "id">[], fallbackAgentId?: string): string {
-  return fallbackAgentId ?? agents[0]?.id ?? "general-assistant";
+  const resolved = fallbackAgentId ?? agents[0]?.id;
+  if (!resolved) {
+    throw new Error("Kein Agent verfuegbar fuer die Session-Erstellung.");
+  }
+  return resolved;
 }
 
 export async function createAndActivateSession(

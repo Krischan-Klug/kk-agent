@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import styled from "styled-components";
 import {
   DEFAULT_REASONING_LEVELS,
@@ -68,16 +68,27 @@ export default function ChatPage() {
   const [debugOpen, setDebugOpen] = useState(false);
   const [debugTab, setDebugTab] = useState<ChatDebugTab | null>("prompt");
   const [debugPrompt, setDebugPrompt] = useState<string | null>(null);
+  const debugPromptRequestRef = useRef(0);
   const { ref: messagesRef, scrollToBottom, handleScroll } = useChatAutoScroll();
   const attachments = useAttachments();
 
+  const refreshDebugPrompt = useCallback(async (sessionId: string) => {
+    const requestId = ++debugPromptRequestRef.current;
+    try {
+      const result = await sessionApi.getPrompt(sessionId);
+      if (requestId === debugPromptRequestRef.current) {
+        setDebugPrompt(result.systemPrompt);
+      }
+    } catch {
+      if (requestId === debugPromptRequestRef.current) {
+        setDebugPrompt("[Fehler beim Laden]");
+      }
+    }
+  }, []);
+
   const sessionData = useChatSessionData({
     setDebugOpen,
-    onDebugOpen: (sessionId: string) => {
-      sessionApi.getPrompt(sessionId)
-        .then((result) => setDebugPrompt(result.systemPrompt))
-        .catch(() => setDebugPrompt("[Fehler beim Laden]"));
-    },
+    onDebugOpen: refreshDebugPrompt,
   });
 
   const streaming = useChatStreaming({
@@ -90,6 +101,26 @@ export default function ChatPage() {
     setSession: sessionData.setSession,
     debugOpen,
   });
+
+  useEffect(() => {
+    if (!debugOpen || !sessionData.session) {
+      debugPromptRequestRef.current++;
+      return;
+    }
+
+    queueMicrotask(() => {
+      void refreshDebugPrompt(sessionData.session!.id);
+    });
+  }, [
+    debugOpen,
+    refreshDebugPrompt,
+    sessionData.session,
+    sessionData.tasks,
+    sessionData.sessionFacts,
+    sessionData.userFacts,
+    streaming.loopState?.iteration,
+    streaming.loopState?.status,
+  ]);
 
   useEffect(
     scrollToBottom,

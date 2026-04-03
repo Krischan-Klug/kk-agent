@@ -29,16 +29,19 @@ export function buildRunnableMcpInstructions(
 }
 
 export function resolveSessionToolIds(
-  agent: { toolIds?: string[] },
+  agent: { modeConfigs?: Partial<Record<"plan" | "edit", { toolIds?: string[] }>> },
   activeToolIds?: string[],
 ): string[] {
   if (activeToolIds !== undefined) return sanitizeToolIds(activeToolIds);
-  return sanitizeToolIds(agent.toolIds ?? []);
+  const modeToolIds = Object.values(agent.modeConfigs ?? {}).flatMap((mode) => mode?.toolIds ?? []);
+  return sanitizeToolIds(modeToolIds);
 }
 
 export function resolveSessionMcpIds(
-  agent: { mcpIds?: string[] },
+  agent: { modeConfigs?: Partial<Record<"plan" | "edit", { mcpIds?: string[] }>> },
   activeMcpIds?: string[],
 ): string[] {
-  return sanitizeMcpIds(activeMcpIds ?? agent.mcpIds ?? []);
+  if (activeMcpIds !== undefined) return sanitizeMcpIds(activeMcpIds);
+  const modeMcpIds = Object.values(agent.modeConfigs ?? {}).flatMap((mode) => mode?.mcpIds ?? []);
+  return sanitizeMcpIds(modeMcpIds);
 }

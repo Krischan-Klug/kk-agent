@@ -1,13 +1,85 @@
 import type { UnifiedToolDefinition } from "../provider/lib/types.js";
-import type { McpServerConfig, McpToolDefinition, ToolCallResult, UpdateMcpBody } from "../mcp/types.js";
+import type { AccessScope, McpServerConfig, McpToolDefinition, ToolCallResult, UpdateMcpBody } from "../mcp/types.js";
 import { buildSystemMcps, createOverrideState, loadSystemMcpOverrides, saveSystemMcpOverrides } from "./lib/system-registry.js";
-import { executeSystemTool, getSystemToolDefinitions, getSystemToolsForMcp } from "./lib/index.js";
-import { getCurrentSessionId } from "./lib/user-interaction/interaction-store.js";
+import { executeSystemTool, getSystemToolsForMcp } from "./lib/index.js";
 import { clearSessionFacts, getMemoryPromptContext, initMemoryState, listSessionFacts, listUserFacts, replaceSessionFacts, replaceUserFacts } from "./lib/memory-state.js";
-import { clearTasks, getTaskSummary, listTasks, replaceTasks } from "./lib/task-state.js";
+import { clearTasks, createTasks, getTaskSummary, listTasks, replaceTasks, solveTasks, updateTasks } from "./lib/task-state.js";
 import type { MemoryFact, TaskItem, ToolResultOptions } from "./types.js";
+import {
+  getDefaultPathForScope,
+  getTerminalElevationLabel,
+  resolveAccessScope,
+  resolveFilesystemSystemConfig,
+  resolveTerminalSystemConfig,
+} from "./lib/access-paths.js";
 
 let cachedSystemMcps: McpServerConfig[] = [];
+
+export interface ResolvedSystemToolTarget {
+  toolId: string;
+  accessScope?: AccessScope;
+}
+
+export interface ResolvedSystemToolRuntime {
+  toolDefinitions: UnifiedToolDefinition[];
+  instructionsById: Record<string, string>;
+  toolTargetsByName: Record<string, ResolvedSystemToolTarget>;
+  toolAccessContext: string;
+}
+
+function normalizeSystemConfigForMcp(id: string, systemConfig?: McpServerConfig["systemConfig"]) {
+  if (id === "filesystem") return resolveFilesystemSystemConfig(systemConfig);
+  if (id === "terminal") return resolveTerminalSystemConfig(systemConfig);
+  return systemConfig ? { ...systemConfig } : undefined;
+}
+
+function buildScopedInstruction(baseInstruction: string, mcp: McpServerConfig): string {
+  if (mcp.systemKey === "filesystem") {
+    const config = resolveFilesystemSystemConfig(mcp.systemConfig);
+    const allowedRoot = getDefaultPathForScope(resolveAccessScope(config.accessScope));
+    return [
+      baseInstruction,
+      `Aktueller Zugriff: scope=${resolveAccessScope(config.accessScope)}, basePath=${config.basePath}, allowedRoot=${allowedRoot}.`,
+    ].join(" ");
+  }
+
+  if (mcp.systemKey === "terminal") {
+    const config = resolveTerminalSystemConfig(mcp.systemConfig);
+    const allowedRoot = getDefaultPathForScope(resolveAccessScope(config.accessScope));
+    return [
+      baseInstruction,
+      `Aktueller Zugriff: scope=${resolveAccessScope(config.accessScope)}, workingDirectory=${config.workingDirectory}, allowedRoot=${allowedRoot}, elevation=${getTerminalElevationLabel(config.accessScope)}.`,
+    ].join(" ");
+  }
+
+  return baseInstruction;
+}
+
+function buildAccessContext(mcp: McpServerConfig): string | undefined {
+  if (mcp.systemKey === "filesystem") {
+    const config = resolveFilesystemSystemConfig(mcp.systemConfig);
+    const allowedRoot = getDefaultPathForScope(resolveAccessScope(config.accessScope));
+    return [
+      `<filesystem access_scope="${resolveAccessScope(config.accessScope)}">`,
+      `<base_path>${config.basePath}</base_path>`,
+      `<allowed_root>${allowedRoot}</allowed_root>`,
+      "</filesystem>",
+    ].join("\n");
+  }
+
+  if (mcp.systemKey === "terminal") {
+    const config = resolveTerminalSystemConfig(mcp.systemConfig);
+    const allowedRoot = getDefaultPathForScope(resolveAccessScope(config.accessScope));
+    return [
+      `<terminal access_scope="${resolveAccessScope(config.accessScope)}" elevation="${getTerminalElevationLabel(config.accessScope)}">`,
+      `<working_directory>${config.workingDirectory}</working_directory>`,
+      `<allowed_root>${allowedRoot}</allowed_root>`,
+      "</terminal>",
+    ].join("\n");
+  }
+
+  return undefined;
+}
 
 function setSystemMcp(mcp: McpServerConfig): void {
   cachedSystemMcps = cachedSystemMcps.map((entry) => (entry.id === mcp.id ? mcp : entry));
@@ -15,6 +87,39 @@ function setSystemMcp(mcp: McpServerConfig): void {
 
 async function persistSystemOverrides(): Promise<void> {
   await saveSystemMcpOverrides(createOverrideState(cachedSystemMcps));
+}
+
+function normalizeToolResultForContext(content: string, options: ToolResultOptions = {}): string {
+  const maxChars = options.maxContextChars ?? 1200;
+  const normalized = content.trim();
+  if (normalized.length <= maxChars) return normalized;
+
+  const preview = normalized.slice(0, maxChars);
+  return `${preview}\n\n[Ausgabe gekuerzt: ${normalized.length} Zeichen insgesamt]`;
+}
+
+function resolveSystemMcp(
+  id: string,
+  accessScopeOverride?: AccessScope,
+  instructionOverride?: string,
+): { mcp: McpServerConfig; instruction: string; tools: McpToolDefinition[]; accessContext?: string } | null {
+  const systemMcp = getSystemMcpById(id);
+  if (!systemMcp) return null;
+
+  const mcp: McpServerConfig = {
+    ...systemMcp,
+    systemConfig: normalizeSystemConfigForMcp(id, {
+      ...systemMcp.systemConfig,
+      ...(accessScopeOverride ? { accessScope: accessScopeOverride } : {}),
+    }),
+  };
+
+  return {
+    mcp,
+    instruction: buildScopedInstruction(instructionOverride ?? mcp.instruction, mcp),
+    tools: getSystemToolsForMcp(id),
+    accessContext: buildAccessContext(mcp),
+  };
 }
 
 export async function initToolsService(): Promise<void> {
@@ -41,73 +146,7 @@ export function getRunnableSystemMcpIds(): string[] {
 export function getActiveToolInstructions(): { id: string; name: string; instruction: string }[] {
   return cachedSystemMcps
     .filter((mcp) => mcp.active)
-    .map((mcp) => ({ id: mcp.id, name: mcp.name, instruction: mcp.instruction }));
-}
-
-export function getSystemToolDefinitionsForActive(activeMcpIds: string[]): UnifiedToolDefinition[] {
-  return getSystemToolDefinitions(activeMcpIds).map((tool) => ({
-    name: tool.name,
-    description: tool.description,
-    parameters: tool.inputSchema,
-  }));
-}
-
-function getSessionIdOrThrow(): string {
-  const sessionId = getCurrentSessionId();
-  if (!sessionId) throw new Error("No active session context for internal tool.");
-  return sessionId;
-}
-
-function normalizeToolResultForContext(content: string, options: ToolResultOptions = {}): string {
-  const maxChars = options.maxContextChars ?? 1200;
-  const normalized = content.trim();
-  if (normalized.length <= maxChars) return normalized;
-
-  const preview = normalized.slice(0, maxChars);
-  return `${preview}\n\n[Ausgabe gekuerzt: ${normalized.length} Zeichen insgesamt]`;
-}
-
-function taskSummary(tasks: TaskItem[]): string {
-  if (tasks.length === 0) return "Keine Tasks gesetzt.";
-  return tasks.map((task) => `- [${task.status}] ${task.title}${task.notes ? ` (${task.notes})` : ""}`).join("\n");
-}
-
-function memorySummary(facts: MemoryFact[]): string {
-  if (facts.length === 0) return "Keine Facts gespeichert.";
-  return facts.map((fact) => `- ${fact.text}`).join("\n");
-}
-
-async function executeInternalToolByName(
-  toolName: string,
-  args: Record<string, unknown>,
-): Promise<ToolCallResult | null> {
-  if (toolName === "update_tasks") {
-    const sessionId = getSessionIdOrThrow();
-    const tasks = replaceTasks(sessionId, Array.isArray(args.tasks) ? args.tasks as TaskItem[] : []);
-    return {
-      content: `Tasks aktualisiert.\n${taskSummary(tasks)}`,
-      isError: false,
-    };
-  }
-
-  if (toolName === "remember_facts") {
-    const facts = Array.isArray(args.facts) ? args.facts as MemoryFact[] : [];
-    const scope = String(args.scope ?? "");
-    if (scope !== "session" && scope !== "user") {
-      return { content: "scope must be 'session' or 'user'", isError: true };
-    }
-
-    if (scope === "session") {
-      const sessionId = getSessionIdOrThrow();
-      const next = replaceSessionFacts(sessionId, facts);
-      return { content: `Session-Memory aktualisiert.\n${memorySummary(next)}`, isError: false };
-    }
-
-    const next = await replaceUserFacts(facts);
-    return { content: `User-Memory aktualisiert.\n${memorySummary(next)}`, isError: false };
-  }
-
-  return null;
+    .map((mcp) => ({ id: mcp.id, name: mcp.name, instruction: buildScopedInstruction(mcp.instruction, mcp) }));
 }
 
 export function getInternalToolState(sessionId: string): { tasks: TaskItem[]; sessionFacts: MemoryFact[]; userFacts: MemoryFact[] } {
@@ -140,6 +179,44 @@ export function getInternalToolById(id: string): McpServerConfig | undefined {
   return getSystemMcpById(id);
 }
 
+export function buildResolvedSystemToolRuntime(
+  activeToolIds: string[],
+  accessScopeOverrides: Record<string, AccessScope> = {},
+  instructionOverrides: Record<string, string> = {},
+): ResolvedSystemToolRuntime {
+  const toolDefinitions: UnifiedToolDefinition[] = [];
+  const instructionsById: Record<string, string> = {};
+  const toolTargetsByName: Record<string, ResolvedSystemToolTarget> = {};
+  const toolAccessContext: string[] = [];
+
+  for (const toolId of activeToolIds) {
+    const resolved = resolveSystemMcp(toolId, accessScopeOverrides[toolId], instructionOverrides[toolId]);
+    if (!resolved || !resolved.mcp.active) continue;
+
+    instructionsById[toolId] = resolved.instruction;
+    if (resolved.accessContext) toolAccessContext.push(resolved.accessContext);
+
+    for (const tool of resolved.tools) {
+      toolDefinitions.push({
+        name: tool.name,
+        description: tool.description,
+        parameters: tool.inputSchema,
+      });
+      toolTargetsByName[tool.name] = {
+        toolId,
+        accessScope: accessScopeOverrides[toolId],
+      };
+    }
+  }
+
+  return {
+    toolDefinitions,
+    instructionsById,
+    toolTargetsByName,
+    toolAccessContext: toolAccessContext.join("\n"),
+  };
+}
+
 export async function toggleSystemMcp(id: string, active: boolean): Promise<McpServerConfig> {
   const systemMcp = getSystemMcpById(id);
   if (!systemMcp) throw new Error(`System-MCP "${id}" not found`);
@@ -157,10 +234,10 @@ export async function updateSystemMcpConfig(id: string, body: UpdateMcpBody): Pr
     ...systemMcp,
     active: body.active ?? systemMcp.active,
     instruction: body.instruction ?? systemMcp.instruction,
-    systemConfig: {
+    systemConfig: normalizeSystemConfigForMcp(id, {
       ...systemMcp.systemConfig,
       ...body.systemConfig,
-    },
+    }),
   };
 
   if (body.name !== undefined) next.name = body.name;
@@ -187,24 +264,22 @@ export async function updateInternalToolConfig(id: string, body: UpdateMcpBody):
   return updateSystemMcpConfig(id, body);
 }
 
-export async function executeSystemToolByName(
+export async function executeSystemToolForId(
+  id: string,
   toolName: string,
   args: Record<string, unknown>,
+  accessScopeOverride?: AccessScope,
 ): Promise<ToolCallResult | null> {
-  const internal = await executeInternalToolByName(toolName, args);
-  if (internal) return normalizeToolResult(internal);
-
-  for (const mcp of cachedSystemMcps) {
-    if (!mcp.active) continue;
-    const result = await executeSystemTool(mcp, toolName, args);
-    if (result) return normalizeToolResult(result);
-  }
-  return null;
+  const resolved = resolveSystemMcp(id, accessScopeOverride);
+  if (!resolved || !resolved.mcp.active) return null;
+  const result = await executeSystemTool(resolved.mcp, toolName, args);
+  return result ? normalizeToolResult(result) : null;
 }
 
 export {
   clearSessionFacts,
   clearTasks,
+  createTasks,
   getMemoryPromptContext,
   getTaskSummary,
   listSessionFacts,
@@ -213,4 +288,6 @@ export {
   replaceSessionFacts,
   replaceTasks,
   replaceUserFacts,
+  solveTasks,
+  updateTasks,
 };

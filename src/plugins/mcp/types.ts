@@ -1,8 +1,10 @@
 export type McpSource = "system" | "custom";
 export type SystemMcpKey = "filesystem" | "web-search" | "terminal" | "user-interaction" | "task" | "memory" | "attachment";
+export type AccessScope = "user" | "system";
 
 export interface SystemMcpConfig {
-  rootPath?: string;
+  accessScope?: AccessScope;
+  basePath?: string;
   workingDirectory?: string;
 }
 

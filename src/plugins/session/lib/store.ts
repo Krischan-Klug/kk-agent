@@ -7,9 +7,9 @@ export function createSession(data: {
   agentId: string;
   providerId: string;
   model: string;
+  activeMode: SessionState["activeMode"];
   activeToolIds: string[];
   activeMcpIds: string[];
-  systemPrompt: string;
   reasoningEffort?: SessionState["reasoningEffort"];
   temperature?: number;
 }): SessionState {
@@ -20,9 +20,9 @@ export function createSession(data: {
     providerId: data.providerId,
     model: data.model,
     agentId: data.agentId,
+    activeMode: data.activeMode,
     activeToolIds: data.activeToolIds,
     activeMcpIds: data.activeMcpIds,
-    systemPrompt: data.systemPrompt,
     reasoningEffort: data.reasoningEffort,
     temperature: data.temperature,
     messages: [],

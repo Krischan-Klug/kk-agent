@@ -1,6 +1,6 @@
 import { loadState, saveState } from "../../lib/state.js";
 import type { AgentDefinition } from "../types.js";
-import { getDefaultAgent } from "./defaults.js";
+import { getBundledAgents } from "./defaults.js";
 
 const STATE_FILE = "agents.json";
 
@@ -14,7 +14,7 @@ export async function initStore(): Promise<void> {
   const state = await loadState<AgentsState>(STATE_FILE, { agents: [] });
 
   if (state.agents.length === 0) {
-    state.agents.push(getDefaultAgent());
+    state.agents.push(...getBundledAgents());
     await saveState(STATE_FILE, state);
   }
 

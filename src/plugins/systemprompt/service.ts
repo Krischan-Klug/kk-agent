@@ -4,16 +4,16 @@ import {
   type PromptBuildContext,
 } from "./lib/builder.js";
 import { getSystemVariables } from "./lib/builder.js";
-
-/* ── Public API ── */
+import type { AgentPromptSections } from "../agent/types.js";
 
 export function buildPrompt(
-  agentBasePrompt: string,
+  promptSections: AgentPromptSections,
+  modeInstruction: string,
   mcpInstructions: string,
   variables: Record<string, string>,
   context: PromptBuildContext = {},
 ): string {
-  return build(agentBasePrompt, mcpInstructions, variables, context);
+  return build(promptSections, modeInstruction, mcpInstructions, variables, context);
 }
 
 export function buildCapabilityInstructions(

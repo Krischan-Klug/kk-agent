@@ -6,7 +6,7 @@ import { getStatePath } from "../../lib/state.js";
 
 const REGISTRY_PATH = getStatePath("mcps.json");
 const LEGACY_PATH = resolve("mcps.json");
-const SYSTEM_IDS = new Set(["filesystem", "web-search", "terminal", "commands"]);
+const SYSTEM_IDS = new Set(["filesystem", "web-search", "terminal", "user-interaction", "task", "memory", "attachment"]);
 const DEFAULT_REGISTRY: { mcps: McpServerConfig[] } = { mcps: [] };
 
 async function ensureDir(): Promise<void> {

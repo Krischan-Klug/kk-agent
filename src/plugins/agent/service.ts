@@ -1,34 +1,44 @@
-import type { AgentDefinition, CreateAgentBody, UpdateAgentBody, AgentLoopState } from "./types.js";
+import type {
+  AgentDefinition,
+  CreateAgentBody,
+  UpdateAgentBody,
+  AgentLoopState,
+  ChatMode,
+} from "./types.js";
 import * as store from "./lib/store.js";
 import { getDefaults } from "../lib/defaults.js";
-import { createSlugId, normalizeMcpId } from "../lib/ids.js";
+import { createSlugId } from "../lib/ids.js";
 import { getSystemVariableNames } from "../systemprompt/lib/builder.js";
+import { getChatModes } from "./lib/modes.js";
+import { applyModeConfigPatch, compactModeConfigs, normalizeModeConfigs } from "./lib/mode-config.js";
 
-const REQUIRED_TOOL_IDS = ["attachment"];
-
-function ensureRequiredToolIds(toolIds: string[]): string[] {
-  return [...new Set([...toolIds, ...REQUIRED_TOOL_IDS].map(normalizeMcpId))];
+function compactAgentForStore(agent: AgentDefinition): AgentDefinition {
+  return {
+    ...agent,
+    modeConfigs: compactModeConfigs(agent.modeConfigs) as AgentDefinition["modeConfigs"],
+  };
 }
 
 function normalizeAgent(agent: AgentDefinition): AgentDefinition {
   const defaults = getDefaults();
-  const toolIds = ensureRequiredToolIds(agent.toolIds ?? []);
-  const mcpIds = [...new Set((agent.mcpIds ?? []).map(normalizeMcpId))];
-  const toolInstructions = Object.fromEntries(
-    Object.entries(agent.toolInstructions ?? {}).map(([id, instruction]) => [normalizeMcpId(id), instruction]),
-  );
-  const mcpInstructions = Object.fromEntries(
-    Object.entries(agent.mcpInstructions ?? {}).map(([id, instruction]) => [normalizeMcpId(id), instruction]),
-  );
+  const defaultChatMode = agent.defaultChatMode ?? defaults.agent.defaultChatMode;
   return {
     ...agent,
-    toolIds,
-    mcpIds,
-    toolInstructions,
-    mcpInstructions,
-    loopMode: agent.loopMode ?? defaults.agent.loopMode,
-    phasePrompts: agent.phasePrompts ?? {},
+    defaultChatMode,
+    modeConfigs: normalizeModeConfigs(agent.modeConfigs),
   };
+}
+
+function normalizeModePatches(
+  existing: AgentDefinition["modeConfigs"],
+  patch?: UpdateAgentBody["modeConfigs"] | CreateAgentBody["modeConfigs"],
+): AgentDefinition["modeConfigs"] {
+  const result = normalizeModeConfigs(existing);
+  if (!patch) return result;
+  for (const mode of getChatModes()) {
+    result[mode] = applyModeConfigPatch(mode, result[mode], patch[mode]);
+  }
+  return result;
 }
 
 export async function initAgentService(): Promise<void> {
@@ -50,62 +60,46 @@ export function listSystemVariables(): string[] {
 }
 
 export async function createAgent(body: CreateAgentBody): Promise<AgentDefinition> {
+  const defaults = getDefaults();
   const id = createSlugId(body.name);
-
   const now = new Date().toISOString();
+  const defaultChatMode = body.defaultChatMode ?? defaults.agent.defaultChatMode;
 
   const agent: AgentDefinition = {
     id,
     name: body.name,
     description: body.description ?? "",
-    systemPrompt: body.systemPrompt ?? "",
-    maxIterations: body.maxIterations ?? getDefaults().agent.maxIterations,
-    toolIds: ensureRequiredToolIds(body.toolIds ?? []),
-    mcpIds: (body.mcpIds ?? []).map(normalizeMcpId),
-    toolInstructions: Object.fromEntries(
-      Object.entries(body.toolInstructions ?? {}).map(([toolId, instruction]) => [normalizeMcpId(toolId), instruction]),
-    ),
-    mcpInstructions: Object.fromEntries(
-      Object.entries(body.mcpInstructions ?? {}).map(([mcpId, instruction]) => [normalizeMcpId(mcpId), instruction]),
-    ),
+    defaultChatMode,
+    modeConfigs: normalizeModePatches({} as AgentDefinition["modeConfigs"], body.modeConfigs),
+    maxIterations: body.maxIterations ?? defaults.agent.maxIterations,
     variables: body.variables ?? {},
     defaultModel: body.defaultModel,
     reasoningEffort: body.reasoningEffort,
     temperature: body.temperature,
-    loopMode: body.loopMode ?? getDefaults().agent.loopMode,
-    phasePrompts: body.phasePrompts ?? {},
     createdAt: now,
     updatedAt: now,
   };
 
-  return store.createAgent(agent);
+  return normalizeAgent(await store.createAgent(compactAgentForStore(agent)));
 }
 
 export async function updateAgent(id: string, body: UpdateAgentBody): Promise<AgentDefinition> {
+  const existing = getAgent(id);
   const patch: Partial<AgentDefinition> = {};
   if (body.name !== undefined) patch.name = body.name;
   if (body.description !== undefined) patch.description = body.description;
-  if (body.systemPrompt !== undefined) patch.systemPrompt = body.systemPrompt;
+  if (body.defaultChatMode !== undefined) patch.defaultChatMode = body.defaultChatMode;
+  if (body.modeConfigs !== undefined) {
+    patch.modeConfigs = compactModeConfigs(
+      normalizeModePatches(existing.modeConfigs, body.modeConfigs),
+    ) as AgentDefinition["modeConfigs"];
+  }
   if (body.maxIterations !== undefined) patch.maxIterations = body.maxIterations;
-  if (body.toolIds !== undefined) patch.toolIds = ensureRequiredToolIds(body.toolIds);
-  if (body.mcpIds !== undefined) patch.mcpIds = body.mcpIds.map(normalizeMcpId);
-  if (body.toolInstructions !== undefined) {
-    patch.toolInstructions = Object.fromEntries(
-      Object.entries(body.toolInstructions).map(([toolId, instruction]) => [normalizeMcpId(toolId), instruction]),
-    );
-  }
-  if (body.mcpInstructions !== undefined) {
-    patch.mcpInstructions = Object.fromEntries(
-      Object.entries(body.mcpInstructions).map(([mcpId, instruction]) => [normalizeMcpId(mcpId), instruction]),
-    );
-  }
   if (body.variables !== undefined) patch.variables = body.variables;
   if (body.defaultModel !== undefined) patch.defaultModel = body.defaultModel;
   if (body.reasoningEffort !== undefined) patch.reasoningEffort = body.reasoningEffort;
   if (body.temperature !== undefined) patch.temperature = body.temperature;
-  if (body.loopMode !== undefined) patch.loopMode = body.loopMode;
-  if (body.phasePrompts !== undefined) patch.phasePrompts = body.phasePrompts;
-  return store.updateAgent(id, patch);
+  return normalizeAgent(await store.updateAgent(id, patch));
 }
 
 export async function deleteAgent(id: string): Promise<void> {
@@ -113,39 +107,60 @@ export async function deleteAgent(id: string): Promise<void> {
   if (!removed) throw new Error(`Agent "${id}" not found`);
 }
 
-export async function removeMcpFromAgents(mcpId: string): Promise<void> {
-  const updates = listAgents()
-    .filter((agent) => agent.mcpIds.includes(mcpId) || agent.mcpInstructions[mcpId] !== undefined)
-    .map(async (agent) => {
-      const nextMcpIds = agent.mcpIds.filter((id) => id !== mcpId);
-      const nextInstructions = { ...agent.mcpInstructions };
-      delete nextInstructions[mcpId];
-      await store.updateAgent(agent.id, {
-        mcpIds: nextMcpIds,
-        mcpInstructions: nextInstructions,
-      });
-    });
+function removeCapabilityFromModeConfig(
+  modeConfig: AgentDefinition["modeConfigs"][ChatMode] | undefined,
+  capabilityId: string,
+  kind: "tool" | "mcp",
+) {
+  if (!modeConfig) return modeConfig;
+  const toolIds = kind === "tool" ? modeConfig.toolIds.filter((entry) => entry !== capabilityId) : modeConfig.toolIds;
+  const mcpIds = kind === "mcp" ? modeConfig.mcpIds.filter((entry) => entry !== capabilityId) : modeConfig.mcpIds;
+  const toolAccessScopes = { ...modeConfig.toolAccessScopes };
+  const toolInstructions = { ...modeConfig.toolInstructions };
+  const mcpInstructions = { ...modeConfig.mcpInstructions };
+  if (kind === "tool") delete toolAccessScopes[capabilityId];
+  if (kind === "tool") delete toolInstructions[capabilityId];
+  if (kind === "mcp") delete mcpInstructions[capabilityId];
+  return { ...modeConfig, toolIds, mcpIds, toolAccessScopes, toolInstructions, mcpInstructions };
+}
 
+export async function removeMcpFromAgents(mcpId: string): Promise<void> {
+  const updates = listAgents().map(async (agent) => {
+    const nextModeConfigs = { ...agent.modeConfigs };
+    let changed = false;
+    for (const mode of getChatModes()) {
+      const current = agent.modeConfigs[mode];
+      const next = removeCapabilityFromModeConfig(current, mcpId, "mcp");
+      if (JSON.stringify(next) !== JSON.stringify(current)) {
+        nextModeConfigs[mode] = next!;
+        changed = true;
+      }
+    }
+    if (changed) {
+      await store.updateAgent(agent.id, { modeConfigs: nextModeConfigs });
+    }
+  });
   await Promise.all(updates);
 }
 
 export async function removeToolFromAgents(toolId: string): Promise<void> {
-  const updates = listAgents()
-    .filter((agent) => agent.toolIds.includes(toolId) || agent.toolInstructions[toolId] !== undefined)
-    .map(async (agent) => {
-      const nextToolIds = agent.toolIds.filter((id) => id !== toolId);
-      const nextInstructions = { ...agent.toolInstructions };
-      delete nextInstructions[toolId];
-      await store.updateAgent(agent.id, {
-        toolIds: nextToolIds,
-        toolInstructions: nextInstructions,
-      });
-    });
-
+  const updates = listAgents().map(async (agent) => {
+    const nextModeConfigs = { ...agent.modeConfigs };
+    let changed = false;
+    for (const mode of getChatModes()) {
+      const current = agent.modeConfigs[mode];
+      const next = removeCapabilityFromModeConfig(current, toolId, "tool");
+      if (JSON.stringify(next) !== JSON.stringify(current)) {
+        nextModeConfigs[mode] = next!;
+        changed = true;
+      }
+    }
+    if (changed) {
+      await store.updateAgent(agent.id, { modeConfigs: nextModeConfigs });
+    }
+  });
   await Promise.all(updates);
 }
-
-/* ── Loop State (in-memory, runtime only) ── */
 
 const loopStates = new Map<string, AgentLoopState>();
 const loopStateListeners = new Map<string, Set<(state: AgentLoopState) => void>>();

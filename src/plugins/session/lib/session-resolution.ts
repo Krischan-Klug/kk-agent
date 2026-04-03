@@ -4,24 +4,26 @@ import { REASONING_LEVEL_DEFAULTS } from "../../provider/defaults.js";
 import { getDefaults } from "../../lib/defaults.js";
 import { getModelSettings, resolveProviderModel } from "../../provider/service.js";
 import { resolveSessionMcpIds, resolveSessionToolIds } from "./tool-selection.js";
+import type { ChatMode } from "../../agent/types.js";
 
 type SessionLikeAgent = {
   defaultModel?: string;
-  toolIds?: string[];
-  mcpIds?: string[];
+  defaultChatMode?: ChatMode;
+  modeConfigs?: Partial<Record<"plan" | "edit", { toolIds?: string[]; mcpIds?: string[] }>>;
   reasoningEffort?: string;
   temperature?: number;
 };
 
 export async function resolveSessionDefaults(
   agent: SessionLikeAgent,
-  body: Pick<CreateSessionBody, "activeToolIds" | "activeMcpIds" | "model" | "reasoningEffort" | "temperature">,
+  body: Pick<CreateSessionBody, "activeToolIds" | "activeMcpIds" | "activeMode" | "model" | "reasoningEffort" | "temperature">,
   providerId: string,
 ) {
   const selection = await resolveProviderModel(providerId, body.model ?? agent.defaultModel);
   return {
     providerId: selection.providerId,
     model: selection.model,
+    activeMode: body.activeMode ?? agent.defaultChatMode ?? getDefaults().agent.defaultChatMode,
     activeToolIds: resolveSessionToolIds(agent, body.activeToolIds),
     activeMcpIds: resolveSessionMcpIds(agent, body.activeMcpIds),
     reasoningEffort: body.reasoningEffort ?? agent.reasoningEffort,

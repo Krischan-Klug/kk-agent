@@ -1,7 +1,7 @@
 import type { UnifiedMessage, UnifiedToolDefinition, ContentBlock } from "../../provider/lib/types.js";
 import { getTextContent } from "../../provider/lib/types.js";
 import type { LoopOptions, LoopResult, LoopMessage } from "../types.js";
-import type { AgentLoopMode, AgentLoopPhase, AgentLoopState } from "../../agent/types.js";
+import type { AgentLoopState } from "../../agent/types.js";
 import { callProviderStream } from "../../provider/service.js";
 import { buildPrompt } from "../../systemprompt/service.js";
 import { getSystemVariables } from "../../systemprompt/lib/builder.js";
@@ -10,7 +10,6 @@ import { getTaskSummary } from "../../tools/service.js";
 
 const INVALID_TOOL_RETRY_BUDGET = 2;
 const EMPTY_RESPONSE_RETRY_BUDGET = 1;
-const VERIFY_RETRY_LIMIT = 1;
 
 const INVALID_TOOL_CALL_PATTERNS = [
   /<tool_call\b/i,
@@ -30,7 +29,7 @@ function hasVisibleContent(content: string | ContentBlock[]): boolean {
   return getTextContent(content).trim().length > 0;
 }
 
-function toUnifiedTools(tools: LoopOptions["allTools"]): UnifiedToolDefinition[] {
+function toUnifiedTools(tools: UnifiedToolDefinition[]): UnifiedToolDefinition[] {
   return tools.map((tool) => ({
     name: tool.name,
     description: tool.description,
@@ -44,7 +43,7 @@ function buildLoopState(opts: LoopOptions): AgentLoopState {
     sessionId: opts.sessionId,
     agentId: opts.agentId,
     status: "running",
-    phase: opts.phase,
+    mode: opts.activeMode,
     iteration: 0,
     maxIterations: opts.maxIterations,
     startedAt: now,
@@ -80,50 +79,31 @@ function buildModelMessages(
   ];
 }
 
-function getPhasePrompt(opts: LoopOptions, phase: AgentLoopPhase): string | undefined {
-  if (phase === "planning") {
-    return opts.phasePrompts.planning;
-  }
-  if (phase === "verifying") {
-    return opts.phasePrompts.verifying;
-  }
-  if (phase === "executing") {
-    return opts.phasePrompts.executing;
-  }
-  return undefined;
-}
-
-function getInitialPhase(loopMode: AgentLoopMode): AgentLoopPhase {
-  return loopMode === "simple" ? "executing" : "planning";
-}
-
-function shouldVerify(loopMode: AgentLoopMode): boolean {
-  return loopMode === "full_verify";
-}
-
 async function runModelPass(
   opts: LoopOptions,
   messages: LoopMessage[],
-  phase: AgentLoopPhase,
-  feedback: string,
   retryInstruction?: string,
   extraSystemMessages: string[] = [],
 ): Promise<Awaited<ReturnType<typeof callProviderStream>>> {
+  const modeConfig = opts.modeConfigs[opts.activeMode];
+  if (!modeConfig) {
+    throw new Error(`Missing mode config for mode "${opts.activeMode}"`);
+  }
+
   const variables: Record<string, string> = {
     ...getSystemVariables({ CURRENT_MODEL: opts.model }),
     iteration: String(messages.filter((message) => message.role === "assistant").length + 1),
     maxIterations: String(opts.maxIterations),
-    mcpInstructions: opts.mcpInstructions,
-    phase,
+    mode: opts.activeMode,
     TASK_SUMMARY: getTaskSummary(opts.sessionId),
-    FEEDBACK: feedback,
     ...opts.agentVariables,
   };
   const systemPrompt = buildPrompt(
-    opts.systemPrompt,
-    opts.mcpInstructions,
+    modeConfig.promptSections,
+    modeConfig.modeInstruction,
+    modeConfig.mcpInstructions,
     variables,
-    { sessionId: opts.sessionId, phase, phasePrompt: getPhasePrompt(opts, phase), feedback },
+    { sessionId: opts.sessionId, mode: opts.activeMode },
   );
 
   const messagesWithSystem = buildModelMessages(systemPrompt, messages, retryInstruction, extraSystemMessages);
@@ -134,18 +114,18 @@ async function runModelPass(
       providerId: opts.providerId,
       model: opts.model,
       messages: messagesWithSystem,
-      tools: phase === "verifying" ? undefined : opts.allTools.length > 0 ? toUnifiedTools(opts.allTools) : undefined,
+      tools: modeConfig.allTools.length > 0 ? toUnifiedTools(modeConfig.allTools) : undefined,
       reasoningEffort: opts.reasoningEffort,
       temperature: opts.temperature,
       maxOutputTokens: opts.maxOutputTokens,
     },
     (chunk) => {
-      if (chunk.type === "content" && chunk.content && phase !== "verifying") {
+      if (chunk.type === "content" && chunk.content) {
         opts.onContent?.(chunk.content);
         return;
       }
 
-      if (chunk.type === "reasoning" && chunk.content && phase !== "verifying") {
+      if (chunk.type === "reasoning" && chunk.content) {
         opts.onReasoning?.(chunk.content);
         return;
       }
@@ -169,26 +149,6 @@ async function runModelPass(
   return response;
 }
 
-function parseVerificationVerdict(content: string): { ok: boolean; feedback?: string } {
-  const trimmed = content.trim();
-  if (/^VERIFY_OK\b/i.test(trimmed)) return { ok: true };
-  if (/^VERIFY_RETRY\b/i.test(trimmed)) {
-    return { ok: false, feedback: trimmed.replace(/^VERIFY_RETRY\s*:?\s*/i, "").trim() };
-  }
-  return {
-    ok: false,
-    feedback: trimmed || "Die Verifikation konnte das Ergebnis nicht bestaetigen. Pruefe offene Punkte erneut.",
-  };
-}
-
-function applyTemplate(template: string, variables: Record<string, string>): string {
-  let result = template;
-  for (const [key, value] of Object.entries(variables)) {
-    result = result.replaceAll(`{{${key}}}`, value);
-  }
-  return result;
-}
-
 export async function runAgentLoop(opts: LoopOptions): Promise<LoopResult> {
   const messages: LoopMessage[] = [...opts.messages];
   let iteration = 0;
@@ -196,19 +156,16 @@ export async function runAgentLoop(opts: LoopOptions): Promise<LoopResult> {
   let lastMeaningfulContent = "";
   let invalidToolAttemptCount = 0;
   let emptyResponseRetryCount = 0;
-  let verificationRetryCount = 0;
   let retryInstruction: string | undefined;
-  let latestFeedback = "";
-  let phase: AgentLoopPhase = opts.phase || getInitialPhase(opts.loopMode);
   const loopState = buildLoopState(opts);
   opts.onLoopState?.(loopState);
 
   while (iteration < opts.maxIterations) {
     iteration++;
-    emitLoopState(loopState, opts, { iteration, phase, status: "running" });
+    emitLoopState(loopState, opts, { iteration, status: "running", mode: opts.activeMode });
 
-    const extraSys = iteration === 1 ? opts.extraSystemMessages : undefined;
-    const response = await runModelPass(opts, messages, phase, latestFeedback, retryInstruction, extraSys);
+    const extraSys = iteration === 1 && opts.extraSystemMessages ? [...opts.extraSystemMessages] : [];
+    const response = await runModelPass(opts, messages, retryInstruction, extraSys);
     retryInstruction = undefined;
 
     const messageContent = response.content.trim();
@@ -229,7 +186,7 @@ export async function runAgentLoop(opts: LoopOptions): Promise<LoopResult> {
         iteration--;
         continue;
       }
-      emitLoopState(loopState, opts, { status: "error", phase: "error" });
+      emitLoopState(loopState, opts, { status: "error" });
       throw new Error("Model emitted pseudo-formatted tool calls instead of structured tool_calls.");
     }
     invalidToolAttemptCount = 0;
@@ -249,7 +206,7 @@ export async function runAgentLoop(opts: LoopOptions): Promise<LoopResult> {
         iteration--;
         continue;
       }
-      emitLoopState(loopState, opts, { status: "error", phase: "error" });
+      emitLoopState(loopState, opts, { status: "error" });
       throw new Error("Model returned an empty response twice in a row.");
     }
     emptyResponseRetryCount = 0;
@@ -265,19 +222,17 @@ export async function runAgentLoop(opts: LoopOptions): Promise<LoopResult> {
       reasoning: messageReasoning,
       tool_calls: toolsCalled.length > 0 ? toolsCalled : undefined,
     };
-    let appendedAssistantMessage = false;
+    const shouldAppendAssistant =
+      toolsCalled.length > 0 || hasVisibleContent(messageContent) || Boolean(messageReasoning);
 
-    if (toolsCalled.length > 0 || hasVisibleContent(messageContent) || messageReasoning) {
+    if (shouldAppendAssistant) {
       messages.push(assistantMessage);
-      appendedAssistantMessage = true;
     }
 
     if (response.finishReason === "tool_calls" && toolsCalled.length > 0) {
-      phase = "executing";
-      latestFeedback = "";
       for (const toolCall of toolsCalled) {
         opts.onToolCall?.(toolCall);
-        const result = await opts.executeTool(toolCall.name, toolCall.arguments);
+        const result = await opts.executeTool(toolCall.name, toolCall.arguments, opts.activeMode);
         opts.onToolResult?.(toolCall.id, result);
 
         messages.push({
@@ -286,70 +241,17 @@ export async function runAgentLoop(opts: LoopOptions): Promise<LoopResult> {
           tool_call_id: toolCall.id,
         });
       }
-      emitLoopState(loopState, opts, { iteration, phase });
+
       continue;
     }
 
-    if (phase === "planning") {
-      phase = "executing";
-      latestFeedback = "";
-    }
-
-    if (!shouldVerify(opts.loopMode)) {
-      phase = "completed";
-      break;
-    }
-
-    emitLoopState(loopState, opts, { iteration, phase: "verifying" });
-    const verificationTaskSummary = getTaskSummary(opts.sessionId);
-    const verificationInstruction = applyTemplate(getDefaults().loop.verificationInstruction, {
-      TASK_SUMMARY: verificationTaskSummary,
-    });
-    const verificationResponse = await runModelPass(
-      opts,
-      messages,
-      "verifying",
-      latestFeedback,
-      undefined,
-      [verificationInstruction],
-    );
-
-    const verification = parseVerificationVerdict(verificationResponse.content);
-    if (verification.ok) {
-      phase = "completed";
-      break;
-    }
-
-    if (verificationRetryCount >= VERIFY_RETRY_LIMIT) {
-      phase = "completed";
-      break;
-    }
-
-    if (appendedAssistantMessage) {
-      const lastMessage = messages[messages.length - 1];
-      if (
-        lastMessage
-        && lastMessage.role === "assistant"
-        && lastMessage.content === assistantMessage.content
-        && lastMessage.reasoning === assistantMessage.reasoning
-      ) {
-        messages.pop();
-      }
-    }
-
-    verificationRetryCount++;
-    latestFeedback = verification.feedback ?? "Bitte Ergebnis erneut pruefen und vervollstaendigen.";
-    opts.onContentReset?.();
-    retryInstruction = applyTemplate(getDefaults().loop.verificationRetryMessage, {
-      FEEDBACK: latestFeedback,
-    });
-    phase = "executing";
+    break;
   }
 
   emitLoopState(loopState, opts, {
     status: loopState.status === "error" ? "error" : "completed",
-    phase: loopState.status === "error" ? "error" : "completed",
     iteration,
+    mode: opts.activeMode,
   });
 
   return {

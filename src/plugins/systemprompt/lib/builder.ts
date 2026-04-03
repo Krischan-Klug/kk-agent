@@ -1,6 +1,7 @@
 import { getActiveInstructions as getCustomActiveInstructions } from "../../mcp/service.js";
 import { getActiveToolInstructions, getInternalToolState, getMemoryPromptContext, getTaskSummary } from "../../tools/service.js";
 import { getDefaults } from "../../lib/defaults.js";
+import type { AgentPromptSections, ChatMode } from "../../agent/types.js";
 
 const RUNTIME_SYSTEM_VARIABLES = [
   "CURRENT_DATE",
@@ -9,23 +10,16 @@ const RUNTIME_SYSTEM_VARIABLES = [
   "CURRENT_MODEL",
   "iteration",
   "maxIterations",
-  "mcpInstructions",
-  "phase",
+  "mode",
   "TASK_SUMMARY",
-  "FEEDBACK",
 ] as const;
 
 export interface PromptBuildContext {
   sessionId?: string;
-  phase?: "planning" | "executing" | "verifying" | "completed" | "error";
-  phasePrompt?: string;
-  feedback?: string;
+  mode?: ChatMode;
+  toolAccessContext?: string;
 }
 
-/**
- * Build capability instruction blocks for the given active tool and MCP IDs.
- * Agent-specific instructions override the global instructions.
- */
 export function buildCapabilityInstructions(
   activeCapabilityIds: string[],
   agentInstructions?: Record<string, string>,
@@ -44,9 +38,6 @@ export function buildCapabilityInstructions(
   return blocks.join("\n\n");
 }
 
-/**
- * System variables that are always available in prompts.
- */
 export function getSystemVariables(extra: Record<string, string> = {}): Record<string, string> {
   const now = new Date();
   return {
@@ -70,9 +61,6 @@ export function getSystemVariableNames(): string[] {
   return [...RUNTIME_SYSTEM_VARIABLES];
 }
 
-/**
- * Replace all {{key}} placeholders in a string with values from the variables map.
- */
 function resolveVariables(text: string, variables: Record<string, string>): string {
   let result = text;
   for (const [key, value] of Object.entries(variables)) {
@@ -81,42 +69,61 @@ function resolveVariables(text: string, variables: Record<string, string>): stri
   return result;
 }
 
-function resolveDefaultPhasePrompt(phase?: PromptBuildContext["phase"]): string {
-  const defaults = getDefaults().agent.phasePrompts;
-  if (phase === "planning") return defaults.planningPrompt;
-  if (phase === "verifying") return defaults.verifyingPrompt;
-  return defaults.executingPrompt;
+function buildBaseSections(sections: AgentPromptSections, variables: Record<string, string>): string[] {
+  return [
+    "<identity>",
+    resolveVariables(sections.identity, variables),
+    "</identity>",
+    "<system>",
+    resolveVariables(sections.system, variables),
+    "</system>",
+    "<risky_actions>",
+    resolveVariables(sections.riskyActions, variables),
+    "</risky_actions>",
+    "<tool_usage>",
+    resolveVariables(sections.toolUsage, variables),
+    "</tool_usage>",
+    "<communication>",
+    resolveVariables(sections.communication, variables),
+    "</communication>",
+  ];
 }
 
-function buildPhaseSection(phase?: PromptBuildContext["phase"], phasePrompt?: string): string {
-  const effectivePhase = phase ?? "executing";
-  const defaults = getDefaults().agent;
-  const completedGuidance = "<completed_phase_guidance>\nDie Aufgabe ist abgeschlossen. Fasse nur das Ergebnis sauber zusammen.\n</completed_phase_guidance>";
-  const errorGuidance = "<error_phase_guidance>\nEs ist ein Fehler aufgetreten. Analysiere die Ursache und bleibe ehrlich.\n</error_phase_guidance>";
-  const resolvedPhasePrompt = phasePrompt?.trim() || resolveDefaultPhasePrompt(effectivePhase);
-  const guidanceSource =
-    effectivePhase === "planning"
-      ? defaults.phaseGuidance.planning
-      : effectivePhase === "verifying"
-        ? defaults.phaseGuidance.verifying
-        : effectivePhase === "completed"
-          ? completedGuidance
-          : effectivePhase === "error"
-            ? errorGuidance
-            : defaults.phaseGuidance.executing;
+function buildModeSection(modeInstruction: string, mode?: ChatMode, variables: Record<string, string> = {}): string {
+  const effectiveMode = mode ?? "edit";
   return [
-    `<loop_phase_context phase="${effectivePhase}">`,
-    "<current_phase>",
-    effectivePhase,
-    "</current_phase>",
-    guidanceSource,
-    resolvedPhasePrompt,
-    "</loop_phase_context>",
+    `<mode_context mode="${effectiveMode}">`,
+    resolveVariables(modeInstruction, variables),
+    "</mode_context>",
   ].join("\n");
 }
 
+function buildRuntimeStatusSection(
+  sessionId: string | undefined,
+  mode: ChatMode | undefined,
+  variables: Record<string, string>,
+): string {
+  if (!sessionId) return "";
+
+  const defaults = getDefaults().agent.runtimeSections;
+  const effectiveMode = mode ?? "edit";
+
+  const parts = [
+    "<runtime_status>",
+    resolveVariables(defaults.runtimeStatusWithSession, variables),
+    `<current_mode>${effectiveMode}</current_mode>`,
+    `<current_iteration current="${resolveVariables("{{iteration}}", variables)}" max="${resolveVariables("{{maxIterations}}", variables)}" />`,
+    "<current_task_summary>",
+    resolveVariables("{{TASK_SUMMARY}}", variables),
+    "</current_task_summary>",
+  ];
+
+  parts.push("</runtime_status>");
+  return parts.join("\n");
+}
+
 function buildTaskSection(sessionId?: string): string {
-  const defaults = getDefaults().agent.promptSections;
+  const defaults = getDefaults().agent.runtimeSections;
   if (!sessionId) return "";
   return [
     "<task_context>",
@@ -129,7 +136,7 @@ function buildTaskSection(sessionId?: string): string {
 }
 
 function buildMemorySection(sessionId?: string): string {
-  const defaults = getDefaults().agent.promptSections;
+  const defaults = getDefaults().agent.runtimeSections;
   if (!sessionId) return "";
 
   const memory = getMemoryPromptContext(sessionId);
@@ -147,7 +154,7 @@ function buildMemorySection(sessionId?: string): string {
 }
 
 function buildToolRulesSection(sessionId?: string): string {
-  const defaults = getDefaults().agent.promptSections;
+  const defaults = getDefaults().agent.runtimeSections;
   if (!sessionId) return "";
 
   const state = getInternalToolState(sessionId);
@@ -160,28 +167,26 @@ function buildToolRulesSection(sessionId?: string): string {
   ].join("\n");
 }
 
-/**
- * Build a complete system prompt.
- * Variables like {{iteration}}, {{maxIterations}}, {{CURRENT_DATE}}
- * are resolved in the base prompt.
- */
 export function buildPrompt(
-  agentBasePrompt: string,
+  promptSections: AgentPromptSections,
+  modeInstruction: string,
   mcpInstructions: string,
   variables: Record<string, string>,
   context: PromptBuildContext = {},
 ): string {
   const resolvedVariables: Record<string, string> = {
     TASK_SUMMARY: context.sessionId ? getTaskSummary(context.sessionId) : "",
-    FEEDBACK: context.feedback ?? "",
     ...variables,
   };
-  const resolvedBase = resolveVariables(agentBasePrompt, resolvedVariables);
 
   const parts = [
     "<agent_runtime_prompt>",
-    resolvedBase,
-    buildPhaseSection(context.phase, context.phasePrompt),
+    ...buildBaseSections(promptSections, resolvedVariables),
+    buildModeSection(modeInstruction, context.mode, resolvedVariables),
+    buildRuntimeStatusSection(context.sessionId, context.mode, resolvedVariables),
+    context.toolAccessContext
+      ? ["<tool_access_context>", context.toolAccessContext, "</tool_access_context>"].join("\n")
+      : "",
     buildToolRulesSection(context.sessionId),
     buildTaskSection(context.sessionId),
     buildMemorySection(context.sessionId),

@@ -1,17 +1,5 @@
-import type { UnifiedToolCall, TokenStats, ContentBlock } from "../provider/lib/types.js";
-import type { AgentLoopMode, AgentLoopPhase, AgentLoopState, AgentPhasePrompts } from "../agent/types.js";
-
-export interface ToolDefinition {
-  name: string;
-  description: string;
-  parameters: Record<string, unknown>;
-}
-
-export interface ToolResult {
-  content: string;
-  isError: boolean;
-  contextContent?: string;
-}
+import type { UnifiedToolCall, TokenStats, ContentBlock, UnifiedToolDefinition } from "../provider/lib/types.js";
+import type { ChatMode, AgentPromptSections } from "../agent/types.js";
 
 export interface LoopMessage {
   role: "user" | "assistant" | "tool" | "system";
@@ -21,42 +9,56 @@ export interface LoopMessage {
   tool_calls?: UnifiedToolCall[];
 }
 
-export type ExecuteToolFn = (
-  name: string,
-  args: Record<string, unknown>,
-) => Promise<ToolResult>;
+export interface LoopResult {
+  messages: LoopMessage[];
+  finalResponse: string;
+  iterations: number;
+}
+
+export interface ToolExecutionResult {
+  content: string;
+  contextContent?: string;
+  isError?: boolean;
+}
+
+export interface ModeRuntimeConfig {
+  promptSections: AgentPromptSections;
+  modeInstruction: string;
+  mcpInstructions: string;
+  toolAccessContext?: string;
+  allTools: UnifiedToolDefinition[];
+}
 
 export interface LoopOptions {
   agentId: string;
   sessionId: string;
   providerId: string;
-  messages: LoopMessage[];
   model: string;
+  messages: LoopMessage[];
+  extraSystemMessages?: string[];
+  modeConfigs: Partial<Record<ChatMode, ModeRuntimeConfig>>;
+  maxIterations: number;
+  activeMode: ChatMode;
+  agentVariables: Record<string, string>;
+  executeTool: (toolName: string, args: Record<string, unknown>, mode: ChatMode) => Promise<ToolExecutionResult>;
   reasoningEffort?: string;
   temperature?: number;
   maxOutputTokens?: number;
-  systemPrompt: string;
-  maxIterations: number;
-  loopMode: AgentLoopMode;
-  phasePrompts: AgentPhasePrompts;
-  mcpInstructions: string;
-  agentVariables: Record<string, string>;
-  extraSystemMessages?: string[];
-  phase: AgentLoopPhase;
-  allTools: ToolDefinition[];
-  executeTool: ExecuteToolFn;
   onContent?: (content: string) => void;
   onReasoning?: (content: string) => void;
   onContentReset?: () => void;
   onRetryNotice?: (message: string) => void;
   onToolCall?: (toolCall: UnifiedToolCall) => void;
-  onToolResult?: (toolCallId: string, result: ToolResult) => void;
-  onLoopState?: (state: AgentLoopState) => void;
+  onToolResult?: (toolCallId: string, result: ToolExecutionResult) => void;
+  onLoopState?: (state: {
+    sessionId: string;
+    agentId: string;
+    status: "idle" | "running" | "completed" | "error";
+    mode: ChatMode;
+    iteration: number;
+    maxIterations: number;
+    startedAt: string;
+    updatedAt: string;
+  }) => void;
   onStats?: (stats: TokenStats) => void;
-}
-
-export interface LoopResult {
-  messages: LoopMessage[];
-  finalResponse: string;
-  iterations: number;
 }

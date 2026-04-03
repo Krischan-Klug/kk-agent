@@ -38,11 +38,12 @@ Hinweis:
 
 ## Wie der Loop funktioniert
 
-Je nach `loopMode` arbeitet der Agent als:
+Je nach `mode` arbeitet der Agent als:
 
 1. `simple` -> direkt `executing`
-2. `plan_execute` -> `planning` -> `executing`
-3. `full_verify` -> `planning` -> `executing` -> interne `verifying`-Phase
+2. `read_only` -> nur `executing` mit read-only Tool-Policy
+3. `verify` -> nur `verifying` mit read-only Verify-Policy
+4. `read_execute_verify` -> `planning` -> `executing` -> `verifying`
 
 Jede Iteration besteht aus:
 

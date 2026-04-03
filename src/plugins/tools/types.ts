@@ -13,6 +13,17 @@ export interface TaskItem {
   notes?: string;
 }
 
+export interface TaskDraft {
+  title: string;
+  notes?: string;
+}
+
+export interface TaskUpdateInput {
+  id: string;
+  title?: string;
+  notes?: string;
+}
+
 export interface MemoryFact {
   id: string;
   text: string;

@@ -1,7 +1,7 @@
-import { homedir } from "node:os";
 import { mkdir, readdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
-import { dirname, extname, relative, resolve } from "node:path";
+import { dirname, extname, resolve, sep } from "node:path";
 import type { McpServerConfig, ToolCallResult } from "../../../mcp/types.js";
+import { getDefaultPathForScope, resolveAccessScope, resolveFilesystemSystemConfig } from "../access-paths.js";
 
 const SEARCH_LIMIT = 50;
 const GREP_RESULT_LIMIT = 50;
@@ -16,15 +16,32 @@ function clamp(text: string, max = CONTENT_LIMIT): string {
   return text.length > max ? `${text.slice(0, max)}\n\n[truncated]` : text;
 }
 
-function getFilesystemRoot(config: McpServerConfig): string {
-  return resolve(config.systemConfig?.rootPath ?? homedir());
+function getFilesystemBasePath(config: McpServerConfig): string {
+  return resolveFilesystemSystemConfig(config.systemConfig).basePath ?? resolve("/");
 }
 
-function resolveWithinRoot(root: string, target?: unknown): string {
-  const base = resolve(root);
-  const candidate = typeof target === "string" && target.trim() ? resolve(base, target) : base;
-  const rel = relative(base, candidate);
-  if (rel.startsWith("..") || rel.includes("..\\") || rel.includes("../")) {
+function getFilesystemAllowedRoot(config: McpServerConfig): string {
+  return getDefaultPathForScope(resolveAccessScope(config.systemConfig?.accessScope));
+}
+
+function normalizeRequestedPath(target: string): string {
+  const trimmed = target.trim();
+  if (/^[\\/][A-Za-z]:[\\/]/.test(trimmed)) {
+    return trimmed.slice(1);
+  }
+  return trimmed;
+}
+
+function resolveWithinRoot(allowedRoot: string, basePath: string, target?: unknown): string {
+  const base = resolve(basePath);
+  const allowedBase = resolve(allowedRoot);
+  const normalizedTarget = typeof target === "string" ? normalizeRequestedPath(target) : target;
+  const candidate = typeof normalizedTarget === "string" && normalizedTarget ? resolve(base, normalizedTarget) : base;
+  const normalizedBase = allowedBase.toLowerCase().endsWith(sep)
+    ? allowedBase.toLowerCase()
+    : `${allowedBase.toLowerCase()}${sep}`;
+  const normalizedCandidate = candidate.toLowerCase();
+  if (normalizedCandidate !== allowedBase.toLowerCase() && !normalizedCandidate.startsWith(normalizedBase)) {
     throw new Error(`Path "${String(target ?? "")}" is outside the allowed root path`);
   }
   return candidate;
@@ -202,10 +219,11 @@ export async function executeFilesystemTool(
   toolName: string,
   args: Record<string, unknown>,
 ): Promise<ToolCallResult | null> {
-  const root = getFilesystemRoot(config);
+  const basePath = getFilesystemBasePath(config);
+  const allowedRoot = getFilesystemAllowedRoot(config);
 
   if (toolName === "read_file") {
-    const path = resolveWithinRoot(root, args.path);
+    const path = resolveWithinRoot(allowedRoot, basePath, args.path);
     const raw = await readFile(path, "utf-8");
     const lines = raw.split("\n");
     const total = lines.length;
@@ -226,7 +244,7 @@ export async function executeFilesystemTool(
   }
 
   if (toolName === "edit_file") {
-    const path = resolveWithinRoot(root, args.path);
+    const path = resolveWithinRoot(allowedRoot, basePath, args.path);
     const oldString = String(args.old_string ?? "");
     const newString = String(args.new_string ?? "");
     if (!oldString) throw new Error("old_string is required");
@@ -247,7 +265,7 @@ export async function executeFilesystemTool(
   }
 
   if (toolName === "write_file") {
-    const path = resolveWithinRoot(root, args.path);
+    const path = resolveWithinRoot(allowedRoot, basePath, args.path);
     await mkdir(dirname(path), { recursive: true });
     await writeFile(path, String(args.content ?? ""), "utf-8");
     return { content: `File written: ${path}`, isError: false };
@@ -256,7 +274,7 @@ export async function executeFilesystemTool(
   if (toolName === "grep") {
     const pattern = String(args.pattern ?? "").trim();
     if (!pattern) throw new Error("pattern is required");
-    const start = resolveWithinRoot(root, args.path);
+    const start = resolveWithinRoot(allowedRoot, basePath, args.path);
     const include = typeof args.include === "string" ? args.include.trim() || undefined : undefined;
 
     const regex = buildRegex(pattern);
@@ -287,7 +305,7 @@ export async function executeFilesystemTool(
   }
 
   if (toolName === "list_directory") {
-    const path = resolveWithinRoot(root, args.path);
+    const path = resolveWithinRoot(allowedRoot, basePath, args.path);
     const recursive = args.recursive === true;
 
     if (!recursive) {
@@ -323,7 +341,7 @@ export async function executeFilesystemTool(
   }
 
   if (toolName === "search_files") {
-    const start = resolveWithinRoot(root, args.path);
+    const start = resolveWithinRoot(allowedRoot, basePath, args.path);
     const pattern = String(args.pattern ?? "").trim();
     if (!pattern) throw new Error("pattern is required");
     const typeFilter = typeof args.type === "string" ? args.type : "all";
@@ -336,7 +354,7 @@ export async function executeFilesystemTool(
   }
 
   if (toolName === "stat_path") {
-    const path = resolveWithinRoot(root, args.path);
+    const path = resolveWithinRoot(allowedRoot, basePath, args.path);
     const info = await stat(path);
     return {
       content: JSON.stringify(
@@ -355,15 +373,15 @@ export async function executeFilesystemTool(
   }
 
   if (toolName === "move_path") {
-    const from = resolveWithinRoot(root, args.from);
-    const to = resolveWithinRoot(root, args.to);
+    const from = resolveWithinRoot(allowedRoot, basePath, args.from);
+    const to = resolveWithinRoot(allowedRoot, basePath, args.to);
     await mkdir(dirname(to), { recursive: true });
     await rename(from, to);
     return { content: `Moved: ${from} → ${to}`, isError: false };
   }
 
   if (toolName === "delete_path") {
-    const path = resolveWithinRoot(root, args.path);
+    const path = resolveWithinRoot(allowedRoot, basePath, args.path);
     await rm(path, { recursive: true, force: false });
     return { content: `Deleted: ${path}`, isError: false };
   }

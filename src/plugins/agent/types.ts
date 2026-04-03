@@ -1,80 +1,83 @@
-/* ── Agent Definition (persisted) ── */
-
 export type ReasoningEffort = string;
-export type AgentLoopMode = "simple" | "plan_execute" | "full_verify";
-export type AgentLoopPhase = "planning" | "executing" | "verifying" | "completed" | "error";
+export type ChatMode = "plan" | "edit";
+export type ToolAccessScope = "user" | "system";
 
-export interface AgentPhasePrompts {
-  planning?: string;
-  executing?: string;
-  verifying?: string;
+export interface AgentPromptSections {
+  identity: string;
+  system: string;
+  riskyActions: string;
+  toolUsage: string;
+  communication: string;
+}
+
+export interface AgentModeConfig {
+  promptSections: AgentPromptSections;
+  modeInstruction: string;
+  toolIds: string[];
+  mcpIds: string[];
+  toolAccessScopes: Record<string, ToolAccessScope>;
+  toolInstructions: Record<string, string>;
+  mcpInstructions: Record<string, string>;
+  allowedToolNames: string[];
+}
+
+export interface AgentModeConfigPatch {
+  promptSections?: Partial<AgentPromptSections>;
+  modeInstruction?: string;
+  toolIds?: string[];
+  mcpIds?: string[];
+  toolAccessScopes?: Record<string, ToolAccessScope>;
+  toolInstructions?: Record<string, string>;
+  mcpInstructions?: Record<string, string>;
+  allowedToolNames?: string[];
 }
 
 export interface AgentDefinition {
   id: string;
   name: string;
   description: string;
-  systemPrompt: string;
+  defaultChatMode: ChatMode;
+  modeConfigs: Record<ChatMode, AgentModeConfig>;
   maxIterations: number;
-  toolIds: string[];
-  mcpIds: string[];
-  toolInstructions: Record<string, string>;
-  mcpInstructions: Record<string, string>;
   variables: Record<string, string>;
   defaultModel?: string;
   reasoningEffort?: ReasoningEffort;
   temperature?: number;
-  loopMode: AgentLoopMode;
-  phasePrompts: AgentPhasePrompts;
   createdAt: string;
   updatedAt: string;
 }
-
-/* ── Runtime Loop State (in-memory) ── */
 
 export interface AgentLoopState {
   sessionId: string;
   agentId: string;
   status: "idle" | "running" | "completed" | "error";
-  phase: AgentLoopPhase;
+  mode: ChatMode;
   iteration: number;
   maxIterations: number;
   startedAt: string;
   updatedAt: string;
 }
 
-/* ── API Bodies ── */
-
 export interface CreateAgentBody {
   name: string;
   description?: string;
-  systemPrompt?: string;
+  defaultChatMode?: ChatMode;
+  modeConfigs?: Partial<Record<ChatMode, AgentModeConfigPatch>>;
   maxIterations?: number;
-  toolIds?: string[];
-  mcpIds?: string[];
-  toolInstructions?: Record<string, string>;
-  mcpInstructions?: Record<string, string>;
   variables?: Record<string, string>;
   defaultModel?: string;
   reasoningEffort?: ReasoningEffort;
   temperature?: number;
-  loopMode?: AgentLoopMode;
-  phasePrompts?: AgentPhasePrompts;
 }
 
 export interface UpdateAgentBody {
   name?: string;
   description?: string;
-  systemPrompt?: string;
+  defaultChatMode?: ChatMode;
+  modeConfigs?: Partial<Record<ChatMode, AgentModeConfigPatch>>;
   maxIterations?: number;
-  toolIds?: string[];
-  mcpIds?: string[];
-  toolInstructions?: Record<string, string>;
-  mcpInstructions?: Record<string, string>;
   variables?: Record<string, string>;
   defaultModel?: string;
   reasoningEffort?: ReasoningEffort;
   temperature?: number;
-  loopMode?: AgentLoopMode;
-  phasePrompts?: AgentPhasePrompts;
 }

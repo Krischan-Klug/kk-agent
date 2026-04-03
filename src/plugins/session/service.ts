@@ -1,19 +1,18 @@
 import type { SessionState, CreateSessionBody, SSEEvent } from "./types.js";
 import type { AttachmentDisplayMeta } from "./lib/attachment-types.js";
+import type { ContentBlock, UnifiedToolDefinition } from "../provider/lib/types.js";
 import * as store from "./lib/store.js";
 import { clearSessionAttachments, getSessionAttachmentsByIds, readAttachmentData } from "./lib/attachments.js";
-import { buildCapabilityInstructions, buildPrompt, getSystemVariables } from "../systemprompt/service.js";
-import { getActiveProviderId, resolveProviderModel, getModelCapabilities } from "../provider/service.js";
-import type { ContentBlock } from "../provider/lib/types.js";
-import { getToolDefinitions, executeTool, getKnownMcpIds, getRunnableMcpIds } from "../mcp/service.js";
+import { buildPrompt, getSystemVariables } from "../systemprompt/service.js";
+import { getActiveProviderId, getModelCapabilities } from "../provider/service.js";
+import { getToolDefinitions, executeTool } from "../mcp/service.js";
 import {
-  executeSystemToolByName,
-  getKnownSystemMcpIds,
-  getRunnableSystemMcpIds,
-  getSystemToolDefinitionsForActive,
+  buildResolvedSystemToolRuntime,
+  executeSystemToolForId,
+  type ResolvedSystemToolTarget,
 } from "../tools/service.js";
 import { runLoop } from "../loop/service.js";
-import type { LoopMessage } from "../loop/types.js";
+import type { LoopMessage, ModeRuntimeConfig } from "../loop/types.js";
 import { getAgent, setLoopState, clearLoopState } from "../agent/service.js";
 import { getDefaults } from "../lib/defaults.js";
 import { clearSessionFacts, clearTasks } from "../tools/service.js";
@@ -30,45 +29,105 @@ import {
 } from "./lib/message-state.js";
 import {
   buildRunnableMcpInstructions,
-  resolveSessionMcpIds,
-  resolveSessionToolIds,
-  sanitizeMcpIds,
-  sanitizeToolIds,
 } from "./lib/tool-selection.js";
 import { resolveReasoningConfig, resolveSessionDefaults } from "./lib/session-resolution.js";
+import { getChatModes } from "../agent/lib/modes.js";
+import { getModeConfig } from "../agent/lib/mode-config.js";
+import type { AgentDefinition, ChatMode } from "../agent/types.js";
 
-function getCombinedToolDefinitions(activeToolIds: string[], activeMcpIds: string[]) {
-  return [...getSystemToolDefinitionsForActive(activeToolIds), ...getToolDefinitions(activeMcpIds)];
+function intersectIds(sessionIds: string[], modeIds: string[]): string[] {
+  const sessionSet = new Set(sessionIds);
+  return modeIds.filter((id) => sessionSet.has(id));
 }
 
-async function executeCombinedTool(toolName: string, args: Record<string, unknown>) {
-  const systemResult = await executeSystemToolByName(toolName, args);
-  if (systemResult) return systemResult;
+function filterAllowedTools(tools: UnifiedToolDefinition[], allowedToolNames: string[]): UnifiedToolDefinition[] {
+  const allowed = new Set(allowedToolNames);
+  return tools.filter((tool) => allowed.has(tool.name));
+}
+
+function getCombinedToolDefinitions(systemTools: UnifiedToolDefinition[], activeMcpIds: string[], allowedToolNames: string[]) {
+  const filteredSystemTools = filterAllowedTools(systemTools, allowedToolNames);
+  const mcpTools = getToolDefinitions(activeMcpIds);
+  return [...filteredSystemTools, ...mcpTools];
+}
+
+interface SessionModeRuntimeConfig extends ModeRuntimeConfig {
+  allowedToolNames: string[];
+  toolTargetsByName: Record<string, ResolvedSystemToolTarget>;
+}
+
+async function executeCombinedTool(
+  toolName: string,
+  args: Record<string, unknown>,
+  modeRuntimeConfig: SessionModeRuntimeConfig,
+  mode: ChatMode,
+) {
+  if (modeRuntimeConfig.toolTargetsByName[toolName] && !modeRuntimeConfig.allowedToolNames.includes(toolName)) {
+    return { content: `Tool "${toolName}" ist im Mode "${mode}" nicht erlaubt.`, isError: true };
+  }
+  const systemTarget = modeRuntimeConfig.toolTargetsByName[toolName];
+  if (systemTarget) {
+    const systemResult = await executeSystemToolForId(systemTarget.toolId, toolName, args, systemTarget.accessScope);
+    if (systemResult) return systemResult;
+  }
   return executeTool(toolName, args);
+}
+
+function buildModeRuntimeConfig(
+  session: Pick<SessionState, "activeToolIds" | "activeMcpIds" | "model">,
+  agent: AgentDefinition,
+  mode: ChatMode,
+): SessionModeRuntimeConfig {
+  const config = getModeConfig(agent, mode);
+  const activeToolIds = intersectIds(session.activeToolIds, config.toolIds);
+  const activeMcpIds = intersectIds(session.activeMcpIds, config.mcpIds);
+  const systemToolRuntime = buildResolvedSystemToolRuntime(
+    activeToolIds,
+    config.toolAccessScopes,
+    config.toolInstructions,
+  );
+  const effectiveInstructions = {
+    ...systemToolRuntime.instructionsById,
+    ...config.mcpInstructions,
+  };
+
+  return {
+    promptSections: config.promptSections,
+    modeInstruction: config.modeInstruction,
+    mcpInstructions: buildRunnableMcpInstructions(
+      activeToolIds,
+      activeMcpIds,
+      effectiveInstructions,
+    ),
+    toolAccessContext: systemToolRuntime.toolAccessContext,
+    allTools: getCombinedToolDefinitions(systemToolRuntime.toolDefinitions, activeMcpIds, config.allowedToolNames),
+    allowedToolNames: config.allowedToolNames,
+    toolTargetsByName: systemToolRuntime.toolTargetsByName,
+  };
 }
 
 function buildCurrentSystemPrompt(
   sessionId: string,
-  session: Pick<SessionState, "activeToolIds" | "activeMcpIds" | "systemPrompt" | "model">,
-  agent: ReturnType<typeof getAgent>,
+  session: Pick<SessionState, "activeToolIds" | "activeMcpIds" | "activeMode" | "model">,
+  agent: AgentDefinition,
 ): string {
-  const mcpInstr = buildRunnableMcpInstructions(
-    session.activeToolIds,
-    session.activeMcpIds,
-    { ...agent.toolInstructions, ...agent.mcpInstructions },
-  );
-
+  const modeRuntimeConfig = buildModeRuntimeConfig(session, agent, session.activeMode);
   const variables: Record<string, string> = {
     ...getSystemVariables({ CURRENT_MODEL: session.model }),
-    mcpInstructions: mcpInstr,
     ...agent.variables,
   };
 
-  return buildPrompt(session.systemPrompt, mcpInstr, variables, {
-    sessionId,
-    phase: "executing",
-    phasePrompt: agent.phasePrompts.executing,
-  });
+  return buildPrompt(
+    modeRuntimeConfig.promptSections,
+    modeRuntimeConfig.modeInstruction,
+    modeRuntimeConfig.mcpInstructions,
+    variables,
+    {
+      sessionId,
+      mode: session.activeMode,
+      toolAccessContext: modeRuntimeConfig.toolAccessContext,
+    },
+  );
 }
 
 function formatAttachmentSize(bytes: number): string {
@@ -84,9 +143,9 @@ export async function createSession(body: CreateSessionBody): Promise<SessionSta
     agentId: body.agentId,
     providerId: defaults.providerId,
     model: defaults.model,
+    activeMode: defaults.activeMode,
     activeToolIds: defaults.activeToolIds,
     activeMcpIds: defaults.activeMcpIds,
-    systemPrompt: agent.systemPrompt,
     reasoningEffort: defaults.reasoningEffort,
     temperature: defaults.temperature,
   });
@@ -159,7 +218,7 @@ async function prepareLoopRun(sessionId: string, message: string, attachmentIds?
         [
           "",
           "[Chat attachments]",
-          "Use the attachment tool for uploaded files from this session instead of searching the main filesystem.",
+          "Nutze fuer hochgeladene Dateien das Attachment-Tool statt die Hauptdateiablage.",
           ...attachmentHints,
         ].join("\n"),
       );
@@ -185,7 +244,7 @@ async function prepareLoopRun(sessionId: string, message: string, attachmentIds?
   }
 
   const userMessage: SessionState["messages"][number] = {
-    role: "user" as const,
+    role: "user",
     content: message,
     ...(attachmentsMeta?.length ? { attachments: attachmentsMeta } : {}),
   };
@@ -193,19 +252,18 @@ async function prepareLoopRun(sessionId: string, message: string, attachmentIds?
   const messages = [...session.messages, userMessage];
   store.updateSession(sessionId, { messages });
 
+  const modeRuntimeConfigs = Object.fromEntries(
+    getChatModes().map((mode) => [mode, buildModeRuntimeConfig(session, agent, mode)]),
+  ) as Partial<Record<ChatMode, SessionModeRuntimeConfig>>;
+
   return {
     session,
     agent,
     messages,
     userContent,
     extraSystemMessages,
-    tools: getCombinedToolDefinitions(session.activeToolIds, session.activeMcpIds),
+    modeRuntimeConfigs,
     reasoning: resolveReasoningConfig(session),
-    mcpInstructions: buildRunnableMcpInstructions(
-      session.activeToolIds,
-      session.activeMcpIds,
-      { ...agent.toolInstructions, ...agent.mcpInstructions },
-    ),
   };
 }
 
@@ -228,9 +286,8 @@ function finalizeLoopSession(
 function buildLoopRequest(
   prepared: Awaited<ReturnType<typeof prepareLoopRun>>,
   sessionId: string,
-  handlers: Parameters<typeof runLoop>[0] extends infer T ? Partial<T> : never = {},
+  handlers: Partial<Parameters<typeof runLoop>[0]> = {},
 ) {
-  // Build loop messages, substituting the last visible user message with provider-facing content.
   const loopMessages = toLoopMessages(prepared.messages);
   if (loopMessages.length > 0) {
     for (let i = loopMessages.length - 1; i >= 0; i--) {
@@ -251,15 +308,17 @@ function buildLoopRequest(
     reasoningEffort: prepared.reasoning.reasoningEffort,
     temperature: prepared.reasoning.temperature,
     maxOutputTokens: prepared.reasoning.maxOutputTokens,
-    systemPrompt: prepared.session.systemPrompt,
+    modeConfigs: prepared.modeRuntimeConfigs,
     maxIterations: prepared.agent.maxIterations,
-    loopMode: prepared.agent.loopMode,
-    phasePrompts: prepared.agent.phasePrompts ?? {},
-    mcpInstructions: prepared.mcpInstructions,
+    activeMode: prepared.session.activeMode,
     agentVariables: prepared.agent.variables ?? {},
-    phase: prepared.agent.loopMode === "simple" ? "executing" as const : "planning" as const,
-    allTools: prepared.tools,
-    executeTool: executeCombinedTool,
+    executeTool: (toolName: string, args: Record<string, unknown>, mode: ChatMode) =>
+      executeCombinedTool(
+        toolName,
+        args,
+        prepared.modeRuntimeConfigs[mode] as SessionModeRuntimeConfig,
+        mode,
+      ),
     ...handlers,
   };
 }
@@ -270,7 +329,7 @@ export async function chat(
   attachmentIds?: string[],
 ): Promise<{ response: string; session: SessionState }> {
   const prepared = await prepareLoopRun(sessionId, message, attachmentIds);
-  const result = await runLoop(buildLoopRequest(prepared, sessionId));
+  const result = await runWithSessionId(sessionId, () => runLoop(buildLoopRequest(prepared, sessionId)));
   return {
     response: result.finalResponse,
     session: finalizeLoopSession(sessionId, prepared.session, prepared.messages, result.messages, result.finalResponse),
@@ -300,7 +359,7 @@ export async function chatStream(
         onContent: (content) => emit({ type: "content", content }),
         onReasoning: (content) => emit({ type: "reasoning", content }),
         onContentReset: () => emit({ type: "content_reset" }),
-        onRetryNotice: (message) => emit({ type: "retry_notice", message }),
+        onRetryNotice: (messageText) => emit({ type: "retry_notice", message: messageText }),
         onToolCall: (tc) =>
           emit({ type: "tool_call", toolCall: { id: tc.id, name: tc.name, arguments: tc.arguments } }),
         onToolResult: (toolCallId, result) =>
@@ -319,69 +378,63 @@ export async function chatStream(
           }),
       })),
     );
-    const updatedSession = finalizeLoopSession(
-      sessionId,
-      prepared.session,
-      prepared.messages,
-      result.messages,
-      result.finalResponse,
-    );
-    emit({ type: "done", session: updatedSession });
-  } catch (err) {
-    emit({ type: "error", message: (err as Error).message });
+
+    const updated = finalizeLoopSession(sessionId, prepared.session, prepared.messages, result.messages, result.finalResponse);
+    emit({ type: "done", session: updated });
   } finally {
     unregisterSession(sessionId);
   }
 }
 
-export async function patchSession(
-  id: string,
-  update: {
-    agentId?: string;
-    model?: string;
-    activeToolIds?: string[];
-    activeMcpIds?: string[];
-    reasoningEffort?: string;
-    temperature?: number;
-  },
-): Promise<SessionState> {
+export async function updateSession(id: string, body: Partial<CreateSessionBody>): Promise<SessionState> {
   const session = getSession(id);
-  const patch: Partial<SessionState> = {};
+  const nextAgentId = body.agentId ?? session.agentId;
+  const agent = getAgent(nextAgentId);
+  const defaults = await resolveSessionDefaults(
+    agent,
+    {
+      activeToolIds: body.activeToolIds,
+      activeMcpIds: body.activeMcpIds,
+      activeMode: body.activeMode ?? session.activeMode,
+      model: body.model ?? session.model,
+      reasoningEffort: body.reasoningEffort ?? session.reasoningEffort,
+      temperature: body.temperature ?? session.temperature,
+    },
+    body.agentId ? getActiveProviderId() : session.providerId,
+  );
 
-  if (update.agentId !== undefined) {
-    const agent = getAgent(update.agentId);
-    const defaults = await resolveSessionDefaults(agent, update, session.providerId);
-    patch.agentId = update.agentId;
-    patch.systemPrompt = agent.systemPrompt;
-    if (update.activeToolIds === undefined) patch.activeToolIds = defaults.activeToolIds;
-    if (update.activeMcpIds === undefined) patch.activeMcpIds = defaults.activeMcpIds;
-    if (update.model === undefined) patch.model = defaults.model;
-    if (update.reasoningEffort === undefined) patch.reasoningEffort = defaults.reasoningEffort;
-    if (update.temperature === undefined) patch.temperature = defaults.temperature;
-  }
+  const patch: Partial<SessionState> = {
+    agentId: nextAgentId,
+    providerId: defaults.providerId,
+    model: defaults.model,
+    activeMode: defaults.activeMode,
+    activeToolIds: defaults.activeToolIds,
+    activeMcpIds: defaults.activeMcpIds,
+    reasoningEffort: defaults.reasoningEffort,
+    temperature: defaults.temperature,
+  };
 
-  if (update.model) {
-    const selection = await resolveProviderModel(session.providerId, update.model);
-    patch.providerId = selection.providerId;
-    patch.model = selection.model;
-  }
-  if (update.activeToolIds !== undefined) patch.activeToolIds = sanitizeToolIds(update.activeToolIds);
-  if (update.activeMcpIds !== undefined) patch.activeMcpIds = sanitizeMcpIds(update.activeMcpIds);
-  if (update.reasoningEffort !== undefined) patch.reasoningEffort = update.reasoningEffort as SessionState["reasoningEffort"];
-  if (update.temperature !== undefined) patch.temperature = update.temperature;
   return store.updateSession(id, patch);
+}
+
+export async function patchSession(id: string, body: Partial<CreateSessionBody>): Promise<SessionState> {
+  return updateSession(id, body);
 }
 
 export function removeMcpFromSessions(mcpId: string): void {
   for (const session of listSessions()) {
     if (!session.activeMcpIds.includes(mcpId)) continue;
-    store.updateSession(session.id, { activeMcpIds: session.activeMcpIds.filter((id) => id !== mcpId) });
+    store.updateSession(session.id, {
+      activeMcpIds: session.activeMcpIds.filter((entry) => entry !== mcpId),
+    });
   }
 }
 
 export function removeToolFromSessions(toolId: string): void {
   for (const session of listSessions()) {
     if (!session.activeToolIds.includes(toolId)) continue;
-    store.updateSession(session.id, { activeToolIds: session.activeToolIds.filter((id) => id !== toolId) });
+    store.updateSession(session.id, {
+      activeToolIds: session.activeToolIds.filter((entry) => entry !== toolId),
+    });
   }
 }

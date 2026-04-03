@@ -160,7 +160,7 @@ export default function ChatPage() {
       <ChatMessages
         session={sessionData.session}
         currentAgentName={sessionData.currentAgentName}
-        mcps={sessionData.mcps}
+        mcps={[...sessionData.toolMcps, ...sessionData.mcps]}
         streaming={streaming.streaming}
         streamContent={streaming.streamContent}
         streamReasoning={streaming.streamReasoning}

@@ -22,6 +22,8 @@ const InputArea = styled.div`
 `;
 
 const Composer = styled.div<{ $dragOver?: boolean }>`
+  position: relative;
+  z-index: 1;
   width: 100%;
   background: var(--bg-elevated);
   border: 1px solid ${(p) => (p.$dragOver ? "var(--accent)" : "var(--border)")};
@@ -34,19 +36,26 @@ const Composer = styled.div<{ $dragOver?: boolean }>`
 const ComposerLayout = styled.div`
   width: 100%;
   display: grid;
-  grid-template-columns: max-content minmax(0, 900px) 280px;
+  grid-template-columns: max-content minmax(0, 900px);
   justify-content: center;
   align-items: end;
   gap: 6px;
   padding: 0 var(--space-md);
 
   @media (max-width: 1360px) {
-    grid-template-columns: max-content minmax(0, 900px) 240px;
+    grid-template-columns: max-content minmax(0, 900px);
   }
 
   @media (max-width: 1180px) {
     grid-template-columns: 1fr;
   }
+`;
+
+const ComposerStack = styled.div`
+  position: relative;
+  width: 100%;
+  display: flex;
+  align-items: flex-end;
 `;
 
 const ModeStrip = styled.div`
@@ -96,17 +105,24 @@ const ModeButton = styled.button<{ $active: boolean; $mode: ChatMode }>`
   }
 `;
 
-const TasksCard = styled.div`
-  width: 100%;
+const TasksDrawer = styled.div<{ $open: boolean }>`
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: calc(100% - 18px);
+  z-index: 0;
   display: flex;
   flex-direction: column;
   gap: 10px;
-  padding: 10px 12px;
+  padding: 14px 14px 30px;
   background: color-mix(in srgb, var(--bg-elevated) 88%, white 12%);
   border: 1px solid var(--border);
-  border-radius: 14px;
+  border-radius: 18px 18px 0 0;
   box-shadow: 0 8px 18px rgba(0, 0, 0, 0.08);
-  align-self: end;
+  transform: translateY(${(p) => (p.$open ? "0" : "18px")});
+  opacity: ${(p) => (p.$open ? 1 : 0)};
+  pointer-events: ${(p) => (p.$open ? "auto" : "none")};
+  transition: transform 0.2s ease, opacity 0.2s ease;
 `;
 
 const TasksHeader = styled.div`
@@ -125,6 +141,13 @@ const TasksTitle = styled.div`
   color: var(--text-muted);
 `;
 
+const TasksHeaderActions = styled.div`
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+`;
+
 const ModeBadge = styled.div<{ $mode: ChatMode }>`
   display: inline-flex;
   align-items: center;
@@ -140,6 +163,25 @@ const ModeBadge = styled.div<{ $mode: ChatMode }>`
   color: var(--text-primary);
   font-size: 12px;
   font-weight: 600;
+`;
+
+const TasksToggleButton = styled.button<{ $active: boolean }>`
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid ${(p) => (p.$active ? "var(--accent)" : "var(--border)")};
+  background: ${(p) => (p.$active ? "var(--accent-muted)" : "var(--bg-elevated)")};
+  color: ${(p) => (p.$active ? "var(--accent)" : "var(--text-secondary)")};
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+
+  &:hover {
+    border-color: var(--accent);
+    color: var(--accent);
+  }
 `;
 
 const TasksList = styled.div`
@@ -165,18 +207,19 @@ const TaskStatusDot = styled.span<{ $status: TaskItem["status"] }>`
   border-radius: 50%;
   flex-shrink: 0;
   background: ${({ $status }) => (
-    $status === "completed" ? "var(--success)"
-      : $status === "in_progress" ? "var(--warning)"
+    $status === "in_progress" ? "var(--success)"
+      : $status === "pending" ? "var(--warning)"
         : "var(--text-muted)"
   )};
   margin-top: 6px;
 `;
 
-const TaskText = styled.span`
+const TaskText = styled.span<{ $status: TaskItem["status"] }>`
   display: block;
   font-size: 13px;
   font-weight: 600;
   line-height: 1.35;
+  text-decoration: ${(p) => (p.$status === "completed" ? "line-through" : "none")};
 `;
 
 const TaskNotes = styled.span`
@@ -211,6 +254,7 @@ const ComposerActions = styled.div`
   display: flex;
   align-items: center;
   gap: var(--space-sm);
+  flex-wrap: wrap;
 `;
 
 const ControlGroup = styled.div`
@@ -403,6 +447,7 @@ export default function ChatComposer({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const textAreaRef = useRef<HTMLTextAreaElement>(null);
   const [dragOver, setDragOver] = useState(false);
+  const [tasksOpen, setTasksOpen] = useState(true);
 
   const canSend = !sending && (input.trim().length > 0 || pendingAttachments.length > 0);
 
@@ -475,118 +520,132 @@ export default function ChatComposer({
             </ModeButton>
           ))}
         </ModeStrip>
-        <Composer
-          $dragOver={dragOver}
-          onDragOver={handleDragOver}
-          onDragEnter={handleDragOver}
-          onDragLeave={handleDragLeave}
-          onDrop={handleDrop}
-        >
-          <ComposerInputWrap>
-            <ChatInput
-              ref={textAreaRef}
-              value={input}
-              onChange={(e) => onInputChange(e.target.value)}
-              onKeyDown={onKeyDown}
-              onPaste={handlePaste}
-              placeholder="Nachricht eingeben..."
-              disabled={sending}
-              rows={1}
-              aria-label="Chat-Nachricht"
-            />
-          </ComposerInputWrap>
-          <AttachmentPreview attachments={pendingAttachments} onRemove={onRemoveAttachment} />
-          <ComposerFooter>
-            <ComposerMeta>
-              {showReasoningControl && (
-                <ControlGroup>
-                  <ControlEmoji>🧠</ControlEmoji>
-                  <SelectMenu
-                    value={resolvedEffort}
-                    options={reasoningOptions}
-                    onSelect={onReasoningSelect}
-                    direction="up"
-                    variant="neutral"
-                  />
-                </ControlGroup>
+        <ComposerStack>
+          {(tasks.length > 0 || loopState) && (
+            <TasksDrawer $open={tasksOpen}>
+              <TasksHeader>
+                <TasksTitle>Tasks</TasksTitle>
+                <TasksHeaderActions>
+                  {loopState && (
+                    <ModeBadge $mode={loopState.mode}>
+                      {formatModeLabel(loopState.mode)}
+                      <span>{loopState.iteration}/{loopState.maxIterations}</span>
+                    </ModeBadge>
+                  )}
+                </TasksHeaderActions>
+              </TasksHeader>
+              {tasks.length > 0 && (
+                <TasksList>
+                  {tasks.map((task) => (
+                    <TaskRow key={task.id} $status={task.status} title={task.notes ? `${task.title} - ${task.notes}` : task.title}>
+                      <TaskStatusDot $status={task.status} />
+                      <div>
+                        <TaskText $status={task.status}>{task.title}</TaskText>
+                        {task.notes && <TaskNotes>{task.notes}</TaskNotes>}
+                      </div>
+                    </TaskRow>
+                  ))}
+                </TasksList>
               )}
-              {showTemperatureControl && (
-                <ControlGroup>
-                  <ControlEmoji>🔥</ControlEmoji>
-                  <SelectMenu
-                    value={resolvedTemp.toFixed(1)}
-                    options={temperatureOptions}
-                    onSelect={onTemperatureSelect}
-                    direction="up"
-                    variant="neutral"
-                  />
-                </ControlGroup>
-              )}
-              {agents.length > 0 && (
-                <AgentSelect agents={agents} currentAgentId={currentAgentId} onSelect={onAgentSwitch} direction="up" />
-              )}
-            </ComposerMeta>
-            <ComposerActions>
-              {maxCtx > 0 && tokenStats && (
-                <ContextIndicator
-                  title={`Input: ${tokenStats.input.toLocaleString()} | Output: ${tokenStats.output.toLocaleString()} | Reasoning: ${tokenStats.reasoning.toLocaleString()}`}
-                >
-                  <ContextRing used={tokenStats.input} max={maxCtx} />
-                  <span>{formatTokens(tokenStats.input)} / {formatTokens(maxCtx)}</span>
-                </ContextIndicator>
-              )}
-              <HiddenFileInput
-                ref={fileInputRef}
-                type="file"
-                multiple
-                accept={ACCEPTED_FILES}
-                onChange={(e) => {
-                  if (e.target.files && e.target.files.length > 0) {
-                    onFilesSelected(e.target.files);
-                    e.target.value = "";
-                  }
-                }}
-              />
-              <AttachIconButton
-                onClick={() => fileInputRef.current?.click()}
+            </TasksDrawer>
+          )}
+          <Composer
+            $dragOver={dragOver}
+            onDragOver={handleDragOver}
+            onDragEnter={handleDragOver}
+            onDragLeave={handleDragLeave}
+            onDrop={handleDrop}
+          >
+            <ComposerInputWrap>
+              <ChatInput
+                ref={textAreaRef}
+                value={input}
+                onChange={(e) => onInputChange(e.target.value)}
+                onKeyDown={onKeyDown}
+                onPaste={handlePaste}
+                placeholder="Nachricht eingeben..."
                 disabled={sending}
-                aria-label="Datei anhaengen"
-                title="Datei anhaengen"
-              >
-                +
-              </AttachIconButton>
-              <SendIconButton onClick={onSend} disabled={!canSend} aria-label="Nachricht senden">
-                ^
-              </SendIconButton>
-            </ComposerActions>
-          </ComposerFooter>
-        </Composer>
-        {(tasks.length > 0 || loopState) && (
-          <TasksCard>
-            <TasksHeader>
-              <TasksTitle>Tasks</TasksTitle>
-              {loopState && (
-                <ModeBadge $mode={loopState.mode}>
-                  {formatModeLabel(loopState.mode)}
-                  <span>{loopState.iteration}/{loopState.maxIterations}</span>
-                </ModeBadge>
-              )}
-            </TasksHeader>
-            {tasks.length > 0 && (
-              <TasksList>
-                {tasks.map((task) => (
-                  <TaskRow key={task.id} $status={task.status} title={task.notes ? `${task.title} - ${task.notes}` : task.title}>
-                    <TaskStatusDot $status={task.status} />
-                    <div>
-                      <TaskText>{task.title}</TaskText>
-                      {task.notes && <TaskNotes>{task.notes}</TaskNotes>}
-                    </div>
-                  </TaskRow>
-                ))}
-              </TasksList>
-            )}
-          </TasksCard>
-        )}
+                rows={1}
+                aria-label="Chat-Nachricht"
+              />
+            </ComposerInputWrap>
+            <AttachmentPreview attachments={pendingAttachments} onRemove={onRemoveAttachment} />
+            <ComposerFooter>
+              <ComposerMeta>
+                {showReasoningControl && (
+                  <ControlGroup>
+                    <ControlEmoji>🧠</ControlEmoji>
+                    <SelectMenu
+                      value={resolvedEffort}
+                      options={reasoningOptions}
+                      onSelect={onReasoningSelect}
+                      direction="up"
+                      variant="neutral"
+                    />
+                  </ControlGroup>
+                )}
+                {showTemperatureControl && (
+                  <ControlGroup>
+                    <ControlEmoji>🔥</ControlEmoji>
+                    <SelectMenu
+                      value={resolvedTemp.toFixed(1)}
+                      options={temperatureOptions}
+                      onSelect={onTemperatureSelect}
+                      direction="up"
+                      variant="neutral"
+                    />
+                  </ControlGroup>
+                )}
+                {agents.length > 0 && (
+                  <AgentSelect agents={agents} currentAgentId={currentAgentId} onSelect={onAgentSwitch} direction="up" />
+                )}
+              </ComposerMeta>
+              <ComposerActions>
+                {(tasks.length > 0 || loopState) && (
+                  <TasksToggleButton
+                    type="button"
+                    $active={tasksOpen}
+                    onClick={() => setTasksOpen((previous) => !previous)}
+                  >
+                    <span>Tasks</span>
+                    {tasks.length > 0 && <span>{tasks.length}</span>}
+                  </TasksToggleButton>
+                )}
+                {maxCtx > 0 && tokenStats && (
+                  <ContextIndicator
+                    title={`Input: ${tokenStats.input.toLocaleString()} | Output: ${tokenStats.output.toLocaleString()} | Reasoning: ${tokenStats.reasoning.toLocaleString()}`}
+                  >
+                    <ContextRing used={tokenStats.input} max={maxCtx} />
+                    <span>{formatTokens(tokenStats.input)} / {formatTokens(maxCtx)}</span>
+                  </ContextIndicator>
+                )}
+                <HiddenFileInput
+                  ref={fileInputRef}
+                  type="file"
+                  multiple
+                  accept={ACCEPTED_FILES}
+                  onChange={(e) => {
+                    if (e.target.files && e.target.files.length > 0) {
+                      onFilesSelected(e.target.files);
+                      e.target.value = "";
+                    }
+                  }}
+                />
+                <AttachIconButton
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={sending}
+                  aria-label="Datei anhaengen"
+                  title="Datei anhaengen"
+                >
+                  +
+                </AttachIconButton>
+                <SendIconButton onClick={onSend} disabled={!canSend} aria-label="Nachricht senden">
+                  ^
+                </SendIconButton>
+              </ComposerActions>
+            </ComposerFooter>
+          </Composer>
+        </ComposerStack>
       </ComposerLayout>
     </InputArea>
   );

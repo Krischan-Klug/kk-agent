@@ -32,7 +32,7 @@ export default function ToolCallCards({ mcps, toolCalls }: Props) {
         <ToolLabel>{toolCall.name}</ToolLabel>
         {toolCall.result ? (
           <Badge variant={toolCall.result.isError ? "danger" : "success"}>
-            {toolCall.result.isError ? "Fehler" : "Fertig"}
+            {toolCall.result.isError ? "Failed" : "Fertig"}
           </Badge>
         ) : (
           <Spinner size={12} />

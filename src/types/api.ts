@@ -35,6 +35,7 @@ export interface AttachmentDisplayMeta {
 export interface SessionMessage {
   role: "user" | "assistant" | "tool" | "system";
   content: string;
+  isError?: boolean;
   reasoning?: string;
   tool_call_id?: string;
   tool_calls?: ToolCall[];

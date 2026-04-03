@@ -38,7 +38,7 @@ export function groupMessages(messages: SessionMessage[]): MessageGroup[] {
         while (i < messages.length && messages[i].role === "tool") {
           const toolMessage = messages[i];
           if (toolMessage.tool_call_id) {
-            toolResults.set(toolMessage.tool_call_id, { content: toolMessage.content, isError: false });
+            toolResults.set(toolMessage.tool_call_id, { content: toolMessage.content, isError: toolMessage.isError === true });
           }
           i++;
         }

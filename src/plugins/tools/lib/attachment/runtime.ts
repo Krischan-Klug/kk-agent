@@ -4,12 +4,6 @@ import type { StoredAttachment } from "../../../session/lib/attachment-types.js"
 import { getCurrentSessionId } from "../user-interaction/interaction-store.js";
 
 const READ_LINE_LIMIT = 200;
-const CONTENT_LIMIT = 12000;
-
-function clamp(text: string, max = CONTENT_LIMIT): string {
-  return text.length > max ? `${text.slice(0, max)}\n\n[truncated]` : text;
-}
-
 function formatSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
@@ -32,18 +26,16 @@ function renderTextAttachment(attachment: StoredAttachment, rawText: string, off
   const width = String(endLine).length;
   const numbered = slice.map((line, index) => `${String(safeOffset + index).padStart(width)}\t${line}`).join("\n");
   const footer = safeOffset === 1 && endLine >= total ? "" : `\n\n[Lines ${safeOffset}-${endLine} of ${total}]`;
-  return clamp(
-    [
-      `Attachment: ${attachment.filename}`,
-      `Id: ${attachment.id}`,
-      `Type: ${attachment.category}`,
-      `Size: ${formatSize(attachment.size)}`,
-      `Stored path: ${attachment.storedPath}`,
-      "",
-      numbered,
-      footer,
-    ].join("\n"),
-  );
+  return [
+    `Attachment: ${attachment.filename}`,
+    `Id: ${attachment.id}`,
+    `Type: ${attachment.category}`,
+    `Size: ${formatSize(attachment.size)}`,
+    `Stored path: ${attachment.storedPath}`,
+    "",
+    numbered,
+    footer,
+  ].join("\n");
 }
 
 export async function executeAttachmentTool(

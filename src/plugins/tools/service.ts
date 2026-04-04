@@ -1,10 +1,17 @@
 import type { UnifiedToolDefinition } from "../provider/lib/types.js";
-import type { AccessScope, McpServerConfig, McpToolDefinition, ToolCallResult, UpdateMcpBody } from "../mcp/types.js";
+import type {
+  AccessScope,
+  McpServerConfig,
+  McpToolDefinition,
+  ToolCallResult,
+  ToolResultPolicy,
+  UpdateMcpBody,
+} from "../mcp/types.js";
 import { buildSystemMcps, createOverrideState, loadSystemMcpOverrides, saveSystemMcpOverrides } from "./lib/system-registry.js";
 import { executeSystemTool, getSystemToolsForMcp } from "./lib/index.js";
 import { clearSessionFacts, getMemoryPromptContext, initMemoryState, listSessionFacts, listUserFacts, replaceSessionFacts, replaceUserFacts } from "./lib/memory-state.js";
 import { clearTasks, createTasks, getTaskSummary, listTasks, replaceTasks, solveTasks, updateTasks } from "./lib/task-state.js";
-import type { MemoryFact, TaskItem, ToolResultOptions } from "./types.js";
+import type { MemoryFact, TaskItem } from "./types.js";
 import {
   getDefaultPathForScope,
   getTerminalElevationLabel,
@@ -12,6 +19,8 @@ import {
   resolveFilesystemSystemConfig,
   resolveTerminalSystemConfig,
 } from "./lib/access-paths.js";
+import { getDefaultSystemMcpMap } from "./lib/index.js";
+import { normalizeSystemConfig } from "./lib/system-config.js";
 
 let cachedSystemMcps: McpServerConfig[] = [];
 
@@ -28,9 +37,18 @@ export interface ResolvedSystemToolRuntime {
 }
 
 function normalizeSystemConfigForMcp(id: string, systemConfig?: McpServerConfig["systemConfig"]) {
-  if (id === "filesystem") return resolveFilesystemSystemConfig(systemConfig);
-  if (id === "terminal") return resolveTerminalSystemConfig(systemConfig);
-  return systemConfig ? { ...systemConfig } : undefined;
+  const defaults = getDefaultSystemMcpMap();
+  const base = defaults[id as keyof typeof defaults];
+  const baseSystemConfig = base?.systemConfig;
+  const explicitResultPolicy = Object.prototype.hasOwnProperty.call(systemConfig ?? {}, "resultPolicy");
+
+  const merged = {
+    ...baseSystemConfig,
+    ...systemConfig,
+    ...(explicitResultPolicy ? { resultPolicy: { ...baseSystemConfig?.resultPolicy, ...systemConfig?.resultPolicy } } : {}),
+  };
+
+  return normalizeSystemConfig(id as keyof typeof defaults, merged);
 }
 
 function buildRuntimeVariablesForMcp(mcp: McpServerConfig): Record<string, string> {
@@ -66,13 +84,32 @@ async function persistSystemOverrides(): Promise<void> {
   await saveSystemMcpOverrides(createOverrideState(cachedSystemMcps));
 }
 
-function normalizeToolResultForContext(content: string, options: ToolResultOptions = {}): string {
-  const maxChars = options.maxContextChars ?? 1200;
-  const normalized = content.trim();
-  if (normalized.length <= maxChars) return normalized;
+function buildToolResultPreview(content: string, previewChars: number): string {
+  if (content.length <= previewChars) return content;
+  const truncated = content.slice(0, previewChars);
+  const lastNewline = truncated.lastIndexOf("\n");
+  const cutPoint = lastNewline > Math.floor(previewChars * 0.5) ? lastNewline : previewChars;
+  return `${content.slice(0, cutPoint)}\n...`;
+}
 
-  const preview = normalized.slice(0, maxChars);
-  return `${preview}\n\n[Ausgabe gekuerzt: ${normalized.length} Zeichen insgesamt]`;
+function getResolvedResultPolicy(mcp: McpServerConfig): Required<ToolResultPolicy> | null {
+  if (!mcp.systemConfig?.resultPolicy?.previewThresholdChars) return null;
+  return {
+    previewThresholdChars: Math.max(1, mcp.systemConfig?.resultPolicy?.previewThresholdChars ?? 12000),
+    previewChars: Math.max(200, mcp.systemConfig?.resultPolicy?.previewChars ?? 2000),
+  };
+}
+
+function buildToolResultContextContent(mcp: McpServerConfig, content: string): string {
+  const normalized = content.trim();
+  if (!normalized) return normalized;
+
+  const policy = getResolvedResultPolicy(mcp);
+  if (!policy || normalized.length <= policy.previewThresholdChars) {
+    return normalized;
+  }
+
+  return `${buildToolResultPreview(normalized, policy.previewChars)}\n\n[abgeschnitten: ${normalized.length} Zeichen insgesamt]`;
 }
 
 function resolveSystemMcp(
@@ -130,16 +167,6 @@ export function getInternalToolState(sessionId: string): { tasks: TaskItem[]; se
     tasks: listTasks(sessionId),
     sessionFacts: listSessionFacts(sessionId),
     userFacts: listUserFacts(),
-  };
-}
-
-export function normalizeToolResult(
-  result: ToolCallResult,
-  options: ToolResultOptions = {},
-): ToolCallResult & { contextContent: string } {
-  return {
-    ...result,
-    contextContent: normalizeToolResultForContext(result.content, options),
   };
 }
 
@@ -249,7 +276,12 @@ export async function executeSystemToolForId(
   const resolved = resolveSystemMcp(id, accessScopeOverride);
   if (!resolved || !resolved.mcp.active) return null;
   const result = await executeSystemTool(resolved.mcp, toolName, args);
-  return result ? normalizeToolResult(result) : null;
+  if (!result) return null;
+
+  return {
+    ...result,
+    contextContent: buildToolResultContextContent(resolved.mcp, result.content),
+  };
 }
 
 export {

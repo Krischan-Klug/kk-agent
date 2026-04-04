@@ -6,15 +6,10 @@ import { getDefaultPathForScope, resolveAccessScope, resolveFilesystemSystemConf
 const SEARCH_LIMIT = 50;
 const GREP_RESULT_LIMIT = 50;
 const READ_LINE_LIMIT = 200;
-const CONTENT_LIMIT = 12000;
 const LIST_ENTRY_LIMIT = 500;
 const LIST_MAX_DEPTH = 5;
 
 const IGNORED_DIRS = new Set(["node_modules", ".git", "dist", "build", ".next", "__pycache__"]);
-
-function clamp(text: string, max = CONTENT_LIMIT): string {
-  return text.length > max ? `${text.slice(0, max)}\n\n[truncated]` : text;
-}
 
 function getFilesystemBasePath(config: McpServerConfig): string {
   return resolveFilesystemSystemConfig(config.systemConfig).basePath ?? resolve("/");
@@ -240,7 +235,7 @@ export async function executeFilesystemTool(
     const showingAll = offset === 1 && endLine >= total;
     const footer = showingAll ? "" : `\n\n[Lines ${offset}-${endLine} of ${total}]`;
 
-    return { content: clamp(numbered + footer), isError: false };
+    return { content: numbered + footer, isError: false };
   }
 
   if (toolName === "edit_file") {
@@ -301,7 +296,7 @@ export async function executeFilesystemTool(
     }
 
     const footer = results.length >= GREP_RESULT_LIMIT ? `\n\n[limit reached — showing first ${GREP_RESULT_LIMIT} matches]` : "";
-    return { content: clamp(output.join("\n") + footer), isError: false };
+    return { content: output.join("\n") + footer, isError: false };
   }
 
   if (toolName === "list_directory") {
@@ -337,7 +332,7 @@ export async function executeFilesystemTool(
     });
 
     const footer = entries.length >= LIST_ENTRY_LIMIT ? `\n\n[limit reached — ${LIST_ENTRY_LIMIT} entries shown]` : "";
-    return { content: clamp((lines.length ? lines.join("\n") : "[empty directory]") + footer), isError: false };
+    return { content: (lines.length ? lines.join("\n") : "[empty directory]") + footer, isError: false };
   }
 
   if (toolName === "search_files") {

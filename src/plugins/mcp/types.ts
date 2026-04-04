@@ -2,10 +2,16 @@ export type McpSource = "system" | "custom";
 export type SystemMcpKey = "filesystem" | "web-search" | "terminal" | "user-interaction" | "task" | "memory" | "attachment";
 export type AccessScope = "user" | "system";
 
+export interface ToolResultPolicy {
+  previewThresholdChars?: number;
+  previewChars?: number;
+}
+
 export interface SystemMcpConfig {
   accessScope?: AccessScope;
   basePath?: string;
   workingDirectory?: string;
+  resultPolicy?: ToolResultPolicy;
 }
 
 export interface McpServerConfig {
@@ -41,6 +47,7 @@ export interface McpToolDefinition {
 export interface ToolCallResult {
   content: string;
   isError: boolean;
+  contextContent?: string;
 }
 
 export interface CreateMcpBody {

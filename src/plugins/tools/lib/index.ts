@@ -68,7 +68,12 @@ const SYSTEM_TOOL_MODULES: Record<SystemMcpKey, SystemToolModule> = {
 function cloneConfig(config: McpServerConfig): McpServerConfig {
   return {
     ...config,
-    systemConfig: config.systemConfig ? { ...config.systemConfig } : undefined,
+    systemConfig: config.systemConfig
+      ? {
+          ...config.systemConfig,
+          resultPolicy: config.systemConfig.resultPolicy ? { ...config.systemConfig.resultPolicy } : undefined,
+        }
+      : undefined,
     server:
       "command" in config.server
         ? { ...config.server, args: [...config.server.args], env: config.server.env ? { ...config.server.env } : undefined }

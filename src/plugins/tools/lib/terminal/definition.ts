@@ -15,7 +15,11 @@ export const terminalDefinition: McpServerConfig = {
   emoji: "🖳",
   source: "system",
   systemKey: "terminal",
-  systemConfig: { accessScope: "user", workingDirectory: DEFAULT_TERMINAL_WORKDIR },
+  systemConfig: {
+    accessScope: "user",
+    workingDirectory: DEFAULT_TERMINAL_WORKDIR,
+    resultPolicy: { previewThresholdChars: 12000, previewChars: 2200 },
+  },
   transport: "stdio",
   server: { command: "internal", args: [] },
 };

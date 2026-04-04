@@ -12,6 +12,7 @@ export const webSearchDefinition: McpServerConfig = {
   emoji: "🌐",
   source: "system",
   systemKey: "web-search",
+  systemConfig: { resultPolicy: { previewThresholdChars: 24000, previewChars: 3200 } },
   transport: "stdio",
   server: { command: "internal", args: [] },
 };

@@ -10,7 +10,7 @@ provider      -> Provider, Modelle, Capabilities, Streaming
 tools         -> Interne Tools und interner Tool-State
 mcp           -> Externe / custom MCP-Server
 agent         -> Agent-Definitionen, Mode-Konfiguration, Loop-State
-systemprompt  -> XML-Prompt-Building mit Variablen und Runtime-Kontext
+systemprompt  -> XML-Prompt-Building mit zentralen Systemvariablen
 loop          -> Iterativer Agent-Loop
 session       -> Sessions, Chat, SSE-Streaming, Uploads
 ```
@@ -30,8 +30,8 @@ Der finale System-Prompt wird aus vier Ebenen gebaut:
 
 1. globalen Prompt-Defaults
 2. agent- und mode-spezifischen Overrides
-3. Laufzeitsektionen wie Mode, Iteration, Tasks und Memory
-4. `tool_access_context` fuer effektiven Filesystem-/Terminal-Zugriff
+3. zentral aufgeloesten Systemvariablen wie Mode, Iteration, Tasks, Memory und Tool-Zugriff
+4. internen Tool- und MCP-Instructions
 
 Wichtige Runtime-Variablen:
 
@@ -41,6 +41,16 @@ Wichtige Runtime-Variablen:
 - `{{CURRENT_MODEL}}`
 - `{{iteration}}`
 - `{{maxIterations}}`
+- `{{TASK_SUMMARY}}`
+- `{{SESSION_MEMORY}}`
+- `{{USER_MEMORY}}`
+- `{{FILESYSTEM_ACCESS_SCOPE}}`
+- `{{FILESYSTEM_BASE_PATH}}`
+- `{{FILESYSTEM_ALLOWED_ROOT}}`
+- `{{TERMINAL_ACCESS_SCOPE}}`
+- `{{TERMINAL_WORKING_DIRECTORY}}`
+- `{{TERMINAL_ALLOWED_ROOT}}`
+- `{{TERMINAL_ELEVATION}}`
 
 Agents koennen zusaetzlich eigene Variablen definieren.
 

@@ -16,7 +16,11 @@ export const filesystemDefinition: McpServerConfig = {
   emoji: "📁",
   source: "system",
   systemKey: "filesystem",
-  systemConfig: { accessScope: "user", basePath: DEFAULT_FILESYSTEM_ROOT },
+  systemConfig: {
+    accessScope: "user",
+    basePath: DEFAULT_FILESYSTEM_ROOT,
+    resultPolicy: { previewThresholdChars: 16000, previewChars: 2400 },
+  },
   transport: "stdio",
   server: { command: "internal", args: [] },
 };

@@ -67,7 +67,12 @@ async function executeCombinedTool(
   }
   const systemTarget = modeRuntimeConfig.toolTargetsByName[toolName];
   if (systemTarget) {
-    const systemResult = await executeSystemToolForId(systemTarget.toolId, toolName, args, systemTarget.accessScope);
+    const systemResult = await executeSystemToolForId(
+      systemTarget.toolId,
+      toolName,
+      args,
+      systemTarget.accessScope,
+    );
     if (systemResult) return systemResult;
   }
   return executeTool(toolName, args);
@@ -393,16 +398,27 @@ export async function updateSession(id: string, body: Partial<CreateSessionBody>
   const session = getSession(id);
   const nextAgentId = body.agentId ?? session.agentId;
   const agent = getAgent(nextAgentId);
+  const switchingAgent = body.agentId !== undefined && body.agentId !== session.agentId;
+  const defaultsInput = switchingAgent
+    ? {
+        activeToolIds: body.activeToolIds,
+        activeMcpIds: body.activeMcpIds,
+        activeMode: body.activeMode,
+        model: body.model,
+        reasoningEffort: body.reasoningEffort,
+        temperature: body.temperature,
+      }
+    : {
+        activeToolIds: body.activeToolIds,
+        activeMcpIds: body.activeMcpIds,
+        activeMode: body.activeMode ?? session.activeMode,
+        model: body.model ?? session.model,
+        reasoningEffort: body.reasoningEffort ?? session.reasoningEffort,
+        temperature: body.temperature ?? session.temperature,
+      };
   const defaults = await resolveSessionDefaults(
     agent,
-    {
-      activeToolIds: body.activeToolIds,
-      activeMcpIds: body.activeMcpIds,
-      activeMode: body.activeMode ?? session.activeMode,
-      model: body.model ?? session.model,
-      reasoningEffort: body.reasoningEffort ?? session.reasoningEffort,
-      temperature: body.temperature ?? session.temperature,
-    },
+    defaultsInput,
     body.agentId ? getActiveProviderId() : session.providerId,
   );
 
@@ -417,7 +433,11 @@ export async function updateSession(id: string, body: Partial<CreateSessionBody>
     temperature: defaults.temperature,
   };
 
-  return store.updateSession(id, patch);
+  const updated = store.updateSession(id, patch);
+  if (switchingAgent) {
+    clearLoopState(id);
+  }
+  return updated;
 }
 
 export async function patchSession(id: string, body: Partial<CreateSessionBody>): Promise<SessionState> {

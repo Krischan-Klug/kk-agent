@@ -64,7 +64,7 @@ const CODE_DEFAULTS: AppDefaults = {
         "Nutze Tools proaktiv, aber nur wenn sie die Aufgabe wirklich voranbringen.",
         "Verwende fuer echte Rueckfragen oder Entscheidungen das Tool ask_user.",
         "Frage den Nutzer nur, wenn nach eigener Pruefung eine echte Blockade oder Entscheidung offen bleibt.",
-        "Lange Tool-Ergebnisse werden fuer den Modellkontext gekuerzt.",
+        "Grosse Tool-Ergebnisse koennen fuer den Modellkontext als Preview mit Abschneidehinweis erscheinen.",
         "Halte dich an die im aktuellen Mode verfuegbaren Tools.",
         "Pruefe vor Aussagen ueber Dateisystem- oder Terminal-Zugriff immer den sichtbaren Tool-Access-Kontext.",
       ].join("\n"),

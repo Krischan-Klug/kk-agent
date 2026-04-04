@@ -1,9 +1,8 @@
 import type { McpServerConfig, ToolCallResult } from "../../../mcp/types.js";
 
-const CONTENT_LIMIT = 12000;
 const REQUEST_TIMEOUT = 10000;
 
-function clamp(text: string, max = CONTENT_LIMIT): string {
+function clamp(text: string, max: number): string {
   return text.length > max ? `${text.slice(0, max)}\n\n[truncated]` : text;
 }
 
@@ -104,14 +103,15 @@ export async function executeWebSearchTool(
   if (toolName === "fetch_url") {
     const url = String(args.url ?? "").trim();
     if (!url) throw new Error("url is required");
-    const maxChars = typeof args.maxChars === "number" ? Math.max(500, Math.min(20000, args.maxChars)) : CONTENT_LIMIT;
+    const maxChars = typeof args.maxChars === "number" ? Math.max(500, Math.min(40000, args.maxChars)) : undefined;
 
     const response = await fetchWithTimeout(url);
     const html = await response.text();
     const text = htmlToText(html);
     const title = extractTitle(html);
 
-    const content = [`URL: ${url}`, title ? `Title: ${title}` : null, "", clamp(text, maxChars)]
+    const body = maxChars ? clamp(text, maxChars) : text;
+    const content = [`URL: ${url}`, title ? `Title: ${title}` : null, "", body]
       .filter(Boolean)
       .join("\n");
     return { content, isError: false };

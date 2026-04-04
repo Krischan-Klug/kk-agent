@@ -15,6 +15,7 @@ export const taskDefinition: McpServerConfig = {
   emoji: "📝",
   source: "system",
   systemKey: "task",
+  systemConfig: {},
   transport: "stdio",
   server: { command: "internal", args: [] },
 };

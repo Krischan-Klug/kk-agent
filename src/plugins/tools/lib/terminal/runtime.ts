@@ -13,7 +13,6 @@ import {
 } from "../access-paths.js";
 
 const execAsync = promisify(exec);
-const COMMAND_OUTPUT_LIMIT = 12000;
 const DEFAULT_TIMEOUT = 30000;
 const READ_ONLY_COMMAND_PREFIXES = [
   "pwd",
@@ -56,11 +55,6 @@ const READ_ONLY_BLOCK_PATTERNS = [
   /\byarn\s+(add|install|remove|up|run|dlx)\b/,
   /\b(python\s+-m\s+pip|pip\s+(install|uninstall)|uv\s+(pip|sync|run))\b/,
 ];
-
-function clamp(text: string, max = COMMAND_OUTPUT_LIMIT): string {
-  if (text.length <= max) return text;
-  return `[truncated - showing last ${max} chars]\n\n${text.slice(-max)}`;
-}
 
 function getWorkingDirectory(config: McpServerConfig): string {
   return resolveTerminalSystemConfig(config.systemConfig).workingDirectory ?? resolve("/");
@@ -147,7 +141,7 @@ async function executeElevatedWindowsCommand(command: string, cwd: string, timeo
     const output = [e.stdout?.trim(), e.stderr?.trim(), e.message].filter(Boolean).join("\n\n");
     await rm(workDir, { recursive: true, force: true });
     return {
-      content: clamp(`${output || "Erhoehte Terminal-Ausfuehrung konnte nicht gestartet werden."}\n\n[exit code: 1]`),
+      content: `${output || "Erhoehte Terminal-Ausfuehrung konnte nicht gestartet werden."}\n\n[exit code: 1]`,
       isError: true,
     };
   }
@@ -163,7 +157,7 @@ async function executeElevatedWindowsCommand(command: string, cwd: string, timeo
   const code = Number.parseInt(exitCodeRaw.trim(), 10);
   const exitCode = Number.isNaN(code) ? 1 : code;
   return {
-    content: clamp(`${output || "[no output]"}\n\n[exit code: ${exitCode}]`),
+    content: `${output || "[no output]"}\n\n[exit code: ${exitCode}]`,
     isError: exitCode !== 0,
   };
 }
@@ -183,17 +177,17 @@ async function executeElevatedUnixCommand(
       env,
     });
     const output = [stdout.trim(), stderr.trim()].filter(Boolean).join("\n\n");
-    return { content: clamp(`${output || "[no output]"}\n\n[exit code: 0]`), isError: false };
+    return { content: `${output || "[no output]"}\n\n[exit code: 0]`, isError: false };
   } catch (err: unknown) {
     const e = err as { stdout?: string; stderr?: string; code?: number; killed?: boolean; message?: string };
     if (e.killed) {
       const output = [e.stdout?.trim(), e.stderr?.trim()].filter(Boolean).join("\n\n");
-      return { content: clamp(`${output || "[no output]"}\n\n[timed out after ${timeoutMs}ms]`), isError: true };
+      return { content: `${output || "[no output]"}\n\n[timed out after ${timeoutMs}ms]`, isError: true };
     }
 
     const output = [e.stdout?.trim(), e.stderr?.trim()].filter(Boolean).join("\n\n");
     const code = e.code ?? 1;
-    return { content: clamp(`${output || e.message || "[no output]"}\n\n[exit code: ${code}]`), isError: true };
+    return { content: `${output || e.message || "[no output]"}\n\n[exit code: ${code}]`, isError: true };
   }
 }
 
@@ -238,17 +232,17 @@ export async function executeTerminalTool(
     });
 
     const output = [stdout.trim(), stderr.trim()].filter(Boolean).join("\n\n");
-    return { content: clamp(`${output || "[no output]"}\n\n[exit code: 0]`), isError: false };
+    return { content: `${output || "[no output]"}\n\n[exit code: 0]`, isError: false };
   } catch (err: unknown) {
     const e = err as { stdout?: string; stderr?: string; code?: number; killed?: boolean; message?: string };
 
     if (e.killed) {
       const output = [e.stdout?.trim(), e.stderr?.trim()].filter(Boolean).join("\n\n");
-      return { content: clamp(`${output || "[no output]"}\n\n[timed out after ${timeoutMs}ms]`), isError: true };
+      return { content: `${output || "[no output]"}\n\n[timed out after ${timeoutMs}ms]`, isError: true };
     }
 
     const output = [e.stdout?.trim(), e.stderr?.trim()].filter(Boolean).join("\n\n");
     const code = e.code ?? 1;
-    return { content: clamp(`${output || e.message || "[no output]"}\n\n[exit code: ${code}]`), isError: code !== 0 };
+    return { content: `${output || e.message || "[no output]"}\n\n[exit code: ${code}]`, isError: code !== 0 };
   }
 }

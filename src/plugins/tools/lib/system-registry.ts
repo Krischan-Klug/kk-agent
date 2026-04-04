@@ -1,7 +1,7 @@
 import { loadState, saveState } from "../../lib/state.js";
 import type { McpServerConfig, SystemMcpConfig, SystemMcpKey } from "../../mcp/types.js";
 import { getDefaultSystemMcpMap } from "./index.js";
-import { resolveFilesystemSystemConfig, resolveTerminalSystemConfig } from "./access-paths.js";
+import { normalizeSystemConfig } from "./system-config.js";
 
 interface SystemMcpOverrideEntry {
   active?: boolean;
@@ -15,13 +15,6 @@ interface SystemMcpOverrideState {
 
 const OVERRIDES_FILE = "system-mcps.json";
 const DEFAULT_OVERRIDES: SystemMcpOverrideState = { mcps: {} };
-
-function normalizeSystemConfig(key: SystemMcpKey, systemConfig?: SystemMcpConfig): SystemMcpConfig | undefined {
-  if (!systemConfig) return systemConfig;
-  if (key === "filesystem") return resolveFilesystemSystemConfig(systemConfig);
-  if (key === "terminal") return resolveTerminalSystemConfig(systemConfig);
-  return { ...systemConfig };
-}
 
 export async function loadSystemMcpOverrides(): Promise<SystemMcpOverrideState> {
   return loadState<SystemMcpOverrideState>(OVERRIDES_FILE, DEFAULT_OVERRIDES);

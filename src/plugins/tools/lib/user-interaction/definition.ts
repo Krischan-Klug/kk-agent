@@ -12,6 +12,7 @@ export const userInteractionDefinition: McpServerConfig = {
   emoji: "💬",
   source: "system",
   systemKey: "user-interaction",
+  systemConfig: {},
   transport: "stdio",
   server: { command: "internal", args: [] },
 };

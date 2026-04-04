@@ -12,6 +12,7 @@ export const memoryDefinition: McpServerConfig = {
   emoji: "🧠",
   source: "system",
   systemKey: "memory",
+  systemConfig: {},
   transport: "stdio",
   server: { command: "internal", args: [] },
 };

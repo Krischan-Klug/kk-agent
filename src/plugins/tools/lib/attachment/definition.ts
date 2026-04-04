@@ -12,6 +12,7 @@ export const attachmentDefinition: McpServerConfig = {
   emoji: "📎",
   source: "system",
   systemKey: "attachment",
+  systemConfig: {},
   transport: "stdio",
   server: { command: "internal", args: [] },
 };

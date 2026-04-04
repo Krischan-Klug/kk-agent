@@ -1,19 +1,15 @@
-import type { UnifiedToolCall, TokenStats, ContentBlock, UnifiedToolDefinition } from "../provider/lib/types.js";
+import type { TranscriptMessage } from "../lib/transcript.js";
+import type { ProviderTransportState, ProviderTurnDebug, TokenStats, UnifiedToolDefinition } from "../provider/lib/types.js";
 import type { ChatMode, AgentPromptSections } from "../agent/types.js";
 
-export interface LoopMessage {
-  role: "user" | "assistant" | "tool" | "system";
-  content: string | ContentBlock[];
-  isError?: boolean;
-  reasoning?: string;
-  tool_call_id?: string;
-  tool_calls?: UnifiedToolCall[];
-}
+export type LoopMessage = TranscriptMessage;
 
 export interface LoopResult {
   messages: LoopMessage[];
   finalResponse: string;
   iterations: number;
+  providerState?: ProviderTransportState;
+  providerDebug?: ProviderTurnDebug;
 }
 
 export interface ToolExecutionResult {
@@ -21,6 +17,15 @@ export interface ToolExecutionResult {
   contextContent?: string;
   isError?: boolean;
 }
+
+export type ToolExecutionStatus =
+  | "queued"
+  | "executing"
+  | "yielded"
+  | "completed"
+  | "error"
+  | "discarded"
+  | "invalid";
 
 export interface ModeRuntimeConfig {
   promptSections: AgentPromptSections;
@@ -45,12 +50,16 @@ export interface LoopOptions {
   reasoningEffort?: string;
   temperature?: number;
   maxOutputTokens?: number;
-  onContent?: (content: string) => void;
-  onReasoning?: (content: string) => void;
-  onContentReset?: () => void;
-  onRetryNotice?: (message: string) => void;
-  onToolCall?: (toolCall: UnifiedToolCall) => void;
-  onToolResult?: (toolCallId: string, result: ToolExecutionResult) => void;
+  providerState?: ProviderTransportState;
+  onAssistantBlockDelta?: (messageId: string, block: import("../lib/transcript.js").TranscriptBlock) => void;
+  onAssistantMessage?: (message: LoopMessage) => void;
+  onSystemNotice?: (level: "info" | "warning" | "error", message: string) => void;
+  onToolExecutionUpdate?: (
+    toolUseId: string,
+    toolName: string,
+    status: ToolExecutionStatus,
+    result?: LoopMessage,
+  ) => void;
   onLoopState?: (state: {
     sessionId: string;
     agentId: string;

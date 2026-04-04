@@ -8,6 +8,7 @@ import type {
 import * as store from "./lib/store.js";
 import { getDefaults } from "../lib/defaults.js";
 import { createSlugId } from "../lib/ids.js";
+import { normalizeCanonicalReasoningLevel } from "../provider/lib/capabilities.js";
 import { getSystemVariableNames } from "../systemprompt/lib/builder.js";
 import { getChatModes } from "./lib/modes.js";
 import { applyModeConfigPatch, compactModeConfigs, normalizeModeConfigs } from "./lib/mode-config.js";
@@ -25,6 +26,7 @@ function normalizeAgent(agent: AgentDefinition): AgentDefinition {
   return {
     ...agent,
     defaultChatMode,
+    reasoningEffort: normalizeCanonicalReasoningLevel(agent.reasoningEffort),
     modeConfigs: normalizeModeConfigs(agent.modeConfigs),
   };
 }
@@ -74,7 +76,7 @@ export async function createAgent(body: CreateAgentBody): Promise<AgentDefinitio
     maxIterations: body.maxIterations ?? defaults.agent.maxIterations,
     variables: body.variables ?? {},
     defaultModel: body.defaultModel,
-    reasoningEffort: body.reasoningEffort,
+    reasoningEffort: normalizeCanonicalReasoningLevel(body.reasoningEffort),
     temperature: body.temperature,
     createdAt: now,
     updatedAt: now,
@@ -97,7 +99,7 @@ export async function updateAgent(id: string, body: UpdateAgentBody): Promise<Ag
   if (body.maxIterations !== undefined) patch.maxIterations = body.maxIterations;
   if (body.variables !== undefined) patch.variables = body.variables;
   if (body.defaultModel !== undefined) patch.defaultModel = body.defaultModel;
-  if (body.reasoningEffort !== undefined) patch.reasoningEffort = body.reasoningEffort;
+  if (body.reasoningEffort !== undefined) patch.reasoningEffort = normalizeCanonicalReasoningLevel(body.reasoningEffort);
   if (body.temperature !== undefined) patch.temperature = body.temperature;
   return normalizeAgent(await store.updateAgent(id, patch));
 }

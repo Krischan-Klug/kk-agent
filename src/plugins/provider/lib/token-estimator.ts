@@ -9,7 +9,7 @@ import {
   type LLMTool,
 } from "@lmstudio/sdk";
 import type { UnifiedMessage, UnifiedRequest, UnifiedToolDefinition, TokenStats } from "./types.js";
-import { getTextContent } from "./types.js";
+import { getMessageText, getToolResults, getToolUses } from "../../lib/transcript.js";
 
 const clientCache = new Map<string, LMStudioClient>();
 
@@ -36,31 +36,31 @@ function toSdkHistory(messages: UnifiedMessage[]): ChatHistoryData {
     messages: messages.map((message): ChatMessageData => {
       if (message.role === "assistant") {
         const content: Array<ChatMessagePartTextData | ChatMessagePartToolCallRequestData> = [];
-        if (message.content) {
-          content.push({ type: "text", text: getTextContent(message.content) });
+        if (message.content.length > 0) {
+          const text = getMessageText(message);
+          if (text) content.push({ type: "text", text });
         }
-        if (message.tool_calls?.length) {
-          for (const toolCall of message.tool_calls) {
+        for (const toolCall of getToolUses(message)) {
             const toolCallRequest: FunctionToolCallRequest = {
               id: toolCall.id,
               type: "function",
               name: toolCall.name,
-              arguments: toolCall.arguments,
+              arguments: toolCall.input,
             };
             content.push({
               type: "toolCallRequest",
               toolCallRequest,
             });
-          }
         }
         return { role: "assistant" as const, content };
       }
 
       if (message.role === "tool") {
+        const toolResult = getToolResults(message)[0];
         const content: ChatMessagePartToolCallResultData[] = [{
           type: "toolCallResult",
-          content: getTextContent(message.content),
-          toolCallId: message.tool_call_id,
+          content: toolResult?.content ?? getMessageText(message),
+          toolCallId: toolResult?.tool_use_id,
         }];
         return {
           role: "tool" as const,
@@ -68,7 +68,7 @@ function toSdkHistory(messages: UnifiedMessage[]): ChatHistoryData {
         };
       }
 
-      const content: ChatMessagePartTextData[] = [{ type: "text", text: getTextContent(message.content) }];
+      const content: ChatMessagePartTextData[] = [{ type: "text", text: getMessageText(message) }];
       return {
         role: message.role,
         content,
@@ -92,17 +92,16 @@ function buildEstimationText(request: UnifiedRequest): string {
 
   for (const message of request.messages) {
     parts.push(`[${message.role}]`);
-    if (message.content) {
-      parts.push(getTextContent(message.content));
+    if (message.content.length > 0) {
+      parts.push(getMessageText(message));
     }
-    if (message.tool_call_id) {
-      parts.push(`[tool_call_id:${message.tool_call_id}]`);
+    for (const toolCall of getToolUses(message)) {
+      parts.push(`[tool_call:${toolCall.name}]`);
+      parts.push(JSON.stringify(toolCall.input));
     }
-    if (message.tool_calls?.length) {
-      for (const toolCall of message.tool_calls) {
-        parts.push(`[tool_call:${toolCall.name}]`);
-        parts.push(JSON.stringify(toolCall.arguments));
-      }
+    for (const toolResult of getToolResults(message)) {
+      parts.push(`[tool_result:${toolResult.tool_use_id}]`);
+      parts.push(toolResult.content);
     }
   }
 

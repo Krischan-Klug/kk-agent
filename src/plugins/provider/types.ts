@@ -1,6 +1,11 @@
 export type EndpointType = "chat-completions" | "responses";
 export type ReasoningControl = "none" | "effort" | "on-off";
 export type ReasoningSource = "none" | "declared" | "observed";
+export type ReasoningTransport = "none" | "chat-completions-effort" | "chat-completions-on-off" | "responses-effort";
+export type ToolSchemaTransport = "chat-completions-tools" | "responses-tools";
+export type StreamGrammar = "openai-chat-completions" | "openai-responses";
+export type ToolCallAssemblyMode = "chat-completions-indexed" | "responses-output-state";
+export type ContinuationMode = "none" | "raw-output-replay" | "previous-response-id" | "conversations";
 
 export interface NumericRange {
   min: number;
@@ -13,6 +18,20 @@ export interface EndpointCapabilities {
   temperatureRange?: NumericRange;
   maxOutputTokensSupported: boolean;
   maxOutputTokensRange?: NumericRange;
+}
+
+export interface EndpointTransportProfile {
+  supported: boolean;
+  reasoningTransport: ReasoningTransport;
+  toolSchemaTransport: ToolSchemaTransport;
+  streamGrammar: StreamGrammar;
+  toolCallAssemblyMode: ToolCallAssemblyMode;
+  supportsParallelToolCalls: boolean;
+  supportsConcatenatedJsonSplit: boolean;
+  continuationMode: ContinuationMode;
+  supportsPreviousResponseId: boolean;
+  supportsConversations: boolean;
+  supportsStrictTools: boolean;
 }
 
 export interface ProviderConfig {
@@ -39,6 +58,7 @@ export interface ModelCapabilities {
   reasoningControl: ReasoningControl;
   reasoningLevels: string[];
   endpointCapabilities: Partial<Record<EndpointType, EndpointCapabilities>>;
+  transportProfiles: Partial<Record<EndpointType, EndpointTransportProfile>>;
 }
 
 export interface ModelInfo {

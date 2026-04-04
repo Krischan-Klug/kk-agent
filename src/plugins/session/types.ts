@@ -1,34 +1,25 @@
 import type { ChatMode, ReasoningEffort } from "../agent/types.js";
+import type { AttachmentCategory, TranscriptMessage } from "../lib/transcript.js";
+import type { ToolExecutionStatus } from "../loop/types.js";
+import type { ProviderTransportState, ProviderTurnDebug } from "../provider/lib/types.js";
 
 export interface AttachmentMeta {
   id: string;
   filename: string;
   mimeType: string;
-  category: "image" | "text" | "pdf";
+  category: AttachmentCategory;
   size: number;
 }
 
 export interface AttachmentDisplayMeta {
   filename: string;
   mimeType: string;
-  category: "image" | "text" | "pdf";
+  category: AttachmentCategory;
   size: number;
   previewDataUrl?: string;
 }
 
-export interface SessionMessage {
-  role: "user" | "assistant" | "tool" | "system";
-  content: string;
-  isError?: boolean;
-  reasoning?: string;
-  tool_call_id?: string;
-  tool_calls?: {
-    id: string;
-    name: string;
-    arguments: Record<string, unknown>;
-  }[];
-  attachments?: AttachmentDisplayMeta[];
-}
+export type SessionMessage = TranscriptMessage;
 
 export interface SessionState {
   id: string;
@@ -42,6 +33,8 @@ export interface SessionState {
   reasoningEffort?: ReasoningEffort;
   temperature?: number;
   messages: SessionMessage[];
+  providerState?: ProviderTransportState;
+  providerDebug?: ProviderTurnDebug;
   createdAt: string;
   updatedAt: string;
 }
@@ -74,13 +67,17 @@ export interface ChatBody {
 export type PatchSessionBody = UpdateSessionBody;
 
 export type SSEEvent =
-  | { type: "content"; content: string }
-  | { type: "reasoning"; content: string }
-  | { type: "content_reset" }
-  | { type: "retry_notice"; message: string }
-  | { type: "tool_call"; toolCall: { id: string; name: string; arguments: Record<string, unknown> } }
-  | { type: "tool_result"; toolCallId: string; content: string; isError?: boolean }
-  | { type: "loop_state"; state: import("../agent/types.js").AgentLoopState }
+  | { type: "assistant_block_delta"; messageId: string; block: import("../lib/transcript.js").TranscriptBlock }
+  | { type: "assistant_message_complete"; message: SessionMessage }
+  | {
+      type: "tool_execution_update";
+      toolUseId: string;
+      toolName: string;
+      status: ToolExecutionStatus;
+      result?: SessionMessage;
+    }
+  | { type: "turn_state"; state: import("../agent/types.js").AgentLoopState }
+  | { type: "system_notice"; level: "info" | "warning" | "error"; message: string }
   | { type: "stats"; inputTokens: number; outputTokens: number; reasoningTokens: number; source: "provider" | "estimated" | "unknown" }
   | { type: "user_prompt"; promptId: string; question: string; choices: { key: string; label: string }[] }
   | { type: "done"; session: SessionState }

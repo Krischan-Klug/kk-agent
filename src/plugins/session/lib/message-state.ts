@@ -1,5 +1,4 @@
 import type { SessionState } from "../types.js";
-import { getTextContent } from "../../provider/lib/types.js";
 import type { LoopMessage } from "../../loop/types.js";
 
 export function generateSessionName(content: string): string {
@@ -12,49 +11,17 @@ export function generateSessionName(content: string): string {
 }
 
 export function toLoopMessages(messages: SessionState["messages"]): LoopMessage[] {
-  return messages.map((message) => ({
-    role: message.role,
-    content: message.content,
-    isError: message.isError,
-    reasoning: message.reasoning,
-    tool_call_id: message.tool_call_id,
-    tool_calls: message.tool_calls?.map((toolCall) => ({
-      id: toolCall.id,
-      name: toolCall.name,
-      arguments: toolCall.arguments,
-    })),
-  }));
+  return messages.map((message) => ({ ...message, content: [...message.content] }));
 }
 
 export function fromLoopMessages(messages: LoopMessage[]): SessionState["messages"] {
-  return messages.map((message) => ({
-    role: message.role,
-    content: typeof message.content === "string" ? message.content : getTextContent(message.content),
-    isError: message.isError,
-    reasoning: message.reasoning,
-    tool_call_id: message.tool_call_id,
-    tool_calls: message.tool_calls?.map((toolCall) => ({
-      id: toolCall.id,
-      name: toolCall.name,
-      arguments: toolCall.arguments,
-    })),
-  }));
+  return messages.map((message) => ({ ...message, content: [...message.content] }));
 }
 
 export function mergeMessageDisplayState(
   nextMessages: SessionState["messages"],
-  previousMessages: SessionState["messages"],
+  _previousMessages: SessionState["messages"],
 ): SessionState["messages"] {
-  return nextMessages.map((message, index) => {
-    const previous = previousMessages[index];
-    if (!previous || previous.role !== message.role || !previous.attachments?.length) {
-      return message;
-    }
-
-    return {
-      ...message,
-      content: previous.content,
-      attachments: previous.attachments,
-    };
-  });
+  return nextMessages;
 }
+

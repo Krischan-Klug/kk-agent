@@ -1,53 +1,28 @@
-export type ContentBlock =
-  | { type: "text"; text: string }
-  | { type: "image_url"; image_url: { url: string } };
+import type { TranscriptBlock, TranscriptMessage, TranscriptStopReason } from "../../lib/transcript.js";
+import type { ContinuationMode, EndpointTransportProfile, EndpointType } from "../types.js";
 
-export interface UnifiedMessage {
-  role: "system" | "user" | "assistant" | "tool";
-  content: string | ContentBlock[];
-  tool_call_id?: string;
-  tool_calls?: UnifiedToolCall[];
-}
-
-/** Extract plain text from content that may be string or ContentBlock[] */
-export function getTextContent(content: string | ContentBlock[]): string {
-  if (typeof content === "string") return content;
-  return content
-    .filter((b): b is { type: "text"; text: string } => b.type === "text")
-    .map((b) => b.text)
-    .join("");
-}
-
-export interface UnifiedToolCall {
-  id: string;
-  name: string;
-  arguments: Record<string, unknown>;
-}
+export type ProviderMessage = TranscriptMessage;
+export type ProviderBlock = TranscriptBlock;
+export type UnifiedMessage = ProviderMessage;
 
 export interface UnifiedRequest {
   providerId?: string;
   model: string;
-  messages: UnifiedMessage[];
+  messages: ProviderMessage[];
   tools?: UnifiedToolDefinition[];
   stream?: boolean;
   reasoningEffort?: string;
   temperature?: number;
   maxOutputTokens?: number;
-  endpoint?: string;
+  endpoint?: EndpointType;
+  transportProfile?: EndpointTransportProfile;
+  transportState?: ProviderTransportState;
 }
 
 export interface UnifiedToolDefinition {
   name: string;
   description: string;
   parameters: Record<string, unknown>;
-}
-
-export interface UnifiedResponse {
-  content: string;
-  reasoning?: string;
-  tool_calls?: UnifiedToolCall[];
-  finishReason: "stop" | "tool_calls" | "length";
-  stats?: TokenStats;
 }
 
 export interface TokenStats {
@@ -57,12 +32,107 @@ export interface TokenStats {
   source: "provider" | "estimated" | "unknown";
 }
 
-export interface StreamChunk {
-  type: "content" | "reasoning" | "tool_calls" | "done" | "stats";
-  content?: string;
-  tool_calls?: UnifiedToolCall[];
-  finishReason?: UnifiedResponse["finishReason"];
-  stats?: TokenStats;
+export interface ToolCallParseIssue {
+  id: string;
+  callId?: string;
+  toolName?: string;
+  code:
+    | "missing_tool_name"
+    | "unknown_tool_name"
+    | "invalid_arguments"
+    | "incomplete_arguments"
+    | "non_object_arguments"
+    | "split_arguments"
+    | "duplicate_call_collapsed";
+  message: string;
+  rawArguments?: string;
+  severity: "warning" | "error";
 }
+
+export interface ProviderNotice {
+  level: "info" | "warning" | "error";
+  message: string;
+  code?: string;
+  toolCallId?: string;
+  toolName?: string;
+}
+
+export interface NormalizedToolCall {
+  id: string;
+  name: string;
+  arguments: Record<string, unknown>;
+  rawArguments: string;
+  index: number;
+}
+
+export interface AssembledOutputItem extends Record<string, unknown> {
+  type: string;
+  content?: Array<Record<string, unknown>>;
+  summary?: Array<Record<string, unknown>>;
+  id?: string;
+  call_id?: string;
+  name?: string;
+  arguments?: string;
+}
+
+export interface AssembledAssistantTurn {
+  messageId: string;
+  text: string;
+  reasoning: string;
+  toolCalls: NormalizedToolCall[];
+  finishReason: TranscriptStopReason;
+  usage?: TokenStats;
+  output?: AssembledOutputItem[];
+  notices: ProviderNotice[];
+  parseIssues: ToolCallParseIssue[];
+}
+
+export interface ChatCompletionsTransportState {
+  endpoint: "chat-completions";
+  lastAssistantMessageId?: string;
+}
+
+export interface ResponsesConversationItem extends Record<string, unknown> {
+  type?: string;
+}
+
+export interface ResponsesTransportState {
+  endpoint: "responses";
+  continuationMode: ContinuationMode;
+  syncedMessageIds: string[];
+  historyItems: ResponsesConversationItem[];
+  callIdByToolUseId: Record<string, string>;
+  lastResponseId?: string;
+  conversationId?: string;
+  lastOutput?: AssembledOutputItem[];
+}
+
+export type ProviderTransportState = ChatCompletionsTransportState | ResponsesTransportState;
+
+export interface ProviderTurnDebug {
+  endpoint: EndpointType;
+  continuationMode?: ContinuationMode;
+  requestBody?: Record<string, unknown>;
+  responseId?: string;
+  conversationId?: string;
+  outputCount?: number;
+}
+
+export interface UnifiedResponse {
+  message: ProviderMessage;
+  finishReason: TranscriptStopReason;
+  stats?: TokenStats;
+  notices?: ProviderNotice[];
+  parseIssues?: ToolCallParseIssue[];
+  assembledOutput?: AssembledOutputItem[];
+  transportState?: ProviderTransportState;
+  debug?: ProviderTurnDebug;
+}
+
+export type StreamChunk =
+  | { type: "assistant_block_delta"; messageId: string; block: ProviderBlock }
+  | { type: "assistant_message"; message: ProviderMessage; finishReason: TranscriptStopReason }
+  | { type: "done"; finishReason: TranscriptStopReason }
+  | { type: "stats"; stats: TokenStats };
 
 export type OnChunkFn = (chunk: StreamChunk) => void;

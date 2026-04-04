@@ -14,11 +14,14 @@ import {
   clampNumber,
   coerceReasoningSelection,
   getEndpointCapabilities,
+  getEndpointTransportProfile,
   getPreferredEndpoint,
+  normalizeCanonicalReasoningLevel,
   resolveMaxOutputRange,
 } from "./lib/capabilities.js";
 import { estimateRequestTokens } from "./lib/token-estimator.js";
 import { loadState, saveState } from "../lib/state.js";
+import { getMessageReasoning } from "../lib/transcript.js";
 
 const STATE_FILE = "providers.json";
 
@@ -86,6 +89,22 @@ function mergeObservedReasoning(providerId: string, model: ModelInfo): ModelInfo
       reasoningLevels: model.capabilities.reasoningLevels.length > 0
         ? model.capabilities.reasoningLevels
         : ["none", "minimal", "low", "medium", "high", "xhigh"],
+      transportProfiles: {
+        ...model.capabilities.transportProfiles,
+        "chat-completions": {
+          supported: true,
+          reasoningTransport: "chat-completions-effort",
+          toolSchemaTransport: "chat-completions-tools",
+          streamGrammar: "openai-chat-completions",
+          toolCallAssemblyMode: "chat-completions-indexed",
+          supportsParallelToolCalls: true,
+          supportsConcatenatedJsonSplit: true,
+          continuationMode: "none",
+          supportsPreviousResponseId: false,
+          supportsConversations: false,
+          supportsStrictTools: true,
+        },
+      },
     },
   };
 }
@@ -103,21 +122,23 @@ async function markObservedReasoning(providerId: string, modelId: string): Promi
 }
 
 function hasObservedReasoning(response: UnifiedResponse): boolean {
-  return Boolean(response.reasoning?.trim()) || (response.stats?.reasoningTokens ?? 0) > 0;
+  return getMessageReasoning(response.message).trim().length > 0 || (response.stats?.reasoningTokens ?? 0) > 0;
 }
 
 function normalizeRequestOptions(
   model: ModelInfo | undefined,
   settings: ModelSettings,
   request: UnifiedRequest,
-): Pick<UnifiedRequest, "endpoint" | "reasoningEffort" | "temperature" | "maxOutputTokens"> {
+): Pick<UnifiedRequest, "endpoint" | "reasoningEffort" | "temperature" | "maxOutputTokens" | "transportProfile"> {
   const endpoint = getPreferredEndpoint(model?.capabilities, settings.endpoint as EndpointType | undefined);
   const endpointCapabilities = getEndpointCapabilities(model?.capabilities, endpoint);
+  const transportProfile = getEndpointTransportProfile(model?.capabilities, endpoint);
   const maxOutputRange = resolveMaxOutputRange(model, endpoint);
 
   return {
     endpoint,
-    reasoningEffort: coerceReasoningSelection(model?.capabilities, request.reasoningEffort),
+    transportProfile,
+    reasoningEffort: coerceReasoningSelection(model?.capabilities, endpoint, request.reasoningEffort),
     temperature: endpointCapabilities.temperatureSupported
       ? clampNumber(request.temperature, endpointCapabilities.temperatureRange)
       : undefined,
@@ -292,7 +313,11 @@ export function getActiveProviderId(): string {
 }
 
 export function getModelSettings(providerId: string, modelId: string): ModelSettings {
-  return state.modelSettings[getModelSettingsKey(providerId, modelId)] ?? {};
+  const settings = state.modelSettings[getModelSettingsKey(providerId, modelId)] ?? {};
+  return {
+    ...settings,
+    reasoningEffort: normalizeCanonicalReasoningLevel(settings.reasoningEffort),
+  };
 }
 
 export function getAllModelSettings(providerId?: string): Record<string, ModelSettings> {
@@ -300,11 +325,17 @@ export function getAllModelSettings(providerId?: string): Record<string, ModelSe
   return Object.fromEntries(
     Object.entries(state.modelSettings)
       .filter(([key]) => key.startsWith(`${provider.id}::`))
-      .map(([key, value]) => [key.slice(provider.id.length + 2), value]),
+      .map(([key, value]) => [
+        key.slice(provider.id.length + 2),
+        { ...value, reasoningEffort: normalizeCanonicalReasoningLevel(value.reasoningEffort) },
+      ]),
   );
 }
 
 export async function setModelSettings(providerId: string, modelId: string, settings: ModelSettings): Promise<void> {
-  state.modelSettings[getModelSettingsKey(providerId, modelId)] = settings;
+  state.modelSettings[getModelSettingsKey(providerId, modelId)] = {
+    ...settings,
+    reasoningEffort: normalizeCanonicalReasoningLevel(settings.reasoningEffort),
+  };
   await persist();
 }

@@ -1,31 +1,40 @@
-/**
- * OpenAI Chat Completions endpoint (/v1/chat/completions)
- *
- * Pure functions — no state, no config. The adapter provides baseUrl + headers.
- */
-import type { UnifiedRequest, UnifiedResponse, UnifiedToolCall, OnChunkFn } from "../types.js";
+import { randomUUID } from "node:crypto";
+import type { OnChunkFn, TokenStats, UnifiedRequest, UnifiedResponse } from "../types.js";
 import { readSSEStream } from "../sse.js";
 import {
   buildChatCompletionsBody,
-  safeParseArgs,
-  parseThinkTags,
-  parseToolCalls,
+  buildUnifiedResponseFromTurn,
   mapFinishReason,
 } from "../helpers.js";
+import { finalizeChatCompletionsTurn } from "../transport.js";
+import { reasoningBlock, textBlock } from "../../../lib/transcript.js";
 
-/* ── Non-streaming ── */
+type ChatCompletionUsage = {
+  prompt_tokens?: number;
+  completion_tokens?: number;
+  reasoning_tokens?: number;
+  completion_tokens_details?: { reasoning_tokens?: number };
+};
+
+function normalizeUsage(usage?: ChatCompletionUsage): TokenStats | undefined {
+  if (!usage) return undefined;
+  return {
+    inputTokens: usage.prompt_tokens ?? 0,
+    outputTokens: usage.completion_tokens ?? 0,
+    reasoningTokens: usage.reasoning_tokens ?? usage.completion_tokens_details?.reasoning_tokens ?? 0,
+    source: "provider",
+  };
+}
 
 export async function chat(
   request: UnifiedRequest,
   baseUrl: string,
   headers: Record<string, string> = {},
 ): Promise<UnifiedResponse> {
-  const body = buildChatCompletionsBody(request, false);
-
   const res = await fetch(`${baseUrl}/v1/chat/completions`, {
     method: "POST",
     headers: { "Content-Type": "application/json", ...headers },
-    body: JSON.stringify(body),
+    body: JSON.stringify(buildChatCompletionsBody(request, false)),
   });
 
   if (!res.ok) {
@@ -38,37 +47,41 @@ export async function chat(
       message: {
         content?: string | null;
         reasoning_content?: string | null;
-        tool_calls?: Array<{ id: string; function: { name: string; arguments: string } }>;
+        tool_calls?: Array<{ id?: string; function?: { name?: string; arguments?: string } }>;
       };
-      finish_reason: string;
+      finish_reason?: string | null;
     }>;
-    usage?: {
-      prompt_tokens?: number;
-      completion_tokens?: number;
-      reasoning_tokens?: number;
-      completion_tokens_details?: { reasoning_tokens?: number };
-    };
+    usage?: ChatCompletionUsage;
   };
 
   const choice = data.choices[0];
+  const turn = finalizeChatCompletionsTurn({
+    messageId: randomUUID(),
+    text: choice?.message.content ?? "",
+    reasoning: choice?.message.reasoning_content ?? "",
+    rawToolCalls: (choice?.message.tool_calls ?? []).map((toolCall, index) => ({
+      id: toolCall.id,
+      name: toolCall.function?.name,
+      rawArguments: toolCall.function?.arguments,
+      index,
+    })),
+    finishReason: mapFinishReason(choice?.finish_reason),
+    usage: normalizeUsage(data.usage),
+    tools: request.tools,
+    supportsConcatenatedJsonSplit: true,
+  });
 
-  return {
-    content: choice.message.content ?? "",
-    reasoning: choice.message.reasoning_content ?? undefined,
-    tool_calls: parseToolCalls(choice.message.tool_calls),
-    finishReason: mapFinishReason(choice.finish_reason),
-    stats: data.usage
-      ? {
-          inputTokens: data.usage.prompt_tokens ?? 0,
-          outputTokens: data.usage.completion_tokens ?? 0,
-          reasoningTokens: data.usage.reasoning_tokens ?? data.usage.completion_tokens_details?.reasoning_tokens ?? 0,
-          source: "provider",
-        }
-      : undefined,
+  const response = buildUnifiedResponseFromTurn(turn);
+  response.transportState = {
+    endpoint: "chat-completions",
+    lastAssistantMessageId: response.message.id,
   };
+  response.debug = {
+    endpoint: "chat-completions",
+    requestBody: buildChatCompletionsBody(request, false),
+  };
+  return response;
 }
-
-/* ── Streaming ── */
 
 export async function chatStream(
   request: UnifiedRequest,
@@ -76,12 +89,10 @@ export async function chatStream(
   onChunk: OnChunkFn,
   headers: Record<string, string> = {},
 ): Promise<UnifiedResponse> {
-  const body = buildChatCompletionsBody(request, true);
-
   const res = await fetch(`${baseUrl}/v1/chat/completions`, {
     method: "POST",
     headers: { "Content-Type": "application/json", ...headers },
-    body: JSON.stringify(body),
+    body: JSON.stringify(buildChatCompletionsBody(request, true)),
   });
 
   if (!res.ok) {
@@ -89,111 +100,105 @@ export async function chatStream(
     throw new Error(`Chat Completions error ${res.status}: ${text}`);
   }
 
-  let fullContent = "";
-  let fullReasoning = "";
-  let inThink = false;
-  const toolCallDeltas: Map<number, { id: string; name: string; args: string }> = new Map();
+  const messageId = randomUUID();
+  const rawToolCalls = new Map<number, { id?: string; name?: string; rawArguments?: string; index: number }>();
+  const providerNotices: Array<{ level: "info" | "warning" | "error"; message: string }> = [];
+  let text = "";
+  let reasoning = "";
   let finishReason: UnifiedResponse["finishReason"] = "stop";
-  let usage: {
-    prompt_tokens?: number;
-    completion_tokens?: number;
-    reasoning_tokens?: number;
-    completion_tokens_details?: { reasoning_tokens?: number };
-  } | undefined;
+  let usage: ChatCompletionUsage | undefined;
 
   await readSSEStream(res, (parsed) => {
+    if (parsed.error && typeof parsed.error === "object") {
+      const message =
+        "message" in parsed.error && typeof parsed.error.message === "string"
+          ? parsed.error.message
+          : JSON.stringify(parsed.error);
+      providerNotices.push({
+        level: message.includes("tool call") ? "warning" : "error",
+        message: `Provider stream stopped early: ${message}`,
+      });
+      return true;
+    }
+
+    if (parsed.type === "error" && typeof parsed.message === "string") {
+      providerNotices.push({
+        level: parsed.message.includes("tool call") ? "warning" : "error",
+        message: `Provider stream stopped early: ${parsed.message}`,
+      });
+      return true;
+    }
+
     const choices = parsed.choices as
       | Array<{
           delta?: {
             content?: string | null;
             reasoning_content?: string | null;
-            tool_calls?: Array<{
-              index: number;
-              id?: string;
-              function?: { name?: string; arguments?: string };
-            }>;
+            tool_calls?: Array<{ index: number; id?: string; function?: { name?: string; arguments?: string } }>;
           };
           finish_reason?: string | null;
         }>
       | undefined;
+    const choice = choices?.[0];
+    if (!choice) {
+      const chunkUsage = parsed.usage as ChatCompletionUsage | undefined;
+      if (chunkUsage) usage = chunkUsage;
+      return false;
+    }
 
-    const chunkUsage = parsed.usage as typeof usage;
+    const delta = choice.delta;
+    const chunkUsage = parsed.usage as ChatCompletionUsage | undefined;
     if (chunkUsage) usage = chunkUsage;
+    finishReason = mapFinishReason(choice.finish_reason);
 
-    if (!choices?.[0]) return false;
-    const delta = choices[0].delta;
-    const reason = choices[0].finish_reason;
-
-    if (reason === "tool_calls") finishReason = "tool_calls";
-    else if (reason === "length") finishReason = "length";
-    else if (reason === "stop") finishReason = "stop";
-
-    // Native reasoning_content (some models send this)
-    if (delta?.reasoning_content) {
-      fullReasoning += delta.reasoning_content;
-      onChunk({ type: "reasoning", content: delta.reasoning_content });
+    if (typeof delta?.reasoning_content === "string" && delta.reasoning_content.length > 0) {
+      reasoning += delta.reasoning_content;
+      onChunk({ type: "assistant_block_delta", messageId, block: reasoningBlock(delta.reasoning_content) });
     }
 
-    // Content with <think> tag fallback parsing
-    if (delta?.content) {
-      fullContent += delta.content;
-      inThink = parseThinkTags(delta.content, inThink, onChunk);
+    if (typeof delta?.content === "string" && delta.content.length > 0) {
+      text += delta.content;
+      onChunk({ type: "assistant_block_delta", messageId, block: textBlock(delta.content) });
     }
 
-    // Tool call deltas (streamed incrementally)
-    if (delta?.tool_calls) {
-      for (const tc of delta.tool_calls) {
-        const idx = tc.index;
-        if (!toolCallDeltas.has(idx)) {
-          toolCallDeltas.set(idx, { id: tc.id ?? "", name: "", args: "" });
-        }
-        const entry = toolCallDeltas.get(idx)!;
-        if (tc.id) entry.id = tc.id;
-        if (tc.function?.name) entry.name += tc.function.name;
-        if (tc.function?.arguments) entry.args += tc.function.arguments;
-      }
+    for (const toolCall of delta?.tool_calls ?? []) {
+      const existing = rawToolCalls.get(toolCall.index) ?? { index: toolCall.index };
+      rawToolCalls.set(toolCall.index, {
+        index: toolCall.index,
+        id: toolCall.id ?? existing.id,
+        name: `${existing.name ?? ""}${toolCall.function?.name ?? ""}`,
+        rawArguments: `${existing.rawArguments ?? ""}${toolCall.function?.arguments ?? ""}`,
+      });
     }
 
     return false;
+  }, { throwOnProviderError: false });
+
+  const turn = finalizeChatCompletionsTurn({
+    messageId,
+    text,
+    reasoning,
+    rawToolCalls: [...rawToolCalls.values()].sort((left, right) => left.index - right.index),
+    finishReason,
+    usage: normalizeUsage(usage),
+    tools: request.tools,
+    supportsConcatenatedJsonSplit: true,
   });
 
-  // Ensure finishReason matches actual tool call presence
-  if (toolCallDeltas.size > 0 && finishReason === "stop") {
-    finishReason = "tool_calls";
-  }
-
-  const toolCalls: UnifiedToolCall[] | undefined =
-    toolCallDeltas.size > 0
-      ? [...toolCallDeltas.entries()]
-          .sort(([a], [b]) => a - b)
-          .map(([, tc]) => ({
-            id: tc.id,
-            name: tc.name,
-            arguments: safeParseArgs(tc.args),
-          }))
-      : undefined;
-
-  if (toolCalls) {
-    onChunk({ type: "tool_calls", tool_calls: toolCalls, finishReason });
-  }
-
-  const stats = usage
-      ? {
-          inputTokens: usage.prompt_tokens ?? 0,
-          outputTokens: usage.completion_tokens ?? 0,
-          reasoningTokens: usage.reasoning_tokens ?? usage.completion_tokens_details?.reasoning_tokens ?? 0,
-          source: "provider" as const,
-        }
-    : undefined;
-
-  if (stats) onChunk({ type: "stats", stats });
-  onChunk({ type: "done", finishReason });
-
-  return {
-    content: fullContent,
-    reasoning: fullReasoning || undefined,
-    tool_calls: toolCalls,
-    finishReason,
-    stats,
+  const response = buildUnifiedResponseFromTurn(turn);
+  response.transportState = {
+    endpoint: "chat-completions",
+    lastAssistantMessageId: response.message.id,
   };
+  response.debug = {
+    endpoint: "chat-completions",
+    requestBody: buildChatCompletionsBody(request, true),
+  };
+  if (providerNotices.length > 0) {
+    response.notices = [...(response.notices ?? []), ...providerNotices];
+  }
+  onChunk({ type: "assistant_message", message: response.message, finishReason: response.finishReason });
+  if (response.stats) onChunk({ type: "stats", stats: response.stats });
+  onChunk({ type: "done", finishReason: response.finishReason });
+  return response;
 }

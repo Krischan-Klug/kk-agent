@@ -1,5 +1,5 @@
 import type { ProviderAdapter } from "../adapter.js";
-import type { EndpointCapabilities, ModelCapabilities, ModelInfo, ProviderConfig } from "../../types.js";
+import type { EndpointCapabilities, EndpointTransportProfile, ModelCapabilities, ModelInfo, ProviderConfig } from "../../types.js";
 import * as chatCompletions from "../endpoints/chat-completions.js";
 import * as responses from "../endpoints/responses.js";
 import { DEFAULT_REASONING_LEVELS } from "../../defaults.js";
@@ -45,6 +45,65 @@ function createEndpointCapabilities(
   };
 }
 
+function createTransportProfiles(
+  kind: "lmstudio" | "ollama" | "generic-openai",
+  reasoningControl: "none" | "effort" | "on-off",
+): Partial<Record<"chat-completions" | "responses", EndpointTransportProfile>> {
+  const chatReasoningTransport =
+    reasoningControl === "on-off"
+      ? "chat-completions-on-off"
+      : reasoningControl === "effort"
+        ? "chat-completions-effort"
+        : "none";
+
+  if (kind === "lmstudio") {
+    return {
+      "chat-completions": {
+        supported: true,
+        reasoningTransport: reasoningControl === "none" ? "none" : "chat-completions-effort",
+        toolSchemaTransport: "chat-completions-tools",
+        streamGrammar: "openai-chat-completions",
+        toolCallAssemblyMode: "chat-completions-indexed",
+        supportsParallelToolCalls: true,
+        supportsConcatenatedJsonSplit: true,
+        continuationMode: "none",
+        supportsPreviousResponseId: false,
+        supportsConversations: false,
+        supportsStrictTools: true,
+      },
+      responses: {
+        supported: true,
+        reasoningTransport: reasoningControl === "none" ? "none" : "responses-effort",
+        toolSchemaTransport: "responses-tools",
+        streamGrammar: "openai-responses",
+        toolCallAssemblyMode: "responses-output-state",
+        supportsParallelToolCalls: true,
+        supportsConcatenatedJsonSplit: true,
+        continuationMode: "raw-output-replay",
+        supportsPreviousResponseId: false,
+        supportsConversations: false,
+        supportsStrictTools: false,
+      },
+    };
+  }
+
+  return {
+    "chat-completions": {
+      supported: true,
+      reasoningTransport: chatReasoningTransport,
+      toolSchemaTransport: "chat-completions-tools",
+      streamGrammar: "openai-chat-completions",
+      toolCallAssemblyMode: "chat-completions-indexed",
+      supportsParallelToolCalls: true,
+      supportsConcatenatedJsonSplit: true,
+      continuationMode: "none",
+      supportsPreviousResponseId: false,
+      supportsConversations: false,
+      supportsStrictTools: true,
+    },
+  };
+}
+
 function createCapabilities(
   kind: "lmstudio" | "ollama" | "generic-openai",
   maxTokensMax?: number,
@@ -56,10 +115,11 @@ function createCapabilities(
       supportsVision: false,
       reasoningSource: "declared",
       supportsStreaming: true,
-      supportedEndpoints: ["chat-completions", "responses"],
+      supportedEndpoints: ["responses", "chat-completions"],
       reasoningControl: "effort",
       reasoningLevels: [...DEFAULT_REASONING_LEVELS],
       endpointCapabilities: createEndpointCapabilities(kind, maxTokensMax),
+      transportProfiles: createTransportProfiles(kind, "effort"),
     };
   }
 
@@ -74,6 +134,7 @@ function createCapabilities(
       reasoningControl: "none",
       reasoningLevels: [],
       endpointCapabilities: createEndpointCapabilities(kind, maxTokensMax),
+      transportProfiles: createTransportProfiles(kind, "none"),
     };
   }
 
@@ -87,6 +148,7 @@ function createCapabilities(
     reasoningControl: "none",
     reasoningLevels: [],
     endpointCapabilities: createEndpointCapabilities(kind, maxTokensMax),
+    transportProfiles: createTransportProfiles(kind, "none"),
   };
 }
 
@@ -98,6 +160,8 @@ function buildLmStudioCapabilities(model: {
   const contextWindow = model.loaded_instances?.[0]?.config?.context_length ?? model.max_context_length;
   const supportsReasoning = !!model.capabilities?.reasoning;
   const supportsVision = !!model.capabilities?.vision;
+  const allowedOptions = model.capabilities?.reasoning?.allowed_options ?? [];
+  const usesOnOff = allowedOptions.length > 0 && allowedOptions.every((option) => option === "on" || option === "off");
 
   return {
     supportsTools: true,
@@ -105,10 +169,11 @@ function buildLmStudioCapabilities(model: {
     supportsVision,
     reasoningSource: supportsReasoning ? "declared" : "none",
     supportsStreaming: true,
-    supportedEndpoints: ["chat-completions", "responses"],
-    reasoningControl: supportsReasoning ? "effort" : "none",
-    reasoningLevels: supportsReasoning ? [...DEFAULT_REASONING_LEVELS] : [],
+    supportedEndpoints: ["responses", "chat-completions"],
+    reasoningControl: !supportsReasoning ? "none" : usesOnOff ? "on-off" : "effort",
+    reasoningLevels: !supportsReasoning ? [] : [...DEFAULT_REASONING_LEVELS],
     endpointCapabilities: createEndpointCapabilities("lmstudio", contextWindow),
+    transportProfiles: createTransportProfiles("lmstudio", !supportsReasoning ? "none" : usesOnOff ? "on-off" : "effort"),
   };
 }
 

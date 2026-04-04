@@ -1,101 +1,235 @@
-/**
- * OpenAI Responses endpoint (/v1/responses)
- *
- * The newer OpenAI API format. Converts from/to our unified types.
- * Reference: https://platform.openai.com/docs/api-reference/responses
- */
-import type { UnifiedMessage, UnifiedRequest, UnifiedResponse, UnifiedToolCall, OnChunkFn } from "../types.js";
+import { randomUUID } from "node:crypto";
+import type { ContinuationMode } from "../../types.js";
+import type {
+  AssembledOutputItem,
+  OnChunkFn,
+  ProviderNotice,
+  ProviderTransportState,
+  ResponsesConversationItem,
+  ResponsesTransportState,
+  TokenStats,
+  UnifiedRequest,
+  UnifiedResponse,
+} from "../types.js";
 import { readSSEStream } from "../sse.js";
-import { safeParseArgs, buildTools } from "../helpers.js";
+import {
+  buildResponsesTools,
+  buildUnifiedResponseFromTurn,
+  extractResponsesInstructions,
+  serializeToolMessageToResponsesInput,
+  serializeUserMessageToResponsesInput,
+} from "../helpers.js";
+import { finalizeResponsesOutput, handleResponsesStreamingEvent } from "../transport.js";
+import { reasoningBlock, textBlock, type TranscriptMessage } from "../../../lib/transcript.js";
 
-/* ── Format conversion ── */
+type ResponsesUsage = {
+  input_tokens?: number;
+  output_tokens?: number;
+  reasoning_tokens?: number;
+  output_tokens_details?: { reasoning_tokens?: number };
+};
 
-/**
- * Convert UnifiedMessage[] → Responses API `input` array.
- * The responses API uses a flat list of typed items.
- */
-function buildInput(messages: UnifiedMessage[]) {
-  const input: Array<Record<string, unknown>> = [];
+type ResponsesApiResponse = {
+  id?: string;
+  output?: Array<Record<string, unknown>>;
+  usage?: ResponsesUsage;
+  conversation_id?: string;
+  conversation?: string | { id?: string };
+};
 
-  for (const m of messages) {
-    if (m.role === "system") {
-      input.push({ type: "message", role: "system", content: m.content });
-    } else if (m.role === "user") {
-      // Handle multimodal content blocks for Responses API
-      if (Array.isArray(m.content)) {
-        const mapped = m.content.map((block) => {
-          if (block.type === "text") return { type: "input_text", text: block.text };
-          if (block.type === "image_url") return { type: "input_image", image_url: block.image_url.url };
-          return block;
-        });
-        input.push({ type: "message", role: "user", content: mapped });
-      } else {
-        input.push({ type: "message", role: "user", content: m.content });
-      }
-    } else if (m.role === "assistant") {
-      if (m.content) {
-        input.push({ type: "message", role: "assistant", content: m.content });
-      }
-      if (m.tool_calls?.length) {
-        for (const tc of m.tool_calls) {
-          input.push({
-            type: "function_call",
-            id: tc.id,
-            name: tc.name,
-            arguments: JSON.stringify(tc.arguments),
-          });
-        }
-      }
-    } else if (m.role === "tool") {
-      input.push({
-        type: "function_call_output",
-        call_id: m.tool_call_id,
-        output: m.content,
-      });
-    }
-  }
-
-  return input;
+function cloneConversationItem<T extends ResponsesConversationItem | AssembledOutputItem>(item: T): T {
+  return structuredClone(item);
 }
 
-function buildResponsesBody(request: UnifiedRequest, stream: boolean): Record<string, unknown> {
+function isResponsesTransportState(state: ProviderTransportState | undefined): state is ResponsesTransportState {
+  return state?.endpoint === "responses";
+}
+
+function createResponsesState(continuationMode: ContinuationMode): ResponsesTransportState {
+  return {
+    endpoint: "responses",
+    continuationMode,
+    syncedMessageIds: [],
+    historyItems: [],
+    callIdByToolUseId: {},
+  };
+}
+
+function cloneResponsesState(
+  state: ResponsesTransportState | undefined,
+  continuationMode: ContinuationMode,
+): ResponsesTransportState {
+  if (!state) return createResponsesState(continuationMode);
+  return {
+    endpoint: "responses",
+    continuationMode,
+    syncedMessageIds: [...state.syncedMessageIds],
+    historyItems: state.historyItems.map((item) => cloneConversationItem(item)),
+    callIdByToolUseId: { ...state.callIdByToolUseId },
+    lastResponseId: state.lastResponseId,
+    conversationId: state.conversationId,
+    lastOutput: state.lastOutput?.map((item) => cloneConversationItem(item)),
+  };
+}
+
+function normalizeUsage(usage?: ResponsesUsage): TokenStats | undefined {
+  if (!usage) return undefined;
+  return {
+    inputTokens: usage.input_tokens ?? 0,
+    outputTokens: usage.output_tokens ?? 0,
+    reasoningTokens: usage.reasoning_tokens ?? usage.output_tokens_details?.reasoning_tokens ?? 0,
+    source: "provider",
+  };
+}
+
+function extractResponseConversationId(response?: Record<string, unknown>): string | undefined {
+  if (!response) return undefined;
+  if (typeof response.conversation_id === "string") return response.conversation_id;
+  if (typeof response.conversation === "string") return response.conversation;
+  if (
+    typeof response.conversation === "object"
+    && response.conversation !== null
+    && "id" in response.conversation
+    && typeof (response.conversation as { id?: unknown }).id === "string"
+  ) {
+    return (response.conversation as { id: string }).id;
+  }
+  return undefined;
+}
+
+function emitDeltaBlocks(parsed: Record<string, unknown>, messageId: string, onChunk: OnChunkFn): void {
+  const eventType = typeof parsed.type === "string" ? parsed.type : "";
+  const delta = typeof parsed.delta === "string" ? parsed.delta : undefined;
+  if (!delta || delta.length === 0) return;
+
+  if (eventType === "response.output_text.delta" || eventType === "response.text.delta") {
+    onChunk({ type: "assistant_block_delta", messageId, block: textBlock(delta) });
+    return;
+  }
+
+  if (eventType === "response.reasoning_text.delta" || eventType === "response.reasoning_summary_text.delta") {
+    onChunk({ type: "assistant_block_delta", messageId, block: reasoningBlock(delta) });
+  }
+}
+
+type PreparedResponsesRequest = {
+  body: Record<string, unknown>;
+  transportState: ResponsesTransportState;
+  notices: ProviderNotice[];
+  continuationMode: ContinuationMode;
+};
+
+function appendUnsyncedConversationItems(
+  state: ResponsesTransportState,
+  messages: TranscriptMessage[],
+): { transportState: ResponsesTransportState; appendedItems: ResponsesConversationItem[]; notices: ProviderNotice[] } {
+  const syncedMessageIds = new Set(state.syncedMessageIds);
+  const appendedItems: ResponsesConversationItem[] = [];
+  const notices: ProviderNotice[] = [];
+
+  for (const message of messages) {
+    if (message.role === "system" || syncedMessageIds.has(message.id)) continue;
+
+    if (message.role === "assistant") {
+      notices.push({
+        level: "warning",
+        code: "responses_missing_native_output",
+        message: `Responses transport skipped transcript-only assistant message ${message.id}; native output replay is required.`,
+      });
+      syncedMessageIds.add(message.id);
+      state.syncedMessageIds.push(message.id);
+      continue;
+    }
+
+    const serialized = message.role === "user"
+      ? serializeUserMessageToResponsesInput(message)
+      : serializeToolMessageToResponsesInput(message, state.callIdByToolUseId);
+
+    state.historyItems.push(...serialized.map((item) => cloneConversationItem(item)));
+    appendedItems.push(...serialized.map((item) => cloneConversationItem(item)));
+    syncedMessageIds.add(message.id);
+    state.syncedMessageIds.push(message.id);
+  }
+
+  return { transportState: state, appendedItems, notices };
+}
+
+export function prepareResponsesRequest(request: UnifiedRequest): PreparedResponsesRequest {
+  const continuationMode = request.transportProfile?.continuationMode ?? "raw-output-replay";
+  const baseState = isResponsesTransportState(request.transportState)
+    ? request.transportState
+    : undefined;
+  const transportState = cloneResponsesState(baseState, continuationMode);
+  const { appendedItems, notices } = appendUnsyncedConversationItems(transportState, request.messages);
   const body: Record<string, unknown> = {
     model: request.model,
-    input: buildInput(request.messages),
-    stream,
+    stream: request.stream === true,
   };
 
-  const tools = request.tools?.map((t) => ({
-    type: "function" as const,
-    name: t.name,
-    description: t.description,
-    parameters: t.parameters,
-  }));
+  const instructions = extractResponsesInstructions(request.messages);
+  if (instructions) body.instructions = instructions;
+
+  const tools = buildResponsesTools(request.tools, request.transportProfile?.supportsStrictTools === true);
   if (tools?.length) body.tools = tools;
-  if (request.reasoningEffort) {
-    body.reasoning = { effort: request.reasoningEffort };
-  }
+  if (request.reasoningEffort) body.reasoning = { effort: request.reasoningEffort };
   if (request.temperature !== undefined) body.temperature = request.temperature;
   if (request.maxOutputTokens !== undefined && request.maxOutputTokens > 0) {
     body.max_output_tokens = request.maxOutputTokens;
   }
 
-  return body;
+  const canUsePreviousResponseId = continuationMode === "previous-response-id"
+    && request.transportProfile?.supportsPreviousResponseId === true
+    && typeof transportState.lastResponseId === "string"
+    && appendedItems.length > 0;
+
+  if (canUsePreviousResponseId) {
+    body.previous_response_id = transportState.lastResponseId;
+    body.input = appendedItems;
+  } else {
+    body.input = transportState.historyItems;
+  }
+
+  return { body, transportState, notices, continuationMode: canUsePreviousResponseId ? "previous-response-id" : "raw-output-replay" };
 }
 
-/* ── Non-streaming ── */
+export function commitResponsesTransportState(input: {
+  transportState: ResponsesTransportState;
+  assistantMessageId: string;
+  output: AssembledOutputItem[];
+  responseId?: string;
+  conversationId?: string;
+}): ResponsesTransportState {
+  const next = cloneResponsesState(input.transportState, input.transportState.continuationMode);
+  next.historyItems.push(...input.output.map((item) => cloneConversationItem(item)));
+  if (!next.syncedMessageIds.includes(input.assistantMessageId)) {
+    next.syncedMessageIds.push(input.assistantMessageId);
+  }
+  next.lastOutput = input.output.map((item) => cloneConversationItem(item));
+  if (input.responseId) next.lastResponseId = input.responseId;
+  if (input.conversationId) next.conversationId = input.conversationId;
+
+  for (const item of input.output) {
+    if (item.type !== "function_call") continue;
+    const toolUseId = typeof item.call_id === "string" ? item.call_id : typeof item.id === "string" ? item.id : undefined;
+    const callId = typeof item.call_id === "string" ? item.call_id : toolUseId;
+    if (toolUseId && callId) {
+      next.callIdByToolUseId[toolUseId] = callId;
+    }
+  }
+
+  return next;
+}
 
 export async function chat(
   request: UnifiedRequest,
   baseUrl: string,
   headers: Record<string, string> = {},
 ): Promise<UnifiedResponse> {
-  const body = buildResponsesBody(request, false);
-
+  const prepared = prepareResponsesRequest({ ...request, stream: false });
   const res = await fetch(`${baseUrl}/v1/responses`, {
     method: "POST",
     headers: { "Content-Type": "application/json", ...headers },
-    body: JSON.stringify(body),
+    body: JSON.stringify(prepared.body),
   });
 
   if (!res.ok) {
@@ -103,61 +237,39 @@ export async function chat(
     throw new Error(`Responses API error ${res.status}: ${text}`);
   }
 
-  const data = (await res.json()) as {
-    output: Array<{
-      type: string;
-      content?: Array<{ type: string; text?: string }>;
-      id?: string;
-      name?: string;
-      arguments?: string;
-    }>;
-    usage?: {
-      input_tokens?: number;
-      output_tokens?: number;
-      reasoning_tokens?: number;
-      output_tokens_details?: { reasoning_tokens?: number };
-    };
+  const data = (await res.json()) as ResponsesApiResponse;
+  const output = (data.output ?? []).filter((item): item is Record<string, unknown> & { type: string } =>
+    typeof item === "object" && item !== null && typeof item.type === "string"
+  );
+  const turn = finalizeResponsesOutput({
+    messageId: randomUUID(),
+    output,
+    usage: normalizeUsage(data.usage),
+    tools: request.tools,
+    supportsConcatenatedJsonSplit: request.transportProfile?.supportsConcatenatedJsonSplit ?? true,
+  });
+
+  const response = buildUnifiedResponseFromTurn(turn);
+  response.transportState = commitResponsesTransportState({
+    transportState: prepared.transportState,
+    assistantMessageId: response.message.id,
+    output,
+    responseId: typeof data.id === "string" ? data.id : undefined,
+    conversationId: extractResponseConversationId(data as unknown as Record<string, unknown>),
+  });
+  response.debug = {
+    endpoint: "responses",
+    continuationMode: prepared.continuationMode,
+    requestBody: prepared.body,
+    responseId: typeof data.id === "string" ? data.id : undefined,
+    conversationId: extractResponseConversationId(data as unknown as Record<string, unknown>),
+    outputCount: output.length,
   };
-
-  let content = "";
-  let reasoning = "";
-  const toolCalls: UnifiedToolCall[] = [];
-
-  for (const item of data.output) {
-    if (item.type === "message" && item.content) {
-      for (const part of item.content) {
-        if (part.type === "output_text" && part.text) content += part.text;
-      }
-    } else if (item.type === "reasoning" && item.content) {
-      for (const part of item.content) {
-        if (part.type === "reasoning_text" && part.text) reasoning += part.text;
-      }
-    } else if (item.type === "function_call" && item.id && item.name) {
-      toolCalls.push({
-        id: item.id,
-        name: item.name,
-        arguments: safeParseArgs(item.arguments ?? "{}"),
-      });
-    }
+  if (prepared.notices.length > 0) {
+    response.notices = [...prepared.notices, ...(response.notices ?? [])];
   }
-
-  return {
-    content,
-    reasoning: reasoning || undefined,
-    tool_calls: toolCalls.length > 0 ? toolCalls : undefined,
-    finishReason: toolCalls.length > 0 ? "tool_calls" : "stop",
-    stats: data.usage
-      ? {
-          inputTokens: data.usage.input_tokens ?? 0,
-          outputTokens: data.usage.output_tokens ?? 0,
-          reasoningTokens: data.usage.reasoning_tokens ?? data.usage.output_tokens_details?.reasoning_tokens ?? 0,
-          source: "provider",
-        }
-      : undefined,
-  };
+  return response;
 }
-
-/* ── Streaming ── */
 
 export async function chatStream(
   request: UnifiedRequest,
@@ -165,12 +277,11 @@ export async function chatStream(
   onChunk: OnChunkFn,
   headers: Record<string, string> = {},
 ): Promise<UnifiedResponse> {
-  const body = buildResponsesBody(request, true);
-
+  const prepared = prepareResponsesRequest({ ...request, stream: true });
   const res = await fetch(`${baseUrl}/v1/responses`, {
     method: "POST",
     headers: { "Content-Type": "application/json", ...headers },
-    body: JSON.stringify(body),
+    body: JSON.stringify(prepared.body),
   });
 
   if (!res.ok) {
@@ -178,101 +289,88 @@ export async function chatStream(
     throw new Error(`Responses API error ${res.status}: ${text}`);
   }
 
-  let fullContent = "";
-  const toolCalls: UnifiedToolCall[] = [];
-  let currentFnCallId = "";
-  let currentFnCallName = "";
-  let currentFnCallArgs = "";
-  let fullReasoning = "";
-  let usage: {
-    input_tokens?: number;
-    output_tokens?: number;
-    reasoning_tokens?: number;
-    output_tokens_details?: { reasoning_tokens?: number };
-  } | undefined;
+  const messageId = randomUUID();
+  const providerNotices: ProviderNotice[] = [];
+  let output: Array<Record<string, unknown> & { type: string }> = [];
+  let usage: ResponsesUsage | undefined;
+  let responseId: string | undefined;
+  let conversationId: string | undefined;
 
   await readSSEStream(res, (parsed) => {
-    const eventType = parsed.type as string;
-
-    // Text content delta
-    if (eventType === "response.output_text.delta") {
-      const delta = parsed.delta as string;
-      if (delta) {
-        fullContent += delta;
-        onChunk({ type: "content", content: delta });
-      }
+    if (parsed.error && typeof parsed.error === "object") {
+      const message =
+        "message" in parsed.error && typeof parsed.error.message === "string"
+          ? parsed.error.message
+          : JSON.stringify(parsed.error);
+      providerNotices.push({
+        level: message.includes("tool call") ? "warning" : "error",
+        message: `Provider stream stopped early: ${message}`,
+      });
+      return true;
     }
 
-    if (eventType === "response.reasoning_text.delta") {
-      const delta = parsed.delta as string;
-      if (delta) {
-        fullReasoning += delta;
-        onChunk({ type: "reasoning", content: delta });
-      }
+    if (parsed.type === "error" && typeof parsed.message === "string") {
+      providerNotices.push({
+        level: parsed.message.includes("tool call") ? "warning" : "error",
+        message: `Provider stream stopped early: ${parsed.message}`,
+      });
+      return true;
     }
 
-    // Function call started
-    if (eventType === "response.function_call_arguments.delta") {
-      const delta = parsed.delta as string;
-      if (delta) currentFnCallArgs += delta;
+    emitDeltaBlocks(parsed, messageId, onChunk);
+    const next = handleResponsesStreamingEvent(parsed, output);
+    output = next.output;
+
+    if (next.metadata?.error) {
+      providerNotices.push({
+        level: "error",
+        message: next.metadata.error,
+      });
+      return true;
     }
 
-    if (eventType === "response.output_item.added") {
-      const item = parsed.item as { type?: string; id?: string; name?: string } | undefined;
-      if (item?.type === "function_call") {
-        currentFnCallId = item.id ?? "";
-        currentFnCallName = item.name ?? "";
-        currentFnCallArgs = "";
-      }
+    if (next.metadata?.usage) {
+      usage = next.metadata.usage as ResponsesUsage;
     }
-
-    // Function call done
-    if (eventType === "response.output_item.done") {
-      const item = parsed.item as { type?: string; id?: string; name?: string; arguments?: string } | undefined;
-      if (item?.type === "function_call") {
-        toolCalls.push({
-          id: item.id ?? currentFnCallId,
-          name: item.name ?? currentFnCallName,
-          arguments: safeParseArgs(item.arguments ?? currentFnCallArgs),
-        });
-        currentFnCallId = "";
-        currentFnCallName = "";
-        currentFnCallArgs = "";
-      }
+    if (typeof next.metadata?.responseId === "string") {
+      responseId = next.metadata.responseId;
     }
-
-    // Completion
-    if (eventType === "response.completed") {
-      const response = parsed.response as { usage?: typeof usage } | undefined;
-      if (response?.usage) usage = response.usage;
+    if (typeof next.metadata?.conversationId === "string") {
+      conversationId = next.metadata.conversationId;
     }
 
     return false;
+  }, { throwOnProviderError: false });
+
+  const turn = finalizeResponsesOutput({
+    messageId,
+    output,
+    usage: normalizeUsage(usage),
+    tools: request.tools,
+    supportsConcatenatedJsonSplit: request.transportProfile?.supportsConcatenatedJsonSplit ?? true,
   });
 
-  const finishReason = toolCalls.length > 0 ? "tool_calls" as const : "stop" as const;
-
-  if (toolCalls.length > 0) {
-    onChunk({ type: "tool_calls", tool_calls: toolCalls, finishReason });
-  }
-
-  const stats = usage
-      ? {
-          inputTokens: usage.input_tokens ?? 0,
-          outputTokens: usage.output_tokens ?? 0,
-          reasoningTokens: usage.reasoning_tokens ?? usage.output_tokens_details?.reasoning_tokens ?? 0,
-          source: "provider" as const,
-        }
-      : undefined;
-
-  if (stats) onChunk({ type: "stats", stats });
-  onChunk({ type: "done", finishReason });
-
-  return {
-    content: fullContent,
-    reasoning: fullReasoning || undefined,
-    tool_calls: toolCalls.length > 0 ? toolCalls : undefined,
-    finishReason,
-    stats,
+  const response = buildUnifiedResponseFromTurn(turn);
+  response.transportState = commitResponsesTransportState({
+    transportState: prepared.transportState,
+    assistantMessageId: response.message.id,
+    output,
+    responseId,
+    conversationId,
+  });
+  response.debug = {
+    endpoint: "responses",
+    continuationMode: prepared.continuationMode,
+    requestBody: prepared.body,
+    responseId,
+    conversationId,
+    outputCount: output.length,
   };
+  if (prepared.notices.length > 0 || providerNotices.length > 0) {
+    response.notices = [...prepared.notices, ...(response.notices ?? []), ...providerNotices];
+  }
+  onChunk({ type: "assistant_message", message: response.message, finishReason: response.finishReason });
+  if (response.stats) onChunk({ type: "stats", stats: response.stats });
+  onChunk({ type: "done", finishReason: response.finishReason });
+  return response;
 }

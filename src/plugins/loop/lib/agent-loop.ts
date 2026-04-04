@@ -1,41 +1,15 @@
-import type { UnifiedMessage, UnifiedToolDefinition, ContentBlock } from "../../provider/lib/types.js";
-import { getTextContent } from "../../provider/lib/types.js";
-import type { LoopOptions, LoopResult, LoopMessage } from "../types.js";
+import type { TranscriptMessage } from "../../lib/transcript.js";
+import { createTranscriptMessage, getMessageText, getToolUses, hasVisibleAssistantContent, repairTranscript, textBlock } from "../../lib/transcript.js";
+import type { LoopOptions, LoopResult } from "../types.js";
 import type { AgentLoopState } from "../../agent/types.js";
 import { callProviderStream } from "../../provider/service.js";
 import { buildPrompt } from "../../systemprompt/service.js";
 import { getSystemVariables } from "../../systemprompt/lib/builder.js";
-import { getDefaults } from "../../lib/defaults.js";
 import { getTaskSummary } from "../../tools/service.js";
+import { ToolExecutor } from "./tool-executor.js";
+import { getDefaults } from "../../lib/defaults.js";
 
-const INVALID_TOOL_RETRY_BUDGET = 2;
 const EMPTY_RESPONSE_RETRY_BUDGET = 1;
-
-const INVALID_TOOL_CALL_PATTERNS = [
-  /<tool_call\b/i,
-  /<function=/i,
-  /<parameter=/i,
-  /<\/function>/i,
-  /<\/tool_call>/i,
-];
-
-function looksLikeInvalidToolAttempt(content: string | ContentBlock[], reasoning?: string): boolean {
-  const text = getTextContent(content);
-  const combined = `${text}\n${reasoning ?? ""}`;
-  return INVALID_TOOL_CALL_PATTERNS.some((pattern) => pattern.test(combined));
-}
-
-function hasVisibleContent(content: string | ContentBlock[]): boolean {
-  return getTextContent(content).trim().length > 0;
-}
-
-function toUnifiedTools(tools: UnifiedToolDefinition[]): UnifiedToolDefinition[] {
-  return tools.map((tool) => ({
-    name: tool.name,
-    description: tool.description,
-    parameters: tool.parameters,
-  }));
-}
 
 function buildLoopState(opts: LoopOptions): AgentLoopState {
   const now = new Date().toISOString();
@@ -62,29 +36,25 @@ function emitLoopState(
 
 function buildModelMessages(
   systemPrompt: string,
-  messages: LoopMessage[],
+  messages: TranscriptMessage[],
   retryInstruction?: string,
   extraSystemMessages: string[] = [],
-): UnifiedMessage[] {
+): TranscriptMessage[] {
   return [
-    { role: "system", content: systemPrompt },
-    ...(retryInstruction ? [{ role: "system" as const, content: retryInstruction }] : []),
-    ...extraSystemMessages.map((content) => ({ role: "system" as const, content })),
-    ...messages.map((m) => ({
-      role: m.role,
-      content: m.content,
-      tool_call_id: m.tool_call_id,
-      tool_calls: m.tool_calls,
-    })),
+    createTranscriptMessage({ role: "system", content: [textBlock(systemPrompt)] }),
+    ...(retryInstruction ? [createTranscriptMessage({ role: "system", content: [textBlock(retryInstruction)] })] : []),
+    ...extraSystemMessages.map((message) => createTranscriptMessage({ role: "system", content: [textBlock(message)] })),
+    ...repairTranscript(messages),
   ];
 }
 
 async function runModelPass(
   opts: LoopOptions,
-  messages: LoopMessage[],
+  messages: TranscriptMessage[],
+  providerState: LoopOptions["providerState"],
   retryInstruction?: string,
   extraSystemMessages: string[] = [],
-): Promise<Awaited<ReturnType<typeof callProviderStream>>> {
+) {
   const modeConfig = opts.modeConfigs[opts.activeMode];
   if (!modeConfig) {
     throw new Error(`Missing mode config for mode "${opts.activeMode}"`);
@@ -99,6 +69,7 @@ async function runModelPass(
     TASK_SUMMARY: getTaskSummary(opts.sessionId),
     ...opts.agentVariables,
   };
+
   const systemPrompt = buildPrompt(
     modeConfig.promptSections,
     modeConfig.modeInstruction,
@@ -109,34 +80,31 @@ async function runModelPass(
       mode: opts.activeMode,
       iteration: Number(variables.iteration),
       maxIterations: opts.maxIterations,
-    }
+    },
   );
-
-  const messagesWithSystem = buildModelMessages(systemPrompt, messages, retryInstruction, extraSystemMessages);
 
   let receivedProviderStats = false;
   const response = await callProviderStream(
     {
       providerId: opts.providerId,
       model: opts.model,
-      messages: messagesWithSystem,
-      tools: modeConfig.allTools.length > 0 ? toUnifiedTools(modeConfig.allTools) : undefined,
+      messages: buildModelMessages(systemPrompt, messages, retryInstruction, extraSystemMessages),
+      tools: modeConfig.allTools.length > 0 ? modeConfig.allTools : undefined,
       reasoningEffort: opts.reasoningEffort,
       temperature: opts.temperature,
       maxOutputTokens: opts.maxOutputTokens,
+      transportState: providerState,
     },
     (chunk) => {
-      if (chunk.type === "content" && chunk.content) {
-        opts.onContent?.(chunk.content);
+      if (chunk.type === "assistant_block_delta") {
+        opts.onAssistantBlockDelta?.(chunk.messageId, chunk.block);
         return;
       }
-
-      if (chunk.type === "reasoning" && chunk.content) {
-        opts.onReasoning?.(chunk.content);
+      if (chunk.type === "assistant_message") {
+        opts.onAssistantMessage?.(chunk.message);
         return;
       }
-
-      if (chunk.type === "stats" && chunk.stats) {
+      if (chunk.type === "stats") {
         receivedProviderStats = true;
         opts.onStats?.(chunk.stats);
       }
@@ -156,105 +124,77 @@ async function runModelPass(
 }
 
 export async function runAgentLoop(opts: LoopOptions): Promise<LoopResult> {
-  const messages: LoopMessage[] = [...opts.messages];
-  let iteration = 0;
-  let lastContent = "";
-  let lastMeaningfulContent = "";
-  let invalidToolAttemptCount = 0;
-  let emptyResponseRetryCount = 0;
-  let retryInstruction: string | undefined;
+  const messages: TranscriptMessage[] = [...opts.messages];
   const loopState = buildLoopState(opts);
   opts.onLoopState?.(loopState);
+
+  let iteration = 0;
+  let finalResponse = "";
+  let retryInstruction: string | undefined;
+  let emptyResponseRetryCount = 0;
+  let invalidToolRetryCount = 0;
+  let providerState = opts.providerState;
+  let providerDebug: LoopResult["providerDebug"] = undefined;
+  const defaults = getDefaults();
 
   while (iteration < opts.maxIterations) {
     iteration++;
     emitLoopState(loopState, opts, { iteration, status: "running", mode: opts.activeMode });
 
-    const extraSys = iteration === 1 && opts.extraSystemMessages ? [...opts.extraSystemMessages] : [];
-    const response = await runModelPass(opts, messages, retryInstruction, extraSys);
+    const extraSystemMessages = iteration === 1 && opts.extraSystemMessages ? [...opts.extraSystemMessages] : [];
+    const response = await runModelPass(opts, messages, providerState, retryInstruction, extraSystemMessages);
     retryInstruction = undefined;
+    for (const notice of response.notices ?? []) {
+      opts.onSystemNotice?.(notice.level, notice.message);
+    }
 
-    const messageContent = response.content.trim();
-    const messageReasoning = response.reasoning?.trim() || undefined;
-    const toolsCalled = response.tool_calls ?? [];
+    const assistantMessage = response.message;
+    const assistantText = getMessageText(assistantMessage).trim();
+    const toolUses = getToolUses(assistantMessage);
+    const hasToolParseErrors = (response.parseIssues ?? []).some((issue) => issue.severity === "error");
 
-    const invalidToolAttempt =
-      response.finishReason !== "tool_calls"
-      && toolsCalled.length === 0
-      && looksLikeInvalidToolAttempt(messageContent, messageReasoning);
-
-    if (invalidToolAttempt) {
-      invalidToolAttemptCount++;
-      if (invalidToolAttemptCount <= INVALID_TOOL_RETRY_BUDGET) {
-        opts.onContentReset?.();
-        opts.onRetryNotice?.("Modellantwort wurde verworfen: Tool-Aufruf nur als Text statt strukturierter tool_call. Korrekturversuch.");
-        retryInstruction = getDefaults().retry.invalidToolInstruction;
+    if (toolUses.length === 0 && !hasVisibleAssistantContent(assistantMessage)) {
+      if (hasToolParseErrors && invalidToolRetryCount < EMPTY_RESPONSE_RETRY_BUDGET) {
+        invalidToolRetryCount++;
+        opts.onSystemNotice?.("warning", "Modell hat ungueltige Tool-Calls erzeugt. Korrekturversuch.");
+        retryInstruction = [
+          defaults.retry.invalidToolInstruction,
+          "If you call a tool, use only registered tool names and valid JSON object arguments.",
+        ].join(" ");
         iteration--;
         continue;
       }
-      emitLoopState(loopState, opts, { status: "error" });
-      throw new Error("Model emitted pseudo-formatted tool calls instead of structured tool_calls.");
-    }
-    invalidToolAttemptCount = 0;
 
-    const emptyResponse =
-      response.finishReason === "stop"
-      && toolsCalled.length === 0
-      && !hasVisibleContent(messageContent)
-      && !messageReasoning;
-
-    if (emptyResponse) {
       emptyResponseRetryCount++;
       if (emptyResponseRetryCount <= EMPTY_RESPONSE_RETRY_BUDGET) {
-        opts.onContentReset?.();
-        opts.onRetryNotice?.("Modellantwort war leer. Korrekturversuch.");
-        retryInstruction = getDefaults().retry.emptyResponseInstruction;
+        opts.onSystemNotice?.("warning", "Modellantwort war leer. Korrekturversuch.");
+        retryInstruction = defaults.retry.emptyResponseInstruction;
         iteration--;
         continue;
       }
       emitLoopState(loopState, opts, { status: "error" });
       throw new Error("Model returned an empty response twice in a row.");
     }
+
     emptyResponseRetryCount = 0;
+    invalidToolRetryCount = 0;
+    messages.push(assistantMessage);
+    finalResponse = assistantText || finalResponse;
+    providerState = response.transportState ?? providerState;
+    providerDebug = response.debug ?? providerDebug;
 
-    lastContent = messageContent;
-    if (hasVisibleContent(messageContent)) {
-      lastMeaningfulContent = messageContent;
+    if (toolUses.length === 0) {
+      break;
     }
 
-    const assistantMessage: LoopMessage = {
-      role: "assistant",
-      content: messageContent,
-      reasoning: messageReasoning,
-      tool_calls: toolsCalled.length > 0 ? toolsCalled : undefined,
-    };
-    const shouldAppendAssistant =
-      toolsCalled.length > 0 || hasVisibleContent(messageContent) || Boolean(messageReasoning);
-
-    if (shouldAppendAssistant) {
-      messages.push(assistantMessage);
-    }
-
-    if (response.finishReason === "tool_calls" && toolsCalled.length > 0) {
-      for (const toolCall of toolsCalled) {
-        opts.onToolCall?.(toolCall);
-        const result = await opts.executeTool(toolCall.name, toolCall.arguments, opts.activeMode);
-        opts.onToolResult?.(toolCall.id, result);
-
-        messages.push({
-          role: "tool",
-          content: result.contextContent ?? result.content,
-          isError: result.isError,
-          tool_call_id: toolCall.id,
-        });
-      }
-
-      continue;
-    }
-
-    break;
+    const executor = new ToolExecutor(opts.executeTool, opts.activeMode, (update) => {
+      opts.onToolExecutionUpdate?.(update.toolUseId, update.toolName, update.status, update.result);
+    });
+    const toolResults = await executor.execute(toolUses);
+    messages.push(...toolResults);
   }
 
+  const repaired = repairTranscript(messages);
   emitLoopState(loopState, opts, {
     status: loopState.status === "error" ? "error" : "completed",
     iteration,
@@ -262,8 +202,10 @@ export async function runAgentLoop(opts: LoopOptions): Promise<LoopResult> {
   });
 
   return {
-    messages,
-    finalResponse: lastMeaningfulContent || lastContent,
+    messages: repaired,
+    finalResponse,
     iterations: iteration,
+    providerState,
+    providerDebug,
   };
 }

@@ -1,6 +1,5 @@
 import type { SessionState, CreateSessionBody, SSEEvent } from "./types.js";
-import type { AttachmentDisplayMeta } from "./lib/attachment-types.js";
-import type { ContentBlock, UnifiedToolDefinition } from "../provider/lib/types.js";
+import type { UnifiedToolDefinition } from "../provider/lib/types.js";
 import * as store from "./lib/store.js";
 import { clearSessionAttachments, getSessionAttachmentsByIds, readAttachmentData } from "./lib/attachments.js";
 import { buildPrompt, getSystemVariables } from "../systemprompt/service.js";
@@ -34,6 +33,15 @@ import { resolveReasoningConfig, resolveSessionDefaults } from "./lib/session-re
 import { getChatModes } from "../agent/lib/modes.js";
 import { getModeConfig } from "../agent/lib/mode-config.js";
 import type { AgentDefinition, ChatMode } from "../agent/types.js";
+import { attachmentRefBlock, createTranscriptMessage, textBlock, type TranscriptBlock } from "../lib/transcript.js";
+import { normalizeCanonicalReasoningLevel } from "../provider/lib/capabilities.js";
+
+function normalizeSessionReasoning(session: SessionState): SessionState {
+  return {
+    ...session,
+    reasoningEffort: normalizeCanonicalReasoningLevel(session.reasoningEffort),
+  };
+}
 
 function intersectIds(sessionIds: string[], modeIds: string[]): string[] {
   const sessionSet = new Set(sessionIds);
@@ -147,7 +155,7 @@ function formatAttachmentSize(bytes: number): string {
 export async function createSession(body: CreateSessionBody): Promise<SessionState> {
   const agent = getAgent(body.agentId);
   const defaults = await resolveSessionDefaults(agent, body, getActiveProviderId());
-  return store.createSession({
+  return normalizeSessionReasoning(store.createSession({
     agentId: body.agentId,
     providerId: defaults.providerId,
     model: defaults.model,
@@ -156,17 +164,17 @@ export async function createSession(body: CreateSessionBody): Promise<SessionSta
     activeMcpIds: defaults.activeMcpIds,
     reasoningEffort: defaults.reasoningEffort,
     temperature: defaults.temperature,
-  });
+  }));
 }
 
 export function getSession(id: string): SessionState {
   const session = store.getSession(id);
   if (!session) throw new Error(`Session "${id}" not found`);
-  return session;
+  return normalizeSessionReasoning(session);
 }
 
 export function listSessions(): SessionState[] {
-  return store.listSessions();
+  return store.listSessions().map(normalizeSessionReasoning);
 }
 
 export function deleteSession(id: string): void {
@@ -188,42 +196,38 @@ async function prepareLoopRun(sessionId: string, message: string, attachmentIds?
   const session = getSession(sessionId);
   const agent = getAgent(session.agentId);
 
-  let userContent: string | ContentBlock[] = message;
-  let attachmentsMeta: AttachmentDisplayMeta[] | undefined;
+  const userBlocks: TranscriptBlock[] = [textBlock(message)];
   const extraSystemMessages: string[] = [];
 
   if (attachmentIds?.length) {
     const attachments = await getSessionAttachmentsByIds(sessionId, attachmentIds);
     if (attachments.length > 0) {
-      const textParts: string[] = [message];
-      const imageBlocks: ContentBlock[] = [];
-      const displayMetas: AttachmentDisplayMeta[] = [];
       const attachmentHints: string[] = [];
 
       for (const att of attachments) {
-        const displayMeta: AttachmentDisplayMeta = {
-          filename: att.filename,
-          mimeType: att.mimeType,
-          category: att.category,
-          size: att.size,
-        };
-
         attachmentHints.push(
           `- ${att.filename} [id=${att.id}, type=${att.category}, size=${formatAttachmentSize(att.size)}]`,
         );
 
+        let previewDataUrl: string | undefined;
         if (att.category === "image") {
           const base64 = (await readAttachmentData(att)).toString("base64");
-          const dataUrl = `data:${att.mimeType};base64,${base64}`;
-          imageBlocks.push({ type: "image_url", image_url: { url: dataUrl } });
-          displayMeta.previewDataUrl = dataUrl;
+          previewDataUrl = `data:${att.mimeType};base64,${base64}`;
         }
 
-        displayMetas.push(displayMeta);
+        userBlocks.push(attachmentRefBlock({
+          attachmentId: att.id,
+          filename: att.filename,
+          mimeType: att.mimeType,
+          category: att.category,
+          size: att.size,
+          previewDataUrl,
+        }));
       }
 
-      textParts.push(
+      userBlocks[0] = textBlock(
         [
+          message,
           "",
           "[Chat attachments]",
           "Nutze fuer hochgeladene Dateien das Attachment-Tool statt die Hauptdateiablage.",
@@ -231,31 +235,20 @@ async function prepareLoopRun(sessionId: string, message: string, attachmentIds?
         ].join("\n"),
       );
 
-      if (imageBlocks.length > 0) {
+      if (userBlocks.some((block) => block.type === "attachment_ref" && block.category === "image")) {
         const capabilities = getModelCapabilities(session.providerId, session.model);
         if (capabilities && !capabilities.supportsVision) {
           const defaults = getDefaults();
           extraSystemMessages.push(defaults.attachment.visionNotSupportedInstruction);
-          userContent = textParts.join("");
-        } else {
-          userContent = [
-            { type: "text" as const, text: textParts.join("") },
-            ...imageBlocks,
-          ];
         }
-      } else {
-        userContent = textParts.join("");
       }
-
-      attachmentsMeta = displayMetas;
     }
   }
 
-  const userMessage: SessionState["messages"][number] = {
+  const userMessage = createTranscriptMessage({
     role: "user",
-    content: message,
-    ...(attachmentsMeta?.length ? { attachments: attachmentsMeta } : {}),
-  };
+    content: userBlocks,
+  });
 
   const messages = [...session.messages, userMessage];
   store.updateSession(sessionId, { messages });
@@ -268,7 +261,6 @@ async function prepareLoopRun(sessionId: string, message: string, attachmentIds?
     session,
     agent,
     messages,
-    userContent,
     extraSystemMessages,
     modeRuntimeConfigs,
     reasoning: resolveReasoningConfig(session),
@@ -281,14 +273,20 @@ function finalizeLoopSession(
   previousMessages: SessionState["messages"],
   messages: LoopMessage[],
   finalResponse: string,
+  providerState?: SessionState["providerState"],
+  providerDebug?: SessionState["providerDebug"],
 ): SessionState {
   const nextMessages = mergeMessageDisplayState(fromLoopMessages(messages), previousMessages);
-  const patch: Partial<SessionState> = { messages: nextMessages };
+  const patch: Partial<SessionState> = {
+    messages: nextMessages,
+    providerState,
+    providerDebug: providerDebug ? { ...providerDebug, requestBody: undefined } : undefined,
+  };
   if (!session.name && finalResponse) {
     const name = generateSessionName(finalResponse);
     if (name) patch.name = name;
   }
-  return store.updateSession(sessionId, patch);
+  return normalizeSessionReasoning(store.updateSession(sessionId, patch));
 }
 
 function buildLoopRequest(
@@ -297,14 +295,6 @@ function buildLoopRequest(
   handlers: Partial<Parameters<typeof runLoop>[0]> = {},
 ) {
   const loopMessages = toLoopMessages(prepared.messages);
-  if (loopMessages.length > 0) {
-    for (let i = loopMessages.length - 1; i >= 0; i--) {
-      if (loopMessages[i].role === "user") {
-        loopMessages[i].content = prepared.userContent;
-        break;
-      }
-    }
-  }
 
   return {
     agentId: prepared.session.agentId,
@@ -316,6 +306,7 @@ function buildLoopRequest(
     reasoningEffort: prepared.reasoning.reasoningEffort,
     temperature: prepared.reasoning.temperature,
     maxOutputTokens: prepared.reasoning.maxOutputTokens,
+    providerState: prepared.session.providerState,
     modeConfigs: prepared.modeRuntimeConfigs,
     maxIterations: prepared.agent.maxIterations,
     activeMode: prepared.session.activeMode,
@@ -340,7 +331,15 @@ export async function chat(
   const result = await runWithSessionId(sessionId, () => runLoop(buildLoopRequest(prepared, sessionId)));
   return {
     response: result.finalResponse,
-    session: finalizeLoopSession(sessionId, prepared.session, prepared.messages, result.messages, result.finalResponse),
+    session: finalizeLoopSession(
+      sessionId,
+      prepared.session,
+      prepared.messages,
+      result.messages,
+      result.finalResponse,
+      result.providerState,
+      result.providerDebug,
+    ),
   };
 }
 
@@ -364,17 +363,14 @@ export async function chatStream(
   try {
     const result = await runWithSessionId(sessionId, () =>
       runLoop(buildLoopRequest(prepared, sessionId, {
-        onContent: (content) => emit({ type: "content", content }),
-        onReasoning: (content) => emit({ type: "reasoning", content }),
-        onContentReset: () => emit({ type: "content_reset" }),
-        onRetryNotice: (messageText) => emit({ type: "retry_notice", message: messageText }),
-        onToolCall: (tc) =>
-          emit({ type: "tool_call", toolCall: { id: tc.id, name: tc.name, arguments: tc.arguments } }),
-        onToolResult: (toolCallId, result) =>
-          emit({ type: "tool_result", toolCallId, content: result.content, isError: result.isError }),
+        onAssistantBlockDelta: (messageId, block) => emit({ type: "assistant_block_delta", messageId, block }),
+        onAssistantMessage: (messageObject) => emit({ type: "assistant_message_complete", message: messageObject }),
+        onSystemNotice: (level, messageText) => emit({ type: "system_notice", level, message: messageText }),
+        onToolExecutionUpdate: (toolUseId, toolName, status, resultMessage) =>
+          emit({ type: "tool_execution_update", toolUseId, toolName, status, result: resultMessage }),
         onLoopState: (state) => {
           setLoopState(sessionId, state);
-          emit({ type: "loop_state", state });
+          emit({ type: "turn_state", state });
         },
         onStats: (stats) =>
           emit({
@@ -387,7 +383,15 @@ export async function chatStream(
       })),
     );
 
-    const updated = finalizeLoopSession(sessionId, prepared.session, prepared.messages, result.messages, result.finalResponse);
+    const updated = finalizeLoopSession(
+      sessionId,
+      prepared.session,
+      prepared.messages,
+      result.messages,
+      result.finalResponse,
+      result.providerState,
+      result.providerDebug,
+    );
     emit({ type: "done", session: updated });
   } finally {
     unregisterSession(sessionId);
@@ -431,9 +435,12 @@ export async function updateSession(id: string, body: Partial<CreateSessionBody>
     activeMcpIds: defaults.activeMcpIds,
     reasoningEffort: defaults.reasoningEffort,
     temperature: defaults.temperature,
+    ...(switchingAgent || session.providerId !== defaults.providerId || session.model !== defaults.model
+      ? { providerState: undefined, providerDebug: undefined }
+      : {}),
   };
 
-  const updated = store.updateSession(id, patch);
+  const updated = normalizeSessionReasoning(store.updateSession(id, patch));
   if (switchingAgent) {
     clearLoopState(id);
   }

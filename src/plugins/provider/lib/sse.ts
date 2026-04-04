@@ -9,6 +9,7 @@
 export async function readSSEStream(
   res: Response,
   onEvent: (parsed: Record<string, unknown>) => boolean,
+  options: { throwOnProviderError?: boolean } = {},
 ): Promise<void> {
   if (!res.body) throw new Error("No response body for streaming");
   const reader = (res.body as ReadableStream<Uint8Array>).getReader();
@@ -43,11 +44,15 @@ export async function readSSEStream(
           "message" in errorPayload && typeof errorPayload.message === "string"
             ? errorPayload.message
             : JSON.stringify(errorPayload);
-        throw new Error(`Provider stream error: ${message}`);
+        if (options.throwOnProviderError !== false) {
+          throw new Error(`Provider stream error: ${message}`);
+        }
       }
 
       if (parsed.type === "error" && typeof parsed.message === "string") {
-        throw new Error(`Provider stream error: ${parsed.message}`);
+        if (options.throwOnProviderError !== false) {
+          throw new Error(`Provider stream error: ${parsed.message}`);
+        }
       }
 
       if (onEvent(parsed)) return;

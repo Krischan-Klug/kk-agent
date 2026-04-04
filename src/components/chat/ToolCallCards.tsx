@@ -30,10 +30,10 @@ export default function ToolCallCards({ mcps, toolCalls }: Props) {
       <CardSummary>
         <ToolEmoji>{getToolEmoji(mcps, toolCall.name)}</ToolEmoji>
         <ToolLabel>{toolCall.name}</ToolLabel>
-        {toolCall.status === "queued" || toolCall.status === "executing" ? (
+        {toolCall.status === "queued" || toolCall.status === "executing" || toolCall.status === "yielded" ? (
           <>
             <Spinner size={12} />
-            <Badge variant="info">{toolCall.status}</Badge>
+            <Badge variant="info">{toolCall.status === "yielded" ? "processing" : toolCall.status}</Badge>
           </>
         ) : toolCall.status === "discarded" || toolCall.status === "invalid" ? (
           <Badge variant="warning">{toolCall.status}</Badge>

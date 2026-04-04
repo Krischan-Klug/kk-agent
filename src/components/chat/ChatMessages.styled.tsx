@@ -1,5 +1,14 @@
 import styled from "styled-components";
 
+const thinkingDots = `
+  @keyframes thinkingDotsPulse {
+    0%, 24% { content: "."; }
+    25%, 49% { content: ".."; }
+    50%, 74% { content: "..."; }
+    75%, 100% { content: ".."; }
+  }
+`;
+
 export const Messages = styled.div`
   flex: 1;
   overflow-y: auto;
@@ -337,4 +346,24 @@ export const MessageTimestamp = styled.span`
   font-size: 11px;
   color: var(--text-muted);
   font-family: var(--font-mono);
+`;
+
+export const ThinkingLabel = styled.span`
+  font-weight: 500;
+`;
+
+export const ThinkingSuffix = styled.span<{ $active: boolean }>`
+  display: inline-block;
+  min-width: 1.2em;
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+
+  ${thinkingDots}
+
+  &::after {
+    content: "...";
+    display: inline-block;
+    white-space: pre;
+    animation: ${(p) => (p.$active ? "thinkingDotsPulse 1.2s infinite steps(1, end)" : "none")};
+  }
 `;

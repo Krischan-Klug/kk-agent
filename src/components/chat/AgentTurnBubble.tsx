@@ -21,6 +21,8 @@ import {
   RoleLabel,
   RoleMetaGroup,
   StreamingDot,
+  ThinkingLabel,
+  ThinkingSuffix,
 } from "./ChatMessages.styled";
 import type { ActiveToolCall } from "./types";
 
@@ -32,13 +34,35 @@ type Props = {
 };
 
 function isActiveToolCall(toolCall: ActiveToolCall): boolean {
-  return toolCall.status === "queued" || toolCall.status === "executing";
+  return toolCall.status === "queued" || toolCall.status === "executing" || toolCall.status === "yielded";
+}
+
+function collectStreamingActiveToolCalls(iterations: Props["turn"]["iterations"]): ActiveToolCall[] {
+  const byId = new Map<string, ActiveToolCall>();
+  for (const iteration of iterations) {
+    for (const toolCall of iteration.toolCalls) {
+      if (!isActiveToolCall(toolCall)) continue;
+      byId.set(toolCall.id, toolCall);
+    }
+  }
+  return [...byId.values()];
 }
 
 function formatChatTime(value: string): string {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return "";
   return date.toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" });
+}
+
+function renderReasoningSummary(isThinking: boolean, animateThinking: boolean) {
+  return (
+    <ReasoningSummary>
+      <ThinkingLabel>
+        Reasoning
+        {isThinking && <ThinkingSuffix $active={animateThinking} />}
+      </ThinkingLabel>
+    </ReasoningSummary>
+  );
 }
 
 export default function AgentTurnBubble({ currentAgentName, mcps, turn, loopState }: Props) {
@@ -50,7 +74,9 @@ export default function AgentTurnBubble({ currentAgentName, mcps, turn, loopStat
   const finalReasoning = collectReasoning(finalIteration.assistant.content).trim();
   const finalText = collectText(finalIteration.assistant.content).trim();
   const finalAttachments = collectAttachments(finalIteration.assistant.content);
-  const activeToolCalls = finalIteration.toolCalls.filter(isActiveToolCall);
+  const activeToolCalls = collectStreamingActiveToolCalls(iterations);
+  const showThinking = Boolean(turn.streaming) && finalReasoning.length > 0;
+  const animateThinking = showThinking && finalText.length === 0;
 
   return (
     <MessageBubble $role="assistant">
@@ -85,6 +111,8 @@ export default function AgentTurnBubble({ currentAgentName, mcps, turn, loopStat
         const text = collectText(iteration.assistant.content).trim();
         const attachments = collectAttachments(iteration.assistant.content);
         const isFinalIteration = index === iterations.length - 1;
+        const showIterationThinking = Boolean(turn.streaming) && isFinalIteration && reasoning.length > 0;
+        const animateIterationThinking = showIterationThinking && text.length === 0;
 
         return (
           <IterationSection key={iteration.assistant.id}>
@@ -97,7 +125,7 @@ export default function AgentTurnBubble({ currentAgentName, mcps, turn, loopStat
 
             {reasoning && (
               <ReasoningCard>
-                <ReasoningSummary>Reasoning</ReasoningSummary>
+                {renderReasoningSummary(showIterationThinking, animateIterationThinking)}
                 <CardContent>{reasoning}</CardContent>
               </ReasoningCard>
             )}
@@ -113,7 +141,7 @@ export default function AgentTurnBubble({ currentAgentName, mcps, turn, loopStat
 
       {!expanded && finalReasoning && (
         <ReasoningCard>
-          <ReasoningSummary>Reasoning</ReasoningSummary>
+          {renderReasoningSummary(showThinking, animateThinking)}
           <CardContent>{finalReasoning}</CardContent>
         </ReasoningCard>
       )}

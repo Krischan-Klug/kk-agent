@@ -91,6 +91,22 @@ function syncIterationToolCalls(assistant: SessionMessage, existingToolCalls: Ac
   return synced;
 }
 
+function completeYieldedToolCalls(iterations: StreamingTurnState["iterations"]): StreamingTurnState["iterations"] {
+  return iterations.map((iteration) => ({
+    ...iteration,
+    toolCalls: iteration.toolCalls.map((toolCall) =>
+      toolCall.status === "yielded"
+        ? {
+            ...toolCall,
+            status: "completed",
+            detail: toolCall.detail ?? `${toolCall.name} completed`,
+            summary: toolCall.summary ?? `${toolCall.name} completed`,
+          }
+        : toolCall,
+    ),
+  }));
+}
+
 function updateIterationAssistant(
   previous: StreamingTurnState | null,
   messageId: string,
@@ -128,11 +144,16 @@ function updateIterationAssistant(
     return { iterations };
   }
 
-  iterations.push({
+  const nextIteration = {
     assistant,
     toolCalls: syncIterationToolCalls(assistant, []),
-  });
-  return { iterations };
+  };
+  return {
+    iterations: [
+      ...completeYieldedToolCalls(iterations),
+      nextIteration,
+    ],
+  };
 }
 
 function updateIterationToolCall(previous: StreamingTurnState | null, event: Extract<StreamEvent, { type: "tool_execution_update" }>): StreamingTurnState {

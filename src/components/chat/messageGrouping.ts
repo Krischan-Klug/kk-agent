@@ -1,4 +1,5 @@
 import type { SessionMessage } from "@/types/api";
+import { collectToolResults, collectToolUses } from "./messageBlocks";
 
 export interface AgentIteration {
   assistant: SessionMessage;
@@ -6,55 +7,65 @@ export interface AgentIteration {
 }
 
 export type MessageGroup =
-  | { kind: "single"; message: SessionMessage; index: number }
-  | { kind: "agent-turn"; iterations: AgentIteration[]; indices: number[] };
+  | { kind: "single"; message: SessionMessage; key: string }
+  | { kind: "agent-turn"; iterations: AgentIteration[]; key: string };
 
 export function groupMessages(messages: SessionMessage[]): MessageGroup[] {
   const groups: MessageGroup[] = [];
-  let i = 0;
+  let index = 0;
 
-  while (i < messages.length) {
-    const message = messages[i];
+  while (index < messages.length) {
+    const message = messages[index];
+    if (!message) break;
 
     if (message.role !== "assistant") {
       if (message.role !== "tool") {
-        groups.push({ kind: "single", message, index: i });
+        groups.push({ kind: "single", message, key: message.id });
       }
-      i++;
+      index++;
       continue;
     }
 
     const iterations: AgentIteration[] = [];
-    const indices: number[] = [];
-
-    while (i < messages.length && (messages[i].role === "assistant" || messages[i].role === "tool")) {
-      const current = messages[i];
+    while (index < messages.length) {
+      const current = messages[index];
+      if (!current || (current.role !== "assistant" && current.role !== "tool")) break;
 
       if (current.role === "assistant") {
+        const assistant = current;
         const toolResults = new Map<string, { content: string; isError: boolean }>();
-        indices.push(i);
-        i++;
+        index++;
 
-        while (i < messages.length && messages[i].role === "tool") {
-          const toolMessage = messages[i];
-          if (toolMessage.tool_call_id) {
-            toolResults.set(toolMessage.tool_call_id, { content: toolMessage.content, isError: toolMessage.isError === true });
+        while (index < messages.length) {
+          const maybeTool = messages[index];
+          if (!maybeTool || maybeTool.role !== "tool") break;
+
+          for (const toolResult of collectToolResults(maybeTool.content)) {
+            toolResults.set(toolResult.tool_use_id, {
+              content: toolResult.content,
+              isError: toolResult.is_error === true,
+            });
           }
-          i++;
+          index++;
         }
 
-        iterations.push({ assistant: current, toolResults });
-      } else {
-        i++;
+        iterations.push({ assistant, toolResults });
+        continue;
       }
+
+      index++;
     }
 
-    if (iterations.length === 1 && (!iterations[0].assistant.tool_calls || iterations[0].assistant.tool_calls.length === 0)) {
-      groups.push({ kind: "single", message: iterations[0].assistant, index: indices[0] });
+    if (iterations.length === 1 && collectToolUses(iterations[0]!.assistant.content).length === 0) {
+      groups.push({ kind: "single", message: iterations[0]!.assistant, key: iterations[0]!.assistant.id });
       continue;
     }
 
-    groups.push({ kind: "agent-turn", iterations, indices });
+    groups.push({
+      kind: "agent-turn",
+      iterations,
+      key: iterations.map((iteration) => iteration.assistant.id).join(":"),
+    });
   }
 
   return groups;

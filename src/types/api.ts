@@ -12,8 +12,17 @@ export interface SessionState {
   reasoningEffort?: ReasoningEffort;
   temperature?: number;
   messages: SessionMessage[];
+  providerDebug?: ProviderTurnDebug;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface ProviderTurnDebug {
+  endpoint: EndpointType;
+  continuationMode?: "none" | "raw-output-replay" | "previous-response-id" | "conversations";
+  responseId?: string;
+  conversationId?: string;
+  outputCount?: number;
 }
 
 export interface AttachmentMeta {
@@ -32,20 +41,58 @@ export interface AttachmentDisplayMeta {
   previewDataUrl?: string;
 }
 
-export interface SessionMessage {
-  role: "user" | "assistant" | "tool" | "system";
-  content: string;
-  isError?: boolean;
-  reasoning?: string;
-  tool_call_id?: string;
-  tool_calls?: ToolCall[];
-  attachments?: AttachmentDisplayMeta[];
+export interface TranscriptTextBlock {
+  type: "text";
+  text: string;
 }
 
-export interface ToolCall {
+export interface TranscriptReasoningBlock {
+  type: "reasoning";
+  text: string;
+}
+
+export interface TranscriptToolUseBlock {
+  type: "tool_use";
   id: string;
   name: string;
-  arguments: Record<string, unknown>;
+  input: Record<string, unknown>;
+}
+
+export interface TranscriptToolResultBlock {
+  type: "tool_result";
+  tool_use_id: string;
+  content: string;
+  is_error?: boolean;
+}
+
+export interface TranscriptAttachmentRefBlock extends AttachmentDisplayMeta {
+  type: "attachment_ref";
+  attachmentId?: string;
+}
+
+export type TranscriptBlock =
+  | TranscriptTextBlock
+  | TranscriptReasoningBlock
+  | TranscriptToolUseBlock
+  | TranscriptToolResultBlock
+  | TranscriptAttachmentRefBlock;
+
+export interface TranscriptUsage {
+  inputTokens: number;
+  outputTokens: number;
+  reasoningTokens: number;
+}
+
+export interface SessionMessage {
+  id: string;
+  role: "user" | "assistant" | "tool" | "system";
+  content: TranscriptBlock[];
+  timestamp: string;
+  requestId?: string;
+  stopReason?: "stop" | "tool_use" | "length";
+  isMeta?: boolean;
+  isApiError?: boolean;
+  usage?: TranscriptUsage;
 }
 
 export interface CreateSessionBody {
@@ -150,6 +197,19 @@ export interface ModelInfo {
       maxOutputTokensSupported: boolean;
       maxOutputTokensRange?: { min: number; max: number; step?: number };
     }>>;
+    transportProfiles?: Partial<Record<EndpointType, {
+      supported: boolean;
+      reasoningTransport: "none" | "chat-completions-effort" | "chat-completions-on-off" | "responses-effort";
+      toolSchemaTransport: "chat-completions-tools" | "responses-tools";
+      streamGrammar: "openai-chat-completions" | "openai-responses";
+      toolCallAssemblyMode: "chat-completions-indexed" | "responses-output-state";
+      supportsParallelToolCalls: boolean;
+      supportsConcatenatedJsonSplit: boolean;
+      continuationMode: "none" | "raw-output-replay" | "previous-response-id" | "conversations";
+      supportsPreviousResponseId: boolean;
+      supportsConversations: boolean;
+      supportsStrictTools: boolean;
+    }>>;
   };
 }
 
@@ -222,6 +282,7 @@ export interface UpdateMcpBody {
 export type ReasoningEffort = string;
 export type ChatMode = "plan" | "edit";
 export type ToolAccessScope = "user" | "system";
+export type ToolExecutionStatus = "queued" | "executing" | "yielded" | "completed" | "error" | "discarded" | "invalid";
 
 export interface AgentPromptSections {
   identity: string;
@@ -338,13 +399,17 @@ export interface AppDefaults {
 /* Streaming */
 
 export type StreamEvent =
-  | { type: "content"; content: string }
-  | { type: "reasoning"; content: string }
-  | { type: "content_reset" }
-  | { type: "retry_notice"; message: string }
-  | { type: "tool_call"; toolCall: { id: string; name: string; arguments: Record<string, unknown> } }
-  | { type: "tool_result"; toolCallId: string; content: string; isError?: boolean }
-  | { type: "loop_state"; state: AgentLoopState }
+  | { type: "assistant_block_delta"; messageId: string; block: TranscriptBlock }
+  | { type: "assistant_message_complete"; message: SessionMessage }
+  | {
+      type: "tool_execution_update";
+      toolUseId: string;
+      toolName: string;
+      status: ToolExecutionStatus;
+      result?: SessionMessage;
+    }
+  | { type: "turn_state"; state: AgentLoopState }
+  | { type: "system_notice"; level: "info" | "warning" | "error"; message: string }
   | { type: "stats"; inputTokens: number; outputTokens: number; reasoningTokens: number; source: "provider" | "estimated" | "unknown" }
   | { type: "user_prompt"; promptId: string; question: string; choices: { key: string; label: string }[] }
   | { type: "done"; session: SessionState }

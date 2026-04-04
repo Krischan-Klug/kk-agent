@@ -1,7 +1,10 @@
+import type { ToolExecutionStatus } from "@/types/api";
+
 export interface ActiveToolCall {
   id: string;
   name: string;
-  arguments: Record<string, unknown>;
+  input: Record<string, unknown>;
+  status: ToolExecutionStatus;
   result?: { content: string; isError: boolean };
 }
 

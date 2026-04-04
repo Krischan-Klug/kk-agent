@@ -2,12 +2,19 @@ import type { RefObject } from "react";
 import Badge from "@/components/Badge";
 import Spinner from "@/components/Spinner";
 import MarkdownMessage from "@/components/MarkdownMessage";
-import type { AgentLoopState, McpListItem, SessionMessage, SessionState } from "@/types/api";
+import type {
+  AgentLoopState,
+  McpListItem,
+  SessionMessage,
+  SessionState,
+} from "@/types/api";
 import type { ActiveToolCall, PendingPrompt } from "./types";
-import MessageAttachments from "./MessageAttachments";
 import AgentTurnBubble from "./AgentTurnBubble";
+import MessageAttachments from "./MessageAttachments";
 import PendingPromptCard from "./PendingPromptCard";
 import ToolCallCards from "./ToolCallCards";
+import { buildToolCards, collectAttachments, collectReasoning, collectText, collectToolUses } from "./messageBlocks";
+import { groupMessages } from "./messageGrouping";
 import {
   CardContent,
   EmptyState,
@@ -22,17 +29,15 @@ import {
   StreamingDot,
   SystemNotice,
 } from "./ChatMessages.styled";
-import { groupMessages } from "./messageGrouping";
 
 type Props = {
   session: SessionState;
   currentAgentName: string;
   mcps: McpListItem[];
   streaming: boolean;
-  streamContent: string;
-  streamReasoning: string;
+  streamMessage: SessionMessage | null;
   streamToolCalls: ActiveToolCall[];
-  streamRetryNotices: string[];
+  streamSystemNotices: string[];
   loopState: AgentLoopState | null;
   pendingPrompt: PendingPrompt | null;
   customAnswer: string;
@@ -42,11 +47,20 @@ type Props = {
   onPromptResponse: (selectedKey: string) => void;
 };
 
-function renderSingleMessage(message: SessionMessage, index: number, currentAgentName: string) {
+function renderSingleMessage(
+  message: SessionMessage,
+  currentAgentName: string,
+  mcps: McpListItem[],
+) {
   if (message.role === "tool") return null;
 
+  const text = collectText(message.content).trim();
+  const reasoning = collectReasoning(message.content).trim();
+  const attachments = collectAttachments(message.content);
+  const toolCalls = message.role === "assistant" ? buildToolCards(collectToolUses(message.content)) : [];
+
   return (
-    <MessageBubble key={index} $role={message.role}>
+    <MessageBubble key={message.id} $role={message.role}>
       {message.role !== "user" && (
         <RoleLabel>
           <Badge variant={message.role === "system" ? "warning" : "info"}>
@@ -55,17 +69,23 @@ function renderSingleMessage(message: SessionMessage, index: number, currentAgen
         </RoleLabel>
       )}
 
-      {message.reasoning?.trim() && (
+      {reasoning && (
         <ReasoningCard>
           <ReasoningSummary>Reasoning</ReasoningSummary>
-          <CardContent>{message.reasoning.trim()}</CardContent>
+          <CardContent>{reasoning}</CardContent>
         </ReasoningCard>
       )}
 
-      {message.role === "assistant" ? <MarkdownMessage content={message.content} /> : message.content}
+      {text && (message.role === "assistant" || message.role === "system"
+        ? <MarkdownMessage content={text} />
+        : text)}
 
-      {message.attachments && message.attachments.length > 0 && (
-        <MessageAttachments attachments={message.attachments} />
+      {attachments.length > 0 && (
+        <MessageAttachments attachments={attachments} />
+      )}
+
+      {toolCalls.length > 0 && (
+        <ToolCallCards mcps={mcps} toolCalls={toolCalls} />
       )}
     </MessageBubble>
   );
@@ -76,10 +96,9 @@ export default function ChatMessages({
   currentAgentName,
   mcps,
   streaming,
-  streamContent,
-  streamReasoning,
+  streamMessage,
   streamToolCalls,
-  streamRetryNotices,
+  streamSystemNotices,
   loopState,
   pendingPrompt,
   customAnswer,
@@ -88,6 +107,8 @@ export default function ChatMessages({
   onCustomAnswerChange,
   onPromptResponse,
 }: Props) {
+  const messageGroups = groupMessages(session.messages);
+
   return (
     <Messages ref={messagesRef} onScroll={onMessagesScroll}>
       {session.messages.length === 0 && !streaming && (
@@ -96,27 +117,17 @@ export default function ChatMessages({
         </EmptyState>
       )}
 
-      {groupMessages(session.messages).map((group) => {
-        if (group.kind === "single") {
-          return renderSingleMessage(group.message, group.index, currentAgentName);
-        }
-
-        return (
-          <AgentTurnBubble
-            key={group.indices[0]}
-            currentAgentName={currentAgentName}
-            mcps={mcps}
-            turn={group}
-            turnKey={group.indices[0]}
-          />
-        );
-      })}
-
-      {streamRetryNotices.map((message, index) => (
-        <SystemNotice key={`stream-retry-${index}`}>{message}</SystemNotice>
+      {messageGroups.map((group) => (
+        group.kind === "agent-turn"
+          ? <AgentTurnBubble key={group.key} currentAgentName={currentAgentName} mcps={mcps} turn={group} />
+          : renderSingleMessage(group.message, currentAgentName, mcps)
       ))}
 
-      {streaming && (streamContent || streamReasoning || streamToolCalls.length > 0) && (
+      {streamSystemNotices.map((message, index) => (
+        <SystemNotice key={`stream-notice-${index}`}>{message}</SystemNotice>
+      ))}
+
+      {streaming && streamMessage && (
         <MessageBubble $role="assistant">
           <RoleLabel>
             <Badge variant="info">{currentAgentName}</Badge>
@@ -125,19 +136,41 @@ export default function ChatMessages({
             {loopState && <PhasePill>{loopState.mode}</PhasePill>}
           </RoleLabel>
 
-          {streamReasoning && (
+          {collectReasoning(streamMessage.content).trim() && (
             <ReasoningCard open>
               <ReasoningSummary>Reasoning</ReasoningSummary>
-              <CardContent>{streamReasoning}</CardContent>
+              <CardContent>{collectReasoning(streamMessage.content).trim()}</CardContent>
             </ReasoningCard>
           )}
 
-          <MarkdownMessage content={streamContent} />
-          {streamToolCalls.length > 0 && <ToolCallCards mcps={mcps} toolCalls={streamToolCalls} />}
+          {collectText(streamMessage.content).trim() && (
+            <MarkdownMessage content={collectText(streamMessage.content)} />
+          )}
+
+          {collectAttachments(streamMessage.content).length > 0 && (
+            <MessageAttachments attachments={collectAttachments(streamMessage.content)} />
+          )}
+
+          {(() => {
+            const streamedToolUses = collectToolUses(streamMessage.content);
+            const mergedToolCalls = streamedToolUses.length > 0
+              ? streamedToolUses.map((toolUse) => {
+                  const execution = streamToolCalls.find((toolCall) => toolCall.id === toolUse.id);
+                  return execution ?? {
+                    id: toolUse.id,
+                    name: toolUse.name,
+                    input: toolUse.input,
+                    status: "queued" as const,
+                  };
+                })
+              : streamToolCalls;
+
+            return mergedToolCalls.length > 0 ? <ToolCallCards mcps={mcps} toolCalls={mergedToolCalls} /> : null;
+          })()}
         </MessageBubble>
       )}
 
-      {streaming && !streamContent && !streamReasoning && streamToolCalls.length === 0 && !pendingPrompt && (
+      {streaming && !streamMessage && streamToolCalls.length === 0 && !pendingPrompt && (
         <LoadingWrap>
           <Spinner />
         </LoadingWrap>

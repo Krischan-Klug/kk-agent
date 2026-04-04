@@ -2,7 +2,15 @@ import { useCallback, useRef, useState } from "react";
 import { session as sessionApi } from "@/lib/api";
 import { emitAppEvent, SESSION_CHANGED_EVENT } from "@/lib/appEvents";
 import { logUiError } from "@/lib/uiLogger";
-import type { AgentLoopState, AttachmentDisplayMeta, SessionState, StreamEvent } from "@/types/api";
+import type {
+  AgentLoopState,
+  SessionMessage,
+  SessionState,
+  StreamEvent,
+  TranscriptAttachmentRefBlock,
+  TranscriptBlock,
+  TranscriptToolResultBlock,
+} from "@/types/api";
 import type { PendingAttachment } from "@/hooks/useAttachments";
 import type { ActiveToolCall, PendingPrompt, TokenDisplayStats } from "@/components/chat/types";
 
@@ -17,6 +25,59 @@ type Options = {
   debugOpen: boolean;
 };
 
+function mergeStreamBlock(existing: TranscriptBlock[], block: TranscriptBlock): TranscriptBlock[] {
+  const last = existing.at(-1);
+
+  if (block.type === "text" || block.type === "reasoning") {
+    if (last && last.type === block.type) {
+      return [...existing.slice(0, -1), { ...last, text: last.text + block.text }];
+    }
+    return [...existing, block];
+  }
+
+  if (block.type === "tool_use") {
+    const next = [...existing];
+    const existingIndex = next.findIndex((entry) => entry.type === "tool_use" && entry.id === block.id);
+    if (existingIndex >= 0) {
+      next[existingIndex] = block;
+      return next;
+    }
+  }
+
+  return [...existing, block];
+}
+
+function buildOptimisticUserMessage(message: string, attachments: PendingAttachment[]): SessionMessage {
+  const content: TranscriptBlock[] = [{ type: "text", text: message }];
+
+  for (const attachment of attachments) {
+    const block: TranscriptAttachmentRefBlock = {
+      type: "attachment_ref",
+      attachmentId: attachment.id,
+      filename: attachment.filename,
+      mimeType: attachment.mimeType,
+      category: attachment.category,
+      size: attachment.size,
+      previewDataUrl: attachment.previewUrl,
+    };
+    content.push(block);
+  }
+
+  return {
+    id: `optimistic-user-${Date.now()}`,
+    role: "user",
+    content,
+    timestamp: new Date().toISOString(),
+  };
+}
+
+function getToolResult(message: SessionMessage | undefined): { content: string; isError: boolean } | undefined {
+  if (!message) return undefined;
+  const block = message.content.find((entry): entry is TranscriptToolResultBlock => entry.type === "tool_result");
+  if (!block) return undefined;
+  return { content: block.content, isError: block.is_error === true };
+}
+
 export function useChatStreaming({
   session,
   pendingAttachments,
@@ -30,26 +91,22 @@ export function useChatStreaming({
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
   const [streaming, setStreaming] = useState(false);
-  const [streamContent, setStreamContent] = useState("");
-  const [streamReasoning, setStreamReasoning] = useState("");
+  const [streamMessage, setStreamMessage] = useState<SessionMessage | null>(null);
   const [streamToolCalls, setStreamToolCalls] = useState<ActiveToolCall[]>([]);
-  const [streamRetryNotices, setStreamRetryNotices] = useState<string[]>([]);
+  const [streamSystemNotices, setStreamSystemNotices] = useState<string[]>([]);
   const [loopState, setLoopState] = useState<AgentLoopState | null>(null);
   const [tokenStats, setTokenStats] = useState<TokenDisplayStats | null>(null);
   const [pendingPrompt, setPendingPrompt] = useState<PendingPrompt | null>(null);
   const [customAnswer, setCustomAnswer] = useState("");
   const optimisticPreviewUrlsRef = useRef<string[]>([]);
-  const toolCallNameMapRef = useRef<Map<string, string>>(new Map());
 
   const resetStreamingState = useCallback(() => {
     setStreaming(false);
-    setStreamContent("");
-    setStreamReasoning("");
+    setStreamMessage(null);
     setStreamToolCalls([]);
-    setStreamRetryNotices([]);
+    setStreamSystemNotices([]);
     setLoopState(null);
     setPendingPrompt(null);
-    toolCallNameMapRef.current.clear();
   }, []);
 
   const handleSend = useCallback(async () => {
@@ -68,74 +125,69 @@ export function useChatStreaming({
     setInput("");
     setSending(true);
     setStreaming(true);
-    setStreamContent("");
-    setStreamReasoning("");
+    setStreamMessage(null);
     setStreamToolCalls([]);
-    setStreamRetryNotices([]);
+    setStreamSystemNotices([]);
     setLoopState(null);
     setTokenStats(null);
 
     setSession((previous) => {
       if (!previous) return previous;
-
-      const attachments: AttachmentDisplayMeta[] | undefined = optimisticAttachments.length > 0
-        ? optimisticAttachments.map((attachment) => ({
-          filename: attachment.filename,
-          mimeType: attachment.mimeType,
-          category: attachment.category,
-          size: attachment.size,
-          previewDataUrl: attachment.previewUrl,
-        }))
-        : undefined;
-
       return {
         ...previous,
-        messages: [
-          ...previous.messages,
-          {
-            role: "user" as const,
-            content: message,
-            ...(attachments ? { attachments } : {}),
-          },
-        ],
+        messages: [...previous.messages, buildOptimisticUserMessage(message, optimisticAttachments)],
       };
     });
 
     try {
       await sessionApi.chatStream(session.id, message, async (event: StreamEvent) => {
         switch (event.type) {
-          case "content":
-            setStreamContent((previous) => previous + event.content);
+          case "assistant_block_delta":
+            setStreamMessage((previous) => {
+              if (!previous || previous.id !== event.messageId) {
+                return {
+                  id: event.messageId,
+                  role: "assistant",
+                  content: [event.block],
+                  timestamp: new Date().toISOString(),
+                };
+              }
+              return {
+                ...previous,
+                content: mergeStreamBlock(previous.content, event.block),
+              };
+            });
             break;
-          case "reasoning":
-            setStreamReasoning((previous) => previous + event.content);
+          case "assistant_message_complete":
+            setStreamMessage(event.message);
             break;
-          case "content_reset":
-            setStreamContent("");
-            setStreamReasoning("");
-            break;
-          case "retry_notice":
-            setStreamRetryNotices((previous) => [...previous, event.message]);
-            break;
-          case "tool_call":
-            toolCallNameMapRef.current.set(event.toolCall.id, event.toolCall.name);
-            setStreamToolCalls((previous) => [
-              ...previous,
-              { id: event.toolCall.id, name: event.toolCall.name, arguments: event.toolCall.arguments },
-            ]);
-            break;
-          case "tool_result":
-            setStreamToolCalls((previous) => previous.map((toolCall) => (
-              toolCall.id === event.toolCallId
-                ? { ...toolCall, result: { content: event.content, isError: event.isError ?? false } }
-                : toolCall
-            )));
-            if (["create_tasks", "update_tasks", "solve_tasks"].includes(toolCallNameMapRef.current.get(event.toolCallId) ?? "")) {
+          case "tool_execution_update":
+            setStreamToolCalls((previous) => {
+              const next = [...previous];
+              const index = next.findIndex((toolCall) => toolCall.id === event.toolUseId);
+              const current: ActiveToolCall = index >= 0
+                ? next[index]!
+                : { id: event.toolUseId, name: event.toolName, input: {}, status: event.status };
+              const updated: ActiveToolCall = {
+                ...current,
+                name: event.toolName,
+                status: event.status,
+                ...(event.result ? { result: getToolResult(event.result) } : {}),
+              };
+
+              if (index >= 0) next[index] = updated;
+              else next.push(updated);
+              return next;
+            });
+            if (event.result && ["create_tasks", "update_tasks", "solve_tasks"].includes(event.toolName)) {
               await loadContextData(session.id);
             }
             break;
-          case "loop_state":
+          case "turn_state":
             setLoopState(event.state);
+            break;
+          case "system_notice":
+            setStreamSystemNotices((previous) => [...previous, event.message]);
             break;
           case "stats":
             if (event.source === "provider") {
@@ -214,10 +266,9 @@ export function useChatStreaming({
     setInput,
     sending,
     streaming,
-    streamContent,
-    streamReasoning,
+    streamMessage,
     streamToolCalls,
-    streamRetryNotices,
+    streamSystemNotices,
     loopState,
     tokenStats,
     pendingPrompt,

@@ -272,6 +272,7 @@ export default function ChatDebugPanel({
         activeMode: session.activeMode,
         reasoningEffort: session.reasoningEffort ?? "default",
         temperature: session.temperature ?? "default",
+        providerDebug: session.providerDebug ?? null,
         messageCount: session.messages.length,
         loopMode: loopState?.mode ?? null,
         loopStatus: loopState?.status ?? null,
@@ -286,10 +287,17 @@ export default function ChatDebugPanel({
       .map((m, i) => {
         const idx = session.messages.length - msgs.length + i;
         const role = m.role.toUpperCase();
-        const preview = m.content?.slice(0, 300) || "(leer)";
-        const toolInfo = m.tool_calls?.length ? `\n  tool_calls: [${m.tool_calls.map((tc) => tc.name).join(", ")}]` : "";
-        const toolId = m.tool_call_id ? `\n  tool_call_id: ${m.tool_call_id}` : "";
-        return `[${idx}] ${role}${toolInfo}${toolId}\n  ${preview}${(m.content?.length ?? 0) > 300 ? "..." : ""}`;
+        const preview = m.content
+          .map((block) => {
+            if (block.type === "text") return block.text;
+            if (block.type === "reasoning") return `[reasoning] ${block.text}`;
+            if (block.type === "tool_use") return `[tool_use:${block.name}] ${JSON.stringify(block.input)}`;
+            if (block.type === "tool_result") return `[tool_result:${block.tool_use_id}] ${block.content}`;
+            return `[attachment:${block.filename}]`;
+          })
+          .join("\n")
+          .slice(0, 300) || "(leer)";
+        return `[${idx}] ${role}\n  message_id: ${m.id}\n  ${preview}${preview.length >= 300 ? "..." : ""}`;
       })
       .join("\n\n");
   }

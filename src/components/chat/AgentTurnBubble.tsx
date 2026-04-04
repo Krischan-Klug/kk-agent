@@ -2,8 +2,10 @@ import { useState } from "react";
 import Badge from "@/components/Badge";
 import MarkdownMessage from "@/components/MarkdownMessage";
 import type { McpListItem } from "@/types/api";
-import type { ActiveToolCall } from "./types";
+import MessageAttachments from "./MessageAttachments";
+import ToolCallCards from "./ToolCallCards";
 import type { MessageGroup } from "./messageGrouping";
+import { buildToolCards, collectAttachments, collectReasoning, collectText, collectToolUses } from "./messageBlocks";
 import {
   CardContent,
   ExpandArrow,
@@ -17,24 +19,28 @@ import {
   RoleLabel,
   RoleMetaGroup,
 } from "./ChatMessages.styled";
-import ToolCallCards from "./ToolCallCards";
 
 type Props = {
   currentAgentName: string;
   mcps: McpListItem[];
   turn: Extract<MessageGroup, { kind: "agent-turn" }>;
-  turnKey: number;
 };
 
-export default function AgentTurnBubble({ currentAgentName, mcps, turn, turnKey }: Props) {
+export default function AgentTurnBubble({ currentAgentName, mcps, turn }: Props) {
   const [expanded, setExpanded] = useState(false);
   const { iterations } = turn;
-  const finalIteration = iterations[iterations.length - 1];
-  const totalToolCalls = iterations.reduce((sum, iteration) => sum + (iteration.assistant.tool_calls?.length ?? 0), 0);
+  const finalIteration = iterations[iterations.length - 1]!;
+  const totalToolCalls = iterations.reduce(
+    (sum, iteration) => sum + collectToolUses(iteration.assistant.content).length,
+    0,
+  );
   const hasMultiple = iterations.length > 1 || totalToolCalls > 0;
+  const finalReasoning = collectReasoning(finalIteration.assistant.content).trim();
+  const finalText = collectText(finalIteration.assistant.content).trim();
+  const finalAttachments = collectAttachments(finalIteration.assistant.content);
 
   return (
-    <MessageBubble key={turnKey} $role="assistant">
+    <MessageBubble $role="assistant">
       <RoleLabel>
         <Badge variant="info">{currentAgentName}</Badge>
         {hasMultiple && (
@@ -58,46 +64,47 @@ export default function AgentTurnBubble({ currentAgentName, mcps, turn, turnKey 
       </RoleLabel>
 
       {expanded && iterations.map((iteration, index) => {
-        const toolCalls: ActiveToolCall[] = (iteration.assistant.tool_calls ?? []).map((toolCall) => ({
-          id: toolCall.id,
-          name: toolCall.name,
-          arguments: toolCall.arguments,
-          result: iteration.toolResults.get(toolCall.id),
-        }));
+        const toolCalls = buildToolCards(collectToolUses(iteration.assistant.content), iteration.toolResults);
+        const reasoning = collectReasoning(iteration.assistant.content).trim();
+        const text = collectText(iteration.assistant.content).trim();
+        const attachments = collectAttachments(iteration.assistant.content);
         const isFinalIteration = index === iterations.length - 1;
 
         return (
-          <IterationSection key={index}>
+          <IterationSection key={iteration.assistant.id}>
             <IterationHeader>
               <IterationPill>{isFinalIteration ? "#final" : `#${index + 1}`}</IterationPill>
               {toolCalls.length > 0 && (
                 <PhasePill>{toolCalls.length} Tool{toolCalls.length > 1 ? "s" : ""}</PhasePill>
               )}
             </IterationHeader>
-            {iteration.assistant.reasoning?.trim() && (
+
+            {reasoning && (
               <ReasoningCard>
                 <ReasoningSummary>Reasoning</ReasoningSummary>
-                <CardContent>{iteration.assistant.reasoning.trim()}</CardContent>
+                <CardContent>{reasoning}</CardContent>
               </ReasoningCard>
             )}
-            {iteration.assistant.content?.trim() && (
-              <MarkdownMessage content={iteration.assistant.content} />
-            )}
+
+            {text && <MarkdownMessage content={text} />}
+
+            {attachments.length > 0 && <MessageAttachments attachments={attachments} />}
+
             {toolCalls.length > 0 && <ToolCallCards mcps={mcps} toolCalls={toolCalls} />}
           </IterationSection>
         );
       })}
 
-      {!expanded && finalIteration.assistant.reasoning?.trim() && (
+      {!expanded && finalReasoning && (
         <ReasoningCard>
           <ReasoningSummary>Reasoning</ReasoningSummary>
-          <CardContent>{finalIteration.assistant.reasoning.trim()}</CardContent>
+          <CardContent>{finalReasoning}</CardContent>
         </ReasoningCard>
       )}
 
-      {!expanded && finalIteration.assistant.content?.trim() && (
-        <MarkdownMessage content={finalIteration.assistant.content} />
-      )}
+      {!expanded && finalText && <MarkdownMessage content={finalText} />}
+
+      {!expanded && finalAttachments.length > 0 && <MessageAttachments attachments={finalAttachments} />}
     </MessageBubble>
   );
 }

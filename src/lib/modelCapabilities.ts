@@ -13,13 +13,19 @@ export const DEFAULT_REASONING_LEVEL_DEFAULTS: Record<string, ReasoningLevelConf
 
 export function getReasoningLevels(modelInfo?: ModelInfo): string[] {
   if (!modelInfo?.capabilities.supportsReasoning) return [];
-  return modelInfo.capabilities.reasoningLevels.length > 0
-    ? modelInfo.capabilities.reasoningLevels
-    : [...DEFAULT_REASONING_LEVELS];
+  return [...DEFAULT_REASONING_LEVELS];
+}
+
+export function normalizeCanonicalReasoningEffort(value?: string): string | undefined {
+  if (!value) return undefined;
+  if (value === "off") return "none";
+  if (value === "on") return "high";
+  return value;
 }
 
 export function getResolvedEndpoint(modelInfo: ModelInfo | undefined, settings?: ModelSettings): EndpointType {
-  const supported = modelInfo?.capabilities.supportedEndpoints ?? ["chat-completions"];
+  const supported = (modelInfo?.capabilities.supportedEndpoints ?? ["chat-completions"])
+    .filter((endpoint) => modelInfo?.capabilities.transportProfiles?.[endpoint]?.supported !== false);
   if (settings?.endpoint && supported.includes(settings.endpoint)) return settings.endpoint;
   return supported[0] ?? "chat-completions";
 }
@@ -33,9 +39,11 @@ export function getEndpointCapabilities(modelInfo: ModelInfo | undefined, endpoi
 
 export function getResolvedReasoningEffort(modelInfo: ModelInfo | undefined, settings: ModelSettings | undefined, value?: string): string {
   const levels = getReasoningLevels(modelInfo);
-  if (levels.length === 0) return value ?? settings?.reasoningEffort ?? "medium";
-  if (value && levels.includes(value)) return value;
-  if (settings?.reasoningEffort && levels.includes(settings.reasoningEffort)) return settings.reasoningEffort;
+  const normalizedValue = normalizeCanonicalReasoningEffort(value);
+  const normalizedSetting = normalizeCanonicalReasoningEffort(settings?.reasoningEffort);
+  if (levels.length === 0) return normalizedValue ?? normalizedSetting ?? "medium";
+  if (normalizedValue && levels.includes(normalizedValue)) return normalizedValue;
+  if (normalizedSetting && levels.includes(normalizedSetting)) return normalizedSetting;
   if (levels.includes("medium")) return "medium";
   return levels[0];
 }

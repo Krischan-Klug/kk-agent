@@ -198,14 +198,6 @@ export interface ModelInfo {
     }>>;
     transportProfiles?: Partial<Record<EndpointType, {
       supported: boolean;
-      reasoningTransport: "none" | "chat-completions-effort" | "chat-completions-on-off" | "responses-effort";
-      toolSchemaTransport: "chat-completions-tools" | "responses-tools";
-      streamGrammar: "openai-chat-completions" | "openai-responses";
-      toolCallAssemblyMode: "chat-completions-indexed" | "responses-output-state";
-      supportsParallelToolCalls: boolean;
-      supportsConcatenatedJsonSplit: boolean;
-      continuationMode: "none" | "raw-output-replay";
-      supportsStrictTools: boolean;
     }>>;
   };
 }
@@ -404,6 +396,8 @@ export type StreamEvent =
       toolName: string;
       status: ToolExecutionStatus;
       result?: SessionMessage;
+      detail?: string;
+      summary?: string;
     }
   | { type: "turn_state"; state: AgentLoopState }
   | { type: "system_notice"; level: "info" | "warning" | "error"; message: string }

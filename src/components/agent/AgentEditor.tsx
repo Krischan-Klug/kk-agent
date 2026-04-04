@@ -229,12 +229,39 @@ type Props = {
   onDelete: () => void;
 };
 
-function getConcreteInternalTools(modeConfig: AgentModeConfig, internalTools: McpListItem[]) {
-  const capabilityMap = new Map(internalTools.map((entry) => [entry.id, entry]));
-  return modeConfig.toolIds
+type ConcreteCapabilityTool = {
+  capabilityId: string;
+  capabilityName: string;
+  name: string;
+  description: string;
+};
+
+function getConcreteCapabilityTools(capabilityIds: string[], capabilities: McpListItem[]): ConcreteCapabilityTool[] {
+  const capabilityMap = new Map(capabilities.map((entry) => [entry.id, entry]));
+  return capabilityIds
     .map((id) => capabilityMap.get(id))
     .filter((entry): entry is McpListItem => Boolean(entry))
-    .flatMap((entry) => entry.tools.map((tool) => ({ capabilityId: entry.id, capabilityName: entry.name, ...tool })));
+    .flatMap((entry) => entry.tools.map((tool) => ({
+      capabilityId: entry.id,
+      capabilityName: entry.name,
+      name: tool.name,
+      description: tool.description,
+    })));
+}
+
+function getConcreteInternalTools(modeConfig: AgentModeConfig, internalTools: McpListItem[]) {
+  return getConcreteCapabilityTools(modeConfig.toolIds, internalTools);
+}
+
+function getConcreteMcpTools(modeConfig: AgentModeConfig, mcps: McpListItem[]) {
+  return getConcreteCapabilityTools(modeConfig.mcpIds, mcps);
+}
+
+function getConcreteRuntimeTools(modeConfig: AgentModeConfig, internalTools: McpListItem[], mcps: McpListItem[]) {
+  return [
+    ...getConcreteInternalTools(modeConfig, internalTools),
+    ...getConcreteMcpTools(modeConfig, mcps),
+  ];
 }
 
 function getCapabilityToolNames(capability: McpListItem): string[] {
@@ -248,6 +275,10 @@ function normalizeAllowedToolNames(nextAllowed: string[], concreteTools: Array<{
 
 function isToolAllowed(modeConfig: AgentModeConfig, toolName: string): boolean {
   return modeConfig.allowedToolNames.includes(toolName);
+}
+
+function hasAllowedToolForCapability(allowedToolNames: string[], capabilityToolNames: string[]): boolean {
+  return capabilityToolNames.some((toolName) => allowedToolNames.includes(toolName));
 }
 
 function setCapabilityInstruction(
@@ -288,6 +319,7 @@ export default function AgentEditor({
 }: Props) {
   const [selectedMode, setSelectedMode] = useState<ChatMode>("edit");
   const [expandedInternalTools, setExpandedInternalTools] = useState<Record<string, boolean>>({});
+  const [expandedMcps, setExpandedMcps] = useState<Record<string, boolean>>({});
   const [visibleToolInstructions, setVisibleToolInstructions] = useState<Record<string, boolean>>({});
   const [visibleMcpInstructions, setVisibleMcpInstructions] = useState<Record<string, boolean>>({});
 
@@ -310,7 +342,8 @@ export default function AgentEditor({
   const showTemperature = endpointCapabilities.temperatureSupported;
   const temperatureOptions = buildTemperatureOptions(endpointCapabilities.temperatureRange);
   const selectedModeConfig = currentAgent.modeConfigs[effectiveSelectedMode];
-  const concreteTools = getConcreteInternalTools(selectedModeConfig, internalTools);
+  const concreteInternalTools = getConcreteInternalTools(selectedModeConfig, internalTools);
+  const concreteRuntimeTools = getConcreteRuntimeTools(selectedModeConfig, internalTools, mcps);
   const defaultModeInstruction = defaults?.agent.modeInstructions[effectiveSelectedMode] ?? "";
   const isCustomizedModeInstruction = selectedModeConfig.modeInstruction.trim() !== defaultModeInstruction.trim();
 
@@ -534,13 +567,10 @@ export default function AgentEditor({
                       const nextAllowedRaw = isActive
                         ? selectedModeConfig.allowedToolNames.filter((name) => !capabilityToolNames.includes(name))
                         : [...selectedModeConfig.allowedToolNames, ...capabilityToolNames];
-                      const nextConcreteTools = getConcreteInternalTools(
-                        { ...selectedModeConfig, toolIds: nextToolIds },
-                        internalTools,
-                      );
+                      const nextModeConfig = { ...selectedModeConfig, toolIds: nextToolIds };
+                      const nextConcreteTools = getConcreteRuntimeTools(nextModeConfig, internalTools, mcps);
                       updateModeConfig({
-                        ...selectedModeConfig,
-                        toolIds: nextToolIds,
+                        ...nextModeConfig,
                         allowedToolNames: normalizeAllowedToolNames(nextAllowedRaw, nextConcreteTools),
                       });
                     }}
@@ -665,9 +695,19 @@ export default function AgentEditor({
                                   const updated = allowed
                                     ? deduped.filter((entry) => entry !== tool.name)
                                     : [...deduped, tool.name];
-                                  updateModeConfig({
+                                  const nextToolIds = hasAllowedToolForCapability(updated, capabilityToolNames)
+                                    ? selectedModeConfig.toolIds
+                                    : selectedModeConfig.toolIds.filter((entry) => entry !== toolGroup.id);
+                                  const nextModeConfig = {
                                     ...selectedModeConfig,
-                                    allowedToolNames: normalizeAllowedToolNames(updated, concreteTools),
+                                    toolIds: nextToolIds,
+                                  };
+                                  updateModeConfig({
+                                    ...nextModeConfig,
+                                    allowedToolNames: normalizeAllowedToolNames(
+                                      updated,
+                                      getConcreteRuntimeTools(nextModeConfig, internalTools, mcps),
+                                    ),
                                   });
                                 }}
                               />
@@ -690,6 +730,8 @@ export default function AgentEditor({
         <SectionTitle>External MCPs</SectionTitle>
         {mcps.map((mcp) => {
           const isActive = selectedModeConfig.mcpIds.includes(mcp.id);
+          const capabilityToolNames = getCapabilityToolNames(mcp);
+          const isExpanded = expandedMcps[mcp.id] ?? false;
           const showInstruction = visibleMcpInstructions[mcp.id] ?? false;
           const effectiveInstruction = selectedModeConfig.mcpInstructions[mcp.id] ?? mcp.instruction ?? "";
           const isCustomized = effectiveInstruction.trim() !== (mcp.instruction ?? "").trim();
@@ -701,17 +743,38 @@ export default function AgentEditor({
                   <input
                     type="checkbox"
                     checked={isActive}
-                    onChange={() => updateModeConfig({
-                      ...selectedModeConfig,
-                      mcpIds: isActive
+                    onChange={() => {
+                      const nextMcpIds = isActive
                         ? selectedModeConfig.mcpIds.filter((id) => id !== mcp.id)
-                        : [...selectedModeConfig.mcpIds, mcp.id],
-                    })}
+                        : [...selectedModeConfig.mcpIds, mcp.id];
+                      const nextAllowedRaw = isActive
+                        ? selectedModeConfig.allowedToolNames.filter((name) => !capabilityToolNames.includes(name))
+                        : [...selectedModeConfig.allowedToolNames, ...capabilityToolNames];
+                      const nextModeConfig = { ...selectedModeConfig, mcpIds: nextMcpIds };
+                      updateModeConfig({
+                        ...nextModeConfig,
+                        allowedToolNames: normalizeAllowedToolNames(
+                          nextAllowedRaw,
+                          getConcreteRuntimeTools(nextModeConfig, internalTools, mcps),
+                        ),
+                      });
+                    }}
                   />
+                  <span style={{ fontSize: "1.1em" }}>{mcp.emoji || "M"}</span>
                   <span>{mcp.name}</span>
+                  <StatusDot $running={mcp.running} />
                 </CheckboxRow>
                 {isActive && (
                   <HeaderActions>
+                    <ExpandButton
+                      type="button"
+                      onClick={() => setExpandedMcps((previous) => ({
+                        ...previous,
+                        [mcp.id]: !isExpanded,
+                      }))}
+                    >
+                      {isExpanded ? "Weniger" : "Details"}
+                    </ExpandButton>
                     <ExpandButton
                       type="button"
                       onClick={() => setVisibleMcpInstructions((previous) => ({
@@ -758,6 +821,45 @@ export default function AgentEditor({
                     ),
                   })}
                 />
+              )}
+              {isActive && isExpanded && (
+                <NestedToolList>
+                  {mcp.tools.map((tool) => {
+                    const allowed = isToolAllowed(selectedModeConfig, tool.name);
+                    return (
+                      <NestedToolCard key={tool.name} $active={allowed}>
+                        <CheckboxRow>
+                          <input
+                            type="checkbox"
+                            checked={allowed}
+                            onChange={() => {
+                              const deduped = [...new Set(selectedModeConfig.allowedToolNames)];
+                              const updated = allowed
+                                ? deduped.filter((entry) => entry !== tool.name)
+                                : [...deduped, tool.name];
+                              const nextMcpIds = hasAllowedToolForCapability(updated, capabilityToolNames)
+                                ? selectedModeConfig.mcpIds
+                                : selectedModeConfig.mcpIds.filter((entry) => entry !== mcp.id);
+                              const nextModeConfig = {
+                                ...selectedModeConfig,
+                                mcpIds: nextMcpIds,
+                              };
+                              updateModeConfig({
+                                ...nextModeConfig,
+                                allowedToolNames: normalizeAllowedToolNames(
+                                  updated,
+                                  getConcreteRuntimeTools(nextModeConfig, internalTools, mcps),
+                                ),
+                              });
+                            }}
+                          />
+                          <ToolName>{tool.name}</ToolName>
+                        </CheckboxRow>
+                        <ToolDescription>{tool.description}</ToolDescription>
+                      </NestedToolCard>
+                    );
+                  })}
+                </NestedToolList>
               )}
             </CapabilityRow>
           );

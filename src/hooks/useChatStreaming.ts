@@ -172,6 +172,8 @@ export function useChatStreaming({
                 ...current,
                 name: event.toolName,
                 status: event.status,
+                ...(event.detail ? { detail: event.detail } : {}),
+                ...(event.summary ? { summary: event.summary } : {}),
                 ...(event.result ? { result: getToolResult(event.result) } : {}),
               };
 

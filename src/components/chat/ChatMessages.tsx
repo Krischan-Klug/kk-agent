@@ -156,12 +156,19 @@ export default function ChatMessages({
             const mergedToolCalls = streamedToolUses.length > 0
               ? streamedToolUses.map((toolUse) => {
                   const execution = streamToolCalls.find((toolCall) => toolCall.id === toolUse.id);
-                  return execution ?? {
-                    id: toolUse.id,
-                    name: toolUse.name,
-                    input: toolUse.input,
-                    status: "queued" as const,
-                  };
+                  return execution
+                    ? {
+                        ...execution,
+                        id: toolUse.id,
+                        name: toolUse.name,
+                        input: toolUse.input,
+                      }
+                    : {
+                        id: toolUse.id,
+                        name: toolUse.name,
+                        input: toolUse.input,
+                        status: "queued" as const,
+                      };
                 })
               : streamToolCalls;
 

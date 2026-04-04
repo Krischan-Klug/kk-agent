@@ -46,6 +46,18 @@ export default function ToolCallCards({ mcps, toolCalls }: Props) {
         )}
       </CardSummary>
       <CardContent>
+        {toolCall.summary && (
+          <>
+            <ToolBlockLabel>Summary:</ToolBlockLabel>
+            {toolCall.summary}
+          </>
+        )}
+        {toolCall.detail && (
+          <>
+            <ToolBlockLabel>Status:</ToolBlockLabel>
+            {toolCall.detail}
+          </>
+        )}
         <ToolBlockLabel>Arguments:</ToolBlockLabel>
         {JSON.stringify(toolCall.input, null, 2)}
         {toolCall.result && (

@@ -6,6 +6,8 @@ export interface ActiveToolCall {
   input: Record<string, unknown>;
   status: ToolExecutionStatus;
   result?: { content: string; isError: boolean };
+  detail?: string;
+  summary?: string;
 }
 
 export interface TokenDisplayStats {

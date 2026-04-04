@@ -96,6 +96,10 @@ export interface McpServerConfig {
     accessScope?: "user" | "system";
     basePath?: string;
     workingDirectory?: string;
+    resultPolicy?: {
+      previewThresholdChars?: number;
+      previewChars?: number;
+    };
   };
   transport: "stdio" | "sse";
   server: McpStdioConfig | McpSseConfig;
@@ -206,6 +210,10 @@ export interface UpdateMcpBody {
     accessScope?: "user" | "system";
     basePath?: string;
     workingDirectory?: string;
+    resultPolicy?: {
+      previewThresholdChars?: number;
+      previewChars?: number;
+    };
   };
 }
 

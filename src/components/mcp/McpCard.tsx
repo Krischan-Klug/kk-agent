@@ -77,6 +77,7 @@ const ConfigDetail = styled.div`
   font-family: var(--font-mono);
   font-size: var(--font-size-sm);
   color: var(--text-secondary);
+  white-space: pre-wrap;
 `;
 
 const ToolItem = styled.div`
@@ -146,6 +147,11 @@ export default function McpCard({
   onSaveEdit,
 }: Props) {
   const handleEditToggle = editOpen ? onEditToggle : onOpenEdit;
+  const configSummary = getConfigSummary(mcp);
+  const customEnv = mcp.source !== "system" && mcp.transport === "stdio"
+    ? (mcp.server as { env?: Record<string, string> }).env ?? {}
+    : {};
+  const hasCustomEnv = Object.keys(customEnv).length > 0;
 
   return (
     <Card>
@@ -196,15 +202,13 @@ export default function McpCard({
         </Name>
       </Header>
 
-      {!editOpen && (
+      {!editOpen && (configSummary || hasCustomEnv) && (
         <ConfigDetail>
-          {getConfigSummary(mcp)}
-          {mcp.source !== "system" &&
-            mcp.transport === "stdio" &&
-            Object.keys((mcp.server as { env?: Record<string, string> }).env ?? {}).length > 0 && (
+          {configSummary}
+          {hasCustomEnv && (
               <div style={{ marginTop: "var(--space-xs)", color: "var(--text-muted)", fontSize: "var(--font-size-sm)" }}>
                 env:{" "}
-                {Object.entries((mcp.server as { env?: Record<string, string> }).env ?? {})
+                {Object.entries(customEnv)
                   .map(([k, v]) => `${k}=${v}`)
                   .join(", ")}
               </div>
@@ -265,11 +269,30 @@ export default function McpCard({
                   </ConfigDetail>
                 </>
               )}
-              {(mcp.systemKey === "web-search" ||
-                mcp.systemKey === "user-interaction" ||
-                mcp.systemKey === "task" ||
-                mcp.systemKey === "memory" ||
-                mcp.systemKey === "attachment") && <ConfigDetail>Keine weitere System-Konfiguration in v1.</ConfigDetail>}
+              {(mcp.systemKey === "filesystem" || mcp.systemKey === "terminal" || mcp.systemKey === "web-search") && (
+                <>
+                  <FormField>
+                    <FieldLabel>Preview Threshold (chars)</FieldLabel>
+                    <Input
+                      type="number"
+                      min={1}
+                      value={editForm.previewThresholdChars}
+                      placeholder="Leer lassen fuer Tool-Default"
+                      onChange={(e) => onEditFormChange({ ...editForm, previewThresholdChars: e.target.value })}
+                    />
+                  </FormField>
+                  <FormField>
+                    <FieldLabel>Preview Chars</FieldLabel>
+                    <Input
+                      type="number"
+                      min={200}
+                      value={editForm.previewChars}
+                      placeholder="Leer lassen fuer Tool-Default"
+                      onChange={(e) => onEditFormChange({ ...editForm, previewChars: e.target.value })}
+                    />
+                  </FormField>
+                </>
+              )}
             </>
           ) : mcp.transport === "stdio" ? (
             <>

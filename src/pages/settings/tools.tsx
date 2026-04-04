@@ -80,6 +80,13 @@ export default function SettingsToolsPage() {
     const form = editForms[tool.id];
     if (!form) return;
 
+    const previewThresholdChars = form.previewThresholdChars.trim() ? Number(form.previewThresholdChars) : undefined;
+    const previewChars = form.previewChars.trim() ? Number(form.previewChars) : undefined;
+    const resultPolicy = {
+      ...(previewThresholdChars !== undefined ? { previewThresholdChars } : {}),
+      ...(previewChars !== undefined ? { previewChars } : {}),
+    };
+
     try {
       await toolsApi.update(tool.id, {
         name: form.name,
@@ -88,6 +95,9 @@ export default function SettingsToolsPage() {
           ...((tool.systemKey === "filesystem" || tool.systemKey === "terminal") ? { accessScope: form.accessScope } : {}),
           ...(tool.systemKey === "filesystem" ? { basePath: form.basePath } : {}),
           ...(tool.systemKey === "terminal" ? { workingDirectory: form.workingDirectory } : {}),
+          ...((tool.systemKey === "filesystem" || tool.systemKey === "terminal" || tool.systemKey === "web-search")
+            ? { resultPolicy }
+            : {}),
         },
       });
       expandedEdit.remove(tool.id);

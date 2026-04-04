@@ -264,7 +264,6 @@ export default function DefaultsPage() {
               })}
             />
           </Field>
-
           <SectionTitle>Reasoning / Attachment</SectionTitle>
           <Field>
             <FieldLabel>Default Reasoning Effort</FieldLabel>

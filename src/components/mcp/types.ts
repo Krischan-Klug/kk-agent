@@ -10,6 +10,8 @@ export type EditForm = {
   accessScope: "user" | "system";
   basePath: string;
   workingDirectory: string;
+  previewThresholdChars: string;
+  previewChars: string;
 };
 
 export const EMPTY_MCP_FORM: CreateMcpBody = {
@@ -35,23 +37,38 @@ export function buildEditForm(mcp: McpListItem): EditForm {
     accessScope: mcp.systemConfig?.accessScope ?? "user",
     basePath: mcp.systemConfig?.basePath ?? "",
     workingDirectory: mcp.systemConfig?.workingDirectory ?? "",
+    previewThresholdChars: mcp.systemConfig?.resultPolicy?.previewThresholdChars
+      ? String(mcp.systemConfig.resultPolicy.previewThresholdChars)
+      : "",
+    previewChars: mcp.systemConfig?.resultPolicy?.previewChars
+      ? String(mcp.systemConfig.resultPolicy.previewChars)
+      : "",
   };
 }
 
 export function getConfigSummary(mcp: McpListItem): string {
+  const resultPolicy = mcp.systemConfig?.resultPolicy;
+  const resultPolicySummary = resultPolicy
+    ? `threshold ${resultPolicy.previewThresholdChars ?? "-"} / preview ${resultPolicy.previewChars ?? "-"}`
+    : "";
+
   if (mcp.source === "system") {
     if (mcp.systemKey === "filesystem") {
-      return `scope: ${mcp.systemConfig?.accessScope ?? "user"} | basePath: ${mcp.systemConfig?.basePath ?? "-"}`;
+      return [
+        mcp.systemConfig?.accessScope ?? "user",
+        mcp.systemConfig?.basePath ?? "-",
+        resultPolicySummary,
+      ].filter(Boolean).join("\n");
     }
     if (mcp.systemKey === "terminal") {
-      return `scope: ${mcp.systemConfig?.accessScope ?? "user"} | workingDirectory: ${mcp.systemConfig?.workingDirectory ?? "-"}`;
+      return [
+        mcp.systemConfig?.accessScope ?? "user",
+        mcp.systemConfig?.workingDirectory ?? "-",
+        resultPolicySummary,
+      ].filter(Boolean).join("\n");
     }
-    if (mcp.systemKey === "web-search") return "Interne Web-Suche";
-    if (mcp.systemKey === "user-interaction") return "Interne User-Interaktion";
-    if (mcp.systemKey === "task") return "Interne Task-Steuerung";
-    if (mcp.systemKey === "memory") return "Interne Memory-Steuerung";
-    if (mcp.systemKey === "attachment") return "Interne Chat-Attachments";
-    return "Internes System-Tool";
+    if (mcp.systemKey === "web-search") return resultPolicySummary;
+    return "";
   }
 
   return mcp.transport === "stdio"

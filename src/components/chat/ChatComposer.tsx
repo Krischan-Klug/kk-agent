@@ -408,7 +408,6 @@ export default function ChatComposer({
   maxCtx,
   tokenStats,
   tasks,
-  loopState,
   pendingAttachments,
   onInputChange,
   onKeyDown,
@@ -497,7 +496,7 @@ export default function ChatComposer({
           ))}
         </ModeStrip>
         <ComposerStack>
-          {(tasks.length > 0 || loopState) && (
+          {tasks.length > 0 && (
             <TasksDrawer $open={tasksOpen}>
               <TasksHeader>
                 <TasksTitle>Tasks</TasksTitle>
@@ -569,7 +568,7 @@ export default function ChatComposer({
                 )}
               </ComposerMeta>
               <ComposerActions>
-                {(tasks.length > 0 || loopState) && (
+                {tasks.length > 0 && (
                   <TasksToggleButton
                     type="button"
                     $active={tasksOpen}

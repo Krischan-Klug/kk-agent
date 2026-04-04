@@ -11,7 +11,7 @@ import {
   useStoredActiveSessionId,
   useStoredSidebarCollapsed,
 } from "@/lib/sessionState";
-import { createAndActivateSession, resolveDefaultSessionAgentId } from "@/lib/sessionFactory";
+import { createAndActivateSession } from "@/lib/sessionFactory";
 import { logUiError } from "@/lib/uiLogger";
 import {
   SidebarWrapper,
@@ -93,10 +93,7 @@ export default function Sidebar() {
 
   async function createSession() {
     try {
-      const fallbackAgentId = resolveDefaultSessionAgentId(
-        [],
-        sessions.find((session) => session.id === activeSessionId)?.agentId ?? sessions[0]?.agentId,
-      );
+      const fallbackAgentId = sessions.find((session) => session.id === activeSessionId)?.agentId ?? sessions[0]?.agentId;
       await createAndActivateSession([], fallbackAgentId);
       await loadSessions();
       await router.push("/chat");

@@ -2,6 +2,7 @@ import type { McpServerConfig, ToolCallResult } from "../../../mcp/types.js";
 import { describeAttachment, listSessionAttachments, readAttachmentData, resolveAttachmentReference } from "../../../session/lib/attachments.js";
 import type { StoredAttachment } from "../../../session/lib/attachment-types.js";
 import { getCurrentSessionId } from "../user-interaction/interaction-store.js";
+import { truncateSelfBoundedReadOutput } from "../read-output.js";
 
 const READ_LINE_LIMIT = 200;
 function formatSize(bytes: number): string {
@@ -78,7 +79,7 @@ export async function executeAttachmentTool(
     const offset = typeof args.offset === "number" ? args.offset : 1;
     const limit = typeof args.limit === "number" ? args.limit : READ_LINE_LIMIT;
     const text = attachment.extractedText ?? (await readAttachmentData(attachment)).toString("utf-8");
-    return { content: renderTextAttachment(attachment, text, offset, limit), isError: false };
+    return { content: truncateSelfBoundedReadOutput(renderTextAttachment(attachment, text, offset, limit)), isError: false };
   }
 
   return null;

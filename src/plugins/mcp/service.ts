@@ -8,7 +8,7 @@ import {
   stopMcp,
   getToolsForMcp,
   getAllTools,
-  executeTool as executeCustomTool,
+  executeToolForMcp as executeMcpTool,
   getRunningMcps,
 } from "./lib/process-manager.js";
 
@@ -144,11 +144,12 @@ export async function updateMcpConfig(id: string, body: UpdateMcpBody): Promise<
   });
 }
 
-export async function executeTool(
+export async function executeToolForMcp(
+  mcpId: string,
   toolName: string,
   args: Record<string, unknown>,
 ): Promise<{ content: string; isError: boolean }> {
-  return executeCustomTool(toolName, args);
+  return executeMcpTool(mcpId, toolName, args);
 }
 
 export { getAllTools };

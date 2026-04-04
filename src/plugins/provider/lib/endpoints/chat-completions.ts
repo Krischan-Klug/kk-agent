@@ -6,8 +6,8 @@ import {
   buildUnifiedResponseFromTurn,
   mapFinishReason,
 } from "../helpers.js";
-import { finalizeChatCompletionsTurn } from "../transport.js";
-import { reasoningBlock, textBlock } from "../../../lib/transcript.js";
+import { finalizeChatCompletionsTurn, normalizeChatCompletionsToolCalls } from "../transport.js";
+import { reasoningBlock, textBlock, toolUseBlock } from "../../../lib/transcript.js";
 
 type ChatCompletionUsage = {
   prompt_tokens?: number;
@@ -74,11 +74,9 @@ export async function chat(
   const response = buildUnifiedResponseFromTurn(turn);
   response.transportState = {
     endpoint: "chat-completions",
-    lastAssistantMessageId: response.message.id,
   };
   response.debug = {
     endpoint: "chat-completions",
-    requestBody: buildChatCompletionsBody(request, false),
   };
   return response;
 }
@@ -102,6 +100,7 @@ export async function chatStream(
 
   const messageId = randomUUID();
   const rawToolCalls = new Map<number, { id?: string; name?: string; rawArguments?: string; index: number }>();
+  const emittedToolUseIds = new Set<string>();
   const providerNotices: Array<{ level: "info" | "warning" | "error"; message: string }> = [];
   let text = "";
   let reasoning = "";
@@ -171,6 +170,23 @@ export async function chatStream(
       });
     }
 
+    if (choice.finish_reason) {
+      const normalizedToolCalls = normalizeChatCompletionsToolCalls({
+        rawToolCalls: [...rawToolCalls.values()],
+        tools: request.tools,
+        supportsConcatenatedJsonSplit: true,
+      }).toolCalls;
+      for (const toolCall of normalizedToolCalls) {
+        if (emittedToolUseIds.has(toolCall.id)) continue;
+        emittedToolUseIds.add(toolCall.id);
+        onChunk({
+          type: "assistant_block_delta",
+          messageId,
+          block: toolUseBlock(toolCall.id, toolCall.name, toolCall.arguments),
+        });
+      }
+    }
+
     return false;
   }, { throwOnProviderError: false });
 
@@ -188,11 +204,9 @@ export async function chatStream(
   const response = buildUnifiedResponseFromTurn(turn);
   response.transportState = {
     endpoint: "chat-completions",
-    lastAssistantMessageId: response.message.id,
   };
   response.debug = {
     endpoint: "chat-completions",
-    requestBody: buildChatCompletionsBody(request, true),
   };
   if (providerNotices.length > 0) {
     response.notices = [...(response.notices ?? []), ...providerNotices];

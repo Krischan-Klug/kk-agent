@@ -47,7 +47,6 @@ export interface McpToolDefinition {
 export interface ToolCallResult {
   content: string;
   isError: boolean;
-  contextContent?: string;
 }
 
 export interface CreateMcpBody {

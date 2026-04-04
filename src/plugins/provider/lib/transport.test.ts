@@ -4,6 +4,8 @@ import {
   finalizeChatCompletionsTurn,
   finalizeResponsesOutput,
   handleResponsesStreamingEvent,
+  normalizeChatCompletionsToolCalls,
+  normalizeResponsesToolCalls,
   splitConcatenatedJson,
 } from "./transport.js";
 
@@ -107,4 +109,35 @@ test("handleResponsesStreamingEvent assembles interleaved response output", () =
   assert.equal(turn.text, "Hallo");
   assert.equal(turn.toolCalls.length, 1);
   assert.deepEqual(turn.toolCalls[0]?.arguments, { pattern: "TODO" });
+});
+
+test("normalizeChatCompletionsToolCalls returns ready tool calls before final turn assembly", () => {
+  const normalized = normalizeChatCompletionsToolCalls({
+    rawToolCalls: [
+      { id: "call-early", name: "list_directory", rawArguments: '{"path":"C:\\\\repo"}', index: 0 },
+    ],
+    tools: [{ name: "list_directory", description: "", parameters: {} }],
+    supportsConcatenatedJsonSplit: true,
+  });
+
+  assert.equal(normalized.toolCalls.length, 1);
+  assert.deepEqual(normalized.toolCalls[0]?.arguments, { path: "C:\\repo" });
+});
+
+test("normalizeResponsesToolCalls returns ready function calls from partial output state", () => {
+  const normalized = normalizeResponsesToolCalls({
+    output: [
+      {
+        type: "function_call",
+        id: "call-early",
+        name: "grep",
+        arguments: '{"pattern":"TODO"}',
+      },
+    ],
+    tools: [{ name: "grep", description: "", parameters: {} }],
+    supportsConcatenatedJsonSplit: true,
+  });
+
+  assert.equal(normalized.toolCalls.length, 1);
+  assert.deepEqual(normalized.toolCalls[0]?.arguments, { pattern: "TODO" });
 });

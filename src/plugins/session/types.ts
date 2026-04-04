@@ -78,6 +78,8 @@ export type SSEEvent =
       toolName: string;
       status: ToolExecutionStatus;
       result?: SessionMessage;
+      detail?: string;
+      summary?: string;
     }
   | { type: "turn_state"; state: import("../agent/types.js").AgentLoopState }
   | { type: "system_notice"; level: "info" | "warning" | "error"; message: string }

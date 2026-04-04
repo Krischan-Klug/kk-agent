@@ -1,31 +1,42 @@
-import { createTranscriptMessage, normalizeToolResultContent, toolResultBlock, type TranscriptMessage, type TranscriptToolUseBlock } from "../../lib/transcript.js";
-import type { ChatMode } from "../../agent/types.js";
-import type { ToolExecutionResult, ToolExecutionStatus } from "../types.js";
+import {
+  createTranscriptMessage,
+  normalizeToolResultContent,
+  toolResultBlock,
+  type TranscriptMessage,
+  type TranscriptToolUseBlock,
+} from "../../lib/transcript.js";
+import type {
+  ChatMode,
+} from "../../agent/types.js";
+import type {
+  RuntimeToolDefinition,
+  ToolExecutionResult,
+  ToolExecutionStatus,
+  ToolRuntimeContext,
+} from "../types.js";
 import { fitToolResultsToBudget, persistLargeToolResult } from "./tool-result-storage.js";
-
-const CONCURRENCY_SAFE_TOOLS = new Set([
-  "read_file",
-  "grep",
-  "search_files",
-  "list_directory",
-  "stat_path",
-  "web_search",
-  "fetch_url",
-  "run_command_readonly",
-  "list_attachments",
-  "read_attachment",
-]);
-
-function isConcurrencySafeTool(toolName: string): boolean {
-  return CONCURRENCY_SAFE_TOOLS.has(toolName);
-}
 
 export interface ToolExecutionUpdate {
   toolUseId: string;
   toolName: string;
   status: ToolExecutionStatus;
   result?: TranscriptMessage;
+  detail?: string;
+  summary?: string;
 }
+
+type TrackedTool = {
+  toolUse: TranscriptToolUseBlock;
+  runtimeTool?: RuntimeToolDefinition;
+  status: ToolExecutionStatus;
+  isConcurrencySafe: boolean;
+  result?: { content: string; isError: boolean };
+  streamedResult?: TranscriptMessage;
+  finalResult?: TranscriptMessage;
+  yielded: boolean;
+  promise?: Promise<void>;
+  contextModifier?: (context: ToolRuntimeContext) => ToolRuntimeContext;
+};
 
 function toToolResultMessage(toolUse: TranscriptToolUseBlock, content: string, isError = false): TranscriptMessage {
   return createTranscriptMessage({
@@ -34,132 +45,267 @@ function toToolResultMessage(toolUse: TranscriptToolUseBlock, content: string, i
   });
 }
 
-type SettledToolExecution = {
-  toolUse: TranscriptToolUseBlock;
-  content: string;
-  isError: boolean;
-};
+function toSyntheticErrorMessage(toolUse: TranscriptToolUseBlock, message: string): TranscriptMessage {
+  return toToolResultMessage(toolUse, message, true);
+}
 
-export class ToolExecutor {
+function partitionCanRunTogether(executing: TrackedTool[], next: TrackedTool): boolean {
+  return executing.length === 0 || (next.isConcurrencySafe && executing.every((entry) => entry.isConcurrencySafe));
+}
+
+export class StreamingToolExecutor {
+  private readonly tools: TrackedTool[] = [];
   private discarded = false;
+  private runtimeContext: ToolRuntimeContext = { values: {} };
 
   constructor(
-    private readonly executeTool: (toolName: string, args: Record<string, unknown>, mode: ChatMode) => Promise<ToolExecutionResult>,
+    private readonly executeTool: (
+      toolName: string,
+      args: Record<string, unknown>,
+      mode: ChatMode,
+      context: ToolRuntimeContext,
+    ) => Promise<ToolExecutionResult>,
     private readonly mode: ChatMode,
+    private readonly runtimeToolsByName: Record<string, RuntimeToolDefinition>,
+    private readonly resolveToolPermission: (
+      runtimeTool: RuntimeToolDefinition,
+      toolName: string,
+      args: Record<string, unknown>,
+      mode: ChatMode,
+    ) => Promise<{ allowed: boolean; reason?: string }>,
     private readonly onUpdate?: (update: ToolExecutionUpdate) => void,
   ) {}
 
-  discardPending(reason = "Tool execution was discarded before completion."): void {
-    this.discarded = true;
-    this.onUpdate?.({ toolUseId: "", toolName: "", status: "discarded" });
-    void reason;
+  addTool(toolUse: TranscriptToolUseBlock): void {
+    if (this.tools.some((entry) => entry.toolUse.id === toolUse.id)) return;
+
+    const runtimeTool = this.runtimeToolsByName[toolUse.name];
+    const tracked: TrackedTool = {
+      toolUse,
+      runtimeTool,
+      status: runtimeTool ? "queued" : "invalid",
+      isConcurrencySafe: runtimeTool ? runtimeTool.isConcurrencySafe(toolUse.input) : false,
+      yielded: false,
+    };
+    this.tools.push(tracked);
+
+    if (!runtimeTool) {
+      const message = `Tool "${toolUse.name}" is not available in the current runtime configuration.`;
+      tracked.result = { content: message, isError: true };
+      tracked.streamedResult = toSyntheticErrorMessage(toolUse, message);
+      tracked.finalResult = tracked.streamedResult;
+      this.onUpdate?.({
+        toolUseId: toolUse.id,
+        toolName: toolUse.name,
+        status: "invalid",
+        result: tracked.streamedResult,
+        detail: message,
+      });
+      this.flushReadyResults();
+      return;
+    }
+
+    this.onUpdate?.({
+      toolUseId: toolUse.id,
+      toolName: toolUse.name,
+      status: "queued",
+      detail: `Queued ${toolUse.name}`,
+    });
+    void this.processQueue();
   }
 
-  async execute(toolUses: TranscriptToolUseBlock[]): Promise<TranscriptMessage[]> {
-    const results: TranscriptMessage[] = [];
-
-    for (const batch of partitionToolUses(toolUses)) {
-      const settled = batch.concurrent
-        ? await Promise.all(batch.toolUses.map((toolUse) => this.runTool(toolUse)))
-        : await this.runSerial(batch.toolUses);
-
-      const persisted = await Promise.all(
-        settled.map(async (entry) => ({
-          toolUse: entry.toolUse,
-          isError: entry.isError,
-          content: await persistLargeToolResult(entry.toolUse.id, entry.toolUse.name, entry.content),
-        })),
-      );
-
-      const budgetedContents = fitToolResultsToBudget(
-        persisted.map((entry) => ({ toolName: entry.toolUse.name, content: entry.content })),
-      );
-
-      budgetedContents.forEach((content, index) => {
-        const entry = persisted[index]!;
-        const result = toToolResultMessage(entry.toolUse, content, entry.isError);
-        this.onUpdate?.({
-          toolUseId: entry.toolUse.id,
-          toolName: entry.toolUse.name,
-          status: entry.isError ? "error" : "yielded",
-          result,
-        });
-        this.onUpdate?.({
-          toolUseId: entry.toolUse.id,
-          toolName: entry.toolUse.name,
-          status: entry.isError ? "error" : "completed",
-          result,
-        });
-        results.push(result);
+  discardPending(reason = "Tool execution was discarded before completion."): void {
+    this.discarded = true;
+    for (const tracked of this.tools) {
+      if (tracked.yielded || tracked.status === "completed" || tracked.status === "error" || tracked.status === "invalid") {
+        continue;
+      }
+      tracked.status = "discarded";
+      tracked.result = { content: reason, isError: true };
+      tracked.streamedResult = toSyntheticErrorMessage(tracked.toolUse, reason);
+      tracked.finalResult = tracked.streamedResult;
+      this.onUpdate?.({
+        toolUseId: tracked.toolUse.id,
+        toolName: tracked.toolUse.name,
+        status: "discarded",
+        result: tracked.streamedResult,
+        detail: reason,
       });
     }
+  }
+
+  async getFinalResults(): Promise<TranscriptMessage[]> {
+    await Promise.all(this.tools.map((tool) => tool.promise).filter((promise): promise is Promise<void> => Boolean(promise)));
+    this.flushReadyResults();
+
+    const ordered = this.tools.map((tool) => ({
+      tool,
+      content: tool.result?.content ?? "",
+      isError: tool.result?.isError === true,
+      policy: tool.runtimeTool?.resultPolicy,
+    }));
+
+    const persistedContents = await Promise.all(
+      ordered.map(async ({ tool, content, policy }) => ({
+        tool,
+        isError: tool.result?.isError === true,
+        content: await persistLargeToolResult(tool.toolUse.id, tool.toolUse.name, content, policy),
+        policy,
+      })),
+    );
+
+    const finalContents = fitToolResultsToBudget(
+      persistedContents.map((entry) => ({
+        toolName: entry.tool.toolUse.name,
+        content: entry.content,
+        policy: entry.policy,
+      })),
+    );
+
+    const results: TranscriptMessage[] = [];
+    finalContents.forEach((content, index) => {
+      const entry = persistedContents[index]!;
+      const finalMessage = toToolResultMessage(entry.tool.toolUse, content, entry.isError);
+      entry.tool.finalResult = finalMessage;
+      results.push(finalMessage);
+    });
 
     return results;
   }
 
-  private async runSerial(toolUses: TranscriptToolUseBlock[]): Promise<SettledToolExecution[]> {
-    const settled: SettledToolExecution[] = [];
-    for (const toolUse of toolUses) {
-      settled.push(await this.runTool(toolUse));
-    }
-    return settled;
+  getRuntimeContext(): ToolRuntimeContext {
+    return this.runtimeContext;
   }
 
-  private async runTool(toolUse: TranscriptToolUseBlock): Promise<SettledToolExecution> {
-    this.onUpdate?.({ toolUseId: toolUse.id, toolName: toolUse.name, status: "queued" });
-
-    if (this.discarded) {
-      const message = "Tool execution was discarded before start.";
-      this.onUpdate?.({
-        toolUseId: toolUse.id,
-        toolName: toolUse.name,
-        status: "discarded",
-        result: toToolResultMessage(toolUse, message, true),
-      });
-      return { toolUse, content: message, isError: true };
+  private async processQueue(): Promise<void> {
+    while (true) {
+      const executing = this.tools.filter((entry) => entry.status === "executing");
+      const next = this.tools.find((entry) => entry.status === "queued");
+      if (!next) return;
+      if (!partitionCanRunTogether(executing, next)) return;
+      void this.executeTrackedTool(next);
+      if (!next.isConcurrencySafe) return;
     }
+  }
 
-    this.onUpdate?.({ toolUseId: toolUse.id, toolName: toolUse.name, status: "executing" });
+  private async executeTrackedTool(tracked: TrackedTool): Promise<void> {
+    tracked.status = "executing";
+    this.onUpdate?.({
+      toolUseId: tracked.toolUse.id,
+      toolName: tracked.toolUse.name,
+      status: "executing",
+      detail: `Executing ${tracked.toolUse.name}`,
+    });
 
-    try {
-      const execution = await this.executeTool(toolUse.name, toolUse.input, this.mode);
+    tracked.promise = (async () => {
       if (this.discarded) {
-        const message = "Tool execution was discarded after completion.";
-        this.onUpdate?.({
-          toolUseId: toolUse.id,
-          toolName: toolUse.name,
-          status: "discarded",
-          result: toToolResultMessage(toolUse, message, true),
-        });
-        return { toolUse, content: message, isError: true };
+        const message = "Tool execution was discarded before start.";
+        tracked.status = "discarded";
+        tracked.result = { content: message, isError: true };
+        tracked.streamedResult = toSyntheticErrorMessage(tracked.toolUse, message);
+        return;
       }
 
-      return {
-        toolUse,
-        content: execution.contextContent ?? execution.content,
-        isError: execution.isError === true,
-      };
-    } catch (error) {
-      return {
-        toolUse,
-        content: (error as Error).message,
-        isError: true,
-      };
+      const runtimeTool = tracked.runtimeTool!;
+      const permission = await this.resolveToolPermission(runtimeTool, tracked.toolUse.name, tracked.toolUse.input, this.mode);
+      if (!permission.allowed) {
+        const message = permission.reason ?? `Tool "${tracked.toolUse.name}" was blocked by runtime permissions.`;
+        tracked.status = "error";
+        tracked.result = { content: message, isError: true };
+        tracked.streamedResult = toSyntheticErrorMessage(tracked.toolUse, message);
+        this.onUpdate?.({
+          toolUseId: tracked.toolUse.id,
+          toolName: tracked.toolUse.name,
+          status: "error",
+          result: tracked.streamedResult,
+          detail: message,
+        });
+        this.flushReadyResults();
+        return;
+      }
+
+      try {
+        const execution = await this.executeTool(
+          tracked.toolUse.name,
+          tracked.toolUse.input,
+          this.mode,
+          this.runtimeContext,
+        );
+        if (this.discarded) {
+          const message = "Tool execution was discarded after completion.";
+          tracked.status = "discarded";
+          tracked.result = { content: message, isError: true };
+          tracked.streamedResult = toSyntheticErrorMessage(tracked.toolUse, message);
+          this.onUpdate?.({
+            toolUseId: tracked.toolUse.id,
+            toolName: tracked.toolUse.name,
+            status: "discarded",
+            result: tracked.streamedResult,
+            detail: message,
+          });
+          this.flushReadyResults();
+          return;
+        }
+
+        tracked.result = {
+          content: execution.content,
+          isError: execution.isError === true,
+        };
+        tracked.streamedResult = toToolResultMessage(
+          tracked.toolUse,
+          tracked.result.content,
+          tracked.result.isError,
+        );
+        tracked.status = tracked.result.isError ? "error" : "completed";
+
+        tracked.contextModifier = execution.contextModifier;
+
+        this.onUpdate?.({
+          toolUseId: tracked.toolUse.id,
+          toolName: tracked.toolUse.name,
+          status: tracked.result.isError ? "error" : "completed",
+          result: tracked.streamedResult,
+          detail: tracked.result.isError ? `${tracked.toolUse.name} failed` : `${tracked.toolUse.name} completed`,
+          summary: `${tracked.toolUse.name} ${tracked.result.isError ? "failed" : "completed"}`,
+        });
+        this.flushReadyResults();
+      } catch (error) {
+        const message = (error as Error).message;
+        tracked.status = "error";
+        tracked.result = { content: message, isError: true };
+        tracked.streamedResult = toSyntheticErrorMessage(tracked.toolUse, message);
+        this.onUpdate?.({
+          toolUseId: tracked.toolUse.id,
+          toolName: tracked.toolUse.name,
+          status: "error",
+          result: tracked.streamedResult,
+          detail: message,
+        });
+        this.flushReadyResults();
+      } finally {
+        void this.processQueue();
+      }
+    })();
+
+    await tracked.promise;
+  }
+
+  private flushReadyResults(): void {
+    for (const tracked of this.tools) {
+      if (tracked.yielded) continue;
+      if (!tracked.streamedResult) break;
+      tracked.yielded = true;
+      if (tracked.contextModifier) {
+        this.runtimeContext = tracked.contextModifier(this.runtimeContext);
+      }
+      this.onUpdate?.({
+        toolUseId: tracked.toolUse.id,
+        toolName: tracked.toolUse.name,
+        status: tracked.result?.isError ? "error" : "yielded",
+        result: tracked.streamedResult,
+        detail: tracked.result?.isError ? `${tracked.toolUse.name} failed` : `${tracked.toolUse.name} yielded`,
+        summary: `${tracked.toolUse.name} result ready`,
+      });
     }
   }
 }
-
-function partitionToolUses(toolUses: TranscriptToolUseBlock[]): Array<{ concurrent: boolean; toolUses: TranscriptToolUseBlock[] }> {
-  const partitions: Array<{ concurrent: boolean; toolUses: TranscriptToolUseBlock[] }> = [];
-  for (const toolUse of toolUses) {
-    const concurrent = isConcurrencySafeTool(toolUse.name);
-    const last = partitions.at(-1);
-    if (concurrent && last?.concurrent) {
-      last.toolUses.push(toolUse);
-      continue;
-    }
-    partitions.push({ concurrent, toolUses: [toolUse] });
-  }
-  return partitions;
-}
-

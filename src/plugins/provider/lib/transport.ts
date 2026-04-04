@@ -305,16 +305,11 @@ function collectReasoningText(item: AssembledOutputItem): string {
   return text;
 }
 
-export function finalizeChatCompletionsTurn(input: {
-  messageId: string;
-  text: string;
-  reasoning: string;
+export function normalizeChatCompletionsToolCalls(input: {
   rawToolCalls: Array<{ id?: string; name?: string; rawArguments?: string; index: number }>;
-  finishReason: TranscriptStopReason;
-  usage?: TokenStats;
   tools?: UnifiedToolDefinition[];
   supportsConcatenatedJsonSplit?: boolean;
-}): AssembledAssistantTurn {
+}): { toolCalls: NormalizedToolCall[]; issues: ToolCallParseIssue[] } {
   const registry = new Set((input.tools ?? []).map((tool) => tool.name));
   const issues: ToolCallParseIssue[] = [];
   const toolCalls: NormalizedToolCall[] = [];
@@ -327,16 +322,64 @@ export function finalizeChatCompletionsTurn(input: {
 
   const deduped = dedupeToolCalls(toolCalls.sort((left, right) => left.index - right.index));
   issues.push(...deduped.issues);
+  return { toolCalls: deduped.toolCalls, issues };
+}
+
+export function normalizeResponsesToolCalls(input: {
+  output: AssembledOutputItem[];
+  tools?: UnifiedToolDefinition[];
+  supportsConcatenatedJsonSplit?: boolean;
+}): { toolCalls: NormalizedToolCall[]; issues: ToolCallParseIssue[] } {
+  const registry = new Set((input.tools ?? []).map((tool) => tool.name));
+  const issues: ToolCallParseIssue[] = [];
+  const toolCalls: NormalizedToolCall[] = [];
+
+  input.output.forEach((item, index) => {
+    if (item.type !== "function_call") return;
+    const normalized = normalizeToolCall(
+      {
+        id: typeof item.call_id === "string" ? item.call_id : typeof item.id === "string" ? item.id : undefined,
+        name: typeof item.name === "string" ? item.name : undefined,
+        rawArguments: typeof item.arguments === "string" ? item.arguments : "",
+        index,
+      },
+      registry,
+      input.supportsConcatenatedJsonSplit === true,
+    );
+    issues.push(...normalized.issues);
+    toolCalls.push(...normalized.calls);
+  });
+
+  const deduped = dedupeToolCalls(toolCalls.sort((left, right) => left.index - right.index));
+  issues.push(...deduped.issues);
+  return { toolCalls: deduped.toolCalls, issues };
+}
+
+export function finalizeChatCompletionsTurn(input: {
+  messageId: string;
+  text: string;
+  reasoning: string;
+  rawToolCalls: Array<{ id?: string; name?: string; rawArguments?: string; index: number }>;
+  finishReason: TranscriptStopReason;
+  usage?: TokenStats;
+  tools?: UnifiedToolDefinition[];
+  supportsConcatenatedJsonSplit?: boolean;
+}): AssembledAssistantTurn {
+  const normalized = normalizeChatCompletionsToolCalls({
+    rawToolCalls: input.rawToolCalls,
+    tools: input.tools,
+    supportsConcatenatedJsonSplit: input.supportsConcatenatedJsonSplit,
+  });
 
   return {
     messageId: input.messageId,
     text: input.text,
     reasoning: input.reasoning,
-    toolCalls: deduped.toolCalls,
-    finishReason: deduped.toolCalls.length > 0 && input.finishReason === "stop" ? "tool_use" : input.finishReason,
+    toolCalls: normalized.toolCalls,
+    finishReason: normalized.toolCalls.length > 0 && input.finishReason === "stop" ? "tool_use" : input.finishReason,
     usage: input.usage,
-    notices: issues.map(issueToNotice),
-    parseIssues: issues,
+    notices: normalized.issues.map(issueToNotice),
+    parseIssues: normalized.issues,
   };
 }
 
@@ -347,9 +390,11 @@ export function finalizeResponsesOutput(input: {
   tools?: UnifiedToolDefinition[];
   supportsConcatenatedJsonSplit?: boolean;
 }): AssembledAssistantTurn {
-  const registry = new Set((input.tools ?? []).map((tool) => tool.name));
-  const issues: ToolCallParseIssue[] = [];
-  const toolCalls: NormalizedToolCall[] = [];
+  const normalized = normalizeResponsesToolCalls({
+    output: input.output,
+    tools: input.tools,
+    supportsConcatenatedJsonSplit: input.supportsConcatenatedJsonSplit,
+  });
   let text = "";
   let reasoning = "";
 
@@ -361,39 +406,21 @@ export function finalizeResponsesOutput(input: {
       case "reasoning":
         reasoning += collectReasoningText(item);
         break;
-      case "function_call": {
-        const normalized = normalizeToolCall(
-          {
-            id: typeof item.call_id === "string" ? item.call_id : typeof item.id === "string" ? item.id : undefined,
-            name: typeof item.name === "string" ? item.name : undefined,
-            rawArguments: typeof item.arguments === "string" ? item.arguments : "",
-            index,
-          },
-          registry,
-          input.supportsConcatenatedJsonSplit === true,
-        );
-        issues.push(...normalized.issues);
-        toolCalls.push(...normalized.calls);
-        break;
-      }
       default:
         break;
     }
   });
 
-  const deduped = dedupeToolCalls(toolCalls.sort((left, right) => left.index - right.index));
-  issues.push(...deduped.issues);
-
   return {
     messageId: input.messageId,
     text,
     reasoning,
-    toolCalls: deduped.toolCalls,
-    finishReason: deduped.toolCalls.length > 0 ? "tool_use" : "stop",
+    toolCalls: normalized.toolCalls,
+    finishReason: normalized.toolCalls.length > 0 ? "tool_use" : "stop",
     usage: input.usage,
     output: input.output,
-    notices: issues.map(issueToNotice),
-    parseIssues: issues,
+    notices: normalized.issues.map(issueToNotice),
+    parseIssues: normalized.issues,
   };
 }
 

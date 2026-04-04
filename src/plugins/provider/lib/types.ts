@@ -89,7 +89,6 @@ export interface AssembledAssistantTurn {
 
 export interface ChatCompletionsTransportState {
   endpoint: "chat-completions";
-  lastAssistantMessageId?: string;
 }
 
 export interface ResponsesConversationItem extends Record<string, unknown> {
@@ -109,7 +108,6 @@ export type ProviderTransportState = ChatCompletionsTransportState | ResponsesTr
 export interface ProviderTurnDebug {
   endpoint: EndpointType;
   continuationMode?: ContinuationMode;
-  requestBody?: Record<string, unknown>;
   responseId?: string;
   outputCount?: number;
 }

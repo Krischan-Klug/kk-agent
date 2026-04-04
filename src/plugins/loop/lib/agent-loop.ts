@@ -6,7 +6,7 @@ import { callProviderStream } from "../../provider/service.js";
 import { buildPrompt } from "../../systemprompt/service.js";
 import { getSystemVariables } from "../../systemprompt/lib/builder.js";
 import { getTaskSummary } from "../../tools/service.js";
-import { ToolExecutor } from "./tool-executor.js";
+import { StreamingToolExecutor } from "./tool-executor.js";
 import { getDefaults } from "../../lib/defaults.js";
 
 const EMPTY_RESPONSE_RETRY_BUDGET = 1;
@@ -52,6 +52,7 @@ async function runModelPass(
   opts: LoopOptions,
   messages: TranscriptMessage[],
   providerState: LoopOptions["providerState"],
+  onToolUseBlock?: (toolUse: import("../../lib/transcript.js").TranscriptToolUseBlock) => void,
   retryInstruction?: string,
   extraSystemMessages: string[] = [],
 ) {
@@ -97,6 +98,9 @@ async function runModelPass(
     },
     (chunk) => {
       if (chunk.type === "assistant_block_delta") {
+        if (chunk.block.type === "tool_use") {
+          onToolUseBlock?.(chunk.block);
+        }
         opts.onAssistantBlockDelta?.(chunk.messageId, chunk.block);
         return;
       }
@@ -141,8 +145,51 @@ export async function runAgentLoop(opts: LoopOptions): Promise<LoopResult> {
     iteration++;
     emitLoopState(loopState, opts, { iteration, status: "running", mode: opts.activeMode });
 
+    const modeConfig = opts.modeConfigs[opts.activeMode];
+    if (!modeConfig) {
+      throw new Error(`Missing mode config for mode "${opts.activeMode}"`);
+    }
+
+    const executor = new StreamingToolExecutor(
+      opts.executeTool,
+      opts.activeMode,
+      modeConfig.runtimeToolsByName,
+      async (runtimeTool, toolName, args, mode) => {
+        return (await opts.resolveToolPermission?.(runtimeTool, toolName, args, mode)) ?? { allowed: true };
+      },
+      (update) => {
+        opts.onToolExecutionUpdate?.(
+          update.toolUseId,
+          update.toolName,
+          update.status,
+          update.result,
+          update.detail,
+          update.summary,
+        );
+      },
+    );
+
+    const streamedToolUseIds = new Set<string>();
     const extraSystemMessages = iteration === 1 && opts.extraSystemMessages ? [...opts.extraSystemMessages] : [];
-    const response = await runModelPass(opts, messages, providerState, retryInstruction, extraSystemMessages);
+    let response;
+    try {
+      response = await runModelPass(
+        opts,
+        messages,
+        providerState,
+        (toolUse) => {
+          if (streamedToolUseIds.has(toolUse.id)) return;
+          streamedToolUseIds.add(toolUse.id);
+          executor.addTool(toolUse);
+        },
+        retryInstruction,
+        extraSystemMessages,
+      );
+    } catch (error) {
+      executor.discardPending("Tool execution was discarded because the provider stream failed.");
+      await executor.getFinalResults().catch(() => []);
+      throw error;
+    }
     retryInstruction = undefined;
     for (const notice of response.notices ?? []) {
       opts.onSystemNotice?.(notice.level, notice.message);
@@ -187,10 +234,12 @@ export async function runAgentLoop(opts: LoopOptions): Promise<LoopResult> {
       break;
     }
 
-    const executor = new ToolExecutor(opts.executeTool, opts.activeMode, (update) => {
-      opts.onToolExecutionUpdate?.(update.toolUseId, update.toolName, update.status, update.result);
-    });
-    const toolResults = await executor.execute(toolUses);
+    for (const toolUse of toolUses) {
+      if (!streamedToolUseIds.has(toolUse.id)) {
+        executor.addTool(toolUse);
+      }
+    }
+    const toolResults = await executor.getFinalResults();
     messages.push(...toolResults);
   }
 

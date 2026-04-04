@@ -19,8 +19,8 @@ import {
   serializeToolMessageToResponsesInput,
   serializeUserMessageToResponsesInput,
 } from "../helpers.js";
-import { finalizeResponsesOutput, handleResponsesStreamingEvent } from "../transport.js";
-import { reasoningBlock, textBlock, type TranscriptMessage } from "../../../lib/transcript.js";
+import { finalizeResponsesOutput, handleResponsesStreamingEvent, normalizeResponsesToolCalls } from "../transport.js";
+import { reasoningBlock, textBlock, toolUseBlock, type TranscriptMessage } from "../../../lib/transcript.js";
 
 type ResponsesUsage = {
   input_tokens?: number;
@@ -221,7 +221,6 @@ export async function chat(
   response.debug = {
     endpoint: "responses",
     continuationMode: prepared.continuationMode,
-    requestBody: prepared.body,
     responseId: typeof data.id === "string" ? data.id : undefined,
     outputCount: output.length,
   };
@@ -254,6 +253,7 @@ export async function chatStream(
   let output: Array<Record<string, unknown> & { type: string }> = [];
   let usage: ResponsesUsage | undefined;
   let responseId: string | undefined;
+  const emittedToolUseIds = new Set<string>();
 
   await readSSEStream(res, (parsed) => {
     if (parsed.error && typeof parsed.error === "object") {
@@ -279,6 +279,31 @@ export async function chatStream(
     emitDeltaBlocks(parsed, messageId, onChunk);
     const next = handleResponsesStreamingEvent(parsed, output);
     output = next.output;
+    const eventType = typeof parsed.type === "string" ? parsed.type : "";
+    const shouldEmitToolUses = eventType === "response.completed" || (
+      eventType === "response.output_item.done"
+      && typeof parsed.item === "object"
+      && parsed.item !== null
+      && "type" in parsed.item
+      && parsed.item.type === "function_call"
+    );
+
+    if (shouldEmitToolUses) {
+      const normalizedToolCalls = normalizeResponsesToolCalls({
+        output,
+        tools: request.tools,
+        supportsConcatenatedJsonSplit: request.transportProfile?.supportsConcatenatedJsonSplit ?? true,
+      }).toolCalls;
+      for (const toolCall of normalizedToolCalls) {
+        if (emittedToolUseIds.has(toolCall.id)) continue;
+        emittedToolUseIds.add(toolCall.id);
+        onChunk({
+          type: "assistant_block_delta",
+          messageId,
+          block: toolUseBlock(toolCall.id, toolCall.name, toolCall.arguments),
+        });
+      }
+    }
 
     if (next.metadata?.error) {
       providerNotices.push({
@@ -315,7 +340,6 @@ export async function chatStream(
   response.debug = {
     endpoint: "responses",
     continuationMode: prepared.continuationMode,
-    requestBody: prepared.body,
     responseId,
     outputCount: output.length,
   };

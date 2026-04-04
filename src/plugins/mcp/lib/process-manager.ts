@@ -79,24 +79,27 @@ export function getAllTools(activeMcpIds: string[]): McpToolDefinition[] {
   return tools;
 }
 
-export async function executeTool(
+export async function executeToolForMcp(
+  mcpId: string,
   toolName: string,
   args: Record<string, unknown>,
 ): Promise<ToolCallResult> {
-  // Find which MCP owns this tool
-  for (const [, entry] of running) {
-    const tool = entry.tools.find((t) => t.name === toolName);
-    if (tool) {
-      try {
-        const result = await entry.client.callTool({ name: toolName, arguments: args });
-        const content = (result.content as Array<{ type: string; text?: string }>)
-          .map((c) => c.text ?? "")
-          .join("\n");
-        return { content, isError: !!result.isError };
-      } catch (err) {
-        return { content: (err as Error).message, isError: true };
-      }
-    }
+  const entry = running.get(mcpId);
+  if (!entry) {
+    return { content: `MCP "${mcpId}" is not running`, isError: true };
   }
-  return { content: `Tool "${toolName}" not found in any running MCP`, isError: true };
+  const tool = entry.tools.find((candidate) => candidate.name === toolName);
+  if (!tool) {
+    return { content: `Tool "${toolName}" not found in MCP "${mcpId}"`, isError: true };
+  }
+
+  try {
+    const result = await entry.client.callTool({ name: toolName, arguments: args });
+    const content = (result.content as Array<{ type: string; text?: string }>)
+      .map((c) => c.text ?? "")
+      .join("\n");
+    return { content, isError: !!result.isError };
+  } catch (err) {
+    return { content: (err as Error).message, isError: true };
+  }
 }

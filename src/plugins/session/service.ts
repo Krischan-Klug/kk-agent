@@ -1,14 +1,10 @@
 import type { SessionRecord, SessionState, CreateSessionBody, SSEEvent } from "./types.js";
-import type { UnifiedToolDefinition } from "../provider/lib/types.js";
 import * as store from "./lib/store.js";
 import { clearSessionAttachments, getSessionAttachmentsByIds, readAttachmentData } from "./lib/attachments.js";
 import { buildPrompt, getSystemVariables } from "../systemprompt/service.js";
 import { getActiveProviderId, getModelCapabilities } from "../provider/service.js";
-import { getToolDefinitions, executeTool } from "../mcp/service.js";
 import {
   buildResolvedSystemToolRuntime,
-  executeSystemToolForId,
-  type ResolvedSystemToolTarget,
 } from "../tools/service.js";
 import { runLoop } from "../loop/service.js";
 import type { LoopMessage, ModeRuntimeConfig } from "../loop/types.js";
@@ -16,6 +12,8 @@ import { getAgent, getLoopState, setLoopState, clearLoopState } from "../agent/s
 import { getDefaults } from "../lib/defaults.js";
 import { clearSessionFacts, clearTasks } from "../tools/service.js";
 import {
+  emitPrompt,
+  waitForResponse,
   registerSession,
   unregisterSession,
   runWithSessionId,
@@ -29,10 +27,12 @@ import {
 import {
   buildRunnableMcpInstructions,
 } from "./lib/tool-selection.js";
+import { buildRuntimeToolCollection, executeRuntimeTool } from "./lib/runtime-tools.js";
 import { resolveReasoningConfig, resolveSessionDefaults } from "./lib/session-resolution.js";
 import { getChatModes } from "../agent/lib/modes.js";
 import { getModeConfig } from "../agent/lib/mode-config.js";
 import type { AgentDefinition, ChatMode } from "../agent/types.js";
+import type { RuntimeToolDefinition, ToolRuntimeContext } from "../loop/types.js";
 import { attachmentRefBlock, createTranscriptMessage, textBlock, type TranscriptBlock } from "../lib/transcript.js";
 import { normalizeCanonicalReasoningLevel } from "../provider/lib/capabilities.js";
 
@@ -60,42 +60,8 @@ function intersectIds(sessionIds: string[], modeIds: string[]): string[] {
   return modeIds.filter((id) => sessionSet.has(id));
 }
 
-function filterAllowedTools(tools: UnifiedToolDefinition[], allowedToolNames: string[]): UnifiedToolDefinition[] {
-  const allowed = new Set(allowedToolNames);
-  return tools.filter((tool) => allowed.has(tool.name));
-}
-
-function getCombinedToolDefinitions(systemTools: UnifiedToolDefinition[], activeMcpIds: string[], allowedToolNames: string[]) {
-  const filteredSystemTools = filterAllowedTools(systemTools, allowedToolNames);
-  const mcpTools = getToolDefinitions(activeMcpIds);
-  return [...filteredSystemTools, ...mcpTools];
-}
-
 interface SessionModeRuntimeConfig extends ModeRuntimeConfig {
-  allowedToolNames: string[];
-  toolTargetsByName: Record<string, ResolvedSystemToolTarget>;
-}
-
-async function executeCombinedTool(
-  toolName: string,
-  args: Record<string, unknown>,
-  modeRuntimeConfig: SessionModeRuntimeConfig,
-  mode: ChatMode,
-) {
-  if (modeRuntimeConfig.toolTargetsByName[toolName] && !modeRuntimeConfig.allowedToolNames.includes(toolName)) {
-    return { content: `Tool "${toolName}" ist im Mode "${mode}" nicht erlaubt.`, isError: true };
-  }
-  const systemTarget = modeRuntimeConfig.toolTargetsByName[toolName];
-  if (systemTarget) {
-    const systemResult = await executeSystemToolForId(
-      systemTarget.toolId,
-      toolName,
-      args,
-      systemTarget.accessScope,
-    );
-    if (systemResult) return systemResult;
-  }
-  return executeTool(toolName, args);
+  runtimeNotices: string[];
 }
 
 function buildModeRuntimeConfig(
@@ -111,6 +77,11 @@ function buildModeRuntimeConfig(
     config.toolAccessScopes,
     config.toolInstructions,
   );
+  const runtimeToolCollection = buildRuntimeToolCollection(
+    systemToolRuntime,
+    activeMcpIds,
+    config.allowedToolNames,
+  );
   const effectiveInstructions = {
     ...systemToolRuntime.instructionsById,
     ...config.mcpInstructions,
@@ -125,9 +96,9 @@ function buildModeRuntimeConfig(
       effectiveInstructions,
     ),
     runtimeVariables: systemToolRuntime.runtimeVariables,
-    allTools: getCombinedToolDefinitions(systemToolRuntime.toolDefinitions, activeMcpIds, config.allowedToolNames),
-    allowedToolNames: config.allowedToolNames,
-    toolTargetsByName: systemToolRuntime.toolTargetsByName,
+    allTools: runtimeToolCollection.allTools,
+    runtimeToolsByName: runtimeToolCollection.runtimeToolsByName,
+    runtimeNotices: runtimeToolCollection.notices,
   };
 }
 
@@ -289,7 +260,7 @@ function finalizeLoopSession(
   const patch: Partial<SessionRecord> = {
     messages: nextMessages,
     providerState,
-    providerDebug: providerDebug ? { ...providerDebug, requestBody: undefined } : undefined,
+    providerDebug,
   };
   if (!session.name && finalResponse) {
     const name = generateSessionName(finalResponse);
@@ -320,13 +291,60 @@ function buildLoopRequest(
     maxIterations: prepared.agent.maxIterations,
     activeMode: prepared.session.activeMode,
     agentVariables: prepared.agent.variables ?? {},
-    executeTool: (toolName: string, args: Record<string, unknown>, mode: ChatMode) =>
-      executeCombinedTool(
-        toolName,
-        args,
-        prepared.modeRuntimeConfigs[mode] as SessionModeRuntimeConfig,
-        mode,
-      ),
+    executeTool: (
+      toolName: string,
+      args: Record<string, unknown>,
+      mode: ChatMode,
+      _context: ToolRuntimeContext,
+    ) => {
+      const modeRuntimeConfig = prepared.modeRuntimeConfigs[mode] as SessionModeRuntimeConfig;
+      const runtimeTool = modeRuntimeConfig.runtimeToolsByName[toolName];
+      if (!runtimeTool) {
+        return Promise.resolve({
+          content: `Tool "${toolName}" ist im Mode "${mode}" nicht erlaubt oder nicht verfuegbar.`,
+          isError: true,
+        });
+      }
+      return executeRuntimeTool(runtimeTool, toolName, args);
+    },
+    resolveToolPermission: async (
+      runtimeTool: RuntimeToolDefinition,
+      toolName: string,
+      _args: Record<string, unknown>,
+      _mode: ChatMode,
+    ) => {
+      switch (runtimeTool.permissionPolicy.kind) {
+        case "allow":
+          return { allowed: true };
+        case "deny":
+          return { allowed: false, reason: runtimeTool.permissionPolicy.reason };
+        case "prompt": {
+          const promptId = `${toolName}-${Date.now()}`;
+          emitPrompt(sessionId, {
+            promptId,
+            question: runtimeTool.permissionPolicy.question,
+            choices: runtimeTool.permissionPolicy.choices,
+          });
+          const result = await waitForResponse(sessionId, promptId);
+          if (result.isError) {
+            return { allowed: false, reason: result.content };
+          }
+          try {
+            const parsed = JSON.parse(result.content) as { selectedKey?: string };
+            if (parsed.selectedKey && runtimeTool.permissionPolicy.allowKeys.includes(parsed.selectedKey)) {
+              return { allowed: true };
+            }
+          } catch {
+            // fall through
+          }
+          return {
+            allowed: false,
+            reason: runtimeTool.permissionPolicy.deniedMessage ?? `Tool "${toolName}" was rejected by the user.`,
+          };
+        }
+      }
+      return { allowed: true };
+    },
     ...handlers,
   };
 }
@@ -359,6 +377,9 @@ export async function chatStream(
   attachmentIds?: string[],
 ): Promise<void> {
   const prepared = await prepareLoopRun(sessionId, message, attachmentIds);
+  for (const notice of prepared.modeRuntimeConfigs[prepared.session.activeMode]?.runtimeNotices ?? []) {
+    emit({ type: "system_notice", level: "warning", message: notice });
+  }
 
   registerSession(sessionId, (payload) => {
     emit({
@@ -375,8 +396,8 @@ export async function chatStream(
         onAssistantBlockDelta: (messageId, block) => emit({ type: "assistant_block_delta", messageId, block }),
         onAssistantMessage: (messageObject) => emit({ type: "assistant_message_complete", message: messageObject }),
         onSystemNotice: (level, messageText) => emit({ type: "system_notice", level, message: messageText }),
-        onToolExecutionUpdate: (toolUseId, toolName, status, resultMessage) =>
-          emit({ type: "tool_execution_update", toolUseId, toolName, status, result: resultMessage }),
+        onToolExecutionUpdate: (toolUseId, toolName, status, resultMessage, detail, summary) =>
+          emit({ type: "tool_execution_update", toolUseId, toolName, status, result: resultMessage, detail, summary }),
         onLoopState: (state) => {
           setLoopState(sessionId, state);
           emit({ type: "turn_state", state });

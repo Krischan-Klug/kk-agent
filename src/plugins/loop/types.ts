@@ -3,6 +3,42 @@ import type { ProviderTransportState, ProviderTurnDebug, TokenStats, UnifiedTool
 import type { ChatMode, AgentPromptSections } from "../agent/types.js";
 
 export type LoopMessage = TranscriptMessage;
+export type RuntimeToolSource = "system" | "mcp";
+export type ToolInterruptBehavior = "cancel" | "block";
+
+export interface RuntimeToolResultPolicy {
+  previewThresholdChars?: number;
+  previewChars?: number;
+  contextBudgetChars?: number;
+  persistLargeResults?: boolean;
+  excludeFromContextBudget?: boolean;
+}
+
+export type RuntimeToolPermissionPolicy =
+  | { kind: "allow" }
+  | { kind: "deny"; reason: string }
+  | {
+      kind: "prompt";
+      question: string;
+      choices: { key: string; label: string }[];
+      allowKeys: string[];
+      deniedMessage?: string;
+    };
+
+export interface ToolRuntimeContext {
+  values: Record<string, unknown>;
+}
+
+export interface RuntimeToolDefinition extends UnifiedToolDefinition {
+  source: RuntimeToolSource;
+  capabilityId: string;
+  inputSchema: Record<string, unknown>;
+  accessScope?: "user" | "system";
+  isConcurrencySafe: (input: Record<string, unknown>) => boolean;
+  interruptBehavior: ToolInterruptBehavior;
+  resultPolicy: RuntimeToolResultPolicy;
+  permissionPolicy: RuntimeToolPermissionPolicy;
+}
 
 export interface LoopResult {
   messages: LoopMessage[];
@@ -14,8 +50,8 @@ export interface LoopResult {
 
 export interface ToolExecutionResult {
   content: string;
-  contextContent?: string;
   isError?: boolean;
+  contextModifier?: (context: ToolRuntimeContext) => ToolRuntimeContext;
 }
 
 export type ToolExecutionStatus =
@@ -33,6 +69,8 @@ export interface ModeRuntimeConfig {
   mcpInstructions: string;
   runtimeVariables?: Record<string, string>;
   allTools: UnifiedToolDefinition[];
+  runtimeToolsByName: Record<string, RuntimeToolDefinition>;
+  runtimeNotices?: string[];
 }
 
 export interface LoopOptions {
@@ -46,7 +84,12 @@ export interface LoopOptions {
   maxIterations: number;
   activeMode: ChatMode;
   agentVariables: Record<string, string>;
-  executeTool: (toolName: string, args: Record<string, unknown>, mode: ChatMode) => Promise<ToolExecutionResult>;
+  executeTool: (
+    toolName: string,
+    args: Record<string, unknown>,
+    mode: ChatMode,
+    context: ToolRuntimeContext,
+  ) => Promise<ToolExecutionResult>;
   reasoningEffort?: string;
   temperature?: number;
   maxOutputTokens?: number;
@@ -59,7 +102,15 @@ export interface LoopOptions {
     toolName: string,
     status: ToolExecutionStatus,
     result?: LoopMessage,
+    detail?: string,
+    summary?: string,
   ) => void;
+  resolveToolPermission?: (
+    runtimeTool: RuntimeToolDefinition,
+    toolName: string,
+    args: Record<string, unknown>,
+    mode: ChatMode,
+  ) => Promise<{ allowed: boolean; reason?: string }>;
   onLoopState?: (state: {
     sessionId: string;
     agentId: string;

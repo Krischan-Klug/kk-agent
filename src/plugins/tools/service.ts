@@ -1,10 +1,9 @@
-import type { UnifiedToolDefinition } from "../provider/lib/types.js";
+import type { RuntimeToolDefinition } from "../loop/types.js";
 import type {
   AccessScope,
   McpServerConfig,
   McpToolDefinition,
   ToolCallResult,
-  ToolResultPolicy,
   UpdateMcpBody,
 } from "../mcp/types.js";
 import { buildSystemMcps, createOverrideState, loadSystemMcpOverrides, saveSystemMcpOverrides } from "./lib/system-registry.js";
@@ -24,16 +23,43 @@ import { normalizeSystemConfig } from "./lib/system-config.js";
 
 let cachedSystemMcps: McpServerConfig[] = [];
 
-export interface ResolvedSystemToolTarget {
-  toolId: string;
-  accessScope?: AccessScope;
+export interface ResolvedSystemToolRuntime {
+  instructionsById: Record<string, string>;
+  runtimeToolsByName: Record<string, RuntimeToolDefinition>;
+  runtimeVariables: Record<string, string>;
 }
 
-export interface ResolvedSystemToolRuntime {
-  toolDefinitions: UnifiedToolDefinition[];
-  instructionsById: Record<string, string>;
-  toolTargetsByName: Record<string, ResolvedSystemToolTarget>;
-  runtimeVariables: Record<string, string>;
+const CONCURRENCY_SAFE_SYSTEM_TOOLS = new Set([
+  "read_file",
+  "grep",
+  "search_files",
+  "list_directory",
+  "stat_path",
+  "web_search",
+  "fetch_url",
+  "run_command_readonly",
+  "list_attachments",
+  "read_attachment",
+]);
+
+const SELF_BOUNDED_READ_SYSTEM_TOOLS = new Set([
+  "read_file",
+  "read_attachment",
+]);
+
+function isConcurrencySafeSystemTool(toolName: string): boolean {
+  return CONCURRENCY_SAFE_SYSTEM_TOOLS.has(toolName);
+}
+
+function buildSystemToolResultPolicy(mcp: McpServerConfig, toolName: string) {
+  // Read-style tools bound their own output. Re-persisting them into tool-results is
+  // circular because the model would need the same read tool to inspect that file again.
+  return {
+    previewThresholdChars: mcp.systemConfig?.resultPolicy?.previewThresholdChars,
+    previewChars: mcp.systemConfig?.resultPolicy?.previewChars,
+    persistLargeResults: !SELF_BOUNDED_READ_SYSTEM_TOOLS.has(toolName),
+    excludeFromContextBudget: SELF_BOUNDED_READ_SYSTEM_TOOLS.has(toolName),
+  };
 }
 
 function normalizeSystemConfigForMcp(id: string, systemConfig?: McpServerConfig["systemConfig"]) {
@@ -82,34 +108,6 @@ function setSystemMcp(mcp: McpServerConfig): void {
 
 async function persistSystemOverrides(): Promise<void> {
   await saveSystemMcpOverrides(createOverrideState(cachedSystemMcps));
-}
-
-function buildToolResultPreview(content: string, previewChars: number): string {
-  if (content.length <= previewChars) return content;
-  const truncated = content.slice(0, previewChars);
-  const lastNewline = truncated.lastIndexOf("\n");
-  const cutPoint = lastNewline > Math.floor(previewChars * 0.5) ? lastNewline : previewChars;
-  return `${content.slice(0, cutPoint)}\n...`;
-}
-
-function getResolvedResultPolicy(mcp: McpServerConfig): Required<ToolResultPolicy> | null {
-  if (!mcp.systemConfig?.resultPolicy?.previewThresholdChars) return null;
-  return {
-    previewThresholdChars: Math.max(1, mcp.systemConfig?.resultPolicy?.previewThresholdChars ?? 12000),
-    previewChars: Math.max(200, mcp.systemConfig?.resultPolicy?.previewChars ?? 2000),
-  };
-}
-
-function buildToolResultContextContent(mcp: McpServerConfig, content: string): string {
-  const normalized = content.trim();
-  if (!normalized) return normalized;
-
-  const policy = getResolvedResultPolicy(mcp);
-  if (!policy || normalized.length <= policy.previewThresholdChars) {
-    return normalized;
-  }
-
-  return `${buildToolResultPreview(normalized, policy.previewChars)}\n\n[abgeschnitten: ${normalized.length} Zeichen insgesamt]`;
 }
 
 function resolveSystemMcp(
@@ -187,9 +185,8 @@ export function buildResolvedSystemToolRuntime(
   accessScopeOverrides: Record<string, AccessScope> = {},
   instructionOverrides: Record<string, string> = {},
 ): ResolvedSystemToolRuntime {
-  const toolDefinitions: UnifiedToolDefinition[] = [];
   const instructionsById: Record<string, string> = {};
-  const toolTargetsByName: Record<string, ResolvedSystemToolTarget> = {};
+  const runtimeToolsByName: Record<string, RuntimeToolDefinition> = {};
   const runtimeVariables: Record<string, string> = {};
 
   for (const toolId of activeToolIds) {
@@ -200,22 +197,25 @@ export function buildResolvedSystemToolRuntime(
     Object.assign(runtimeVariables, buildRuntimeVariablesForMcp(resolved.mcp));
 
     for (const tool of resolved.tools) {
-      toolDefinitions.push({
+      runtimeToolsByName[tool.name] = {
         name: tool.name,
         description: tool.description,
         parameters: tool.inputSchema,
-      });
-      toolTargetsByName[tool.name] = {
-        toolId,
+        inputSchema: tool.inputSchema,
+        source: "system",
+        capabilityId: toolId,
         accessScope: accessScopeOverrides[toolId],
+        isConcurrencySafe: () => isConcurrencySafeSystemTool(tool.name),
+        interruptBehavior: "block",
+        resultPolicy: buildSystemToolResultPolicy(resolved.mcp, tool.name),
+        permissionPolicy: { kind: "allow" },
       };
     }
   }
 
   return {
-    toolDefinitions,
     instructionsById,
-    toolTargetsByName,
+    runtimeToolsByName,
     runtimeVariables,
   };
 }
@@ -280,7 +280,6 @@ export async function executeSystemToolForId(
 
   return {
     ...result,
-    contextContent: buildToolResultContextContent(resolved.mcp, result.content),
   };
 }
 

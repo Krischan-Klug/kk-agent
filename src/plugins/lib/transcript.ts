@@ -147,10 +147,14 @@ export function normalizeToolResultContent(toolName: string, content: string): s
   return content.trim().length > 0 ? content : `(${toolName} completed with no output)`;
 }
 
-function syntheticInterruptedToolResult(toolUse: TranscriptToolUseBlock): TranscriptMessage {
+function syntheticInterruptedToolResults(toolUses: TranscriptToolUseBlock[]): TranscriptMessage {
   return createTranscriptMessage({
     role: "tool",
-    content: [toolResultBlock(toolUse.id, `[Tool result missing for ${toolUse.name}; synthetic error inserted]`, true)],
+    content: toolUses.map((toolUse) => toolResultBlock(
+      toolUse.id,
+      `[Tool result missing for ${toolUse.name}; synthetic error inserted]`,
+      true,
+    )),
   });
 }
 
@@ -158,37 +162,51 @@ export function repairTranscript(messages: TranscriptMessage[]): TranscriptMessa
   const repaired: TranscriptMessage[] = [];
   const seenToolUseIds = new Set<string>();
   const resolvedToolUseIds = new Set<string>();
+  const toolNameById = new Map<string, string>();
 
   for (const original of messages) {
     if (original.role === "assistant") {
       const dedupedContent: TranscriptBlock[] = [];
+      let removedToolUse = false;
       for (const block of original.content) {
         if (block.type !== "tool_use") {
           dedupedContent.push(block);
           continue;
         }
-        if (seenToolUseIds.has(block.id)) continue;
+        if (seenToolUseIds.has(block.id)) {
+          removedToolUse = true;
+          continue;
+        }
         seenToolUseIds.add(block.id);
+        toolNameById.set(block.id, block.name);
         dedupedContent.push(block);
       }
 
       repaired.push({
         ...original,
-        content: dedupedContent.length > 0 ? dedupedContent : [textBlock("[Assistant turn interrupted]")],
+        content: dedupedContent.length > 0
+          ? dedupedContent
+          : [textBlock(original.content.length === 0
+            ? "[Assistant turn contained no visible content]"
+            : removedToolUse
+              ? "[Assistant turn interrupted]"
+              : "[Assistant turn contained no visible content]")],
       });
       continue;
     }
 
     if (original.role === "tool") {
-      const dedupedResults = getToolResults(original).filter((block) => {
-        if (!seenToolUseIds.has(block.tool_use_id)) return false;
-        if (resolvedToolUseIds.has(block.tool_use_id)) return false;
-        resolvedToolUseIds.add(block.tool_use_id);
-        return true;
-      }).map((block) => ({
-        ...block,
-        content: block.content.trim().length > 0 ? block.content : "[Tool completed with no output]",
-      }));
+      const dedupedResults = getToolResults(original)
+        .filter((block) => {
+          if (!seenToolUseIds.has(block.tool_use_id)) return false;
+          if (resolvedToolUseIds.has(block.tool_use_id)) return false;
+          resolvedToolUseIds.add(block.tool_use_id);
+          return true;
+        })
+        .map((block) => ({
+          ...block,
+          content: normalizeToolResultContent(toolNameById.get(block.tool_use_id) ?? "tool", block.content),
+        }));
 
       if (dedupedResults.length === 0) continue;
       repaired.push({
@@ -202,36 +220,65 @@ export function repairTranscript(messages: TranscriptMessage[]): TranscriptMessa
   }
 
   const finalMessages: TranscriptMessage[] = [];
-  for (let index = 0; index < repaired.length; index++) {
+  for (let index = 0; index < repaired.length;) {
     const message = repaired[index]!;
-    finalMessages.push(message);
 
-    if (message.role !== "assistant") continue;
+    if (message.role !== "assistant") {
+      finalMessages.push(message);
+      index++;
+      continue;
+    }
+
     const toolUses = getToolUses(message);
     if (toolUses.length === 0) {
-      if (!hasVisibleAssistantContent(message)) {
-        finalMessages[finalMessages.length - 1] = {
-          ...message,
-          content: [textBlock("[Assistant turn contained no visible content]")],
-        };
-      }
+      finalMessages.push(
+        hasVisibleAssistantContent(message)
+          ? message
+          : { ...message, content: [textBlock("[Assistant turn contained no visible content]")] },
+      );
+      index++;
       continue;
     }
 
     let lookahead = index + 1;
+    const contiguousToolMessages: TranscriptMessage[] = [];
     const nextResults = new Set<string>();
     while (lookahead < repaired.length && repaired[lookahead]?.role === "tool") {
-      for (const block of getToolResults(repaired[lookahead]!)) {
+      const nextMessage = repaired[lookahead]!;
+      contiguousToolMessages.push(nextMessage);
+      for (const block of getToolResults(nextMessage)) {
         nextResults.add(block.tool_use_id);
       }
       lookahead++;
     }
 
-    for (const toolUse of toolUses) {
-      if (!nextResults.has(toolUse.id)) {
-        finalMessages.push(syntheticInterruptedToolResult(toolUse));
+    const missingToolUses = toolUses.filter((toolUse) => !nextResults.has(toolUse.id));
+    finalMessages.push(message);
+
+    if (contiguousToolMessages.length === 0) {
+      if (missingToolUses.length > 0) {
+        finalMessages.push(syntheticInterruptedToolResults(missingToolUses));
       }
+      index = lookahead;
+      continue;
     }
+
+    if (missingToolUses.length > 0) {
+      const [firstToolMessage, ...restToolMessages] = contiguousToolMessages;
+      finalMessages.push({
+        ...firstToolMessage!,
+        content: [
+          ...getToolResults(syntheticInterruptedToolResults(missingToolUses)),
+          ...getToolResults(firstToolMessage!),
+        ],
+      });
+      finalMessages.push(...restToolMessages);
+      index = lookahead;
+      continue;
+    }
+
+    finalMessages.push(...contiguousToolMessages);
+    index = lookahead;
   }
 
   return finalMessages;

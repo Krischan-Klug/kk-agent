@@ -2,6 +2,7 @@ import { mkdir, readdir, readFile, rename, rm, stat, writeFile } from "node:fs/p
 import { dirname, extname, resolve, sep } from "node:path";
 import type { McpServerConfig, ToolCallResult } from "../../../mcp/types.js";
 import { getDefaultPathForScope, resolveAccessScope, resolveFilesystemSystemConfig } from "../access-paths.js";
+import { truncateSelfBoundedReadOutput } from "../read-output.js";
 
 const SEARCH_LIMIT = 50;
 const GREP_RESULT_LIMIT = 50;
@@ -235,7 +236,7 @@ export async function executeFilesystemTool(
     const showingAll = offset === 1 && endLine >= total;
     const footer = showingAll ? "" : `\n\n[Lines ${offset}-${endLine} of ${total}]`;
 
-    return { content: numbered + footer, isError: false };
+    return { content: truncateSelfBoundedReadOutput(numbered + footer), isError: false };
   }
 
   if (toolName === "edit_file") {

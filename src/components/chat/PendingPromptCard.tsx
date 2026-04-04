@@ -1,4 +1,5 @@
 import Button from "@/components/Button";
+import MarkdownMessage from "@/components/MarkdownMessage";
 import {
   ChoiceButton,
   CustomInput,
@@ -30,7 +31,9 @@ export default function PendingPromptCard({
 
   return (
     <PromptCard>
-      <PromptQuestion>{pendingPrompt.question}</PromptQuestion>
+      <PromptQuestion>
+        <MarkdownMessage content={pendingPrompt.question} />
+      </PromptQuestion>
       {pendingPrompt.choices.map((choice) => (
         <ChoiceButton key={choice.key} onClick={() => onPromptResponse(choice.key)}>
           {choice.label}

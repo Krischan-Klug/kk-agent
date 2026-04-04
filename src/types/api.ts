@@ -226,6 +226,7 @@ export type ToolAccessScope = "user" | "system";
 export interface AgentPromptSections {
   identity: string;
   system: string;
+  tasks: string;
   security: string;
   toolUsage: string;
   communication: string;
@@ -322,6 +323,9 @@ export interface AppDefaults {
   retry: {
     emptyResponseInstruction: string;
     invalidToolInstruction: string;
+  };
+  misc: {
+    noTasksInstruction: string;
   };
   reasoning: {
     defaultEffort: string;

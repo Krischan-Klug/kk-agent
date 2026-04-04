@@ -1,4 +1,4 @@
-import { useState } from "react";
+﻿import { useState } from "react";
 import styled from "styled-components";
 import type {
   AgentDefinition,
@@ -203,14 +203,15 @@ const ScopeRow = styled.div`
 
 const MODE_ORDER: ChatMode[] = ["plan", "edit"];
 const PROMPT_SECTION_META: Array<{ key: keyof AgentModeConfig["promptSections"]; label: string }> = [
-  { key: "identity", label: "🪪 Identity" },
-  { key: "system", label: "🧠 System" },
-  { key: "security", label: "🔒 Security" },
-  { key: "toolUsage", label: "🛠️ Tool Usage" },
-  { key: "communication", label: "💬 Communication" },
+  { key: "identity", label: "\u{1FAAA} Identity" },
+  { key: "system", label: "\u{1F9E0} System" },
+  { key: "tasks", label: "\u{1F4DD} Tasks" },
+  { key: "security", label: "\u{1F512} Security" },
+  { key: "toolUsage", label: "\u{1F6E0}\uFE0F Tool Usage" },
+  { key: "communication", label: "\u{1F4AC} Communication" },
 ];
-const OVERRIDE_EMOJI = "✏️";
-const RESET_EMOJI = "↺";
+const OVERRIDE_EMOJI = "\u270F\uFE0F";
+const RESET_EMOJI = "\u21BA";
 
 type Props = {
   agent: AgentDefinition | null;
@@ -770,3 +771,5 @@ export default function AgentEditor({
     </EditorArea>
   );
 }
+
+

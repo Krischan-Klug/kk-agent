@@ -4,6 +4,7 @@ import type { AgentDefinition, AgentLoopState, ChatMode, TaskItem } from "@/type
 import type { PendingAttachment } from "@/hooks/useAttachments";
 import AgentSelect from "@/components/AgentSelect";
 import SelectMenu, { type SelectMenuOption } from "@/components/SelectMenu";
+import Spinner from "@/components/Spinner";
 import AttachmentPreview from "./AttachmentPreview";
 import type { TokenDisplayStats } from "./types";
 
@@ -145,7 +146,10 @@ const TasksToggleButton = styled.button<{ $active: boolean }>`
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 4px 10px;
+  justify-content: center;
+  min-width: 36px;
+  min-height: 36px;
+  padding: 4px 8px;
   border-radius: 999px;
   border: 1px solid ${(p) => (p.$active ? "var(--accent)" : "var(--border)")};
   background: ${(p) => (p.$active ? "var(--accent-muted)" : "var(--bg-elevated)")};
@@ -192,7 +196,7 @@ const TaskStatusDot = styled.span<{ $status: TaskItem["status"] }>`
 
 const TaskText = styled.span<{ $status: TaskItem["status"] }>`
   display: block;
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 600;
   line-height: 1.35;
   text-decoration: ${(p) => (p.$status === "completed" ? "line-through" : "none")};
@@ -201,9 +205,20 @@ const TaskText = styled.span<{ $status: TaskItem["status"] }>`
 const TaskNotes = styled.span`
   display: block;
   margin-top: 2px;
-  font-size: 12px;
+  font-size: 11px;
   line-height: 1.35;
   color: var(--text-muted);
+`;
+
+const TasksButtonEmoji = styled.span`
+  font-size: 14px;
+  line-height: 1;
+`;
+
+const TasksButtonCount = styled.span`
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1;
 `;
 
 const ComposerInputWrap = styled.div`
@@ -573,9 +588,11 @@ export default function ChatComposer({
                     type="button"
                     $active={tasksOpen}
                     onClick={() => setTasksOpen((previous) => !previous)}
+                    title={`Tasks (${tasks.length})`}
+                    aria-label={`Tasks (${tasks.length})`}
                   >
-                    <span>Tasks</span>
-                    {tasks.length > 0 && <span>{tasks.length}</span>}
+                    <TasksButtonEmoji>📝</TasksButtonEmoji>
+                    {sending ? <Spinner size={12} /> : <TasksButtonCount>{tasks.length}</TasksButtonCount>}
                   </TasksToggleButton>
                 )}
                 {maxCtx > 0 && tokenStats && (

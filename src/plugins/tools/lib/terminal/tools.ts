@@ -2,29 +2,23 @@ import type { McpToolDefinition } from "../../../mcp/types.js";
 
 export const terminalTools: McpToolDefinition[] = [
   {
-    name: "run_command_readonly",
-    description: "Run a strictly read-only shell command for inspection or diagnostics. Rejects mutating commands.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        command: { type: "string", description: "Read-only shell command to execute." },
-        cwd: { type: "string", description: "Working directory override." },
-        timeoutMs: { type: "number", description: "Timeout in ms (default: 30000)." },
-      },
-      required: ["command"],
-    },
-    mcpId: "terminal",
-  },
-  {
-    name: "run_command",
-    description: "Run a shell command. Returns stdout, stderr, exit code. Long output keeps the tail.",
+    name: "Bash",
+    description: "Run a shell command on the host. Prefer dedicated tools for reading, globbing, and grep when available.",
     inputSchema: {
       type: "object",
       properties: {
         command: { type: "string", description: "Shell command to execute." },
-        cwd: { type: "string", description: "Working directory override." },
-        timeoutMs: { type: "number", description: "Timeout in ms (default: 30000)." },
-        env: { type: "object", description: "Extra env vars for this command.", additionalProperties: { type: "string" } },
+        description: {
+          type: "string",
+          description: "Short active-voice description of what the command does.",
+        },
+        cwd: { type: "string", description: "Optional working directory override." },
+        timeoutMs: { type: "number", description: "Timeout in milliseconds (default: 30000)." },
+        run_in_background: {
+          type: "boolean",
+          description: "Run the command in the background and write output to files inside the working directory.",
+        },
+        env: { type: "object", description: "Optional environment variables.", additionalProperties: { type: "string" } },
       },
       required: ["command"],
     },

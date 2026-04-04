@@ -8,7 +8,7 @@ import { fitToolResultsToBudget, persistLargeToolResult } from "./tool-result-st
 test("persistLargeToolResult skips persistence for self-bounded read tools", async () => {
   const content = "A".repeat(13_000);
   await rm(join(STATE_DIR, "tool-results", "tool-test-read.txt"), { force: true });
-  const preview = await persistLargeToolResult("tool-test-read", "read_file", content, {
+  const preview = await persistLargeToolResult("tool-test-read", "Read", content, {
     persistLargeResults: false,
   });
 
@@ -20,17 +20,17 @@ test("persistLargeToolResult stores oversized outputs for regular tools and retu
   const content = "A".repeat(13_000);
   const storedPath = join(STATE_DIR, "tool-results", "tool-test-grep.txt");
   await rm(storedPath, { force: true });
-  const preview = await persistLargeToolResult("tool-test-grep", "grep", content);
+  const preview = await persistLargeToolResult("tool-test-grep", "Grep", content);
 
-  assert.ok(preview.includes("stored full grep result"));
+  assert.ok(preview.includes("stored full Grep result"));
   await access(storedPath);
   await rm(storedPath, { force: true });
 });
 
 test("fitToolResultsToBudget keeps self-bounded read results out of aggregate truncation", () => {
   const budgeted = fitToolResultsToBudget([
-    { toolName: "read_file", content: "A".repeat(20_000), policy: { excludeFromContextBudget: true } },
-    { toolName: "grep", content: "B".repeat(20_000) },
+    { toolName: "Read", content: "A".repeat(20_000), policy: { excludeFromContextBudget: true } },
+    { toolName: "Grep", content: "B".repeat(20_000) },
   ]);
 
   assert.equal(budgeted.length, 2);
@@ -40,8 +40,8 @@ test("fitToolResultsToBudget keeps self-bounded read results out of aggregate tr
 
 test("fitToolResultsToBudget still truncates oversized non-read batches", () => {
   const budgeted = fitToolResultsToBudget([
-    { toolName: "grep", content: "A".repeat(20_000) },
-    { toolName: "list_directory", content: "B".repeat(20_000) },
+    { toolName: "Grep", content: "A".repeat(20_000) },
+    { toolName: "Glob", content: "B".repeat(20_000) },
   ]);
 
   assert.equal(budgeted.length, 2);

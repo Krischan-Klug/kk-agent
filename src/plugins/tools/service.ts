@@ -20,6 +20,11 @@ import {
 } from "./lib/access-paths.js";
 import { getDefaultSystemMcpMap } from "./lib/index.js";
 import { normalizeSystemConfig } from "./lib/system-config.js";
+import {
+  getShellPermissionPrompt,
+  isDestructiveShellCommand,
+  isReadOnlyShellCommand,
+} from "./lib/terminal/command-policy.js";
 
 let cachedSystemMcps: McpServerConfig[] = [];
 
@@ -29,26 +34,26 @@ export interface ResolvedSystemToolRuntime {
   runtimeVariables: Record<string, string>;
 }
 
-const CONCURRENCY_SAFE_SYSTEM_TOOLS = new Set([
-  "read_file",
-  "grep",
-  "search_files",
-  "list_directory",
-  "stat_path",
-  "web_search",
-  "fetch_url",
-  "run_command_readonly",
-  "list_attachments",
-  "read_attachment",
-]);
-
 const SELF_BOUNDED_READ_SYSTEM_TOOLS = new Set([
-  "read_file",
+  "Read",
   "read_attachment",
 ]);
 
-function isConcurrencySafeSystemTool(toolName: string): boolean {
-  return CONCURRENCY_SAFE_SYSTEM_TOOLS.has(toolName);
+function isConcurrencySafeSystemTool(toolName: string, input: Record<string, unknown>): boolean {
+  if (toolName === "Bash") {
+    return isReadOnlyShellCommand(String(input.command ?? ""));
+  }
+
+  return new Set([
+    "Read",
+    "Glob",
+    "Grep",
+    "WebSearch",
+    "WebFetch",
+    "list_attachments",
+    "read_attachment",
+    "ask_user",
+  ]).has(toolName);
 }
 
 function buildSystemToolResultPolicy(mcp: McpServerConfig, toolName: string) {
@@ -59,6 +64,41 @@ function buildSystemToolResultPolicy(mcp: McpServerConfig, toolName: string) {
     previewChars: mcp.systemConfig?.resultPolicy?.previewChars,
     persistLargeResults: !SELF_BOUNDED_READ_SYSTEM_TOOLS.has(toolName),
     excludeFromContextBudget: SELF_BOUNDED_READ_SYSTEM_TOOLS.has(toolName),
+  };
+}
+
+function buildSystemToolPermissionPolicy(toolName: string): RuntimeToolDefinition["permissionPolicy"] {
+  if (toolName === "Bash") {
+    return { kind: "allow" };
+  }
+  return { kind: "allow" };
+}
+
+function buildSystemToolPermissionResolver(toolName: string): RuntimeToolDefinition["resolvePermission"] | undefined {
+  if (toolName !== "Bash") return undefined;
+
+  return (_resolvedToolName, args, mode) => {
+    const command = String(args.command ?? "").trim();
+    if (!command) {
+      return { kind: "deny", reason: "Bash requires a command." };
+    }
+    if (mode === "plan" && !isReadOnlyShellCommand(command)) {
+      return {
+        kind: "deny",
+        reason: "Im Plan-Mode ist Bash nur fuer read-only Diagnose, Suche und Inspektion erlaubt.",
+      };
+    }
+    if (mode === "edit" && isDestructiveShellCommand(command)) {
+      const prompt = getShellPermissionPrompt(command);
+      return {
+        kind: "prompt",
+        question: prompt.question,
+        choices: prompt.choices,
+        allowKeys: prompt.allowKeys,
+        deniedMessage: prompt.deniedMessage,
+      };
+    }
+    return { kind: "allow" };
   };
 }
 
@@ -205,10 +245,11 @@ export function buildResolvedSystemToolRuntime(
         source: "system",
         capabilityId: toolId,
         accessScope: accessScopeOverrides[toolId],
-        isConcurrencySafe: () => isConcurrencySafeSystemTool(tool.name),
+        isConcurrencySafe: (input) => isConcurrencySafeSystemTool(tool.name, input),
         interruptBehavior: "block",
         resultPolicy: buildSystemToolResultPolicy(resolved.mcp, tool.name),
-        permissionPolicy: { kind: "allow" },
+        permissionPolicy: buildSystemToolPermissionPolicy(tool.name),
+        resolvePermission: buildSystemToolPermissionResolver(tool.name),
       };
     }
   }

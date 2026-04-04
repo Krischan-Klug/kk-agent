@@ -14,9 +14,9 @@ test("repairTranscript removes duplicate tool uses/results and inserts missing s
       role: "assistant",
       id: "assistant-1",
       content: [
-        toolUseBlock("call-1", "list_directory", { path: "a" }),
-        toolUseBlock("call-1", "list_directory", { path: "a" }),
-        toolUseBlock("call-2", "grep", { pattern: "TODO" }),
+        toolUseBlock("call-1", "Glob", { pattern: "**/*.ts" }),
+        toolUseBlock("call-1", "Glob", { pattern: "**/*.ts" }),
+        toolUseBlock("call-2", "Grep", { pattern: "TODO" }),
       ],
     }),
     createTranscriptMessage({

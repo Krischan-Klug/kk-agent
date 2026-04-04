@@ -38,6 +38,11 @@ export interface RuntimeToolDefinition extends UnifiedToolDefinition {
   interruptBehavior: ToolInterruptBehavior;
   resultPolicy: RuntimeToolResultPolicy;
   permissionPolicy: RuntimeToolPermissionPolicy;
+  resolvePermission?: (
+    toolName: string,
+    args: Record<string, unknown>,
+    mode: ChatMode,
+  ) => Promise<RuntimeToolPermissionPolicy> | RuntimeToolPermissionPolicy;
 }
 
 export interface LoopResult {

@@ -9,15 +9,15 @@ const model = process.argv[2] ?? "qwen3.5-27b-claude-4.6-opus-reasoning-distille
 
 const tools: UnifiedToolDefinition[] = [
   {
-    name: "list_directory",
-    description: "List directory contents with sizes. Use recursive=true for full tree.",
+    name: "Glob",
+    description: "Fast file pattern matching for finding files by name.",
     parameters: {
       type: "object",
       properties: {
-        path: { type: "string", description: "Directory path." },
-        recursive: { type: "boolean", description: "List recursively." },
+        pattern: { type: "string", description: "Glob pattern." },
+        path: { type: "string", description: "Base path." },
       },
-      required: ["path"],
+      required: ["pattern"],
     },
   },
 ];
@@ -54,7 +54,7 @@ function buildInitialMessages() {
     }),
     createTranscriptMessage({
       role: "user",
-      content: [textBlock("Analysiere C:\\Users\\KriKra\\dev\\ai\\kk-agent. Nutze zuerst list_directory und gib danach kurz an, was du gefunden hast.")],
+      content: [textBlock("Analysiere C:\\Users\\KriKra\\dev\\ai\\kk-agent. Nutze zuerst Glob und gib danach kurz an, was du gefunden hast.")],
     }),
   ];
 }
@@ -104,7 +104,7 @@ async function runCase(
         first.message,
         createTranscriptMessage({
           role: "tool",
-          content: [toolResultBlock(toolUse.id, "[file] AGENTS.md\n[dir] kk-agent-backend/\n[dir] kk-agent-frontend/\n[file] README.md")],
+          content: [toolResultBlock(toolUse.id, "C:\\Users\\KriKra\\dev\\ai\\kk-agent\\AGENTS.md\nC:\\Users\\KriKra\\dev\\ai\\kk-agent\\README.md\nC:\\Users\\KriKra\\dev\\ai\\kk-agent\\kk-agent-backend\\package.json")],
         }),
       ],
       tools,

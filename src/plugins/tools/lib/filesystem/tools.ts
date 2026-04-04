@@ -2,120 +2,81 @@ import type { McpToolDefinition } from "../../../mcp/types.js";
 
 export const filesystemTools: McpToolDefinition[] = [
   {
-    name: "read_file",
-    description: "Read a file with line numbers. Use offset/limit for large files.",
+    name: "Read",
+    description: "Read a file from the local filesystem with line numbers. Prefer absolute paths.",
     inputSchema: {
       type: "object",
       properties: {
-        path: { type: "string", description: "File path." },
-        offset: { type: "number", description: "Start line (1-based, default: 1)." },
-        limit: { type: "number", description: "Lines to read (default: 200)." },
+        file_path: { type: "string", description: "Absolute file path to read." },
+        offset: { type: "number", description: "Optional start line (1-based)." },
+        limit: { type: "number", description: "Optional number of lines to read (default: 2000)." },
       },
-      required: ["path"],
+      required: ["file_path"],
     },
     mcpId: "filesystem",
   },
   {
-    name: "edit_file",
-    description: "Replace an exact string in a file. old_string must be unique — add context if needed.",
+    name: "Edit",
+    description: "Perform an exact string replacement in an existing file. Read the file first.",
     inputSchema: {
       type: "object",
       properties: {
-        path: { type: "string", description: "File path." },
-        old_string: { type: "string", description: "Exact text to find (must appear once)." },
-        new_string: { type: "string", description: "Replacement text (empty to delete)." },
+        file_path: { type: "string", description: "Absolute file path to edit." },
+        old_string: { type: "string", description: "Exact text to find." },
+        new_string: { type: "string", description: "Replacement text." },
+        replace_all: { type: "boolean", description: "Replace every occurrence instead of requiring a unique match." },
       },
-      required: ["path", "old_string", "new_string"],
+      required: ["file_path", "old_string", "new_string"],
     },
     mcpId: "filesystem",
   },
   {
-    name: "write_file",
-    description: "Create or overwrite a file. Creates parent dirs. Prefer edit_file for partial changes.",
+    name: "Write",
+    description: "Write a file to the local filesystem. Use this for new files or complete rewrites.",
     inputSchema: {
       type: "object",
       properties: {
-        path: { type: "string", description: "File path." },
+        file_path: { type: "string", description: "Absolute file path to write." },
         content: { type: "string", description: "Full content to write." },
       },
-      required: ["path", "content"],
+      required: ["file_path", "content"],
     },
     mcpId: "filesystem",
   },
   {
-    name: "grep",
-    description: "Search file contents by regex. Returns matching lines with paths. Skips binary/build dirs.",
+    name: "Glob",
+    description: "Fast file pattern matching for finding files by name, such as **/*.ts.",
     inputSchema: {
       type: "object",
       properties: {
-        pattern: { type: "string", description: "Regex or literal string (case-insensitive)." },
-        path: { type: "string", description: "Directory to search (default: root)." },
-        include: { type: "string", description: "Glob to filter files, e.g. '*.ts'." },
+        pattern: { type: "string", description: "Glob pattern like '**/*.ts' or 'src/**/*.tsx'." },
+        path: { type: "string", description: "Optional base directory to search from." },
       },
       required: ["pattern"],
     },
     mcpId: "filesystem",
   },
   {
-    name: "search_files",
-    description: "Find files/dirs by name substring. Use grep to search inside file contents.",
+    name: "Grep",
+    description: "Search file contents using ripgrep-style patterns. Prefer this over shell grep or rg.",
     inputSchema: {
       type: "object",
       properties: {
-        pattern: { type: "string", description: "Name fragment (case-insensitive)." },
-        path: { type: "string", description: "Start directory (default: root)." },
-        type: { type: "string", enum: ["file", "directory", "all"], description: "Filter type (default: all)." },
+        pattern: { type: "string", description: "Regex pattern to search for." },
+        path: { type: "string", description: "Optional base directory to search from." },
+        glob: { type: "string", description: "Optional glob to filter files, such as '*.ts' or '**/*.tsx'." },
+        type: { type: "string", description: "Optional file type filter such as 'ts' or 'py'." },
+        output_mode: {
+          type: "string",
+          enum: ["content", "files_with_matches", "count"],
+          description: "Return matching lines, matching file paths, or a total match count.",
+        },
+        case_sensitive: { type: "boolean", description: "Use case-sensitive matching." },
+        multiline: { type: "boolean", description: "Allow the pattern to match across multiple lines." },
+        head_limit: { type: "number", description: "Maximum number of matches or files to return." },
+        offset: { type: "number", description: "Skip the first N matches before returning results." },
       },
       required: ["pattern"],
-    },
-    mcpId: "filesystem",
-  },
-  {
-    name: "list_directory",
-    description: "List directory contents with sizes. Use recursive=true for full tree.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        path: { type: "string", description: "Directory path (default: root)." },
-        recursive: { type: "boolean", description: "List recursively (default: false)." },
-      },
-    },
-    mcpId: "filesystem",
-  },
-  {
-    name: "stat_path",
-    description: "Get file/directory metadata: type, size, timestamps.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        path: { type: "string", description: "Path to inspect." },
-      },
-      required: ["path"],
-    },
-    mcpId: "filesystem",
-  },
-  {
-    name: "move_path",
-    description: "Move or rename a file or directory.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        from: { type: "string", description: "Source path." },
-        to: { type: "string", description: "Destination path." },
-      },
-      required: ["from", "to"],
-    },
-    mcpId: "filesystem",
-  },
-  {
-    name: "delete_path",
-    description: "Delete a file or directory (recursive).",
-    inputSchema: {
-      type: "object",
-      properties: {
-        path: { type: "string", description: "Path to delete." },
-      },
-      required: ["path"],
     },
     mcpId: "filesystem",
   },

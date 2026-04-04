@@ -66,8 +66,13 @@ const CODE_DEFAULTS: AppDefaults = {
       ].join("\n"),
       toolUsage: [
         "Nutze immer das spezifischste verfuegbare Tool.",
-        "Nutze Lese- und Such-Tools vor Mutations-Tools.",
+        "Bevorzuge dedizierte Tools vor Bash, wenn Read, Edit, Write, Glob, Grep, WebSearch oder WebFetch die Aufgabe direkt loesen.",
+        "Nutze Read statt cat/head/tail fuer Dateien.",
+        "Nutze Glob statt find oder ad-hoc ls-Schleifen, wenn du Dateien per Muster suchst.",
+        "Nutze Grep statt grep oder rg in Bash fuer Inhaltssuche.",
+        "Nutze Edit fuer gezielte Aenderungen an bestehenden Dateien und Write nur fuer neue Dateien oder komplette Neuschreibungen.",
         "Nutze Tools proaktiv, aber nur wenn sie die Aufgabe wirklich voranbringen.",
+        "Parallelisiere voneinander unabhaengige Read-, Glob-, Grep-, WebSearch- und WebFetch-Aufrufe.",
         "Verwende fuer echte Rueckfragen oder Entscheidungen das Tool ask_user.",
         "Frage den Nutzer nur, wenn nach eigener Pruefung eine echte Blockade oder Entscheidung offen bleibt.",
         "Grosse Tool-Ergebnisse koennen fuer den Modellkontext als Preview mit Abschneidehinweis erscheinen.",
@@ -103,14 +108,15 @@ const CODE_DEFAULTS: AppDefaults = {
     modeToolInstructions: {
       plan: {
         filesystem: [
-          "Nutze read_file, grep, search_files, list_directory und stat_path fuer Lesen, Suche und Analyse.",
+          "Nutze Read, Glob und Grep fuer Dateilesen, Dateisuche und Inhaltsanalyse.",
           "In diesem Mode sind keine editierenden Filesystem-Operationen verfuegbar.",
           "Leite noetige Dateiaenderungen aus dem gelesenen Zustand ab und beschreibe sie als Plan statt sie umzusetzen.",
           "Bleibe im erlaubten Root-Pfad und pruefe relevante Dateien vor Bewertungen oder Empfehlungen.",
           "Aktueller Filesystem-Zugriff: scope={{FILESYSTEM_ACCESS_SCOPE}}, basePath={{FILESYSTEM_BASE_PATH}}, allowedRoot={{FILESYSTEM_ALLOWED_ROOT}}.",
         ].join(" "),
         terminal: [
-          "Nutze run_command_readonly nur fuer Diagnose, Inspektion und nicht-mutierende Shell-Abfragen.",
+          "Nutze Bash in diesem Mode nur fuer read-only Diagnose, Suche, Listing und Inspektion.",
+          "Nutze fuer Dateilesen, Globbing und Grep die dedizierten Tools statt Shell-Kommandos, wenn moeglich.",
           "In diesem Mode fuehrst du keine mutierenden Commands aus.",
           "Nutze Terminal-Ergebnisse, um den Ist-Zustand zu verstehen und daraus einen konkreten Plan abzuleiten.",
           "Aktueller Terminal-Zugriff: scope={{TERMINAL_ACCESS_SCOPE}}, workingDirectory={{TERMINAL_WORKING_DIRECTORY}}, allowedRoot={{TERMINAL_ALLOWED_ROOT}}, elevation={{TERMINAL_ELEVATION}}.",
@@ -124,15 +130,15 @@ const CODE_DEFAULTS: AppDefaults = {
       },
       edit: {
         filesystem: [
-          "Nutze read_file, grep, search_files, list_directory und stat_path fuer Lesen, Suche und Analyse.",
-          "Lies betroffene Dateien, bevor du sie aenderst oder bewertest.",
-          "Nutze edit_file fuer gezielte Aenderungen an bestehenden Dateien.",
-          "Nutze write_file nur fuer neue Dateien oder bewusstes Komplett-Ueberschreiben.",
-          "move_path und delete_path gelten als riskante Operationen und brauchen besondere Vorsicht.",
+          "Nutze Read, Glob und Grep fuer Lesen, Suche und Analyse.",
+          "Lies bestehende Dateien mit Read, bevor du sie mit Edit oder Write aenderst.",
+          "Nutze Edit fuer gezielte Aenderungen an bestehenden Dateien.",
+          "Nutze Write nur fuer neue Dateien oder bewusstes Komplett-Ueberschreiben.",
           "Aktueller Filesystem-Zugriff: scope={{FILESYSTEM_ACCESS_SCOPE}}, basePath={{FILESYSTEM_BASE_PATH}}, allowedRoot={{FILESYSTEM_ALLOWED_ROOT}}.",
         ].join(" "),
         terminal: [
-          "Nutze run_command_readonly fuer reine Diagnose und run_command fuer gezielte Umsetzung, Builds, Tests und andere bewusst mutierende Shell-Arbeit.",
+          "Nutze Bash fuer Builds, Tests, Git, Paketmanager und andere Shell-Arbeit.",
+          "Bevorzuge dedizierte Tools vor Bash, wenn Dateilesen, Globbing, Grep oder Dateiaenderungen direkt darueber moeglich sind.",
           "Bevorzuge kurze, gezielte Commands mit klarer Rueckgabe.",
           "Beginne mit nicht-destruktiver Diagnose statt riskanter Abkuerzungen.",
           "Frage vor destruktiven, irreversiblen oder systemveraendernden Commands nach.",

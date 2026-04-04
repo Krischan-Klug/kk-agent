@@ -58,8 +58,8 @@ test("responses follow-up replays raw output items and appends function_call_out
         type: "function_call",
         id: "fc_1",
         call_id: "call_1",
-        name: "list_directory",
-        arguments: "{\"path\":\"C:\\\\repo\"}",
+        name: "Read",
+        arguments: "{\"file_path\":\"C:\\\\repo\\\\README.md\"}",
       },
     ],
   });
@@ -89,8 +89,8 @@ test("responses follow-up replays raw output items and appends function_call_out
       type: "function_call",
       id: "fc_1",
       call_id: "call_1",
-      name: "list_directory",
-      arguments: "{\"path\":\"C:\\\\repo\"}",
+      name: "Read",
+      arguments: "{\"file_path\":\"C:\\\\repo\\\\README.md\"}",
     },
     {
       type: "function_call_output",
@@ -114,7 +114,7 @@ test("commitResponsesTransportState keeps call_id mapping for later tool outputs
       type: "function_call",
       id: "fc_2",
       call_id: "call_2",
-      name: "grep",
+      name: "Grep",
       arguments: "{\"pattern\":\"TODO\"}",
     }],
   });

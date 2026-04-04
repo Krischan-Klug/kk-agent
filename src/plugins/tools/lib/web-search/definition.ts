@@ -5,10 +5,9 @@ export const webSearchDefinition: McpServerConfig = {
   name: "Web Search",
   active: true,
   instruction:
-    "Use web_search to discover relevant sources for current information, news, prices, versions, and anything that may have changed. " +
-    "Use fetch_url to read a specific page after discovery. " +
-    "Prefer targeted searches and fetch the most relevant pages instead of browsing too broadly. " +
-    "Cite sources whenever you use information from web results or fetched pages.",
+    "Use WebSearch for current information and discovery, and WebFetch to read and extract information from a specific page. " +
+    "Prefer targeted queries, keep searches narrow, and include sources when you rely on web results. " +
+    "For a specific page, use WebFetch with a clear extraction prompt instead of pasting raw page text into your answer.",
   emoji: "🌐",
   source: "system",
   systemKey: "web-search",

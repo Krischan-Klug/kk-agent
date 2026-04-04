@@ -1,14 +1,14 @@
-import { mkdir, readdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
-import { dirname, extname, resolve, sep } from "node:path";
+import { mkdir, readdir, readFile, stat, writeFile } from "node:fs/promises";
+import { dirname, extname, relative, resolve, sep } from "node:path";
 import type { McpServerConfig, ToolCallResult } from "../../../mcp/types.js";
 import { getDefaultPathForScope, resolveAccessScope, resolveFilesystemSystemConfig } from "../access-paths.js";
 import { truncateSelfBoundedReadOutput } from "../read-output.js";
+import { getCurrentSessionId } from "../user-interaction/interaction-store.js";
+import { hasCurrentReadForSession, recordReadForSession } from "./read-state.js";
 
-const SEARCH_LIMIT = 50;
-const GREP_RESULT_LIMIT = 50;
-const READ_LINE_LIMIT = 200;
-const LIST_ENTRY_LIMIT = 500;
-const LIST_MAX_DEPTH = 5;
+const GLOB_RESULT_LIMIT = 200;
+const GREP_RESULT_LIMIT = 200;
+const READ_LINE_LIMIT = 2000;
 
 const IGNORED_DIRS = new Set(["node_modules", ".git", "dist", "build", ".next", "__pycache__"]);
 
@@ -43,23 +43,52 @@ function resolveWithinRoot(allowedRoot: string, basePath: string, target?: unkno
   return candidate;
 }
 
-function formatSize(bytes: number): string {
-  if (bytes < 1024) return `${bytes}B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)}KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(1)}MB`;
+function escapeRegex(value: string): string {
+  return value.replace(/[|\\{}()[\]^$+?.]/g, "\\$&");
 }
 
-function matchGlob(filename: string, pattern: string): boolean {
-  // Simple glob: *.ts → endsWith(.ts), *.{ts,tsx} → endsWith(.ts) || endsWith(.tsx)
-  const braceMatch = pattern.match(/^\*\.?\{(.+)\}$/);
-  if (braceMatch) {
-    const exts = braceMatch[1].split(",").map((e) => `.${e.trim()}`);
-    return exts.some((ext) => filename.endsWith(ext));
+function globToRegex(pattern: string): RegExp {
+  let regex = "^";
+  for (let i = 0; i < pattern.length; i++) {
+    const char = pattern[i];
+    const next = pattern[i + 1];
+
+    if (char === "*" && next === "*") {
+      const after = pattern[i + 2];
+      if (after === "/") {
+        regex += "(?:.*\\/)?";
+        i += 2;
+        continue;
+      }
+      regex += ".*";
+      i += 1;
+      continue;
+    }
+
+    if (char === "*") {
+      regex += "[^/]*";
+      continue;
+    }
+
+    if (char === "?") {
+      regex += "[^/]";
+      continue;
+    }
+
+    if (char === "{") {
+      const closeIndex = pattern.indexOf("}", i);
+      if (closeIndex > i) {
+        const body = pattern.slice(i + 1, closeIndex);
+        regex += `(?:${body.split(",").map((part) => escapeRegex(part.trim())).join("|")})`;
+        i = closeIndex;
+        continue;
+      }
+    }
+
+    regex += escapeRegex(char);
   }
-  if (pattern.startsWith("*.")) {
-    return filename.endsWith(pattern.slice(1));
-  }
-  return filename.includes(pattern);
+  regex += "$";
+  return new RegExp(regex, "i");
 }
 
 function isBinary(buffer: Buffer): boolean {
@@ -70,23 +99,22 @@ function isBinary(buffer: Buffer): boolean {
   return false;
 }
 
-function buildRegex(pattern: string): RegExp {
+function buildRegex(pattern: string, caseSensitive = false, multiline = false): RegExp {
+  const flags = `${caseSensitive ? "" : "i"}${multiline ? "m" : ""}`;
   try {
-    return new RegExp(pattern, "i");
+    return new RegExp(pattern, flags);
   } catch {
-    return new RegExp(pattern.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i");
+    return new RegExp(pattern.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), flags);
   }
 }
 
-/* ── Walk helpers ── */
-
-async function walkForSearch(
+async function walkForGlob(
   root: string,
-  pattern: string,
-  typeFilter: string,
+  rootBase: string,
+  matcher: RegExp,
   results: string[],
 ): Promise<void> {
-  if (results.length >= SEARCH_LIMIT) return;
+  if (results.length >= GLOB_RESULT_LIMIT) return;
   let entries;
   try {
     entries = await readdir(root, { withFileTypes: true });
@@ -95,21 +123,19 @@ async function walkForSearch(
   }
 
   for (const entry of entries) {
-    if (results.length >= SEARCH_LIMIT) return;
+    if (results.length >= GLOB_RESULT_LIMIT) return;
     if (entry.isDirectory() && IGNORED_DIRS.has(entry.name)) continue;
 
     const fullPath = resolve(root, entry.name);
-    const matchesName = entry.name.toLowerCase().includes(pattern.toLowerCase());
-
-    if (matchesName) {
-      const isDir = entry.isDirectory();
-      if (typeFilter === "all" || (typeFilter === "file" && !isDir) || (typeFilter === "directory" && isDir)) {
+    if (entry.isFile()) {
+      const relPath = relative(rootBase, fullPath).split("\\").join("/");
+      if (matcher.test(relPath)) {
         results.push(fullPath);
       }
     }
 
     if (entry.isDirectory()) {
-      await walkForSearch(fullPath, pattern, typeFilter, results);
+      await walkForGlob(fullPath, rootBase, matcher, results);
     }
   }
 }
@@ -122,8 +148,11 @@ interface GrepMatch {
 
 async function walkForGrep(
   root: string,
+  rootBase: string,
   regex: RegExp,
-  include: string | undefined,
+  glob: string | undefined,
+  type: string | undefined,
+  multiline: boolean,
   results: GrepMatch[],
 ): Promise<void> {
   if (results.length >= GREP_RESULT_LIMIT) return;
@@ -134,6 +163,8 @@ async function walkForGrep(
     return;
   }
 
+  const globMatcher = glob ? globToRegex(glob) : null;
+
   for (const entry of entries) {
     if (results.length >= GREP_RESULT_LIMIT) return;
     if (entry.isDirectory() && IGNORED_DIRS.has(entry.name)) continue;
@@ -141,74 +172,62 @@ async function walkForGrep(
     const fullPath = resolve(root, entry.name);
 
     if (entry.isDirectory()) {
-      await walkForGrep(fullPath, regex, include, results);
+      await walkForGrep(fullPath, rootBase, regex, glob, type, multiline, results);
       continue;
     }
 
     if (!entry.isFile()) continue;
-    if (include && !matchGlob(entry.name, include)) continue;
+    const relPath = relative(rootBase, fullPath).split("\\").join("/");
+    if (globMatcher && !globMatcher.test(relPath)) continue;
+    if (type && extname(entry.name).replace(/^\./, "").toLowerCase() !== type.toLowerCase()) continue;
 
     try {
       const buffer = await readFile(fullPath);
       if (isBinary(buffer)) continue;
 
       const text = buffer.toString("utf-8");
-      const lines = text.split("\n");
+      if (multiline) {
+        const flags = regex.flags.includes("g") ? regex.flags : `${regex.flags}g`;
+        const iterator = text.matchAll(new RegExp(regex.source, flags));
+        for (const match of iterator) {
+          if (results.length >= GREP_RESULT_LIMIT) return;
+          const index = match.index ?? 0;
+          const line = text.slice(0, index).split("\n").length;
+          results.push({
+            file: fullPath,
+            line,
+            content: match[0].split("\n").join("\\n"),
+          });
+        }
+        continue;
+      }
 
+      const lines = text.split("\n");
       for (let i = 0; i < lines.length; i++) {
         if (results.length >= GREP_RESULT_LIMIT) return;
+        regex.lastIndex = 0;
         if (regex.test(lines[i])) {
           results.push({ file: fullPath, line: i + 1, content: lines[i] });
         }
       }
     } catch {
-      // skip unreadable files
+      // ignore unreadable files
     }
   }
 }
 
-interface ListEntry {
-  type: "dir" | "file";
-  relPath: string;
-  size?: number;
+function getSessionIdOrThrow(): string {
+  const sessionId = getCurrentSessionId();
+  if (!sessionId) throw new Error("No active session context for filesystem tool.");
+  return sessionId;
 }
 
-async function walkForList(
-  root: string,
-  prefix: string,
-  depth: number,
-  entries: ListEntry[],
-): Promise<void> {
-  if (entries.length >= LIST_ENTRY_LIMIT || depth > LIST_MAX_DEPTH) return;
-  let dirEntries;
-  try {
-    dirEntries = await readdir(root, { withFileTypes: true });
-  } catch {
-    return;
-  }
-
-  for (const entry of dirEntries) {
-    if (entries.length >= LIST_ENTRY_LIMIT) return;
-    if (entry.isDirectory() && IGNORED_DIRS.has(entry.name)) continue;
-
-    const fullPath = resolve(root, entry.name);
-    const rel = prefix ? `${prefix}/${entry.name}` : entry.name;
-
-    if (entry.isDirectory()) {
-      entries.push({ type: "dir", relPath: rel });
-      await walkForList(fullPath, rel, depth + 1, entries);
-    } else {
-      try {
-        const info = await stat(fullPath);
-        entries.push({ type: "file", relPath: rel, size: info.size });
-      } catch {
-        entries.push({ type: "file", relPath: rel });
-      }
-    }
+function ensureReadBeforeMutating(path: string, modifiedAtMs: number): void {
+  const sessionId = getSessionIdOrThrow();
+  if (!hasCurrentReadForSession(sessionId, path, modifiedAtMs)) {
+    throw new Error("This file has changed or has not been read in the current conversation. Use Read before editing or overwriting it.");
   }
 }
-
-/* ── Tool execution ── */
 
 export async function executeFilesystemTool(
   config: McpServerConfig,
@@ -218,9 +237,10 @@ export async function executeFilesystemTool(
   const basePath = getFilesystemBasePath(config);
   const allowedRoot = getFilesystemAllowedRoot(config);
 
-  if (toolName === "read_file") {
-    const path = resolveWithinRoot(allowedRoot, basePath, args.path);
+  if (toolName === "Read") {
+    const path = resolveWithinRoot(allowedRoot, basePath, args.file_path);
     const raw = await readFile(path, "utf-8");
+    const info = await stat(path);
     const lines = raw.split("\n");
     const total = lines.length;
 
@@ -230,156 +250,103 @@ export async function executeFilesystemTool(
     const slice = lines.slice(offset - 1, offset - 1 + limit);
     const endLine = Math.min(offset - 1 + limit, total);
     const width = String(endLine).length;
-
     const numbered = slice.map((line, i) => `${String(offset + i).padStart(width)}\t${line}`).join("\n");
-
     const showingAll = offset === 1 && endLine >= total;
     const footer = showingAll ? "" : `\n\n[Lines ${offset}-${endLine} of ${total}]`;
 
+    recordReadForSession(getSessionIdOrThrow(), path, info.mtimeMs);
     return { content: truncateSelfBoundedReadOutput(numbered + footer), isError: false };
   }
 
-  if (toolName === "edit_file") {
-    const path = resolveWithinRoot(allowedRoot, basePath, args.path);
+  if (toolName === "Edit") {
+    const path = resolveWithinRoot(allowedRoot, basePath, args.file_path);
     const oldString = String(args.old_string ?? "");
     const newString = String(args.new_string ?? "");
+    const replaceAll = args.replace_all === true;
     if (!oldString) throw new Error("old_string is required");
 
+    const existingInfo = await stat(path);
+    ensureReadBeforeMutating(path, existingInfo.mtimeMs);
     const content = await readFile(path, "utf-8");
     const occurrences = content.split(oldString).length - 1;
 
-    if (occurrences === 0) {
-      throw new Error("old_string not found in file");
-    }
-    if (occurrences > 1) {
-      throw new Error(`old_string found ${occurrences} times — must be unique. Add more surrounding context.`);
+    if (occurrences === 0) throw new Error("old_string not found in file");
+    if (occurrences > 1 && !replaceAll) {
+      throw new Error(`old_string found ${occurrences} times. Add more context or set replace_all=true.`);
     }
 
-    const updated = content.replace(oldString, newString);
+    const updated = replaceAll ? content.split(oldString).join(newString) : content.replace(oldString, newString);
     await writeFile(path, updated, "utf-8");
-    return { content: `File edited: ${path}`, isError: false };
+    const updatedInfo = await stat(path);
+    recordReadForSession(getSessionIdOrThrow(), path, updatedInfo.mtimeMs);
+    return { content: `Edited file: ${path}`, isError: false };
   }
 
-  if (toolName === "write_file") {
-    const path = resolveWithinRoot(allowedRoot, basePath, args.path);
+  if (toolName === "Write") {
+    const path = resolveWithinRoot(allowedRoot, basePath, args.file_path);
+    try {
+      const existingInfo = await stat(path);
+      ensureReadBeforeMutating(path, existingInfo.mtimeMs);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+    }
+
     await mkdir(dirname(path), { recursive: true });
     await writeFile(path, String(args.content ?? ""), "utf-8");
-    return { content: `File written: ${path}`, isError: false };
+    const updatedInfo = await stat(path);
+    recordReadForSession(getSessionIdOrThrow(), path, updatedInfo.mtimeMs);
+    return { content: `Wrote file: ${path}`, isError: false };
   }
 
-  if (toolName === "grep") {
-    const pattern = String(args.pattern ?? "").trim();
-    if (!pattern) throw new Error("pattern is required");
-    const start = resolveWithinRoot(allowedRoot, basePath, args.path);
-    const include = typeof args.include === "string" ? args.include.trim() || undefined : undefined;
-
-    const regex = buildRegex(pattern);
-    const results: GrepMatch[] = [];
-    await walkForGrep(start, regex, include, results);
-
-    if (results.length === 0) {
-      return { content: "No matches found.", isError: false };
-    }
-
-    // Group by file
-    const grouped = new Map<string, GrepMatch[]>();
-    for (const match of results) {
-      const arr = grouped.get(match.file) ?? [];
-      arr.push(match);
-      grouped.set(match.file, arr);
-    }
-
-    const output: string[] = [];
-    for (const [file, matches] of grouped) {
-      for (const m of matches) {
-        output.push(`${file}:${m.line}: ${m.content}`);
-      }
-    }
-
-    const footer = results.length >= GREP_RESULT_LIMIT ? `\n\n[limit reached — showing first ${GREP_RESULT_LIMIT} matches]` : "";
-    return { content: output.join("\n") + footer, isError: false };
-  }
-
-  if (toolName === "list_directory") {
-    const path = resolveWithinRoot(allowedRoot, basePath, args.path);
-    const recursive = args.recursive === true;
-
-    if (!recursive) {
-      const dirEntries = await readdir(path, { withFileTypes: true });
-      const lines: string[] = [];
-      for (const entry of dirEntries) {
-        if (entry.isDirectory()) {
-          lines.push(`[dir]  ${entry.name}/`);
-        } else {
-          try {
-            const info = await stat(resolve(path, entry.name));
-            lines.push(`[file] ${formatSize(info.size).padEnd(8)} ${entry.name}`);
-          } catch {
-            lines.push(`[file]          ${entry.name}`);
-          }
-        }
-      }
-      return { content: lines.length ? lines.join("\n") : "[empty directory]", isError: false };
-    }
-
-    // Recursive — flat list with relative paths (unambiguous for LLM)
-    const entries: ListEntry[] = [];
-    await walkForList(path, "", 0, entries);
-
-    const lines = entries.map((e) => {
-      if (e.type === "dir") return `[dir]  ${e.relPath}/`;
-      const size = e.size != null ? formatSize(e.size).padEnd(8) : "        ";
-      return `[file] ${size} ${e.relPath}`;
-    });
-
-    const footer = entries.length >= LIST_ENTRY_LIMIT ? `\n\n[limit reached — ${LIST_ENTRY_LIMIT} entries shown]` : "";
-    return { content: (lines.length ? lines.join("\n") : "[empty directory]") + footer, isError: false };
-  }
-
-  if (toolName === "search_files") {
+  if (toolName === "Glob") {
     const start = resolveWithinRoot(allowedRoot, basePath, args.path);
     const pattern = String(args.pattern ?? "").trim();
     if (!pattern) throw new Error("pattern is required");
-    const typeFilter = typeof args.type === "string" ? args.type : "all";
 
     const results: string[] = [];
-    await walkForSearch(start, pattern, typeFilter, results);
-
-    const footer = results.length >= SEARCH_LIMIT ? `\n\n[limit reached — showing first ${SEARCH_LIMIT} matches]` : "";
-    return { content: (results.length ? results.join("\n") : "No matches found.") + footer, isError: false };
+    await walkForGlob(start, start, globToRegex(pattern), results);
+    const footer = results.length >= GLOB_RESULT_LIMIT ? `\n\n[limit reached - showing first ${GLOB_RESULT_LIMIT} matches]` : "";
+    return { content: (results.length ? results.join("\n") : "No files matched.") + footer, isError: false };
   }
 
-  if (toolName === "stat_path") {
-    const path = resolveWithinRoot(allowedRoot, basePath, args.path);
-    const info = await stat(path);
+  if (toolName === "Grep") {
+    const pattern = String(args.pattern ?? "").trim();
+    if (!pattern) throw new Error("pattern is required");
+
+    const start = resolveWithinRoot(allowedRoot, basePath, args.path);
+    const glob = typeof args.glob === "string" ? args.glob.trim() || undefined : undefined;
+    const type = typeof args.type === "string" ? args.type.trim() || undefined : undefined;
+    const outputMode =
+      typeof args.output_mode === "string" && ["content", "files_with_matches", "count"].includes(args.output_mode)
+        ? args.output_mode
+        : "files_with_matches";
+    const caseSensitive = args.case_sensitive === true;
+    const multiline = args.multiline === true;
+    const headLimit = typeof args.head_limit === "number" ? Math.max(1, Math.floor(args.head_limit)) : GREP_RESULT_LIMIT;
+    const offset = typeof args.offset === "number" ? Math.max(0, Math.floor(args.offset)) : 0;
+
+    const results: GrepMatch[] = [];
+    await walkForGrep(start, start, buildRegex(pattern, caseSensitive, multiline), glob, type, multiline, results);
+
+    if (results.length === 0) return { content: "No matches found.", isError: false };
+    if (outputMode === "count") return { content: String(results.length), isError: false };
+
+    const sliced = results.slice(offset, offset + headLimit);
+    if (outputMode === "files_with_matches") {
+      const files = [...new Set(sliced.map((match) => match.file))];
+      const footer =
+        results.length > offset + sliced.length
+          ? `\n\n[showing ${files.length} of ${new Set(results.map((match) => match.file)).size} matching files]`
+          : "";
+      return { content: files.join("\n") + footer, isError: false };
+    }
+
+    const footer =
+      results.length > offset + sliced.length ? `\n\n[showing ${sliced.length} of ${results.length} matches]` : "";
     return {
-      content: JSON.stringify(
-        {
-          path,
-          type: info.isDirectory() ? "directory" : info.isFile() ? "file" : "other",
-          size: info.size,
-          createdAt: info.birthtime.toISOString(),
-          modifiedAt: info.mtime.toISOString(),
-        },
-        null,
-        2,
-      ),
+      content: sliced.map((match) => `${match.file}:${match.line}: ${match.content}`).join("\n") + footer,
       isError: false,
     };
-  }
-
-  if (toolName === "move_path") {
-    const from = resolveWithinRoot(allowedRoot, basePath, args.from);
-    const to = resolveWithinRoot(allowedRoot, basePath, args.to);
-    await mkdir(dirname(to), { recursive: true });
-    await rename(from, to);
-    return { content: `Moved: ${from} → ${to}`, isError: false };
-  }
-
-  if (toolName === "delete_path") {
-    const path = resolveWithinRoot(allowedRoot, basePath, args.path);
-    await rm(path, { recursive: true, force: false });
-    return { content: `Deleted: ${path}`, isError: false };
   }
 
   return null;

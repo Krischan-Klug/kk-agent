@@ -11,6 +11,7 @@ import type { LoopMessage, ModeRuntimeConfig } from "../loop/types.js";
 import { getAgent, getLoopState, setLoopState, clearLoopState } from "../agent/service.js";
 import { getDefaults } from "../lib/defaults.js";
 import { clearSessionFacts, clearTasks } from "../tools/service.js";
+import { clearFilesystemReadState } from "../tools/lib/filesystem/read-state.js";
 import {
   emitPrompt,
   waitForResponse,
@@ -163,6 +164,7 @@ export function deleteSession(id: string): void {
   clearLoopState(id);
   clearTasks(id);
   clearSessionFacts(id);
+  clearFilesystemReadState(id);
   clearSessionAttachments(id);
 }
 
@@ -310,20 +312,24 @@ function buildLoopRequest(
     resolveToolPermission: async (
       runtimeTool: RuntimeToolDefinition,
       toolName: string,
-      _args: Record<string, unknown>,
-      _mode: ChatMode,
+      args: Record<string, unknown>,
+      mode: ChatMode,
     ) => {
-      switch (runtimeTool.permissionPolicy.kind) {
+      const policy = runtimeTool.resolvePermission
+        ? await runtimeTool.resolvePermission(toolName, args, mode)
+        : runtimeTool.permissionPolicy;
+
+      switch (policy.kind) {
         case "allow":
           return { allowed: true };
         case "deny":
-          return { allowed: false, reason: runtimeTool.permissionPolicy.reason };
+          return { allowed: false, reason: policy.reason };
         case "prompt": {
           const promptId = `${toolName}-${Date.now()}`;
           emitPrompt(sessionId, {
             promptId,
-            question: runtimeTool.permissionPolicy.question,
-            choices: runtimeTool.permissionPolicy.choices,
+            question: policy.question,
+            choices: policy.choices,
           });
           const result = await waitForResponse(sessionId, promptId);
           if (result.isError) {
@@ -331,7 +337,7 @@ function buildLoopRequest(
           }
           try {
             const parsed = JSON.parse(result.content) as { selectedKey?: string };
-            if (parsed.selectedKey && runtimeTool.permissionPolicy.allowKeys.includes(parsed.selectedKey)) {
+            if (parsed.selectedKey && policy.allowKeys.includes(parsed.selectedKey)) {
               return { allowed: true };
             }
           } catch {
@@ -339,7 +345,7 @@ function buildLoopRequest(
           }
           return {
             allowed: false,
-            reason: runtimeTool.permissionPolicy.deniedMessage ?? `Tool "${toolName}" was rejected by the user.`,
+            reason: policy.deniedMessage ?? `Tool "${toolName}" was rejected by the user.`,
           };
         }
       }

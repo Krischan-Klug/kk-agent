@@ -8,10 +8,9 @@ export const terminalDefinition: McpServerConfig = {
   name: "Terminal",
   active: true,
   instruction:
-    "Run terminal commands on the host in the configured working directory by default. " +
-    "Use this for inspection, builds, tests, package manager commands, git, and other shell-based tasks. " +
-    "Prefer short, targeted commands that return exactly the information you need. " +
-    "Ask before dangerous, destructive, or system-changing commands.",
+    "Use Bash for shell commands, builds, tests, package manager tasks, git, and other command-line work. " +
+    "Prefer dedicated tools like Read, Glob, Grep, Edit, and Write when they fit the task better than shell commands. " +
+    "Use short, targeted commands. In plan mode, keep Bash read-only. Ask before destructive or system-changing commands.",
   emoji: "🖳",
   source: "system",
   systemKey: "terminal",

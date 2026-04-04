@@ -1,6 +1,7 @@
 import type { McpServerConfig, ToolCallResult } from "../../../mcp/types.js";
 
 const REQUEST_TIMEOUT = 10000;
+const FETCH_CHAR_LIMIT = 12000;
 
 function clamp(text: string, max: number): string {
   return text.length > max ? `${text.slice(0, max)}\n\n[truncated]` : text;
@@ -15,7 +16,6 @@ function decodeHtmlEntities(input: string): string {
     .replace(/&gt;/g, ">");
 }
 
-/** Simple strip for single-line contexts (search titles/snippets). */
 function stripHtml(html: string): string {
   return decodeHtmlEntities(
     html
@@ -25,16 +25,13 @@ function stripHtml(html: string): string {
   );
 }
 
-/** Structure-preserving HTML to text for full page extraction. */
 function htmlToText(html: string): string {
   return decodeHtmlEntities(
     html
-      // Remove non-content elements
       .replace(/<script[\s\S]*?<\/script>/gi, "")
       .replace(/<style[\s\S]*?<\/style>/gi, "")
       .replace(/<nav[\s\S]*?<\/nav>/gi, "")
       .replace(/<footer[\s\S]*?<\/footer>/gi, "")
-      // Preserve block structure
       .replace(/<br\s*\/?>/gi, "\n")
       .replace(/<\/p>/gi, "\n\n")
       .replace(/<\/div>/gi, "\n")
@@ -42,12 +39,9 @@ function htmlToText(html: string): string {
       .replace(/<h[1-6][^>]*>/gi, "\n\n## ")
       .replace(/<li[^>]*>/gi, "\n- ")
       .replace(/<\/li>/gi, "")
-      // Preserve code blocks
       .replace(/<pre[^>]*>([\s\S]*?)<\/pre>/gi, "\n```\n$1\n```\n")
       .replace(/<code[^>]*>([\s\S]*?)<\/code>/gi, "`$1`")
-      // Strip remaining tags
       .replace(/<[^>]+>/g, "")
-      // Clean up whitespace
       .replace(/[ \t]+/g, " ")
       .replace(/\n{3,}/g, "\n\n")
       .trim(),
@@ -69,15 +63,54 @@ function fetchWithTimeout(url: string, timeoutMs = REQUEST_TIMEOUT): Promise<Res
   }).finally(() => clearTimeout(timer));
 }
 
+function hostname(url: string): string {
+  try {
+    return new URL(url).hostname.toLowerCase();
+  } catch {
+    return "";
+  }
+}
+
+function extractRelevantSections(markdown: string, prompt: string): string {
+  const words = [...new Set(
+    prompt
+      .toLowerCase()
+      .split(/[^a-z0-9]+/i)
+      .map((word) => word.trim())
+      .filter((word) => word.length >= 4),
+  )];
+
+  if (words.length === 0) return clamp(markdown, FETCH_CHAR_LIMIT);
+
+  const sections = markdown.split(/\n\s*\n/);
+  const scored = sections
+    .map((section) => {
+      const lower = section.toLowerCase();
+      const score = words.reduce((total, word) => total + (lower.includes(word) ? 1 : 0), 0);
+      return { section, score };
+    })
+    .filter((entry) => entry.score > 0)
+    .sort((left, right) => right.score - left.score);
+
+  if (scored.length === 0) return clamp(markdown, FETCH_CHAR_LIMIT);
+  return clamp(scored.slice(0, 8).map((entry) => entry.section).join("\n\n"), FETCH_CHAR_LIMIT);
+}
+
 export async function executeWebSearchTool(
   _config: McpServerConfig,
   toolName: string,
   args: Record<string, unknown>,
 ): Promise<ToolCallResult | null> {
-  if (toolName === "web_search") {
+  if (toolName === "WebSearch") {
     const query = String(args.query ?? "").trim();
     if (!query) throw new Error("query is required");
-    const limit = typeof args.limit === "number" ? Math.max(1, Math.min(10, args.limit)) : 5;
+
+    const allowedDomains = Array.isArray(args.allowed_domains)
+      ? args.allowed_domains.map((value) => String(value).toLowerCase())
+      : [];
+    const blockedDomains = Array.isArray(args.blocked_domains)
+      ? args.blocked_domains.map((value) => String(value).toLowerCase())
+      : [];
 
     const url = `https://html.duckduckgo.com/html/?q=${encodeURIComponent(query)}`;
     const response = await fetchWithTimeout(url);
@@ -87,34 +120,58 @@ export async function executeWebSearchTool(
       ...html.matchAll(
         /<a[^>]*class="result__a"[^>]*href="([^"]+)"[^>]*>([\s\S]*?)<\/a>[\s\S]*?<a[^>]*class="result__snippet"[^>]*>([\s\S]*?)<\/a>/gi,
       ),
-    ].slice(0, limit);
+    ];
 
-    const results = matches.map((match, index) => {
-      const rawUrl = decodeHtmlEntities(match[1]);
-      const cleanUrl = rawUrl.startsWith("//duckduckgo.com/l/?uddg=")
-        ? decodeURIComponent(rawUrl.split("uddg=")[1]?.split("&")[0] ?? rawUrl)
-        : rawUrl;
-      return `${index + 1}. Title: ${stripHtml(match[2])}\nURL: ${cleanUrl}\nSnippet: ${stripHtml(match[3])}`;
-    });
+    const results = matches
+      .map((match) => {
+        const rawUrl = decodeHtmlEntities(match[1]);
+        const cleanUrl = rawUrl.startsWith("//duckduckgo.com/l/?uddg=")
+          ? decodeURIComponent(rawUrl.split("uddg=")[1]?.split("&")[0] ?? rawUrl)
+          : rawUrl;
+        return {
+          title: stripHtml(match[2]),
+          url: cleanUrl,
+          snippet: stripHtml(match[3]),
+          host: hostname(cleanUrl),
+        };
+      })
+      .filter((entry) => (allowedDomains.length === 0 ? true : allowedDomains.includes(entry.host)))
+      .filter((entry) => !blockedDomains.includes(entry.host))
+      .slice(0, 8);
 
-    return { content: results.length ? results.join("\n\n") : "No search results found.", isError: false };
+    if (results.length === 0) return { content: "No search results found.", isError: false };
+    return {
+      content: results
+        .map((entry, index) => `${index + 1}. [${entry.title}](${entry.url})\nSnippet: ${entry.snippet}`)
+        .join("\n\n"),
+      isError: false,
+    };
   }
 
-  if (toolName === "fetch_url") {
+  if (toolName === "WebFetch") {
     const url = String(args.url ?? "").trim();
+    const prompt = String(args.prompt ?? "").trim();
     if (!url) throw new Error("url is required");
-    const maxChars = typeof args.maxChars === "number" ? Math.max(500, Math.min(40000, args.maxChars)) : undefined;
+    if (!prompt) throw new Error("prompt is required");
 
     const response = await fetchWithTimeout(url);
     const html = await response.text();
-    const text = htmlToText(html);
+    const markdown = htmlToText(html);
     const title = extractTitle(html);
+    const extracted = extractRelevantSections(markdown, prompt);
 
-    const body = maxChars ? clamp(text, maxChars) : text;
-    const content = [`URL: ${url}`, title ? `Title: ${title}` : null, "", body]
-      .filter(Boolean)
-      .join("\n");
-    return { content, isError: false };
+    return {
+      content: [
+        `URL: ${url}`,
+        title ? `Title: ${title}` : null,
+        `Prompt: ${prompt}`,
+        "",
+        extracted,
+      ]
+        .filter(Boolean)
+        .join("\n"),
+      isError: false,
+    };
   }
 
   return null;

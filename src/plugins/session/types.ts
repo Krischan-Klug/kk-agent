@@ -33,10 +33,13 @@ export interface SessionState {
   reasoningEffort?: ReasoningEffort;
   temperature?: number;
   messages: SessionMessage[];
-  providerState?: ProviderTransportState;
   providerDebug?: ProviderTurnDebug;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface SessionRecord extends SessionState {
+  providerState?: ProviderTransportState;
 }
 
 export interface CreateSessionBody {

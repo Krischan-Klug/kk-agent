@@ -402,7 +402,7 @@ export function handleResponsesStreamingEvent(
   currentOutput: AssembledOutputItem[],
 ): {
   output: AssembledOutputItem[];
-  metadata?: { usage?: Record<string, unknown>; done?: boolean; error?: string; responseId?: string; conversationId?: string };
+  metadata?: { usage?: Record<string, unknown>; done?: boolean; error?: string; responseId?: string };
 } {
   const eventType = typeof data.type === "string" ? data.type : "";
 
@@ -561,21 +561,12 @@ export function handleResponsesStreamingEvent(
     const finalOutput = Array.isArray(response?.output)
       ? response.output.filter((entry): entry is AssembledOutputItem => isPlainObject(entry) && typeof entry.type === "string")
       : currentOutput;
-    const conversationId =
-      typeof response?.conversation_id === "string"
-        ? response.conversation_id
-        : typeof response?.conversation === "string"
-          ? response.conversation
-          : isPlainObject(response?.conversation) && typeof response.conversation.id === "string"
-            ? response.conversation.id
-            : undefined;
     return {
       output: finalOutput,
       metadata: {
         usage: isPlainObject(response?.usage) ? response!.usage as Record<string, unknown> : undefined,
         done: true,
         responseId: typeof response?.id === "string" ? response.id : undefined,
-        conversationId,
       },
     };
   }

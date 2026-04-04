@@ -31,8 +31,6 @@ const responsesProfile: EndpointTransportProfile = {
   supportsParallelToolCalls: true,
   supportsConcatenatedJsonSplit: true,
   continuationMode: "raw-output-replay",
-  supportsPreviousResponseId: false,
-  supportsConversations: false,
   supportsStrictTools: false,
 };
 
@@ -45,8 +43,6 @@ const chatCompletionsProfile: EndpointTransportProfile = {
   supportsParallelToolCalls: true,
   supportsConcatenatedJsonSplit: true,
   continuationMode: "none",
-  supportsPreviousResponseId: false,
-  supportsConversations: false,
   supportsStrictTools: true,
 };
 

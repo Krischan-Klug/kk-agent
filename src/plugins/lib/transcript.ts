@@ -116,7 +116,7 @@ export function attachmentRefBlock(input: {
 
 export function getMessageText(message: Pick<TranscriptMessage, "content">): string {
   return message.content
-    .filter((block): block is TranscriptTextBlock | TranscriptReasoningBlock => block.type === "text" || block.type === "reasoning")
+    .filter((block): block is TranscriptTextBlock => block.type === "text")
     .map((block) => block.text)
     .join("");
 }
@@ -138,7 +138,7 @@ export function getToolResults(message: Pick<TranscriptMessage, "content">): Tra
 
 export function hasVisibleAssistantContent(message: Pick<TranscriptMessage, "content">): boolean {
   return message.content.some((block) => {
-    if (block.type === "text" || block.type === "reasoning") return block.text.trim().length > 0;
+    if (block.type === "text") return block.text.trim().length > 0;
     return block.type === "tool_use";
   });
 }

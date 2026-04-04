@@ -102,9 +102,6 @@ export interface ResponsesTransportState {
   syncedMessageIds: string[];
   historyItems: ResponsesConversationItem[];
   callIdByToolUseId: Record<string, string>;
-  lastResponseId?: string;
-  conversationId?: string;
-  lastOutput?: AssembledOutputItem[];
 }
 
 export type ProviderTransportState = ChatCompletionsTransportState | ResponsesTransportState;
@@ -114,7 +111,6 @@ export interface ProviderTurnDebug {
   continuationMode?: ContinuationMode;
   requestBody?: Record<string, unknown>;
   responseId?: string;
-  conversationId?: string;
   outputCount?: number;
 }
 
@@ -124,7 +120,6 @@ export interface UnifiedResponse {
   stats?: TokenStats;
   notices?: ProviderNotice[];
   parseIssues?: ToolCallParseIssue[];
-  assembledOutput?: AssembledOutputItem[];
   transportState?: ProviderTransportState;
   debug?: ProviderTurnDebug;
 }

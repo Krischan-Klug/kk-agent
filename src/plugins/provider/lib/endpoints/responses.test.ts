@@ -17,8 +17,6 @@ function buildRequest(overrides: Partial<UnifiedRequest> = {}): UnifiedRequest {
       supportsParallelToolCalls: true,
       supportsConcatenatedJsonSplit: true,
       continuationMode: "raw-output-replay",
-      supportsPreviousResponseId: false,
-      supportsConversations: false,
       supportsStrictTools: false,
     },
     messages: [],
@@ -64,7 +62,6 @@ test("responses follow-up replays raw output items and appends function_call_out
         arguments: "{\"path\":\"C:\\\\repo\"}",
       },
     ],
-    responseId: "resp_1",
   });
 
   const prepared = prepareResponsesRequest(buildRequest({

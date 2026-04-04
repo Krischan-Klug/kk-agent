@@ -100,8 +100,6 @@ function mergeObservedReasoning(providerId: string, model: ModelInfo): ModelInfo
           supportsParallelToolCalls: true,
           supportsConcatenatedJsonSplit: true,
           continuationMode: "none",
-          supportsPreviousResponseId: false,
-          supportsConversations: false,
           supportsStrictTools: true,
         },
       },

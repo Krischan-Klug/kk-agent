@@ -1,7 +1,6 @@
 import {
   attachmentRefBlock,
   createTranscriptMessage,
-  getMessageReasoning,
   getMessageText,
   getToolResults,
   getToolUses,
@@ -139,7 +138,6 @@ export function buildUnifiedResponseFromTurn(turn: AssembledAssistantTurn): Unif
     stats: turn.usage,
     notices: turn.notices,
     parseIssues: turn.parseIssues,
-    assembledOutput: turn.output,
   };
 }
 

@@ -67,8 +67,6 @@ function createTransportProfiles(
         supportsParallelToolCalls: true,
         supportsConcatenatedJsonSplit: true,
         continuationMode: "none",
-        supportsPreviousResponseId: false,
-        supportsConversations: false,
         supportsStrictTools: true,
       },
       responses: {
@@ -80,8 +78,6 @@ function createTransportProfiles(
         supportsParallelToolCalls: true,
         supportsConcatenatedJsonSplit: true,
         continuationMode: "raw-output-replay",
-        supportsPreviousResponseId: false,
-        supportsConversations: false,
         supportsStrictTools: false,
       },
     };
@@ -97,8 +93,6 @@ function createTransportProfiles(
       supportsParallelToolCalls: true,
       supportsConcatenatedJsonSplit: true,
       continuationMode: "none",
-      supportsPreviousResponseId: false,
-      supportsConversations: false,
       supportsStrictTools: true,
     },
   };

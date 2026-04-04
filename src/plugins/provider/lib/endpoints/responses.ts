@@ -33,8 +33,6 @@ type ResponsesApiResponse = {
   id?: string;
   output?: Array<Record<string, unknown>>;
   usage?: ResponsesUsage;
-  conversation_id?: string;
-  conversation?: string | { id?: string };
 };
 
 function cloneConversationItem<T extends ResponsesConversationItem | AssembledOutputItem>(item: T): T {
@@ -66,9 +64,6 @@ function cloneResponsesState(
     syncedMessageIds: [...state.syncedMessageIds],
     historyItems: state.historyItems.map((item) => cloneConversationItem(item)),
     callIdByToolUseId: { ...state.callIdByToolUseId },
-    lastResponseId: state.lastResponseId,
-    conversationId: state.conversationId,
-    lastOutput: state.lastOutput?.map((item) => cloneConversationItem(item)),
   };
 }
 
@@ -80,21 +75,6 @@ function normalizeUsage(usage?: ResponsesUsage): TokenStats | undefined {
     reasoningTokens: usage.reasoning_tokens ?? usage.output_tokens_details?.reasoning_tokens ?? 0,
     source: "provider",
   };
-}
-
-function extractResponseConversationId(response?: Record<string, unknown>): string | undefined {
-  if (!response) return undefined;
-  if (typeof response.conversation_id === "string") return response.conversation_id;
-  if (typeof response.conversation === "string") return response.conversation;
-  if (
-    typeof response.conversation === "object"
-    && response.conversation !== null
-    && "id" in response.conversation
-    && typeof (response.conversation as { id?: unknown }).id === "string"
-  ) {
-    return (response.conversation as { id: string }).id;
-  }
-  return undefined;
 }
 
 function emitDeltaBlocks(parsed: Record<string, unknown>, messageId: string, onChunk: OnChunkFn): void {
@@ -122,9 +102,8 @@ type PreparedResponsesRequest = {
 function appendUnsyncedConversationItems(
   state: ResponsesTransportState,
   messages: TranscriptMessage[],
-): { transportState: ResponsesTransportState; appendedItems: ResponsesConversationItem[]; notices: ProviderNotice[] } {
+): { transportState: ResponsesTransportState; notices: ProviderNotice[] } {
   const syncedMessageIds = new Set(state.syncedMessageIds);
-  const appendedItems: ResponsesConversationItem[] = [];
   const notices: ProviderNotice[] = [];
 
   for (const message of messages) {
@@ -146,12 +125,11 @@ function appendUnsyncedConversationItems(
       : serializeToolMessageToResponsesInput(message, state.callIdByToolUseId);
 
     state.historyItems.push(...serialized.map((item) => cloneConversationItem(item)));
-    appendedItems.push(...serialized.map((item) => cloneConversationItem(item)));
     syncedMessageIds.add(message.id);
     state.syncedMessageIds.push(message.id);
   }
 
-  return { transportState: state, appendedItems, notices };
+  return { transportState: state, notices };
 }
 
 export function prepareResponsesRequest(request: UnifiedRequest): PreparedResponsesRequest {
@@ -160,7 +138,7 @@ export function prepareResponsesRequest(request: UnifiedRequest): PreparedRespon
     ? request.transportState
     : undefined;
   const transportState = cloneResponsesState(baseState, continuationMode);
-  const { appendedItems, notices } = appendUnsyncedConversationItems(transportState, request.messages);
+  const { notices } = appendUnsyncedConversationItems(transportState, request.messages);
   const body: Record<string, unknown> = {
     model: request.model,
     stream: request.stream === true,
@@ -177,36 +155,21 @@ export function prepareResponsesRequest(request: UnifiedRequest): PreparedRespon
     body.max_output_tokens = request.maxOutputTokens;
   }
 
-  const canUsePreviousResponseId = continuationMode === "previous-response-id"
-    && request.transportProfile?.supportsPreviousResponseId === true
-    && typeof transportState.lastResponseId === "string"
-    && appendedItems.length > 0;
+  body.input = transportState.historyItems;
 
-  if (canUsePreviousResponseId) {
-    body.previous_response_id = transportState.lastResponseId;
-    body.input = appendedItems;
-  } else {
-    body.input = transportState.historyItems;
-  }
-
-  return { body, transportState, notices, continuationMode: canUsePreviousResponseId ? "previous-response-id" : "raw-output-replay" };
+  return { body, transportState, notices, continuationMode };
 }
 
 export function commitResponsesTransportState(input: {
   transportState: ResponsesTransportState;
   assistantMessageId: string;
   output: AssembledOutputItem[];
-  responseId?: string;
-  conversationId?: string;
 }): ResponsesTransportState {
   const next = cloneResponsesState(input.transportState, input.transportState.continuationMode);
   next.historyItems.push(...input.output.map((item) => cloneConversationItem(item)));
   if (!next.syncedMessageIds.includes(input.assistantMessageId)) {
     next.syncedMessageIds.push(input.assistantMessageId);
   }
-  next.lastOutput = input.output.map((item) => cloneConversationItem(item));
-  if (input.responseId) next.lastResponseId = input.responseId;
-  if (input.conversationId) next.conversationId = input.conversationId;
 
   for (const item of input.output) {
     if (item.type !== "function_call") continue;
@@ -254,15 +217,12 @@ export async function chat(
     transportState: prepared.transportState,
     assistantMessageId: response.message.id,
     output,
-    responseId: typeof data.id === "string" ? data.id : undefined,
-    conversationId: extractResponseConversationId(data as unknown as Record<string, unknown>),
   });
   response.debug = {
     endpoint: "responses",
     continuationMode: prepared.continuationMode,
     requestBody: prepared.body,
     responseId: typeof data.id === "string" ? data.id : undefined,
-    conversationId: extractResponseConversationId(data as unknown as Record<string, unknown>),
     outputCount: output.length,
   };
   if (prepared.notices.length > 0) {
@@ -294,7 +254,6 @@ export async function chatStream(
   let output: Array<Record<string, unknown> & { type: string }> = [];
   let usage: ResponsesUsage | undefined;
   let responseId: string | undefined;
-  let conversationId: string | undefined;
 
   await readSSEStream(res, (parsed) => {
     if (parsed.error && typeof parsed.error === "object") {
@@ -335,9 +294,6 @@ export async function chatStream(
     if (typeof next.metadata?.responseId === "string") {
       responseId = next.metadata.responseId;
     }
-    if (typeof next.metadata?.conversationId === "string") {
-      conversationId = next.metadata.conversationId;
-    }
 
     return false;
   }, { throwOnProviderError: false });
@@ -355,15 +311,12 @@ export async function chatStream(
     transportState: prepared.transportState,
     assistantMessageId: response.message.id,
     output,
-    responseId,
-    conversationId,
   });
   response.debug = {
     endpoint: "responses",
     continuationMode: prepared.continuationMode,
     requestBody: prepared.body,
     responseId,
-    conversationId,
     outputCount: output.length,
   };
   if (prepared.notices.length > 0 || providerNotices.length > 0) {

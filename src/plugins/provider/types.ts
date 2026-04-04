@@ -5,7 +5,7 @@ export type ReasoningTransport = "none" | "chat-completions-effort" | "chat-comp
 export type ToolSchemaTransport = "chat-completions-tools" | "responses-tools";
 export type StreamGrammar = "openai-chat-completions" | "openai-responses";
 export type ToolCallAssemblyMode = "chat-completions-indexed" | "responses-output-state";
-export type ContinuationMode = "none" | "raw-output-replay" | "previous-response-id" | "conversations";
+export type ContinuationMode = "none" | "raw-output-replay";
 
 export interface NumericRange {
   min: number;
@@ -29,8 +29,6 @@ export interface EndpointTransportProfile {
   supportsParallelToolCalls: boolean;
   supportsConcatenatedJsonSplit: boolean;
   continuationMode: ContinuationMode;
-  supportsPreviousResponseId: boolean;
-  supportsConversations: boolean;
   supportsStrictTools: boolean;
 }
 

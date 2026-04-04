@@ -43,8 +43,6 @@ export function getEndpointTransportProfile(
     supportsParallelToolCalls: true,
     supportsConcatenatedJsonSplit: true,
     continuationMode: endpoint === "responses" ? "raw-output-replay" : "none",
-    supportsPreviousResponseId: false,
-    supportsConversations: false,
     supportsStrictTools: endpoint !== "responses",
   };
 }

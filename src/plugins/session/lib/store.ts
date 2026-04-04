@@ -1,7 +1,7 @@
 import { v4 as uuidv4 } from "uuid";
-import type { SessionState } from "../types.js";
+import type { SessionRecord, SessionState } from "../types.js";
 
-const sessions = new Map<string, SessionState>();
+const sessions = new Map<string, SessionRecord>();
 
 export function createSession(data: {
   agentId: string;
@@ -12,9 +12,9 @@ export function createSession(data: {
   activeMcpIds: string[];
   reasoningEffort?: SessionState["reasoningEffort"];
   temperature?: number;
-}): SessionState {
+}): SessionRecord {
   const now = new Date().toISOString();
-  const session: SessionState = {
+  const session: SessionRecord = {
     id: uuidv4(),
     name: "",
     providerId: data.providerId,
@@ -33,11 +33,11 @@ export function createSession(data: {
   return session;
 }
 
-export function getSession(id: string): SessionState | undefined {
+export function getSession(id: string): SessionRecord | undefined {
   return sessions.get(id);
 }
 
-export function updateSession(id: string, update: Partial<SessionState>): SessionState {
+export function updateSession(id: string, update: Partial<SessionRecord>): SessionRecord {
   const session = sessions.get(id);
   if (!session) throw new Error(`Session "${id}" not found`);
   Object.assign(session, update, { updatedAt: new Date().toISOString() });
@@ -48,6 +48,6 @@ export function deleteSession(id: string): boolean {
   return sessions.delete(id);
 }
 
-export function listSessions(): SessionState[] {
+export function listSessions(): SessionRecord[] {
   return [...sessions.values()];
 }

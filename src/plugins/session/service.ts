@@ -1,4 +1,4 @@
-import type { SessionState, CreateSessionBody, SSEEvent } from "./types.js";
+import type { SessionRecord, SessionState, CreateSessionBody, SSEEvent } from "./types.js";
 import type { UnifiedToolDefinition } from "../provider/lib/types.js";
 import * as store from "./lib/store.js";
 import { clearSessionAttachments, getSessionAttachmentsByIds, readAttachmentData } from "./lib/attachments.js";
@@ -36,11 +36,23 @@ import type { AgentDefinition, ChatMode } from "../agent/types.js";
 import { attachmentRefBlock, createTranscriptMessage, textBlock, type TranscriptBlock } from "../lib/transcript.js";
 import { normalizeCanonicalReasoningLevel } from "../provider/lib/capabilities.js";
 
-function normalizeSessionReasoning(session: SessionState): SessionState {
+function normalizeSessionReasoning<T extends { reasoningEffort?: string }>(session: T): T {
   return {
     ...session,
     reasoningEffort: normalizeCanonicalReasoningLevel(session.reasoningEffort),
   };
+}
+
+function toPublicSession(session: SessionRecord): SessionState {
+  const normalized = normalizeSessionReasoning(session);
+  const { providerState: _providerState, ...publicSession } = normalized;
+  return publicSession;
+}
+
+function getSessionRecordOrThrow(id: string): SessionRecord {
+  const session = store.getSession(id);
+  if (!session) throw new Error(`Session "${id}" not found`);
+  return normalizeSessionReasoning(session);
 }
 
 function intersectIds(sessionIds: string[], modeIds: string[]): string[] {
@@ -155,7 +167,7 @@ function formatAttachmentSize(bytes: number): string {
 export async function createSession(body: CreateSessionBody): Promise<SessionState> {
   const agent = getAgent(body.agentId);
   const defaults = await resolveSessionDefaults(agent, body, getActiveProviderId());
-  return normalizeSessionReasoning(store.createSession({
+  return toPublicSession(store.createSession({
     agentId: body.agentId,
     providerId: defaults.providerId,
     model: defaults.model,
@@ -168,13 +180,11 @@ export async function createSession(body: CreateSessionBody): Promise<SessionSta
 }
 
 export function getSession(id: string): SessionState {
-  const session = store.getSession(id);
-  if (!session) throw new Error(`Session "${id}" not found`);
-  return normalizeSessionReasoning(session);
+  return toPublicSession(getSessionRecordOrThrow(id));
 }
 
 export function listSessions(): SessionState[] {
-  return store.listSessions().map(normalizeSessionReasoning);
+  return store.listSessions().map(toPublicSession);
 }
 
 export function deleteSession(id: string): void {
@@ -186,14 +196,13 @@ export function deleteSession(id: string): void {
 }
 
 export function getCurrentSystemPrompt(sessionId: string): string {
-  const session = store.getSession(sessionId);
-  if (!session) throw new Error(`Session "${sessionId}" not found`);
+  const session = getSessionRecordOrThrow(sessionId);
   const agent = getAgent(session.agentId);
   return buildCurrentSystemPrompt(sessionId, session, agent);
 }
 
 async function prepareLoopRun(sessionId: string, message: string, attachmentIds?: string[]) {
-  const session = getSession(sessionId);
+  const session = getSessionRecordOrThrow(sessionId);
   const agent = getAgent(session.agentId);
 
   const userBlocks: TranscriptBlock[] = [textBlock(message)];
@@ -269,15 +278,15 @@ async function prepareLoopRun(sessionId: string, message: string, attachmentIds?
 
 function finalizeLoopSession(
   sessionId: string,
-  session: SessionState,
+  session: SessionRecord,
   previousMessages: SessionState["messages"],
   messages: LoopMessage[],
   finalResponse: string,
-  providerState?: SessionState["providerState"],
-  providerDebug?: SessionState["providerDebug"],
-): SessionState {
+  providerState?: SessionRecord["providerState"],
+  providerDebug?: SessionRecord["providerDebug"],
+): SessionRecord {
   const nextMessages = mergeMessageDisplayState(fromLoopMessages(messages), previousMessages);
-  const patch: Partial<SessionState> = {
+  const patch: Partial<SessionRecord> = {
     messages: nextMessages,
     providerState,
     providerDebug: providerDebug ? { ...providerDebug, requestBody: undefined } : undefined,
@@ -331,7 +340,7 @@ export async function chat(
   const result = await runWithSessionId(sessionId, () => runLoop(buildLoopRequest(prepared, sessionId)));
   return {
     response: result.finalResponse,
-    session: finalizeLoopSession(
+    session: toPublicSession(finalizeLoopSession(
       sessionId,
       prepared.session,
       prepared.messages,
@@ -339,7 +348,7 @@ export async function chat(
       result.finalResponse,
       result.providerState,
       result.providerDebug,
-    ),
+    )),
   };
 }
 
@@ -392,14 +401,14 @@ export async function chatStream(
       result.providerState,
       result.providerDebug,
     );
-    emit({ type: "done", session: updated });
+    emit({ type: "done", session: toPublicSession(updated) });
   } finally {
     unregisterSession(sessionId);
   }
 }
 
 export async function updateSession(id: string, body: Partial<CreateSessionBody>): Promise<SessionState> {
-  const session = getSession(id);
+  const session = getSessionRecordOrThrow(id);
   const nextAgentId = body.agentId ?? session.agentId;
   const agent = getAgent(nextAgentId);
   const switchingAgent = body.agentId !== undefined && body.agentId !== session.agentId;
@@ -426,7 +435,7 @@ export async function updateSession(id: string, body: Partial<CreateSessionBody>
     body.agentId ? getActiveProviderId() : session.providerId,
   );
 
-  const patch: Partial<SessionState> = {
+  const patch: Partial<SessionRecord> = {
     agentId: nextAgentId,
     providerId: defaults.providerId,
     model: defaults.model,
@@ -444,7 +453,7 @@ export async function updateSession(id: string, body: Partial<CreateSessionBody>
   if (switchingAgent) {
     clearLoopState(id);
   }
-  return updated;
+  return toPublicSession(updated);
 }
 
 export async function patchSession(id: string, body: Partial<CreateSessionBody>): Promise<SessionState> {

@@ -18,6 +18,9 @@ export interface AppDefaults {
     emptyResponseInstruction: string;
     invalidToolInstruction: string;
   };
+  misc: {
+    noTasksInstruction: string;
+  };
   reasoning: {
     defaultEffort: string;
   };
@@ -44,12 +47,15 @@ const CODE_DEFAULTS: AppDefaults = {
         "Nutze aktuellen Mode und Iteration als bindenden Arbeitskontext.",
         "Aktueller Mode: {{mode}}.",
         "Aktuelle Iteration: {{iteration}} von {{maxIterations}}.",
-        "Aktueller Task-Ueberblick:",
-        "{{TASK_SUMMARY}}",
         "Session-Memory gilt fuer den aktuellen Verlauf:",
         "{{SESSION_MEMORY}}",
         "User-Memory ist fuer langlebige Praeferenzen und wiederverwendbare Fakten:",
         "{{USER_MEMORY}}",
+      ].join("\n"),
+      tasks: [
+        "{{TASKS_INSTRUCTION}}",
+        "Aktuelle Taskliste:",
+        "{{CURRENT_TASKS}}",
       ].join("\n"),
       security: [
         "Frage vor destruktiven, irreversiblen oder extern sichtbaren Aktionen nach.",
@@ -111,9 +117,9 @@ const CODE_DEFAULTS: AppDefaults = {
         ].join(" "),
         task: [
           "Nutze create_tasks und update_tasks, um den Arbeitsplan konkret, klein und nachvollziehbar zu strukturieren.",
-          "Wenn du bestehende Tasks aktualisierst, nutze die sichtbaren Task-IDs exakt wie sie im Task-Kontext stehen.",
+          "Wenn du bestehende Tasks aktualisierst, nutze die sichtbaren Task-IDs exakt wie sie im Task-Kontext oder Tool-Ergebnis stehen.",
           "In diesem Mode markierst du keine Tasks als erledigt.",
-          "Nutze das Task-Tool fuer Planfortschritt, nicht fuer Abschlussmeldungen oder lange Notizen.",
+          "Nutze das Task-Tool nur fuer Task-Pflege, nicht fuer Abschlussmeldungen oder lange Notizen.",
         ].join(" "),
       },
       edit: {
@@ -138,11 +144,8 @@ const CODE_DEFAULTS: AppDefaults = {
           "Nutze solve_tasks als einzigen Weg, um Tasks abzuschliessen.",
           "Nutze bei update_tasks und solve_tasks die sichtbaren Task-IDs exakt wie sie im Task-Kontext oder Tool-Ergebnis stehen.",
           "Status wird intern gefuehrt; create_tasks und update_tasks setzen keinen Status.",
-          "Halte Tasks konkret, klein, arbeitsnah und auf die aktuelle Nutzeraufgabe bezogen.",
-          "Lies, recherchiere oder pruefe relevante Artefakte, bevor du Umsetzungs- oder Abschlussstatus behauptest.",
-          "Melde ueber solve_tasks nur Schritte als erledigt, die wirklich umgesetzt oder verifiziert wurden.",
-          "Wenn etwas nicht geprueft wurde oder offen bleibt, halte das in der Antwort klar fest statt es als erledigt zu implizieren.",
-          "Nutze das Task-Tool nicht fuer lange Notizen, Rohgedanken oder Abschlussberichte.",
+          "Halte Tasks konkret, klein und auf die aktuelle Nutzeraufgabe bezogen.",
+          "Nutze das Task-Tool nur fuer Task-Pflege und Abschluss, nicht fuer lange Notizen, Rohgedanken oder Abschlussberichte.",
         ].join(" "),
         memory: [
           "Nutze remember_facts nur fuer wirklich wiederverwendbare Fakten.",
@@ -155,6 +158,10 @@ const CODE_DEFAULTS: AppDefaults = {
       "Your last attempt was empty or contained no meaningful content. Return a substantive response or a real structured tool_call.",
     invalidToolInstruction:
       "Your last attempt emitted a tool call as plain text. Tools must be invoked only via structured tool_calls in the API.",
+  },
+  misc: {
+    noTasksInstruction:
+      "Es sind aktuell keine offenen Tasks vorhanden. Erstelle oder pflege Tasks nur dann, wenn sie die aktuelle Arbeit wirklich strukturieren.",
   },
   reasoning: {
     defaultEffort: "medium",

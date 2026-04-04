@@ -1,6 +1,7 @@
 import { getActiveInstructions as getCustomActiveInstructions } from "../../mcp/service.js";
 import { getActiveToolInstructions, getInternalToolState, getMemoryPromptContext, getTaskSummary } from "../../tools/service.js";
 import type { AgentPromptSections, ChatMode } from "../../agent/types.js";
+import { getDefaults } from "../../lib/defaults.js";
 
 interface SystemVariableDefinition {
   name: string;
@@ -19,6 +20,21 @@ interface ResolvedVariableContext extends PromptBuildContext {
   taskSummary: string;
   internalState: ReturnType<typeof getInternalToolState> | null;
   memoryContext: ReturnType<typeof getMemoryPromptContext> | null;
+}
+
+function buildTasksInstruction(context: ResolvedVariableContext): string {
+  const tasks = context.internalState?.tasks ?? [];
+  const openTasks = tasks.filter((task) => task.status !== "completed");
+
+  if (openTasks.length === 0) {
+    return getDefaults().misc.noTasksInstruction;
+  }
+
+  if (context.mode === "plan") {
+    return "Es gibt offene Tasks. Nutze sie in diesem Mode als verbindlichen Planungskontext, verfeinere oder aktualisiere sie bei Bedarf, markiere in diesem Mode aber nichts als erledigt.";
+  }
+
+  return "Es gibt offene Tasks. Diese Tasks sind in diesem Mode dein verbindlicher Arbeitsauftrag. Arbeite sie aktiv ab, statt sie nur zu beschreiben, und schliesse erledigte Schritte mit solve_tasks ab.";
 }
 
 const SYSTEM_VARIABLE_DEFINITIONS: SystemVariableDefinition[] = [
@@ -61,6 +77,10 @@ const SYSTEM_VARIABLE_DEFINITIONS: SystemVariableDefinition[] = [
   {
     name: "CURRENT_TASK_COUNT",
     resolve: (context) => String(context.internalState?.tasks.length ?? 0),
+  },
+  {
+    name: "TASKS_INSTRUCTION",
+    resolve: (context) => buildTasksInstruction(context),
   },
   {
     name: "USER_MEMORY",
@@ -220,6 +240,9 @@ export function buildPrompt(
     "<agent_runtime_prompt>",
     ...buildBaseSections(promptSections, resolvedVariables),
     buildModeSection(modeInstruction, context.mode, resolvedVariables),
+    "<tasks>",
+    resolveVariables(promptSections.tasks, resolvedVariables),
+    "</tasks>",
     "<security>",
     resolveVariables(promptSections.security, resolvedVariables),
     "</security>",

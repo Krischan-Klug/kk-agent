@@ -326,3 +326,15 @@ export const ExpandArrow = styled.span<{ $expanded: boolean }>`
   transition: transform 0.15s;
   transform: rotate(${(p) => (p.$expanded ? "90deg" : "0deg")});
 `;
+
+export const MessageFooter = styled.div`
+  display: flex;
+  justify-content: flex-end;
+  margin-top: var(--space-sm);
+`;
+
+export const MessageTimestamp = styled.span`
+  font-size: 11px;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+`;

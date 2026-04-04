@@ -1,14 +1,12 @@
 import type { SessionMessage } from "@/types/api";
-import { collectToolResults, collectToolUses } from "./messageBlocks";
-
-export interface AgentIteration {
-  assistant: SessionMessage;
-  toolResults: Map<string, { content: string; isError: boolean }>;
-}
+import type { AgentIterationView } from "./types";
+import { buildToolCards, collectToolResults, collectToolUses } from "./messageBlocks";
 
 export type MessageGroup =
   | { kind: "single"; message: SessionMessage; key: string }
-  | { kind: "agent-turn"; iterations: AgentIteration[]; key: string };
+  | { kind: "agent-turn"; iterations: AgentIterationView[]; key: string; streaming?: boolean };
+
+export type AgentTurnGroup = Extract<MessageGroup, { kind: "agent-turn" }>;
 
 export function groupMessages(messages: SessionMessage[]): MessageGroup[] {
   const groups: MessageGroup[] = [];
@@ -26,7 +24,7 @@ export function groupMessages(messages: SessionMessage[]): MessageGroup[] {
       continue;
     }
 
-    const iterations: AgentIteration[] = [];
+    const iterations: AgentIterationView[] = [];
     while (index < messages.length) {
       const current = messages[index];
       if (!current || (current.role !== "assistant" && current.role !== "tool")) break;
@@ -49,7 +47,10 @@ export function groupMessages(messages: SessionMessage[]): MessageGroup[] {
           index++;
         }
 
-        iterations.push({ assistant, toolResults });
+        iterations.push({
+          assistant,
+          toolCalls: buildToolCards(collectToolUses(assistant.content), toolResults),
+        });
         continue;
       }
 
@@ -69,4 +70,14 @@ export function groupMessages(messages: SessionMessage[]): MessageGroup[] {
   }
 
   return groups;
+}
+
+export function buildStreamingTurnGroup(iterations: AgentIterationView[]): AgentTurnGroup | null {
+  if (iterations.length === 0) return null;
+  return {
+    kind: "agent-turn",
+    iterations,
+    key: "streaming-turn",
+    streaming: true,
+  };
 }

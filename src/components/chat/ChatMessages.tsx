@@ -8,25 +8,24 @@ import type {
   SessionMessage,
   SessionState,
 } from "@/types/api";
-import type { ActiveToolCall, PendingPrompt } from "./types";
+import type { PendingPrompt, StreamingTurnState } from "./types";
 import AgentTurnBubble from "./AgentTurnBubble";
 import MessageAttachments from "./MessageAttachments";
 import PendingPromptCard from "./PendingPromptCard";
 import ToolCallCards from "./ToolCallCards";
 import { buildToolCards, collectAttachments, collectReasoning, collectText, collectToolUses } from "./messageBlocks";
-import { groupMessages } from "./messageGrouping";
+import { buildStreamingTurnGroup, groupMessages } from "./messageGrouping";
 import {
   CardContent,
   EmptyState,
-  IterationPill,
   LoadingWrap,
   MessageBubble,
+  MessageFooter,
+  MessageTimestamp,
   Messages,
-  PhasePill,
   ReasoningCard,
   ReasoningSummary,
   RoleLabel,
-  StreamingDot,
   SystemNotice,
 } from "./ChatMessages.styled";
 
@@ -35,8 +34,7 @@ type Props = {
   currentAgentName: string;
   mcps: McpListItem[];
   streaming: boolean;
-  streamMessage: SessionMessage | null;
-  streamToolCalls: ActiveToolCall[];
+  streamTurn: StreamingTurnState | null;
   streamSystemNotices: string[];
   loopState: AgentLoopState | null;
   pendingPrompt: PendingPrompt | null;
@@ -58,6 +56,7 @@ function renderSingleMessage(
   const reasoning = collectReasoning(message.content).trim();
   const attachments = collectAttachments(message.content);
   const toolCalls = message.role === "assistant" ? buildToolCards(collectToolUses(message.content)) : [];
+  const timestamp = formatChatTime(message.timestamp);
 
   return (
     <MessageBubble key={message.id} $role={message.role}>
@@ -87,8 +86,20 @@ function renderSingleMessage(
       {toolCalls.length > 0 && (
         <ToolCallCards mcps={mcps} toolCalls={toolCalls} />
       )}
+
+      {message.role !== "system" && (
+        <MessageFooter>
+          <MessageTimestamp>{timestamp}</MessageTimestamp>
+        </MessageFooter>
+      )}
     </MessageBubble>
   );
+}
+
+function formatChatTime(value: string): string {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  return date.toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" });
 }
 
 export default function ChatMessages({
@@ -96,8 +107,7 @@ export default function ChatMessages({
   currentAgentName,
   mcps,
   streaming,
-  streamMessage,
-  streamToolCalls,
+  streamTurn,
   streamSystemNotices,
   loopState,
   pendingPrompt,
@@ -108,6 +118,7 @@ export default function ChatMessages({
   onPromptResponse,
 }: Props) {
   const messageGroups = groupMessages(session.messages);
+  const streamingGroup = streamTurn ? buildStreamingTurnGroup(streamTurn.iterations) : null;
 
   return (
     <Messages ref={messagesRef} onScroll={onMessagesScroll}>
@@ -123,61 +134,21 @@ export default function ChatMessages({
           : renderSingleMessage(group.message, currentAgentName, mcps)
       ))}
 
+      {streamingGroup && (
+        <AgentTurnBubble
+          key={streamingGroup.key}
+          currentAgentName={currentAgentName}
+          mcps={mcps}
+          turn={streamingGroup}
+          loopState={loopState}
+        />
+      )}
+
       {streamSystemNotices.map((message, index) => (
         <SystemNotice key={`stream-notice-${index}`}>{message}</SystemNotice>
       ))}
 
-      {streaming && streamMessage && (
-        <MessageBubble $role="assistant">
-          <RoleLabel>
-            <Badge variant="info">{currentAgentName}</Badge>
-            <StreamingDot />
-            {loopState && <IterationPill>Iteration {loopState.iteration}/{loopState.maxIterations}</IterationPill>}
-            {loopState && <PhasePill>{loopState.mode}</PhasePill>}
-          </RoleLabel>
-
-          {collectReasoning(streamMessage.content).trim() && (
-            <ReasoningCard open>
-              <ReasoningSummary>Reasoning</ReasoningSummary>
-              <CardContent>{collectReasoning(streamMessage.content).trim()}</CardContent>
-            </ReasoningCard>
-          )}
-
-          {collectText(streamMessage.content).trim() && (
-            <MarkdownMessage content={collectText(streamMessage.content)} />
-          )}
-
-          {collectAttachments(streamMessage.content).length > 0 && (
-            <MessageAttachments attachments={collectAttachments(streamMessage.content)} />
-          )}
-
-          {(() => {
-            const streamedToolUses = collectToolUses(streamMessage.content);
-            const mergedToolCalls = streamedToolUses.length > 0
-              ? streamedToolUses.map((toolUse) => {
-                  const execution = streamToolCalls.find((toolCall) => toolCall.id === toolUse.id);
-                  return execution
-                    ? {
-                        ...execution,
-                        id: toolUse.id,
-                        name: toolUse.name,
-                        input: toolUse.input,
-                      }
-                    : {
-                        id: toolUse.id,
-                        name: toolUse.name,
-                        input: toolUse.input,
-                        status: "queued" as const,
-                      };
-                })
-              : streamToolCalls;
-
-            return mergedToolCalls.length > 0 ? <ToolCallCards mcps={mcps} toolCalls={mergedToolCalls} /> : null;
-          })()}
-        </MessageBubble>
-      )}
-
-      {streaming && !streamMessage && streamToolCalls.length === 0 && !pendingPrompt && (
+      {streaming && !streamingGroup && !pendingPrompt && (
         <LoadingWrap>
           <Spinner />
         </LoadingWrap>

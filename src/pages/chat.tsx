@@ -124,7 +124,7 @@ export default function ChatPage() {
 
   useEffect(
     scrollToBottom,
-    [sessionData.session?.messages, streaming.streamMessage, streaming.streamToolCalls, scrollToBottom],
+    [sessionData.session?.messages, streaming.streamTurn, scrollToBottom],
   );
 
   const modelInfo = sessionData.session ? sessionData.modelInfoMap.get(sessionData.session.model) : undefined;
@@ -193,8 +193,7 @@ export default function ChatPage() {
         currentAgentName={sessionData.currentAgentName}
         mcps={[...sessionData.toolMcps, ...sessionData.mcps]}
         streaming={streaming.streaming}
-        streamMessage={streaming.streamMessage}
-        streamToolCalls={streaming.streamToolCalls}
+        streamTurn={streaming.streamTurn}
         streamSystemNotices={streaming.streamSystemNotices}
         loopState={streaming.loopState}
         pendingPrompt={streaming.pendingPrompt}

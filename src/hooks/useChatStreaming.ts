@@ -9,10 +9,11 @@ import type {
   StreamEvent,
   TranscriptAttachmentRefBlock,
   TranscriptBlock,
+  TranscriptToolUseBlock,
   TranscriptToolResultBlock,
 } from "@/types/api";
 import type { PendingAttachment } from "@/hooks/useAttachments";
-import type { ActiveToolCall, PendingPrompt, TokenDisplayStats } from "@/components/chat/types";
+import type { ActiveToolCall, PendingPrompt, StreamingTurnState, TokenDisplayStats } from "@/components/chat/types";
 
 type Options = {
   session: SessionState | null;
@@ -45,6 +46,140 @@ function mergeStreamBlock(existing: TranscriptBlock[], block: TranscriptBlock): 
   }
 
   return [...existing, block];
+}
+
+function createDraftAssistantMessage(messageId: string, block?: TranscriptBlock): SessionMessage {
+  return {
+    id: messageId,
+    role: "assistant",
+    content: block ? [block] : [],
+    timestamp: new Date().toISOString(),
+  };
+}
+
+function collectToolUsesFromMessage(message: SessionMessage): TranscriptToolUseBlock[] {
+  return message.content.filter((entry): entry is TranscriptToolUseBlock => entry.type === "tool_use");
+}
+
+function syncIterationToolCalls(assistant: SessionMessage, existingToolCalls: ActiveToolCall[]): ActiveToolCall[] {
+  const toolUses = collectToolUsesFromMessage(assistant);
+  const existingById = new Map(existingToolCalls.map((toolCall) => [toolCall.id, toolCall]));
+
+  const synced = toolUses.map((toolUse) => {
+    const existing = existingById.get(toolUse.id);
+    return existing
+      ? {
+          ...existing,
+          id: toolUse.id,
+          name: toolUse.name,
+          input: toolUse.input,
+        }
+      : {
+          id: toolUse.id,
+          name: toolUse.name,
+          input: toolUse.input,
+          status: "queued" as const,
+        };
+  });
+
+  for (const toolCall of existingToolCalls) {
+    if (!toolUses.some((toolUse) => toolUse.id === toolCall.id)) {
+      synced.push(toolCall);
+    }
+  }
+
+  return synced;
+}
+
+function updateIterationAssistant(
+  previous: StreamingTurnState | null,
+  messageId: string,
+  updateAssistant: (assistant: SessionMessage | null) => SessionMessage,
+): StreamingTurnState {
+  const iterations = previous?.iterations ? [...previous.iterations] : [];
+  const index = iterations.findIndex((iteration) => iteration.assistant.id === messageId);
+
+  if (index >= 0) {
+    const current = iterations[index]!;
+    const assistant = updateAssistant(current.assistant);
+    iterations[index] = {
+      ...current,
+      assistant,
+      toolCalls: syncIterationToolCalls(assistant, current.toolCalls),
+    };
+    return { iterations };
+  }
+
+  const assistant = updateAssistant(null);
+  const lastIteration = iterations.at(-1);
+  if (
+    lastIteration &&
+    lastIteration.assistant.id.startsWith("stream-tool-") &&
+    (
+      collectToolUsesFromMessage(assistant).some((toolUse) => lastIteration.toolCalls.some((toolCall) => toolCall.id === toolUse.id)) ||
+      lastIteration.assistant.content.length === 0
+    )
+  ) {
+    iterations[iterations.length - 1] = {
+      ...lastIteration,
+      assistant,
+      toolCalls: syncIterationToolCalls(assistant, lastIteration.toolCalls),
+    };
+    return { iterations };
+  }
+
+  iterations.push({
+    assistant,
+    toolCalls: syncIterationToolCalls(assistant, []),
+  });
+  return { iterations };
+}
+
+function updateIterationToolCall(previous: StreamingTurnState | null, event: Extract<StreamEvent, { type: "tool_execution_update" }>): StreamingTurnState {
+  const iterations = previous?.iterations ? [...previous.iterations] : [];
+  let iterationIndex = iterations.findIndex((iteration) =>
+    iteration.toolCalls.some((toolCall) => toolCall.id === event.toolUseId) ||
+    collectToolUsesFromMessage(iteration.assistant).some((toolUse) => toolUse.id === event.toolUseId),
+  );
+
+  if (iterationIndex < 0) {
+    if (iterations.length === 0) {
+      iterations.push({
+        assistant: createDraftAssistantMessage(`stream-tool-${event.toolUseId}`),
+        toolCalls: [],
+      });
+      iterationIndex = 0;
+    } else {
+      iterationIndex = iterations.length - 1;
+    }
+  }
+
+  const iteration = iterations[iterationIndex]!;
+  const toolCallIndex = iteration.toolCalls.findIndex((toolCall) => toolCall.id === event.toolUseId);
+  const currentToolCall: ActiveToolCall = toolCallIndex >= 0
+    ? iteration.toolCalls[toolCallIndex]!
+    : { id: event.toolUseId, name: event.toolName, input: {}, status: event.status };
+
+  const updatedToolCall: ActiveToolCall = {
+    ...currentToolCall,
+    id: event.toolUseId,
+    name: event.toolName,
+    status: event.status,
+    ...(event.detail ? { detail: event.detail } : {}),
+    ...(event.summary ? { summary: event.summary } : {}),
+    ...(event.result ? { result: getToolResult(event.result) } : {}),
+  };
+
+  const toolCalls = [...iteration.toolCalls];
+  if (toolCallIndex >= 0) toolCalls[toolCallIndex] = updatedToolCall;
+  else toolCalls.push(updatedToolCall);
+
+  iterations[iterationIndex] = {
+    ...iteration,
+    toolCalls: syncIterationToolCalls(iteration.assistant, toolCalls),
+  };
+
+  return { iterations };
 }
 
 function buildOptimisticUserMessage(message: string, attachments: PendingAttachment[]): SessionMessage {
@@ -91,8 +226,7 @@ export function useChatStreaming({
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
   const [streaming, setStreaming] = useState(false);
-  const [streamMessage, setStreamMessage] = useState<SessionMessage | null>(null);
-  const [streamToolCalls, setStreamToolCalls] = useState<ActiveToolCall[]>([]);
+  const [streamTurn, setStreamTurn] = useState<StreamingTurnState | null>(null);
   const [streamSystemNotices, setStreamSystemNotices] = useState<string[]>([]);
   const [loopState, setLoopState] = useState<AgentLoopState | null>(null);
   const [tokenStats, setTokenStats] = useState<TokenDisplayStats | null>(null);
@@ -102,8 +236,7 @@ export function useChatStreaming({
 
   const resetStreamingState = useCallback(() => {
     setStreaming(false);
-    setStreamMessage(null);
-    setStreamToolCalls([]);
+    setStreamTurn(null);
     setStreamSystemNotices([]);
     setLoopState(null);
     setPendingPrompt(null);
@@ -125,8 +258,7 @@ export function useChatStreaming({
     setInput("");
     setSending(true);
     setStreaming(true);
-    setStreamMessage(null);
-    setStreamToolCalls([]);
+    setStreamTurn(null);
     setStreamSystemNotices([]);
     setLoopState(null);
     setTokenStats(null);
@@ -143,44 +275,19 @@ export function useChatStreaming({
       await sessionApi.chatStream(session.id, message, async (event: StreamEvent) => {
         switch (event.type) {
           case "assistant_block_delta":
-            setStreamMessage((previous) => {
-              if (!previous || previous.id !== event.messageId) {
-                return {
-                  id: event.messageId,
-                  role: "assistant",
-                  content: [event.block],
-                  timestamp: new Date().toISOString(),
-                };
-              }
+            setStreamTurn((previous) => updateIterationAssistant(previous, event.messageId, (assistant) => {
+              if (!assistant) return createDraftAssistantMessage(event.messageId, event.block);
               return {
-                ...previous,
-                content: mergeStreamBlock(previous.content, event.block),
+                ...assistant,
+                content: mergeStreamBlock(assistant.content, event.block),
               };
-            });
+            }));
             break;
           case "assistant_message_complete":
-            setStreamMessage(event.message);
+            setStreamTurn((previous) => updateIterationAssistant(previous, event.message.id, () => event.message));
             break;
           case "tool_execution_update":
-            setStreamToolCalls((previous) => {
-              const next = [...previous];
-              const index = next.findIndex((toolCall) => toolCall.id === event.toolUseId);
-              const current: ActiveToolCall = index >= 0
-                ? next[index]!
-                : { id: event.toolUseId, name: event.toolName, input: {}, status: event.status };
-              const updated: ActiveToolCall = {
-                ...current,
-                name: event.toolName,
-                status: event.status,
-                ...(event.detail ? { detail: event.detail } : {}),
-                ...(event.summary ? { summary: event.summary } : {}),
-                ...(event.result ? { result: getToolResult(event.result) } : {}),
-              };
-
-              if (index >= 0) next[index] = updated;
-              else next.push(updated);
-              return next;
-            });
+            setStreamTurn((previous) => updateIterationToolCall(previous, event));
             if (event.result && ["create_tasks", "update_tasks", "solve_tasks"].includes(event.toolName)) {
               await loadContextData(session.id);
             }
@@ -206,8 +313,8 @@ export function useChatStreaming({
             optimisticPreviewUrlsRef.current = [];
             clearAttachments();
             setSession(event.session);
-            await loadContextData(event.session.id);
             resetStreamingState();
+            await loadContextData(event.session.id);
             emitAppEvent(SESSION_CHANGED_EVENT);
             if (debugOpen) loadDebugData(event.session.id);
             break;
@@ -268,8 +375,7 @@ export function useChatStreaming({
     setInput,
     sending,
     streaming,
-    streamMessage,
-    streamToolCalls,
+    streamTurn,
     streamSystemNotices,
     loopState,
     tokenStats,

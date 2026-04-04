@@ -1,4 +1,4 @@
-import type { ToolExecutionStatus } from "@/types/api";
+import type { SessionMessage, ToolExecutionStatus } from "@/types/api";
 
 export interface ActiveToolCall {
   id: string;
@@ -8,6 +8,15 @@ export interface ActiveToolCall {
   result?: { content: string; isError: boolean };
   detail?: string;
   summary?: string;
+}
+
+export interface AgentIterationView {
+  assistant: SessionMessage;
+  toolCalls: ActiveToolCall[];
+}
+
+export interface StreamingTurnState {
+  iterations: AgentIterationView[];
 }
 
 export interface TokenDisplayStats {

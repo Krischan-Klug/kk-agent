@@ -19,9 +19,8 @@ export interface SessionState {
 
 export interface ProviderTurnDebug {
   endpoint: EndpointType;
-  continuationMode?: "none" | "raw-output-replay" | "previous-response-id" | "conversations";
+  continuationMode?: "none" | "raw-output-replay";
   responseId?: string;
-  conversationId?: string;
   outputCount?: number;
 }
 
@@ -205,9 +204,7 @@ export interface ModelInfo {
       toolCallAssemblyMode: "chat-completions-indexed" | "responses-output-state";
       supportsParallelToolCalls: boolean;
       supportsConcatenatedJsonSplit: boolean;
-      continuationMode: "none" | "raw-output-replay" | "previous-response-id" | "conversations";
-      supportsPreviousResponseId: boolean;
-      supportsConversations: boolean;
+      continuationMode: "none" | "raw-output-replay";
       supportsStrictTools: boolean;
     }>>;
   };

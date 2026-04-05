@@ -188,6 +188,14 @@ function buildBaseSections(sections: AgentPromptSections, variables: Record<stri
   ];
 }
 
+function buildRuntimeSection(runtime: string, variables: Record<string, string>): string {
+  return [
+    "<runtime>",
+    resolveVariables(runtime, variables),
+    "</runtime>",
+  ].join("\n");
+}
+
 function buildToolUsageSection(toolUsage: string, variables: Record<string, string>): string {
   return [
     "<tool_usage>",
@@ -240,6 +248,7 @@ export function buildPrompt(
   const parts = [
     "<agent_runtime_prompt>",
     ...buildBaseSections(promptSections, resolvedVariables),
+    buildRuntimeSection(promptSections.runtime, resolvedVariables),
     buildModeSection(modeInstruction, context.mode, resolvedVariables),
     "<tasks>",
     resolveVariables(promptSections.tasks, resolvedVariables),

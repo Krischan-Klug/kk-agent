@@ -38,12 +38,12 @@ function buildModelMessages(
   systemPrompt: string,
   messages: TranscriptMessage[],
   retryInstruction?: string,
-  extraSystemMessages: string[] = [],
+  metaMessages: TranscriptMessage[] = [],
 ): TranscriptMessage[] {
   return [
     createTranscriptMessage({ role: "system", content: [textBlock(systemPrompt)] }),
     ...(retryInstruction ? [createTranscriptMessage({ role: "system", content: [textBlock(retryInstruction)] })] : []),
-    ...extraSystemMessages.map((message) => createTranscriptMessage({ role: "system", content: [textBlock(message)] })),
+    ...metaMessages,
     ...repairTranscript(messages),
   ];
 }
@@ -54,7 +54,7 @@ async function runModelPass(
   providerState: LoopOptions["providerState"],
   onToolUseBlock?: (toolUse: import("../../lib/transcript.js").TranscriptToolUseBlock) => void,
   retryInstruction?: string,
-  extraSystemMessages: string[] = [],
+  metaMessages: TranscriptMessage[] = [],
 ) {
   const modeConfig = opts.modeConfigs[opts.activeMode];
   if (!modeConfig) {
@@ -90,7 +90,7 @@ async function runModelPass(
     {
       providerId: opts.providerId,
       model: opts.model,
-      messages: buildModelMessages(systemPrompt, messages, retryInstruction, extraSystemMessages),
+      messages: buildModelMessages(systemPrompt, messages, retryInstruction, metaMessages),
       tools: modeConfig.allTools.length > 0 ? modeConfig.allTools : undefined,
       reasoningEffort: opts.reasoningEffort,
       temperature: opts.temperature,
@@ -175,7 +175,14 @@ export async function runAgentLoop(opts: LoopOptions): Promise<LoopResult> {
     );
 
     const streamedToolUseIds = new Set<string>();
-    const extraSystemMessages = iteration === 1 && opts.extraSystemMessages ? [...opts.extraSystemMessages] : [];
+    const metaMessages = opts.buildEphemeralMetaMessages?.({
+      sessionId: opts.sessionId,
+      agentId: opts.agentId,
+      mode: opts.activeMode,
+      model: opts.model,
+      iteration,
+      maxIterations: opts.maxIterations,
+    }) ?? [];
     let response;
     try {
       response = await runModelPass(
@@ -188,7 +195,7 @@ export async function runAgentLoop(opts: LoopOptions): Promise<LoopResult> {
           executor.addTool(toolUse);
         },
         retryInstruction,
-        extraSystemMessages,
+        metaMessages,
       );
     } catch (error) {
       executor.discardPending("Tool execution was discarded because the provider stream failed.");

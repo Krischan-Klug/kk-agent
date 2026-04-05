@@ -30,8 +30,8 @@ function buildAgent(
 export function getDefaultAgent(): AgentDefinition {
   return buildAgent(
     "general-assistant",
-    "Swagos",
-    "Allgemeiner Unternehmens-Agent mit manuell schaltbaren Chat-Modes.",
+    "Claude Default",
+    "Claude-style default agent for coding, investigation, and technical task work.",
     "edit",
     "qwen3.5-27b-claude-4.6-opus-reasoning-distilled-v2",
   );
@@ -42,16 +42,16 @@ export function getBundledAgents(): AgentDefinition[] {
     getDefaultAgent(),
     buildAgent(
       "krikinator",
-      "Kirk",
-      "Direkter Agent fuer schnelle manuelle Ausfuehrung.",
+      "Direct Agent",
+      "Lean general-purpose agent for fast direct execution.",
       "edit",
       "qwen3.5-35b-a3b-uncensored-hauhaucs-aggressive",
       10,
     ),
     buildAgent(
       "coding-agent",
-      "Musti - Coding Agent",
-      "Coding-Agent mit manuell schaltbaren Chat-Modes fuer Planen und Editieren.",
+      "Claude Coding Agent",
+      "Claude-style coding agent with explicit plan and edit modes.",
       "edit",
       "qwen3.5-27b-claude-4.6-opus-reasoning-distilled-v2",
       50,

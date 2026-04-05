@@ -3,7 +3,7 @@ import type { McpToolDefinition } from "../../../mcp/types.js";
 export const taskTools: McpToolDefinition[] = [
   {
     name: "create_tasks",
-    description: "Create or replace the current session task list using only task title and description.",
+    description: "Create or replace the current session task list with small, concrete tasks.",
     inputSchema: {
       type: "object",
       properties: {
@@ -25,7 +25,7 @@ export const taskTools: McpToolDefinition[] = [
   },
   {
     name: "update_tasks",
-    description: "Update title and description of existing tasks without changing completion state.",
+    description: "Update title or notes of existing tasks without changing completion state.",
     inputSchema: {
       type: "object",
       properties: {
@@ -48,7 +48,7 @@ export const taskTools: McpToolDefinition[] = [
   },
   {
     name: "solve_tasks",
-    description: "Mark one or more existing tasks as completed.",
+    description: "Mark one or more existing tasks as completed. This is the only tool that closes tasks.",
     inputSchema: {
       type: "object",
       properties: {

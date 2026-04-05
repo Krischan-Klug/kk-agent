@@ -7,7 +7,7 @@ import {
   chat,
   chatStream,
   patchSession,
-  getCurrentSystemPrompt,
+  getCurrentPromptDebug,
 } from "./service.js";
 import type { CreateSessionBody, ChatBody, PatchSessionBody } from "./types.js";
 import { resolvePrompt } from "../tools/lib/user-interaction/interaction-store.js";
@@ -141,7 +141,7 @@ export async function doRespondToPrompt(req: Request, res: Response): Promise<Re
 
 export async function doGetPrompt(req: Request, res: Response): Promise<Response> {
   try {
-    return res.json({ systemPrompt: getCurrentSystemPrompt(req.params.id) });
+    return res.json(getCurrentPromptDebug(req.params.id));
   } catch (err) {
     return res.status(404).json({ error: (err as Error).message });
   }

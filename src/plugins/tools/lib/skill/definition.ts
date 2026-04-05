@@ -3,10 +3,11 @@ import type { McpServerConfig } from "../../../mcp/types.js";
 export const skillDefinition: McpServerConfig = {
   id: "skill",
   name: "Skill",
+  emoji: "📚",
   active: true,
   instruction: [
     "Use Skill to load a skill from <skills_catalog> when the user's request clearly matches that skill's description or workflow.",
-    "Call Skill before you rely on a listed skill's workflow.",
+    "When a listed skill clearly matches the task, call Skill before you rely on that workflow.",
     "Use the exact skill id from <skills_catalog>.",
     "Do not mention or assume a skill without loading it.",
     "Do not call Skill for skills that are not listed.",

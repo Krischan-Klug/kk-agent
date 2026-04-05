@@ -3,7 +3,7 @@ import type { McpToolDefinition } from "../../../mcp/types.js";
 export const terminalTools: McpToolDefinition[] = [
   {
     name: "Bash",
-    description: "Run a shell command on the host. Prefer dedicated tools for reading, globbing, and grep when available.",
+    description: "Run a shell command on the host for tests, builds, git, package managers, and other real terminal work. Prefer dedicated file tools when available.",
     inputSchema: {
       type: "object",
       properties: {

@@ -3,7 +3,7 @@ import type { McpToolDefinition } from "../../../mcp/types.js";
 export const memoryTools: McpToolDefinition[] = [
   {
     name: "remember_facts",
-    description: "Store short session facts or durable user preferences for later prompts.",
+    description: "Store short session facts or durable user preferences that are likely to matter again later.",
     inputSchema: {
       type: "object",
       properties: {

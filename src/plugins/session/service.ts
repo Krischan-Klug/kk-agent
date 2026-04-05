@@ -1,3 +1,4 @@
+import { basename } from "node:path";
 import type { SessionRecord, SessionState, CreateSessionBody, SSEEvent } from "./types.js";
 import * as store from "./lib/store.js";
 import { clearSessionAttachments, getSessionAttachmentsByIds, readAttachmentData } from "./lib/attachments.js";
@@ -6,6 +7,7 @@ import { getActiveProviderId, getModelCapabilities } from "../provider/service.j
 import {
   buildResolvedSystemToolRuntime,
 } from "../tools/service.js";
+import { getMemoryPromptContext, getTaskSummary } from "../tools/service.js";
 import { buildActiveSkillCatalogSection, getSkillsRootDir } from "../skills/service.js";
 import { runLoop } from "../loop/service.js";
 import type { LoopMessage, ModeRuntimeConfig } from "../loop/types.js";
@@ -35,7 +37,7 @@ import { getChatModes } from "../agent/lib/modes.js";
 import { getModeConfig } from "../agent/lib/mode-config.js";
 import type { AgentDefinition, ChatMode } from "../agent/types.js";
 import type { RuntimeToolDefinition, ToolRuntimeContext } from "../loop/types.js";
-import { attachmentRefBlock, createTranscriptMessage, textBlock, type TranscriptBlock } from "../lib/transcript.js";
+import { attachmentRefBlock, createTranscriptMessage, getMessageText, textBlock, type TranscriptAttachmentRefBlock, type TranscriptBlock, type TranscriptMessage } from "../lib/transcript.js";
 import { normalizeCanonicalReasoningLevel } from "../provider/lib/capabilities.js";
 import { getLoadedSkillIds } from "../skills/lib/xml.js";
 
@@ -144,6 +146,154 @@ function buildCurrentSystemPrompt(
   );
 }
 
+function escapeXml(value: string): string {
+  return value
+    .replaceAll("&", "&amp;")
+    .replaceAll("\"", "&quot;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;");
+}
+
+function toCData(text: string): string {
+  return `<![CDATA[${text.replaceAll("]]>", "]]]]><![CDATA[>")}]]>`;
+}
+
+function buildSystemReminder(type: string, body: string): string {
+  return [
+    `<system-reminder type="${escapeXml(type)}">`,
+    `  ${toCData(body.trim())}`,
+    "</system-reminder>",
+  ].join("\n");
+}
+
+function createMetaReminder(type: string, body: string): TranscriptMessage {
+  return createTranscriptMessage({
+    role: "user",
+    isMeta: true,
+    content: [textBlock(buildSystemReminder(type, body))],
+  });
+}
+
+function getRuntimeShellHint(): string {
+  const shellCandidate = process.env.SHELL?.trim()
+    || process.env.ComSpec?.trim()
+    || process.env.COMSPEC?.trim()
+    || process.env.TERM_PROGRAM?.trim();
+
+  if (!shellCandidate) return "unknown";
+  return basename(shellCandidate);
+}
+
+function buildRuntimeMetaMessages(input: {
+  sessionId: string;
+  mode: ChatMode;
+  model: string;
+  iteration: number;
+  maxIterations: number;
+  runtimeVariables?: Record<string, string>;
+}): TranscriptMessage[] {
+  const variables = getSystemVariables({
+    CURRENT_MODEL: input.model,
+    mode: input.mode,
+    iteration: String(input.iteration),
+    maxIterations: String(input.maxIterations),
+    ...(input.runtimeVariables ?? {}),
+  });
+  const memory = getMemoryPromptContext(input.sessionId);
+  const body = [
+    "Treat this reminder as authoritative for the current turn.",
+    "",
+    `Current date: ${variables.CURRENT_DATE ?? ""}`,
+    `Current time: ${variables.CURRENT_TIME ?? ""}`,
+    `Current timestamp: ${variables.CURRENT_TIMESTAMP ?? ""}`,
+    "",
+    "Environment:",
+    `platform=${process.platform}`,
+    `shell=${getRuntimeShellHint()}`,
+    "",
+    `Current model: ${variables.CURRENT_MODEL ?? input.model}`,
+    `Current mode: ${input.mode}`,
+    `Current iteration: ${input.iteration} of ${input.maxIterations}`,
+    "",
+    "Current tasks:",
+    getTaskSummary(input.sessionId),
+    "",
+    "Session memory:",
+    memory.sessionMemory,
+    "",
+    "User memory:",
+    memory.userMemory,
+    "",
+    "Filesystem access:",
+    `scope=${input.runtimeVariables?.FILESYSTEM_ACCESS_SCOPE ?? "nicht aktiv"}`,
+    `basePath=${input.runtimeVariables?.FILESYSTEM_BASE_PATH ?? "nicht verfuegbar"}`,
+    `allowedRoot=${input.runtimeVariables?.FILESYSTEM_ALLOWED_ROOT ?? "nicht verfuegbar"}`,
+    "",
+    "Terminal access:",
+    `scope=${input.runtimeVariables?.TERMINAL_ACCESS_SCOPE ?? "nicht aktiv"}`,
+    `workingDirectory=${input.runtimeVariables?.TERMINAL_WORKING_DIRECTORY ?? "nicht verfuegbar"}`,
+    `allowedRoot=${input.runtimeVariables?.TERMINAL_ALLOWED_ROOT ?? "nicht verfuegbar"}`,
+    `elevation=${input.runtimeVariables?.TERMINAL_ELEVATION ?? "nicht aktiv"}`,
+  ].join("\n");
+
+  return [createMetaReminder("runtime_snapshot", body)];
+}
+
+function buildAttachmentMetaMessages(input: {
+  attachments: Array<{
+    id?: string;
+    filename: string;
+    mimeType: string;
+    category: "image" | "text" | "pdf";
+    size: number;
+  }>;
+  visionSupported: boolean;
+}): TranscriptMessage[] {
+  if (input.attachments.length === 0) return [];
+
+  const defaults = getDefaults();
+  const attachmentLines = input.attachments.map((att) =>
+    `- ${att.filename} [id=${att.id ?? "none"}, type=${att.category}, mime=${att.mimeType}, size=${formatAttachmentSize(att.size)}]`,
+  );
+
+  const messages = [
+    createMetaReminder(
+      "attachment_context",
+      [
+        "The current user turn includes session attachments.",
+        "Treat them as chat attachments, not as normal project files.",
+        "Use the attachment tools to inspect them, and prefer attachmentId when available.",
+        "",
+        ...attachmentLines,
+      ].join("\n"),
+    ),
+  ];
+
+  if (!input.visionSupported && input.attachments.some((att) => att.category === "image")) {
+    messages.push(createMetaReminder("vision_warning", defaults.attachment.visionNotSupportedInstruction));
+  }
+
+  return messages;
+}
+
+function getLatestAttachmentRefs(messages: TranscriptMessage[]): TranscriptAttachmentRefBlock[] {
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    const message = messages[index];
+    if (!message || message.role !== "user" || message.isMeta) continue;
+    const attachments = message.content.filter(
+      (block): block is TranscriptAttachmentRefBlock => block.type === "attachment_ref",
+    );
+    if (attachments.length > 0) return attachments;
+  }
+  return [];
+}
+
+function extractMetaMessageTexts(messages: TranscriptMessage[]): string[] {
+  return messages
+    .map((message) => getMessageText(message).trim())
+    .filter((text) => text.length > 0);
+}
+
 function formatAttachmentSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
@@ -189,25 +339,55 @@ export function getCurrentSystemPrompt(sessionId: string): string {
   return buildCurrentSystemPrompt(sessionId, session, agent);
 }
 
+export function getCurrentPromptDebug(sessionId: string): { systemPrompt: string; metaMessages: string[] } {
+  const session = getSessionRecordOrThrow(sessionId);
+  const agent = getAgent(session.agentId);
+  const modeRuntimeConfig = buildModeRuntimeConfig(session, agent, session.activeMode);
+  const loopState = getLoopState(sessionId);
+  const systemPrompt = buildCurrentSystemPrompt(sessionId, session, agent);
+  const runtimeMetaMessages = buildRuntimeMetaMessages({
+    sessionId,
+    mode: session.activeMode,
+    model: session.model,
+    iteration: loopState?.iteration ?? 1,
+    maxIterations: agent.maxIterations,
+    runtimeVariables: modeRuntimeConfig.runtimeVariables,
+  });
+
+  const latestAttachmentRefs = loopState?.status === "running" ? getLatestAttachmentRefs(session.messages) : [];
+  const capabilities = getModelCapabilities(session.providerId, session.model);
+  const attachmentMetaMessages = buildAttachmentMetaMessages({
+    attachments: latestAttachmentRefs.map((attachment) => ({
+      id: attachment.attachmentId,
+      filename: attachment.filename,
+      mimeType: attachment.mimeType,
+      category: attachment.category,
+      size: attachment.size,
+    })),
+    visionSupported: capabilities?.supportsVision ?? false,
+  });
+
+  return {
+    systemPrompt,
+    metaMessages: extractMetaMessageTexts([...runtimeMetaMessages, ...attachmentMetaMessages]),
+  };
+}
+
 async function prepareLoopRun(sessionId: string, message: string, attachmentIds?: string[]) {
   const session = getSessionRecordOrThrow(sessionId);
   const agent = getAgent(session.agentId);
 
   const userBlocks: TranscriptBlock[] = [textBlock(message)];
-  const extraSystemMessages: string[] = [];
+  const attachmentMetaMessages: TranscriptMessage[] = [];
+  const capabilities = getModelCapabilities(session.providerId, session.model);
+  const visionSupported = capabilities?.supportsVision ?? false;
 
   if (attachmentIds?.length) {
     const attachments = await getSessionAttachmentsByIds(sessionId, attachmentIds);
     if (attachments.length > 0) {
-      const attachmentHints: string[] = [];
-
       for (const att of attachments) {
-        attachmentHints.push(
-          `- ${att.filename} [id=${att.id}, type=${att.category}, size=${formatAttachmentSize(att.size)}]`,
-        );
-
         let previewDataUrl: string | undefined;
-        if (att.category === "image") {
+        if (att.category === "image" && visionSupported) {
           const base64 = (await readAttachmentData(att)).toString("base64");
           previewDataUrl = `data:${att.mimeType};base64,${base64}`;
         }
@@ -222,23 +402,16 @@ async function prepareLoopRun(sessionId: string, message: string, attachmentIds?
         }));
       }
 
-      userBlocks[0] = textBlock(
-        [
-          message,
-          "",
-          "[Chat attachments]",
-          "Nutze fuer hochgeladene Dateien das Attachment-Tool statt die Hauptdateiablage.",
-          ...attachmentHints,
-        ].join("\n"),
-      );
-
-      if (userBlocks.some((block) => block.type === "attachment_ref" && block.category === "image")) {
-        const capabilities = getModelCapabilities(session.providerId, session.model);
-        if (capabilities && !capabilities.supportsVision) {
-          const defaults = getDefaults();
-          extraSystemMessages.push(defaults.attachment.visionNotSupportedInstruction);
-        }
-      }
+      attachmentMetaMessages.push(...buildAttachmentMetaMessages({
+        attachments: attachments.map((att) => ({
+          id: att.id,
+          filename: att.filename,
+          mimeType: att.mimeType,
+          category: att.category,
+          size: att.size,
+        })),
+        visionSupported,
+      }));
     }
   }
 
@@ -258,7 +431,7 @@ async function prepareLoopRun(sessionId: string, message: string, attachmentIds?
     session,
     agent,
     messages,
-    extraSystemMessages,
+    attachmentMetaMessages,
     modeRuntimeConfigs,
     reasoning: resolveReasoningConfig(session),
   };
@@ -300,8 +473,32 @@ function buildLoopRequest(
     sessionId,
     providerId: prepared.session.providerId,
     messages: loopMessages,
-    extraSystemMessages: prepared.extraSystemMessages,
     model: prepared.session.model,
+    buildEphemeralMetaMessages: ({
+      iteration,
+      maxIterations,
+      mode,
+      model,
+    }: {
+      sessionId: string;
+      agentId: string;
+      mode: ChatMode;
+      model: string;
+      iteration: number;
+      maxIterations: number;
+    }) => {
+      const runtimeMessages = buildRuntimeMetaMessages({
+        sessionId,
+        mode,
+        model,
+        iteration,
+        maxIterations,
+        runtimeVariables: activeModeConfig.runtimeVariables,
+      });
+      return iteration === 1
+        ? [...runtimeMessages, ...prepared.attachmentMetaMessages]
+        : runtimeMessages;
+    },
     reasoningEffort: prepared.reasoning.reasoningEffort,
     temperature: prepared.reasoning.temperature,
     maxOutputTokens: prepared.reasoning.maxOutputTokens,

@@ -33,6 +33,7 @@ export const EDIT_TOOL_NAMES = [
   "Bash",
   "WebSearch",
   "WebFetch",
+  "Skill",
   "list_attachments",
   "read_attachment",
   "ask_user",

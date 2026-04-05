@@ -12,7 +12,7 @@ export const attachmentTools: McpToolDefinition[] = [
   },
   {
     name: "read_attachment",
-    description: "Read a text or PDF attachment from the current session by attachmentId or filename.",
+    description: "Read a text or PDF attachment from the current session by attachmentId or filename. Prefer attachmentId when available.",
     inputSchema: {
       type: "object",
       properties: {

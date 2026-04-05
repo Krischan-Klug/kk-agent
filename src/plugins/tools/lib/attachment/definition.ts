@@ -8,6 +8,7 @@ export const attachmentDefinition: McpServerConfig = {
     "Use this tool for files that were uploaded through the chat composer.",
     "Prefer list_attachments and read_attachment over searching the main filesystem for uploaded files.",
     "Use attachmentId when available because filenames may be ambiguous.",
+    "Do not assume chat uploads live in the normal project tree.",
   ].join(" "),
   emoji: "📎",
   source: "system",

@@ -9,10 +9,10 @@ export const filesystemDefinition: McpServerConfig = {
   active: true,
   instruction:
     "Use Read, Edit, Write, Glob, and Grep for local filesystem work. " +
-    "Prefer Read before Edit or Write on existing files. " +
+    "Read files before editing them. " +
     "Use Glob to find files by path pattern and Grep to search contents. " +
-    "Do not fall back to shell grep, find, or ad-hoc scripting when these dedicated tools can do the job. " +
-    "Prefer absolute paths when possible and always stay inside the allowed root.",
+    "Do not use Bash for file search, file reading, or file editing when these dedicated tools can do the job. " +
+    "Prefer absolute paths and always stay inside the allowed root.",
   emoji: "📁",
   source: "system",
   systemKey: "filesystem",

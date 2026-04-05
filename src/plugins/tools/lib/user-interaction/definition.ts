@@ -5,10 +5,9 @@ export const userInteractionDefinition: McpServerConfig = {
   name: "User Interaction",
   active: true,
   instruction:
-    "Use the ask_user tool for user-facing questions by default. " +
-    "Whenever you need input, clarification, confirmation, preference, or a decision from the user, ask through this tool instead of asking in plain text. " +
-    "Frame the question as a clear multiple-choice selection and provide meaningful options that let the conversation continue. " +
-    "Use this behavior broadly for essentially all questions to the user, only skipping it when no user input is needed at all.",
+    "Use ask_user when you genuinely need clarification, missing input, approval, confirmation, or a user decision to proceed safely. " +
+    "Do not use it as a substitute for reading files, checking tool output, or making reasonable progress on your own. " +
+    "When you use it, frame the question as a clear multiple-choice selection with meaningful options that let the work continue quickly.",
   emoji: "💬",
   source: "system",
   systemKey: "user-interaction",

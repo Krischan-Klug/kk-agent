@@ -7,7 +7,8 @@ export const webSearchDefinition: McpServerConfig = {
   instruction:
     "Use WebSearch for current information and discovery, and WebFetch to read and extract information from a specific page. " +
     "Prefer targeted queries, keep searches narrow, and include sources when you rely on web results. " +
-    "For a specific page, use WebFetch with a clear extraction prompt instead of pasting raw page text into your answer.",
+    "For a specific page, use WebFetch with a clear extraction prompt instead of pasting raw page text into your answer. " +
+    "Summarize only the relevant findings rather than dumping page content.",
   emoji: "🌐",
   source: "system",
   systemKey: "web-search",

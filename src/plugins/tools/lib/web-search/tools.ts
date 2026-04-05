@@ -25,7 +25,7 @@ export const webSearchTools: McpToolDefinition[] = [
   },
   {
     name: "WebFetch",
-    description: "Fetch content from a URL and extract the parts most relevant to the given prompt.",
+    description: "Fetch content from a URL and extract only the parts most relevant to the given prompt.",
     inputSchema: {
       type: "object",
       properties: {

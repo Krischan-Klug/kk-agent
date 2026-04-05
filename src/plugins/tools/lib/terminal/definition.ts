@@ -8,9 +8,9 @@ export const terminalDefinition: McpServerConfig = {
   name: "Terminal",
   active: true,
   instruction:
-    "Use Bash for shell commands, builds, tests, package manager tasks, git, and other command-line work. " +
-    "Prefer dedicated tools like Read, Glob, Grep, Edit, and Write when they fit the task better than shell commands. " +
-    "Use short, targeted commands. In plan mode, keep Bash read-only. Ask before destructive or system-changing commands.",
+    "Use Bash for shell commands, builds, tests, package manager work, git, and other real terminal operations. " +
+    "Prefer dedicated tools like Read, Edit, Write, Glob, and Grep when they fit the task better than a shell command. " +
+    "Use short, targeted commands. In plan mode, keep Bash read-only. Ask before destructive, irreversible, or externally visible commands.",
   emoji: "🖳",
   source: "system",
   systemKey: "terminal",

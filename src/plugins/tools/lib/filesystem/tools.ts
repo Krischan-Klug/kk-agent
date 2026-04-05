@@ -3,7 +3,7 @@ import type { McpToolDefinition } from "../../../mcp/types.js";
 export const filesystemTools: McpToolDefinition[] = [
   {
     name: "Read",
-    description: "Read a file from the local filesystem with line numbers. Prefer absolute paths.",
+    description: "Read a local file with line numbers. Prefer absolute paths and read files before editing them.",
     inputSchema: {
       type: "object",
       properties: {
@@ -17,7 +17,7 @@ export const filesystemTools: McpToolDefinition[] = [
   },
   {
     name: "Edit",
-    description: "Perform an exact string replacement in an existing file. Read the file first.",
+    description: "Perform an exact string replacement in an existing file. Read the file first and use this for targeted edits.",
     inputSchema: {
       type: "object",
       properties: {
@@ -32,7 +32,7 @@ export const filesystemTools: McpToolDefinition[] = [
   },
   {
     name: "Write",
-    description: "Write a file to the local filesystem. Use this for new files or complete rewrites.",
+    description: "Write a file to the local filesystem. Use this for new files or deliberate full rewrites.",
     inputSchema: {
       type: "object",
       properties: {
@@ -45,7 +45,7 @@ export const filesystemTools: McpToolDefinition[] = [
   },
   {
     name: "Glob",
-    description: "Fast file pattern matching for finding files by name, such as **/*.ts.",
+    description: "Fast file pattern matching for finding files by path pattern, such as **/*.ts.",
     inputSchema: {
       type: "object",
       properties: {
@@ -58,7 +58,7 @@ export const filesystemTools: McpToolDefinition[] = [
   },
   {
     name: "Grep",
-    description: "Search file contents using ripgrep-style patterns. Prefer this over shell grep or rg.",
+    description: "Search file contents using ripgrep-style patterns. Prefer this over shell grep or rg when available.",
     inputSchema: {
       type: "object",
       properties: {

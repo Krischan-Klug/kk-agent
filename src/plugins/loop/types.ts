@@ -88,7 +88,14 @@ export interface LoopOptions {
   providerId: string;
   model: string;
   messages: LoopMessage[];
-  extraSystemMessages?: string[];
+  buildEphemeralMetaMessages?: (input: {
+    sessionId: string;
+    agentId: string;
+    mode: ChatMode;
+    model: string;
+    iteration: number;
+    maxIterations: number;
+  }) => LoopMessage[];
   modeConfigs: Partial<Record<ChatMode, ModeRuntimeConfig>>;
   maxIterations: number;
   activeMode: ChatMode;

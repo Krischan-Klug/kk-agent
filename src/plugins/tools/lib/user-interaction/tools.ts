@@ -4,7 +4,7 @@ export const userInteractionTools: McpToolDefinition[] = [
   {
     name: "ask_user",
     description:
-      "Present a question with choices to the user and wait for their selection. " +
+      "Present a multiple-choice question to the user when you genuinely need missing input, approval, or a decision. " +
       "Returns the selected choice key as JSON.",
     inputSchema: {
       type: "object",

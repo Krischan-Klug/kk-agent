@@ -16,6 +16,11 @@ export function groupMessages(messages: SessionMessage[]): MessageGroup[] {
     const message = messages[index];
     if (!message) break;
 
+    if (message.isMeta) {
+      index++;
+      continue;
+    }
+
     if (message.role !== "assistant") {
       if (message.role !== "tool") {
         groups.push({ kind: "single", message, key: message.id });
@@ -28,6 +33,7 @@ export function groupMessages(messages: SessionMessage[]): MessageGroup[] {
     while (index < messages.length) {
       const current = messages[index];
       if (!current || (current.role !== "assistant" && current.role !== "tool")) break;
+      if (current.isMeta) break;
 
       if (current.role === "assistant") {
         const assistant = current;

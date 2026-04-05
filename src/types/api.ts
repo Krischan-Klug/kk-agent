@@ -140,7 +140,7 @@ export interface McpServerConfig {
   instruction: string;
   emoji?: string;
   source?: "system" | "custom";
-  systemKey?: "filesystem" | "web-search" | "terminal" | "user-interaction" | "task" | "memory" | "attachment";
+  systemKey?: "filesystem" | "web-search" | "terminal" | "user-interaction" | "task" | "memory" | "attachment" | "skill";
   systemConfig?: {
     accessScope?: "user" | "system";
     basePath?: string;

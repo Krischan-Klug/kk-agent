@@ -50,7 +50,7 @@ function renderSingleMessage(
   currentAgentName: string,
   mcps: McpListItem[],
 ) {
-  if (message.role === "tool") return null;
+  if (message.role === "tool" || message.isMeta) return null;
 
   const text = collectText(message.content).trim();
   const reasoning = collectReasoning(message.content).trim();

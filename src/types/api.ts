@@ -9,6 +9,7 @@ export interface SessionState {
   activeMode: ChatMode;
   activeToolIds: string[];
   activeMcpIds: string[];
+  activeSkillIds: string[];
   reasoningEffort?: ReasoningEffort;
   temperature?: number;
   messages: SessionMessage[];
@@ -100,6 +101,7 @@ export interface CreateSessionBody {
   model?: string;
   activeToolIds?: string[];
   activeMcpIds?: string[];
+  activeSkillIds?: string[];
   reasoningEffort?: ReasoningEffort;
   temperature?: number;
 }
@@ -110,6 +112,7 @@ export interface UpdateSessionBody {
   model?: string;
   activeToolIds?: string[];
   activeMcpIds?: string[];
+  activeSkillIds?: string[];
   reasoningEffort?: ReasoningEffort;
   temperature?: number;
 }
@@ -287,9 +290,11 @@ export interface AgentModeConfig {
   modeInstruction: string;
   toolIds: string[];
   mcpIds: string[];
+  skillIds: string[];
   toolAccessScopes: Record<string, ToolAccessScope>;
   toolInstructions: Record<string, string>;
   mcpInstructions: Record<string, string>;
+  skillInstructions: Record<string, string>;
   allowedToolNames: string[];
 }
 
@@ -298,10 +303,47 @@ export interface AgentModeConfigPatch {
   modeInstruction?: string;
   toolIds?: string[];
   mcpIds?: string[];
+  skillIds?: string[];
   toolAccessScopes?: Record<string, ToolAccessScope>;
   toolInstructions?: Record<string, string>;
   mcpInstructions?: Record<string, string>;
+  skillInstructions?: Record<string, string>;
   allowedToolNames?: string[];
+}
+
+export type SkillSource = "system" | "custom";
+
+export interface SkillDefinition {
+  id: string;
+  path: string;
+  active: boolean;
+  source?: SkillSource;
+  recommendedToolIds: string[];
+  recommendedMcpIds: string[];
+  allowedModes: ChatMode[];
+  name: string;
+  description: string;
+  instruction: string;
+}
+
+export interface CreateSkillBody {
+  name: string;
+  description: string;
+  instruction: string;
+  active?: boolean;
+  recommendedToolIds?: string[];
+  recommendedMcpIds?: string[];
+  allowedModes?: ChatMode[];
+}
+
+export interface UpdateSkillBody {
+  name?: string;
+  description?: string;
+  instruction?: string;
+  active?: boolean;
+  recommendedToolIds?: string[];
+  recommendedMcpIds?: string[];
+  allowedModes?: ChatMode[];
 }
 
 export interface AgentDefinition {

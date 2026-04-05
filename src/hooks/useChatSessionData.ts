@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { agent as agentApi, mcp as mcpApi, provider as providerApi, session as sessionApi, tools as toolsApi } from "@/lib/api";
+import { agent as agentApi, mcp as mcpApi, provider as providerApi, session as sessionApi, skills as skillsApi, tools as toolsApi } from "@/lib/api";
 import type {
   AgentDefinition,
   McpListItem,
@@ -7,6 +7,7 @@ import type {
   ModelInfo,
   ModelSettings,
   SessionState,
+  SkillDefinition,
   TaskItem,
 } from "@/types/api";
 import { addAppEventListener, CHAT_DEBUG_TOGGLE_EVENT, SESSION_CHANGED_EVENT } from "@/lib/appEvents";
@@ -36,6 +37,7 @@ export function useChatSessionData({ onDebugOpen, setDebugOpen }: Options) {
   const [modelSettingsMap, setModelSettingsMap] = useState<Record<string, ModelSettings>>({});
   const [mcps, setMcps] = useState<McpListItem[]>([]);
   const [toolMcps, setToolMcps] = useState<McpListItem[]>([]);
+  const [skills, setSkills] = useState<SkillDefinition[]>([]);
   const [agents, setAgents] = useState<AgentDefinition[]>([]);
   const [tasks, setTasks] = useState<TaskItem[]>([]);
   const [sessionFacts, setSessionFacts] = useState<MemoryFact[]>([]);
@@ -82,10 +84,11 @@ export function useChatSessionData({ onDebugOpen, setDebugOpen }: Options) {
 
   const loadDebugData = useCallback((sessionId: string) => {
     onDebugOpen(sessionId);
-    loadAvailableMcps()
-      .then(({ tools, mcps }) => {
+    Promise.all([loadAvailableMcps(), skillsApi.list()])
+      .then(([{ tools, mcps }, availableSkills]) => {
         setToolMcps(tools);
         setMcps(mcps);
+        setSkills(availableSkills);
       })
       .catch(() => {});
     void loadContextData(sessionId);
@@ -140,16 +143,18 @@ export function useChatSessionData({ onDebugOpen, setDebugOpen }: Options) {
 
     void (async () => {
       try {
-        const [snapshot, availableMcps, availableAgents] = await Promise.all([
+        const [snapshot, availableMcps, availableAgents, availableSkills] = await Promise.all([
           fetchSessionSnapshot(),
           loadAvailableMcps(),
           agentApi.list(),
+          skillsApi.list(),
         ]);
         if (disposed) return;
         applyBootstrapSnapshot(snapshot);
         setToolMcps(availableMcps.tools);
         setMcps(availableMcps.mcps);
         setAgents(availableAgents);
+        setSkills(availableSkills);
       } catch {
         if (!disposed) setLoading(false);
       }
@@ -212,6 +217,19 @@ export function useChatSessionData({ onDebugOpen, setDebugOpen }: Options) {
       });
     } catch (err) {
       logUiError("chat-tool-toggle", err);
+    }
+  }, [session, updateSessionAndSet]);
+
+  const handleSkillToggle = useCallback(async (skillId: string, enabled: boolean) => {
+    if (!session) return;
+    try {
+      await updateSessionAndSet({
+        activeSkillIds: enabled
+          ? [...session.activeSkillIds, skillId]
+          : session.activeSkillIds.filter((id) => id !== skillId),
+      });
+    } catch (err) {
+      logUiError("chat-skill-toggle", err);
     }
   }, [session, updateSessionAndSet]);
 
@@ -303,6 +321,7 @@ export function useChatSessionData({ onDebugOpen, setDebugOpen }: Options) {
     modelSettingsMap,
     mcps,
     toolMcps,
+    skills,
     agents,
     tasks,
     sessionFacts,
@@ -313,6 +332,7 @@ export function useChatSessionData({ onDebugOpen, setDebugOpen }: Options) {
     handleModelSwitch,
     handleMcpToggle,
     handleToolToggle,
+    handleSkillToggle,
     handleReasoningEffort,
     handleTemperature,
     handleAgentSwitch,

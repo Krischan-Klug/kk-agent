@@ -1,7 +1,15 @@
 import styled from "styled-components";
-import type { McpListItem } from "@/types/api";
 import { useDropdown } from "@/hooks/useDropdown";
 import Toggle from "./Toggle";
+
+type CapabilityItem = {
+  id: string;
+  name: string;
+  emoji?: string;
+  source?: "system" | "custom";
+  running?: boolean;
+  active?: boolean;
+};
 
 const Wrapper = styled.div`
   position: relative;
@@ -74,19 +82,19 @@ const CapabilityEmoji = styled.span`
   line-height: 1;
 `;
 
-const StatusDot = styled.span<{ $running: boolean }>`
+const StatusDot = styled.span<{ $available: boolean }>`
   width: 6px;
   height: 6px;
   border-radius: 50%;
-  background: ${(p) => (p.$running ? "var(--success)" : "var(--danger)")};
+  background: ${(p) => (p.$available ? "var(--success)" : "var(--danger)")};
   flex-shrink: 0;
 `;
 
-const CapabilityLabel = styled.span<{ $stopped?: boolean }>`
+const CapabilityLabel = styled.span<{ $unavailable?: boolean }>`
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  opacity: ${(p) => (p.$stopped ? 0.5 : 1)};
+  opacity: ${(p) => (p.$unavailable ? 0.5 : 1)};
 `;
 
 const EmptyHint = styled.div`
@@ -96,12 +104,16 @@ const EmptyHint = styled.div`
 `;
 
 type Props = {
-  items: McpListItem[];
+  items: CapabilityItem[];
   activeIds: string[];
   onToggle: (id: string, enabled: boolean) => void;
   label?: string;
   emptyHint?: string;
 };
+
+function isAvailable(item: CapabilityItem): boolean {
+  return item.running !== false && item.active !== false;
+}
 
 export default function CapabilitySelect({
   items,
@@ -113,7 +125,7 @@ export default function CapabilitySelect({
   const { open, ref, toggle } = useDropdown<HTMLDivElement>();
 
   const activeCount = items.filter((item) => activeIds.includes(item.id)).length;
-  const hasUnavailable = items.some((item) => !item.running && activeIds.includes(item.id));
+  const hasUnavailable = items.some((item) => !isAvailable(item) && activeIds.includes(item.id));
 
   return (
     <Wrapper ref={ref}>
@@ -125,20 +137,23 @@ export default function CapabilitySelect({
           {items.length === 0 ? (
             <EmptyHint>{emptyHint}</EmptyHint>
           ) : (
-            items.map((item) => (
-              <CapabilityRow key={item.id}>
-                <CapabilityLabelGroup>
-                  <StatusDot $running={item.running} />
-                  <CapabilityEmoji>{item.emoji || (item.source === "system" ? "🛠️" : "🔌")}</CapabilityEmoji>
-                  <CapabilityLabel $stopped={!item.running}>{item.name}</CapabilityLabel>
-                </CapabilityLabelGroup>
-                <Toggle
-                  checked={activeIds.includes(item.id)}
-                  onChange={(checked) => onToggle(item.id, checked)}
-                  disabled={!item.running}
-                />
-              </CapabilityRow>
-            ))
+            items.map((item) => {
+              const available = isAvailable(item);
+              return (
+                <CapabilityRow key={item.id}>
+                  <CapabilityLabelGroup>
+                    <StatusDot $available={available} />
+                    <CapabilityEmoji>{item.emoji || (item.source === "system" ? "🛠️" : "🔌")}</CapabilityEmoji>
+                    <CapabilityLabel $unavailable={!available}>{item.name}</CapabilityLabel>
+                  </CapabilityLabelGroup>
+                  <Toggle
+                    checked={activeIds.includes(item.id)}
+                    onChange={(checked) => onToggle(item.id, checked)}
+                    disabled={!available}
+                  />
+                </CapabilityRow>
+              );
+            })
           )}
         </Dropdown>
       )}

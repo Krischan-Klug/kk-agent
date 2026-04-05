@@ -8,6 +8,7 @@ import type {
   McpListItem,
   ModelInfo,
   ModelSettings,
+  SkillDefinition,
   ToolAccessScope,
 } from "@/types/api";
 import {
@@ -217,6 +218,7 @@ type Props = {
   agent: AgentDefinition | null;
   mcps: McpListItem[];
   internalTools: McpListItem[];
+  skills: SkillDefinition[];
   models: ModelInfo[];
   modelSettings: Record<string, ModelSettings>;
   defaults: AppDefaults | null;
@@ -306,6 +308,7 @@ export default function AgentEditor({
   agent,
   mcps,
   internalTools,
+  skills,
   models,
   modelSettings,
   defaults,
@@ -322,6 +325,7 @@ export default function AgentEditor({
   const [expandedMcps, setExpandedMcps] = useState<Record<string, boolean>>({});
   const [visibleToolInstructions, setVisibleToolInstructions] = useState<Record<string, boolean>>({});
   const [visibleMcpInstructions, setVisibleMcpInstructions] = useState<Record<string, boolean>>({});
+  const [visibleSkillInstructions, setVisibleSkillInstructions] = useState<Record<string, boolean>>({});
 
   if (!agent) {
     return (
@@ -357,6 +361,10 @@ export default function AgentEditor({
 
   function getEffectiveToolInstruction(toolId: string, fallback?: string): string {
     return selectedModeConfig.toolInstructions[toolId] ?? getToolInstructionFallback(toolId, fallback);
+  }
+
+  function getEffectiveSkillInstruction(skillId: string, fallback: string): string {
+    return selectedModeConfig.skillInstructions[skillId] ?? fallback;
   }
 
   function getDefaultAccessScope(toolId: string): ToolAccessScope {
@@ -864,6 +872,100 @@ export default function AgentEditor({
             </CapabilityRow>
           );
         })}
+      </Section>
+
+      <Section>
+        <SectionTitle>Skills</SectionTitle>
+        {skills.map((skill) => {
+          const isActive = selectedModeConfig.skillIds.includes(skill.id);
+          const showInstruction = visibleSkillInstructions[skill.id] ?? false;
+          const isAvailableInMode = skill.allowedModes.includes(effectiveSelectedMode);
+          const effectiveInstruction = getEffectiveSkillInstruction(skill.id, skill.instruction);
+          const isCustomized = effectiveInstruction.trim() !== skill.instruction.trim();
+
+          return (
+            <CapabilityRow key={skill.id} $active={isActive && skill.active && isAvailableInMode}>
+              <CapabilityHeader>
+                <CheckboxRow>
+                  <input
+                    type="checkbox"
+                    checked={isActive}
+                    disabled={!skill.active || !isAvailableInMode}
+                    onChange={() => {
+                      const nextSkillIds = isActive
+                        ? selectedModeConfig.skillIds.filter((id) => id !== skill.id)
+                        : [...selectedModeConfig.skillIds, skill.id];
+                      updateModeConfig({
+                        ...selectedModeConfig,
+                        skillIds: [...new Set(nextSkillIds)],
+                      });
+                    }}
+                  />
+                  <span style={{ fontSize: "1.1em" }}>🧠</span>
+                  <span style={{ fontWeight: 500 }}>{skill.name}</span>
+                  <StatusDot $running={skill.active && isAvailableInMode} />
+                </CheckboxRow>
+                {isActive && (
+                  <HeaderActions>
+                    <ExpandButton
+                      type="button"
+                      onClick={() => setVisibleSkillInstructions((previous) => ({
+                        ...previous,
+                        [skill.id]: !showInstruction,
+                      }))}
+                    >
+                      {showInstruction ? "Instruction ausblenden" : "Instruction anzeigen"}
+                    </ExpandButton>
+                    {isCustomized && (
+                      <>
+                        <OverrideMark title="Agent-Override">{OVERRIDE_EMOJI}</OverrideMark>
+                        <IconActionButton
+                          type="button"
+                          title="Auf Skill-Default zuruecksetzen"
+                          onClick={() => updateModeConfig({
+                            ...selectedModeConfig,
+                            skillInstructions: setCapabilityInstruction(
+                              selectedModeConfig.skillInstructions,
+                              skill.id,
+                              skill.instruction,
+                              skill.instruction,
+                            ),
+                          })}
+                        >
+                          {RESET_EMOJI}
+                        </IconActionButton>
+                      </>
+                    )}
+                  </HeaderActions>
+                )}
+              </CapabilityHeader>
+              <MutedText>{skill.description}</MutedText>
+              <MutedText>
+                Mode: {skill.allowedModes.join(", ")}
+                {skill.recommendedToolIds.length > 0 ? ` | Tools: ${skill.recommendedToolIds.join(", ")}` : ""}
+                {skill.recommendedMcpIds.length > 0 ? ` | MCPs: ${skill.recommendedMcpIds.join(", ")}` : ""}
+              </MutedText>
+              {!skill.active && <MutedText>Skill ist global deaktiviert.</MutedText>}
+              {skill.active && !isAvailableInMode && <MutedText>In diesem Mode nicht verfuegbar.</MutedText>}
+              {isActive && showInstruction && (
+                <TextArea
+                  rows={6}
+                  value={effectiveInstruction}
+                  onChange={(e) => updateModeConfig({
+                    ...selectedModeConfig,
+                    skillInstructions: setCapabilityInstruction(
+                      selectedModeConfig.skillInstructions,
+                      skill.id,
+                      e.target.value,
+                      skill.instruction,
+                    ),
+                  })}
+                />
+              )}
+            </CapabilityRow>
+          );
+        })}
+        {skills.length === 0 && <EmptyHint>Keine Skills konfiguriert.</EmptyHint>}
       </Section>
 
       <ActionsRow>

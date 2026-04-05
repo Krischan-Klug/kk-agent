@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import styled from "styled-components";
-import type { McpListItem, SessionState, TaskItem, MemoryFact, AgentLoopState } from "@/types/api";
+import type { McpListItem, SessionState, TaskItem, MemoryFact, AgentLoopState, SkillDefinition } from "@/types/api";
 import Badge from "@/components/Badge";
 import Button from "@/components/Button";
 import Input from "@/components/Input";
@@ -8,7 +8,7 @@ import TextArea from "@/components/TextArea";
 import ModelSelect from "@/components/ModelSelect";
 import CapabilitySelect from "@/components/CapabilitySelect";
 
-export type ChatDebugTab = "prompt" | "tools" | "mcps" | "session" | "messages" | "tasks" | "memory";
+export type ChatDebugTab = "prompt" | "tools" | "mcps" | "skills" | "session" | "messages" | "tasks" | "memory";
 
 const DebugPanel = styled.div`
   border: 1px solid var(--border);
@@ -117,6 +117,7 @@ type Props = {
   debugPrompt: string | null;
   internalTools: McpListItem[];
   debugMcps: McpListItem[];
+  skills: SkillDefinition[];
   debugTasks: TaskItem[];
   debugSessionFacts: MemoryFact[];
   debugUserFacts: MemoryFact[];
@@ -124,6 +125,7 @@ type Props = {
   onModelSwitch: (model: string) => void;
   onToolToggle: (toolId: string, enabled: boolean) => void;
   onMcpToggle: (mcpId: string, enabled: boolean) => void;
+  onSkillToggle: (skillId: string, enabled: boolean) => void;
   onSaveTasks: (tasks: TaskItem[]) => Promise<void>;
   onSaveSessionFacts: (facts: MemoryFact[]) => Promise<void>;
   onSaveUserFacts: (facts: MemoryFact[]) => Promise<void>;
@@ -149,6 +151,7 @@ export default function ChatDebugPanel({
   debugPrompt,
   internalTools,
   debugMcps,
+  skills,
   debugTasks,
   debugSessionFacts,
   debugUserFacts,
@@ -156,6 +159,7 @@ export default function ChatDebugPanel({
   onModelSwitch,
   onToolToggle,
   onMcpToggle,
+  onSkillToggle,
   onSaveTasks,
   onSaveSessionFacts,
   onSaveUserFacts,
@@ -172,6 +176,7 @@ export default function ChatDebugPanel({
   if (!open || !session) return null;
   const activeMcpIds = session.activeMcpIds;
   const activeToolIds = session.activeToolIds;
+  const activeSkillIds = session.activeSkillIds;
 
   function updateTask(index: number, patch: Partial<TaskItem>) {
     setTaskDraft((prev) => prev.map((task, i) => (i === index ? { ...task, ...patch } : task)));
@@ -260,6 +265,21 @@ export default function ChatDebugPanel({
     content = renderToolDefinitions(internalTools, "Keine aktiven Tools.");
   } else if (debugTab === "mcps") {
     content = renderDefinitions(debugMcps, "Keine aktiven MCPs.");
+  } else if (debugTab === "skills") {
+    const activeSkills = skills.filter((skill) => activeSkillIds.includes(skill.id));
+    content = activeSkills.length === 0
+      ? "Keine aktiven Skills."
+      : activeSkills
+          .map((skill) => {
+            const toolRefs = skill.recommendedToolIds.length > 0
+              ? `Tools: ${skill.recommendedToolIds.join(", ")}`
+              : "Tools: -";
+            const mcpRefs = skill.recommendedMcpIds.length > 0
+              ? `MCPs: ${skill.recommendedMcpIds.join(", ")}`
+              : "MCPs: -";
+            return `-- ${skill.name} (${skill.id}) --\n${skill.description}\n${toolRefs}\n${mcpRefs}\n\n${skill.instruction}`;
+          })
+          .join("\n\n");
   } else if (debugTab === "session") {
     content = JSON.stringify(
       {
@@ -269,6 +289,7 @@ export default function ChatDebugPanel({
         agentId: session.agentId,
         activeToolIds: session.activeToolIds,
         activeMcpIds: session.activeMcpIds,
+        activeSkillIds: session.activeSkillIds,
         activeMode: session.activeMode,
         reasoningEffort: session.reasoningEffort ?? "default",
         temperature: session.temperature ?? "default",
@@ -312,6 +333,7 @@ export default function ChatDebugPanel({
         <DebugTab $active={debugTab === "prompt"} onClick={() => toggleTab("prompt")}>System Prompt</DebugTab>
         <DebugTab $active={debugTab === "tools"} onClick={() => toggleTab("tools")}>Tools</DebugTab>
         <DebugTab $active={debugTab === "mcps"} onClick={() => toggleTab("mcps")}>MCPs</DebugTab>
+        <DebugTab $active={debugTab === "skills"} onClick={() => toggleTab("skills")}>Skills</DebugTab>
         <DebugTab $active={debugTab === "session"} onClick={() => toggleTab("session")}>Session</DebugTab>
         <DebugTab $active={debugTab === "messages"} onClick={() => toggleTab("messages")}>Messages</DebugTab>
         <DebugTab $active={debugTab === "tasks"} onClick={() => toggleTab("tasks")}>Tasks</DebugTab>
@@ -337,10 +359,17 @@ export default function ChatDebugPanel({
             label="MCPs"
             emptyHint="Keine MCP Server konfiguriert"
           />
+          <CapabilitySelect
+            items={skills}
+            activeIds={session.activeSkillIds}
+            onToggle={onSkillToggle}
+            label="Skills"
+            emptyHint="Keine Skills konfiguriert"
+          />
         </DebugControls>
       </DebugTabs>
 
-      {(debugTab === "prompt" || debugTab === "tools" || debugTab === "mcps" || debugTab === "session" || debugTab === "messages") && (
+      {(debugTab === "prompt" || debugTab === "tools" || debugTab === "mcps" || debugTab === "skills" || debugTab === "session" || debugTab === "messages") && (
         <DebugContent>{content}</DebugContent>
       )}
 

@@ -177,6 +177,7 @@ export default function ChatPage() {
         debugPrompt={debugPrompt}
         internalTools={sessionData.toolMcps}
         debugMcps={sessionData.mcps}
+        skills={sessionData.skills}
         debugTasks={sessionData.tasks}
         debugSessionFacts={sessionData.sessionFacts}
         debugUserFacts={sessionData.userFacts}
@@ -184,6 +185,7 @@ export default function ChatPage() {
         onModelSwitch={sessionData.handleModelSwitch}
         onToolToggle={sessionData.handleToolToggle}
         onMcpToggle={sessionData.handleMcpToggle}
+        onSkillToggle={sessionData.handleSkillToggle}
         onSaveTasks={sessionData.handleSaveTasks}
         onSaveSessionFacts={sessionData.handleSaveSessionFacts}
         onSaveUserFacts={sessionData.handleSaveUserFacts}

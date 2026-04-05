@@ -35,6 +35,7 @@ import {
 const navItems = [
   { href: "/chat", emoji: "💬", label: "Chat" },
   { href: "/agent", emoji: "🤖", label: "Agents" },
+  { href: "/skills", emoji: "🧠", label: "Skills" },
   { href: "/mcp", emoji: "🧩", label: "MCP" },
   { href: "/settings/defaults", emoji: "⚙️", label: "Settings" },
 ];
@@ -61,7 +62,7 @@ export default function Sidebar() {
     } catch {
       // ignore
     }
-  }, []);
+  }, [setSessions]);
 
   const syncSessionState = useCallback(() => {
     void loadSessions();

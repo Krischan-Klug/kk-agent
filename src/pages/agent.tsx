@@ -1,9 +1,9 @@
 import { useEffect, useState } from "react";
 import styled from "styled-components";
-import { agent as agentApi, mcp as mcpApi, provider as providerApi, settings as settingsApi, tools as toolsApi } from "@/lib/api";
+import { agent as agentApi, mcp as mcpApi, provider as providerApi, settings as settingsApi, skills as skillsApi, tools as toolsApi } from "@/lib/api";
 import { cloneDraft } from "@/lib/draft";
 import { logUiError } from "@/lib/uiLogger";
-import type { AgentDefinition, AppDefaults, CreateAgentBody, McpListItem, ModelInfo, ModelSettings } from "@/types/api";
+import type { AgentDefinition, AppDefaults, CreateAgentBody, McpListItem, ModelInfo, ModelSettings, SkillDefinition } from "@/types/api";
 import { PageTitle } from "@/components/Layout.styled";
 import Spinner from "@/components/Spinner";
 import AgentList from "@/components/agent/AgentList";
@@ -20,6 +20,7 @@ export default function AgentPage() {
   const [agents, setAgents] = useState<AgentDefinition[]>([]);
   const [mcps, setMcps] = useState<McpListItem[]>([]);
   const [internalTools, setInternalTools] = useState<McpListItem[]>([]);
+  const [skills, setSkills] = useState<SkillDefinition[]>([]);
   const [models, setModels] = useState<ModelInfo[]>([]);
   const [modelSettings, setModelSettings] = useState<Record<string, ModelSettings>>({});
   const [defaults, setDefaults] = useState<AppDefaults | null>(null);
@@ -33,11 +34,12 @@ export default function AgentPage() {
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    Promise.all([agentApi.list(), mcpApi.list(), toolsApi.list(), agentApi.systemVariables(), providerApi.getModels(), settingsApi.getDefaults()])
-      .then(([agentList, mcpList, toolList, vars, providerModels, appDefaults]) => {
+    Promise.all([agentApi.list(), mcpApi.list(), toolsApi.list(), skillsApi.list(), agentApi.systemVariables(), providerApi.getModels(), settingsApi.getDefaults()])
+      .then(([agentList, mcpList, toolList, skillList, vars, providerModels, appDefaults]) => {
         setAgents(agentList);
         setMcps(mcpList);
         setInternalTools(toolList);
+        setSkills(skillList);
         setSystemVariables(vars.variables);
         setModels(providerModels.models);
         setModelSettings(providerModels.modelSettings ?? {});
@@ -129,6 +131,7 @@ export default function AgentPage() {
           agent={editAgent}
           mcps={mcps}
           internalTools={internalTools}
+          skills={skills}
           models={models}
           modelSettings={modelSettings}
           defaults={defaults}

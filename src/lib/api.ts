@@ -21,6 +21,9 @@ import type {
   TaskItem,
   MemoryFact,
   AttachmentMeta,
+  SkillDefinition,
+  CreateSkillBody,
+  UpdateSkillBody,
 } from "@/types/api";
 
 const BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3001";
@@ -233,6 +236,25 @@ export const agent = {
 
     return () => controller.abort();
   },
+};
+
+export const skills = {
+  list: () => request<SkillDefinition[]>("/skills"),
+
+  create: (body: CreateSkillBody) =>
+    request<SkillDefinition>("/skills", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+
+  update: (id: string, body: UpdateSkillBody) =>
+    request<SkillDefinition>(`/skills/${id}`, {
+      method: "PUT",
+      body: JSON.stringify(body),
+    }),
+
+  delete: (id: string) =>
+    request<{ deleted: boolean }>(`/skills/${id}`, { method: "DELETE" }),
 };
 
 export const settings = {

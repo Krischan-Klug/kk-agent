@@ -26,6 +26,8 @@ const PageStack = styled.div`
   gap: var(--space-lg);
 `;
 
+const SKILL_EMOJI = "\u{1F4DA}";
+
 const Grid = styled.div`
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
@@ -211,10 +213,10 @@ export default function SkillsPage() {
 
   return (
     <>
-      <PageTitle>Skills</PageTitle>
+      <PageTitle>{SKILL_EMOJI} Skills</PageTitle>
       <PageStack>
         <Card>
-          <SectionTitle>Skill erstellen</SectionTitle>
+          <SectionTitle>{SKILL_EMOJI} Skill erstellen</SectionTitle>
           <MutedText>
             Neue Skills werden direkt als Bundle in `state/skills` gespeichert. Das Backend erzeugt dafuer automatisch den Skill-Ordner, die `SKILL.md` und die Skill-Metadaten.
           </MutedText>
@@ -332,7 +334,7 @@ export default function SkillsPage() {
               const draft = editDrafts[skill.id] ?? EMPTY_DRAFT;
               return (
                 <Card key={skill.id}>
-                  <SectionTitle>{skill.name}</SectionTitle>
+                  <SectionTitle>{SKILL_EMOJI} {skill.name}</SectionTitle>
                   <MutedText>{skill.description}</MutedText>
 
                   <SurfaceBox>

@@ -556,7 +556,7 @@ export default function ChatComposer({
               <ComposerMeta>
                 {showReasoningControl && (
                   <ControlGroup>
-                    <ControlEmoji>🧠</ControlEmoji>
+                    <ControlEmoji>{"\u{1F4A1}"}</ControlEmoji>
                     <SelectMenu
                       value={resolvedEffort}
                       options={reasoningOptions}

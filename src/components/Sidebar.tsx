@@ -32,12 +32,18 @@ import {
   SessionDelete,
 } from "./Sidebar.styled";
 
+const CHAT_EMOJI = "\u{1F4AC}";
+const AGENT_EMOJI = "\u{1F916}";
+const SKILL_EMOJI = "\u{1F4DA}";
+const MCP_EMOJI = "\u{1F9E9}";
+const SETTINGS_EMOJI = "\u2699\uFE0F";
+
 const navItems = [
-  { href: "/chat", emoji: "💬", label: "Chat" },
-  { href: "/agent", emoji: "🤖", label: "Agents" },
-  { href: "/skills", emoji: "🧠", label: "Skills" },
-  { href: "/mcp", emoji: "🧩", label: "MCP" },
-  { href: "/settings/defaults", emoji: "⚙️", label: "Settings" },
+  { href: "/chat", emoji: CHAT_EMOJI, label: "Chat" },
+  { href: "/agent", emoji: AGENT_EMOJI, label: "Agents" },
+  { href: "/skills", emoji: SKILL_EMOJI, label: "Skills" },
+  { href: "/mcp", emoji: MCP_EMOJI, label: "MCP" },
+  { href: "/settings/defaults", emoji: SETTINGS_EMOJI, label: "Settings" },
 ];
 
 const navLinkStyle = { textDecoration: "none" };

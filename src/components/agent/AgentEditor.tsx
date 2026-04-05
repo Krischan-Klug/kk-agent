@@ -206,6 +206,7 @@ const MODE_ORDER: ChatMode[] = ["plan", "edit"];
 const PROMPT_SECTION_META: Array<{ key: keyof AgentModeConfig["promptSections"]; label: string }> = [
   { key: "identity", label: "\u{1FAAA} Identity" },
   { key: "system", label: "\u{1F9E0} System" },
+  { key: "runtime", label: "\u2699\uFE0F Runtime" },
   { key: "tasks", label: "\u{1F4DD} Tasks" },
   { key: "security", label: "\u{1F512} Security" },
   { key: "toolUsage", label: "\u{1F6E0}\uFE0F Tool Usage" },
@@ -213,6 +214,7 @@ const PROMPT_SECTION_META: Array<{ key: keyof AgentModeConfig["promptSections"];
 ];
 const OVERRIDE_EMOJI = "\u270F\uFE0F";
 const RESET_EMOJI = "\u21BA";
+const SKILL_EMOJI = "\u{1F4DA}";
 
 type Props = {
   agent: AgentDefinition | null;
@@ -346,8 +348,6 @@ export default function AgentEditor({
   const showTemperature = endpointCapabilities.temperatureSupported;
   const temperatureOptions = buildTemperatureOptions(endpointCapabilities.temperatureRange);
   const selectedModeConfig = currentAgent.modeConfigs[effectiveSelectedMode];
-  const concreteInternalTools = getConcreteInternalTools(selectedModeConfig, internalTools);
-  const concreteRuntimeTools = getConcreteRuntimeTools(selectedModeConfig, internalTools, mcps);
   const defaultModeInstruction = defaults?.agent.modeInstructions[effectiveSelectedMode] ?? "";
   const isCustomizedModeInstruction = selectedModeConfig.modeInstruction.trim() !== defaultModeInstruction.trim();
 
@@ -875,7 +875,7 @@ export default function AgentEditor({
       </Section>
 
       <Section>
-        <SectionTitle>Skills</SectionTitle>
+        <SectionTitle>{SKILL_EMOJI} Skills</SectionTitle>
         {skills.map((skill) => {
           const isActive = selectedModeConfig.skillIds.includes(skill.id);
           const showInstruction = visibleSkillInstructions[skill.id] ?? false;
@@ -901,7 +901,7 @@ export default function AgentEditor({
                       });
                     }}
                   />
-                  <span style={{ fontSize: "1.1em" }}>🧠</span>
+                  <span style={{ fontSize: "1.1em" }}>{SKILL_EMOJI}</span>
                   <span style={{ fontWeight: 500 }}>{skill.name}</span>
                   <StatusDot $running={skill.active && isAvailableInMode} />
                 </CheckboxRow>

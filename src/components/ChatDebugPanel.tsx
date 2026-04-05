@@ -8,7 +8,7 @@ import TextArea from "@/components/TextArea";
 import ModelSelect from "@/components/ModelSelect";
 import CapabilitySelect from "@/components/CapabilitySelect";
 
-export type ChatDebugTab = "prompt" | "tools" | "mcps" | "skills" | "session" | "messages" | "tasks" | "memory";
+export type ChatDebugTab = "prompt" | "meta" | "tools" | "mcps" | "skills" | "session" | "messages" | "tasks" | "memory";
 
 const DebugPanel = styled.div`
   border: 1px solid var(--border);
@@ -115,6 +115,7 @@ type Props = {
   session: SessionState | null;
   loopState: AgentLoopState | null;
   debugPrompt: string | null;
+  debugMetaMessages: string[] | null;
   internalTools: McpListItem[];
   debugMcps: McpListItem[];
   skills: SkillDefinition[];
@@ -149,6 +150,7 @@ export default function ChatDebugPanel({
   session,
   loopState,
   debugPrompt,
+  debugMetaMessages,
   internalTools,
   debugMcps,
   skills,
@@ -261,6 +263,12 @@ export default function ChatDebugPanel({
 
   if (debugTab === "prompt") {
     content = debugPrompt ?? "Lade...";
+  } else if (debugTab === "meta") {
+    content = debugMetaMessages === null
+      ? "Lade..."
+      : debugMetaMessages.length === 0
+        ? "Keine aktuellen Meta-Messages."
+        : debugMetaMessages.join("\n\n");
   } else if (debugTab === "tools") {
     content = renderToolDefinitions(internalTools, "Keine aktiven Tools.");
   } else if (debugTab === "mcps") {
@@ -331,6 +339,7 @@ export default function ChatDebugPanel({
     <DebugPanel>
       <DebugTabs>
         <DebugTab $active={debugTab === "prompt"} onClick={() => toggleTab("prompt")}>System Prompt</DebugTab>
+        <DebugTab $active={debugTab === "meta"} onClick={() => toggleTab("meta")}>Meta</DebugTab>
         <DebugTab $active={debugTab === "tools"} onClick={() => toggleTab("tools")}>Tools</DebugTab>
         <DebugTab $active={debugTab === "mcps"} onClick={() => toggleTab("mcps")}>MCPs</DebugTab>
         <DebugTab $active={debugTab === "skills"} onClick={() => toggleTab("skills")}>Skills</DebugTab>
@@ -349,6 +358,7 @@ export default function ChatDebugPanel({
             items={internalTools}
             activeIds={session.activeToolIds}
             onToggle={onToolToggle}
+            kind="tool"
             label="Tools"
             emptyHint="Keine internen Tools gefunden"
           />
@@ -356,6 +366,7 @@ export default function ChatDebugPanel({
             items={debugMcps}
             activeIds={session.activeMcpIds}
             onToggle={onMcpToggle}
+            kind="mcp"
             label="MCPs"
             emptyHint="Keine MCP Server konfiguriert"
           />
@@ -363,13 +374,14 @@ export default function ChatDebugPanel({
             items={skills}
             activeIds={session.activeSkillIds}
             onToggle={onSkillToggle}
+            kind="skill"
             label="Skills"
             emptyHint="Keine Skills konfiguriert"
           />
         </DebugControls>
       </DebugTabs>
 
-      {(debugTab === "prompt" || debugTab === "tools" || debugTab === "mcps" || debugTab === "skills" || debugTab === "session" || debugTab === "messages") && (
+      {(debugTab === "prompt" || debugTab === "meta" || debugTab === "tools" || debugTab === "mcps" || debugTab === "skills" || debugTab === "session" || debugTab === "messages") && (
         <DebugContent>{content}</DebugContent>
       )}
 

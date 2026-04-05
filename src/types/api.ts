@@ -117,6 +117,11 @@ export interface UpdateSessionBody {
   temperature?: number;
 }
 
+export interface SessionPromptDebug {
+  systemPrompt: string;
+  metaMessages: string[];
+}
+
 export type TaskStatus = "pending" | "in_progress" | "completed";
 
 export interface TaskItem {
@@ -279,6 +284,7 @@ export type ToolExecutionStatus = "queued" | "executing" | "yielded" | "complete
 export interface AgentPromptSections {
   identity: string;
   system: string;
+  runtime: string;
   tasks: string;
   security: string;
   toolUsage: string;

@@ -68,6 +68,7 @@ export default function ChatPage() {
   const [debugOpen, setDebugOpen] = useState(false);
   const [debugTab, setDebugTab] = useState<ChatDebugTab | null>("prompt");
   const [debugPrompt, setDebugPrompt] = useState<string | null>(null);
+  const [debugMetaMessages, setDebugMetaMessages] = useState<string[] | null>(null);
   const debugPromptRequestRef = useRef(0);
   const { ref: messagesRef, scrollToBottom, handleScroll } = useChatAutoScroll();
   const attachments = useAttachments();
@@ -78,10 +79,12 @@ export default function ChatPage() {
       const result = await sessionApi.getPrompt(sessionId);
       if (requestId === debugPromptRequestRef.current) {
         setDebugPrompt(result.systemPrompt);
+        setDebugMetaMessages(result.metaMessages);
       }
     } catch {
       if (requestId === debugPromptRequestRef.current) {
         setDebugPrompt("[Fehler beim Laden]");
+        setDebugMetaMessages(["[Fehler beim Laden]"]);
       }
     }
   }, []);
@@ -175,6 +178,7 @@ export default function ChatPage() {
         session={sessionData.session}
         loopState={streaming.loopState}
         debugPrompt={debugPrompt}
+        debugMetaMessages={debugMetaMessages}
         internalTools={sessionData.toolMcps}
         debugMcps={sessionData.mcps}
         skills={sessionData.skills}

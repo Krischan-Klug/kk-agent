@@ -22,6 +22,7 @@ import type {
   MemoryFact,
   AttachmentMeta,
   SkillDefinition,
+  SessionPromptDebug,
   CreateSkillBody,
   UpdateSkillBody,
 } from "@/types/api";
@@ -297,7 +298,7 @@ export const session = {
     ),
 
   getPrompt: (id: string) =>
-    request<{ systemPrompt: string }>(`/session/${id}/prompt`),
+    request<SessionPromptDebug>(`/session/${id}/prompt`),
 
   respondToPrompt: (sessionId: string, promptId: string, selectedKey: string) =>
     request<{ ok: boolean }>(`/session/${sessionId}/prompt/respond`, {

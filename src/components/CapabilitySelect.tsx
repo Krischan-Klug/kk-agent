@@ -2,6 +2,11 @@ import styled from "styled-components";
 import { useDropdown } from "@/hooks/useDropdown";
 import Toggle from "./Toggle";
 
+const SKILL_EMOJI = "\u{1F4DA}";
+const SYSTEM_CAPABILITY_EMOJI = "\u{1F6E0}\uFE0F";
+const CUSTOM_CAPABILITY_EMOJI = "\u{1F50C}";
+const DROPDOWN_CARET = "\u25BE";
+
 type CapabilityItem = {
   id: string;
   name: string;
@@ -36,7 +41,7 @@ const Trigger = styled.button<{ $warn?: boolean }>`
   }
 
   &::after {
-    content: "▼";
+    content: "${DROPDOWN_CARET}";
     font-size: 8px;
     opacity: 0.7;
   }
@@ -107,6 +112,7 @@ type Props = {
   items: CapabilityItem[];
   activeIds: string[];
   onToggle: (id: string, enabled: boolean) => void;
+  kind?: "tool" | "mcp" | "skill";
   label?: string;
   emptyHint?: string;
 };
@@ -115,10 +121,17 @@ function isAvailable(item: CapabilityItem): boolean {
   return item.running !== false && item.active !== false;
 }
 
+function getCapabilityEmoji(item: CapabilityItem, kind: Props["kind"]): string {
+  if (item.emoji) return item.emoji;
+  if (kind === "skill") return SKILL_EMOJI;
+  return item.source === "system" ? SYSTEM_CAPABILITY_EMOJI : CUSTOM_CAPABILITY_EMOJI;
+}
+
 export default function CapabilitySelect({
   items,
   activeIds,
   onToggle,
+  kind = "mcp",
   label = "Capabilities",
   emptyHint = "Keine Eintraege konfiguriert",
 }: Props) {
@@ -143,7 +156,7 @@ export default function CapabilitySelect({
                 <CapabilityRow key={item.id}>
                   <CapabilityLabelGroup>
                     <StatusDot $available={available} />
-                    <CapabilityEmoji>{item.emoji || (item.source === "system" ? "🛠️" : "🔌")}</CapabilityEmoji>
+                    <CapabilityEmoji>{getCapabilityEmoji(item, kind)}</CapabilityEmoji>
                     <CapabilityLabel $unavailable={!available}>{item.name}</CapabilityLabel>
                   </CapabilityLabelGroup>
                   <Toggle

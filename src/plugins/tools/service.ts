@@ -3,7 +3,6 @@ import type {
   AccessScope,
   McpServerConfig,
   McpToolDefinition,
-  ToolCallResult,
   UpdateMcpBody,
 } from "../mcp/types.js";
 import { buildSystemMcps, createOverrideState, loadSystemMcpOverrides, saveSystemMcpOverrides } from "./lib/system-registry.js";
@@ -313,10 +312,11 @@ export async function executeSystemToolForId(
   toolName: string,
   args: Record<string, unknown>,
   accessScopeOverride?: AccessScope,
-): Promise<ToolCallResult | null> {
+  context?: import("../loop/types.js").ToolRuntimeContext,
+): Promise<import("../loop/types.js").ToolExecutionResult | null> {
   const resolved = resolveSystemMcp(id, accessScopeOverride);
   if (!resolved || !resolved.mcp.active) return null;
-  const result = await executeSystemTool(resolved.mcp, toolName, args);
+  const result = await executeSystemTool(resolved.mcp, toolName, args, context);
   if (!result) return null;
 
   return {

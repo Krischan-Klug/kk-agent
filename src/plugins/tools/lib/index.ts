@@ -1,4 +1,4 @@
-import type { McpServerConfig, McpToolDefinition, SystemMcpKey, ToolCallResult } from "../../mcp/types.js";
+import type { McpServerConfig, McpToolDefinition, SystemMcpKey } from "../../mcp/types.js";
 import { filesystemDefinition } from "./filesystem/definition.js";
 import { executeFilesystemTool } from "./filesystem/runtime.js";
 import { filesystemTools } from "./filesystem/tools.js";
@@ -20,11 +20,20 @@ import { memoryTools } from "./memory/tools.js";
 import { attachmentDefinition } from "./attachment/definition.js";
 import { executeAttachmentTool } from "./attachment/runtime.js";
 import { attachmentTools } from "./attachment/tools.js";
+import { skillDefinition } from "./skill/definition.js";
+import { executeSkillTool } from "./skill/runtime.js";
+import { skillTools } from "./skill/tools.js";
+import type { ToolExecutionResult, ToolRuntimeContext } from "../../loop/types.js";
 
 type SystemToolModule = {
   definition: McpServerConfig;
   tools: McpToolDefinition[];
-  execute: (config: McpServerConfig, toolName: string, args: Record<string, unknown>) => Promise<ToolCallResult | null>;
+  execute: (
+    config: McpServerConfig,
+    toolName: string,
+    args: Record<string, unknown>,
+    context?: ToolRuntimeContext,
+  ) => Promise<ToolExecutionResult | null>;
 };
 
 const SYSTEM_TOOL_MODULES: Record<SystemMcpKey, SystemToolModule> = {
@@ -62,6 +71,11 @@ const SYSTEM_TOOL_MODULES: Record<SystemMcpKey, SystemToolModule> = {
     definition: attachmentDefinition,
     tools: attachmentTools,
     execute: executeAttachmentTool,
+  },
+  skill: {
+    definition: skillDefinition,
+    tools: skillTools,
+    execute: executeSkillTool,
   },
 };
 
@@ -105,11 +119,12 @@ export async function executeSystemTool(
   mcp: McpServerConfig,
   toolName: string,
   args: Record<string, unknown>,
-): Promise<ToolCallResult | null> {
+  context?: ToolRuntimeContext,
+): Promise<ToolExecutionResult | null> {
   try {
     const key = mcp.systemKey as SystemMcpKey | undefined;
     if (!key || !SYSTEM_TOOL_MODULES[key]) return null;
-    return await SYSTEM_TOOL_MODULES[key].execute(mcp, toolName, args);
+    return await SYSTEM_TOOL_MODULES[key].execute(mcp, toolName, args, context);
   } catch (err) {
     return { content: (err as Error).message, isError: true };
   }

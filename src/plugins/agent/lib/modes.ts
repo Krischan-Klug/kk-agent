@@ -9,6 +9,7 @@ export const READ_ONLY_TOOL_NAMES = [
   "Read",
   "Glob",
   "Grep",
+  "Skill",
   "Bash",
   "WebSearch",
   "WebFetch",
@@ -41,9 +42,9 @@ export const EDIT_TOOL_NAMES = [
   "remember_facts",
 ];
 
-export const PLAN_TOOL_IDS = ["filesystem", "web-search", "terminal", "user-interaction", "task", "attachment"];
+export const PLAN_TOOL_IDS = ["filesystem", "web-search", "terminal", "user-interaction", "task", "attachment", "skill"];
 
-export const EDIT_TOOL_IDS = ["filesystem", "web-search", "terminal", "user-interaction", "task", "memory", "attachment"];
+export const EDIT_TOOL_IDS = ["filesystem", "web-search", "terminal", "user-interaction", "task", "memory", "attachment", "skill"];
 
 export const CHAT_MODE_META: Record<ChatMode, ChatModeMeta> = {
   plan: {

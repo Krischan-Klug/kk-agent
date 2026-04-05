@@ -11,7 +11,7 @@
     "start": "node dist/index.js",
     "dev": "tsx watch index.ts",
     "lint": "tsc --noEmit",
-    "test": "node --import tsx --test src/plugins/provider/lib/transport.test.ts src/plugins/provider/lib/endpoints/responses.test.ts src/plugins/loop/lib/tool-executor.test.ts src/plugins/loop/lib/tool-result-storage.test.ts src/plugins/lib/transcript.test.ts src/plugins/tools/lib/read-output.test.ts src/plugins/tools/lib/filesystem/runtime.test.ts src/plugins/tools/lib/terminal/command-policy.test.ts src/plugins/skills/lib/loader.test.ts src/plugins/skills/service.test.ts src/plugins/systemprompt/lib/builder.test.ts",
+    "test": "node --import tsx --test src/plugins/provider/lib/transport.test.ts src/plugins/provider/lib/endpoints/responses.test.ts src/plugins/loop/lib/tool-executor.test.ts src/plugins/loop/lib/tool-result-storage.test.ts src/plugins/lib/transcript.test.ts src/plugins/tools/lib/read-output.test.ts src/plugins/tools/lib/filesystem/runtime.test.ts src/plugins/tools/lib/terminal/command-policy.test.ts src/plugins/tools/lib/skill/runtime.test.ts src/plugins/skills/lib/loader.test.ts src/plugins/skills/service.test.ts src/plugins/systemprompt/lib/builder.test.ts",
     "smoke:provider": "node --import tsx scripts/smoke-provider.ts"
   },
   "engines": {

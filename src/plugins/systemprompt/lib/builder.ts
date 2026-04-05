@@ -228,7 +228,7 @@ export function buildPrompt(
   promptSections: AgentPromptSections,
   modeInstruction: string,
   mcpInstructions: string,
-  skillInstructions: string,
+  skillsCatalog: string,
   variables: Record<string, string>,
   context: PromptBuildContext = {},
 ): string {
@@ -248,12 +248,12 @@ export function buildPrompt(
     resolveVariables(promptSections.security, resolvedVariables),
     "</security>",
     buildToolUsageSection(promptSections.toolUsage, resolvedVariables),
-    resolveVariables(skillInstructions, resolvedVariables),
+    resolveVariables(mcpInstructions, resolvedVariables),
+    resolveVariables(skillsCatalog, resolvedVariables),
     "<communication>",
     resolveVariables(promptSections.communication, resolvedVariables),
     "</communication>",
   ];
-  if (mcpInstructions) parts.push(resolveVariables(mcpInstructions, resolvedVariables));
   parts.push("</agent_runtime_prompt>");
 
   return parts.filter((part) => part.trim().length > 0).join("\n\n");

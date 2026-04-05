@@ -6,7 +6,7 @@ import { getActiveProviderId, getModelCapabilities } from "../provider/service.j
 import {
   buildResolvedSystemToolRuntime,
 } from "../tools/service.js";
-import { buildActiveSkillPromptSection } from "../skills/service.js";
+import { buildActiveSkillCatalogSection, getSkillsRootDir } from "../skills/service.js";
 import { runLoop } from "../loop/service.js";
 import type { LoopMessage, ModeRuntimeConfig } from "../loop/types.js";
 import { getAgent, getLoopState, setLoopState, clearLoopState } from "../agent/service.js";
@@ -37,6 +37,7 @@ import type { AgentDefinition, ChatMode } from "../agent/types.js";
 import type { RuntimeToolDefinition, ToolRuntimeContext } from "../loop/types.js";
 import { attachmentRefBlock, createTranscriptMessage, textBlock, type TranscriptBlock } from "../lib/transcript.js";
 import { normalizeCanonicalReasoningLevel } from "../provider/lib/capabilities.js";
+import { getLoadedSkillIds } from "../skills/lib/xml.js";
 
 function normalizeSessionReasoning<T extends { reasoningEffort?: string }>(session: T): T {
   return {
@@ -89,6 +90,11 @@ function buildModeRuntimeConfig(
     ...systemToolRuntime.instructionsById,
     ...config.mcpInstructions,
   };
+  const skillInstructionsById = Object.fromEntries(
+    activeSkillIds
+      .map((skillId) => [skillId, config.skillInstructions[skillId]])
+      .filter((entry): entry is [string, string] => typeof entry[1] === "string" && entry[1].trim().length > 0),
+  );
 
   return {
     promptSections: config.promptSections,
@@ -98,11 +104,11 @@ function buildModeRuntimeConfig(
       activeMcpIds,
       effectiveInstructions,
     ),
-    skillInstructions: buildActiveSkillPromptSection(
-      activeSkillIds,
-      config.skillInstructions,
-      mode,
-    ),
+    skillsCatalog: activeToolIds.includes("skill")
+      ? buildActiveSkillCatalogSection(activeSkillIds, mode)
+      : "",
+    activeSkillIds,
+    skillInstructionsById,
     runtimeVariables: systemToolRuntime.runtimeVariables,
     allTools: runtimeToolCollection.allTools,
     runtimeToolsByName: runtimeToolCollection.runtimeToolsByName,
@@ -127,7 +133,7 @@ function buildCurrentSystemPrompt(
     modeRuntimeConfig.promptSections,
     modeRuntimeConfig.modeInstruction,
     modeRuntimeConfig.mcpInstructions,
-    modeRuntimeConfig.skillInstructions,
+    modeRuntimeConfig.skillsCatalog,
     variables,
     {
       sessionId,
@@ -286,6 +292,8 @@ function buildLoopRequest(
   handlers: Partial<Parameters<typeof runLoop>[0]> = {},
 ) {
   const loopMessages = toLoopMessages(prepared.messages);
+  const activeModeConfig = prepared.modeRuntimeConfigs[prepared.session.activeMode] as SessionModeRuntimeConfig;
+  const loadedSkillIds = getLoadedSkillIds(loopMessages);
 
   return {
     agentId: prepared.session.agentId,
@@ -298,6 +306,14 @@ function buildLoopRequest(
     temperature: prepared.reasoning.temperature,
     maxOutputTokens: prepared.reasoning.maxOutputTokens,
     providerState: prepared.session.providerState,
+    toolContext: {
+      values: {
+        loadedSkillIds,
+        availableSkillIds: activeModeConfig.activeSkillIds,
+        skillInstructionsById: activeModeConfig.skillInstructionsById,
+        skillsRootDir: getSkillsRootDir(),
+      },
+    },
     modeConfigs: prepared.modeRuntimeConfigs,
     maxIterations: prepared.agent.maxIterations,
     activeMode: prepared.session.activeMode,
@@ -316,7 +332,7 @@ function buildLoopRequest(
           isError: true,
         });
       }
-      return executeRuntimeTool(runtimeTool, toolName, args);
+      return executeRuntimeTool(runtimeTool, toolName, args, _context);
     },
     resolveToolPermission: async (
       runtimeTool: RuntimeToolDefinition,

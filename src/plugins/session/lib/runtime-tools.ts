@@ -129,6 +129,7 @@ export async function executeRuntimeTool(
   runtimeTool: RuntimeToolDefinition,
   toolName: string,
   args: Record<string, unknown>,
+  context?: import("../../loop/types.js").ToolRuntimeContext,
 ): Promise<ToolExecutionResult> {
   if (runtimeTool.source === "system") {
     return (
@@ -137,6 +138,7 @@ export async function executeRuntimeTool(
         toolName,
         args,
         runtimeTool.accessScope as AccessScope | undefined,
+        context,
       )
     ) ?? { content: `Tool "${toolName}" is not available.`, isError: true };
   }

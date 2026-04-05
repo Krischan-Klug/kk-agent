@@ -7,6 +7,7 @@ import { getKnownSystemMcpIds } from "../tools/service.js";
 import type { ChatMode } from "../agent/types.js";
 import type { CreateSkillBody, SkillDefinition, SkillMetadata, UpdateSkillBody } from "./types.js";
 import { loadSkillFromPath, writeSkillBundle } from "./lib/loader.js";
+import { buildSkillsCatalogSection } from "./lib/xml.js";
 
 const DEFAULT_ALLOWED_MODES: ChatMode[] = ["plan", "edit"];
 
@@ -36,18 +37,6 @@ function normalizeSkillMetadata(metadata: Partial<SkillMetadata>): SkillMetadata
     recommendedMcpIds: sanitizeMcpIds(metadata.recommendedMcpIds),
     allowedModes: normalizeModes(metadata.allowedModes),
   };
-}
-
-function toCData(text: string): string {
-  return `<![CDATA[${text.replaceAll("]]>", "]]]]><![CDATA[>")}]]>`;
-}
-
-function escapeXml(value: string): string {
-  return value
-    .replaceAll("&", "&amp;")
-    .replaceAll("\"", "&quot;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;");
 }
 
 async function ensureSkillsRoot(): Promise<void> {
@@ -126,6 +115,10 @@ export function listSkills(): SkillDefinition[] {
   return [...cachedSkills];
 }
 
+export function getSkillById(id: string): SkillDefinition | undefined {
+  return cachedSkills.find((skill) => skill.id === id);
+}
+
 export function getKnownSkillIds(options: { activeOnly?: boolean; mode?: ChatMode } = {}): string[] {
   return cachedSkills
     .filter((skill) => {
@@ -136,45 +129,12 @@ export function getKnownSkillIds(options: { activeOnly?: boolean; mode?: ChatMod
     .map((skill) => skill.id);
 }
 
-export function buildSkillPromptSection(
-  skills: SkillDefinition[],
-  agentInstructions: Record<string, string> = {},
-): string {
-  if (skills.length === 0) return "";
-
-  const entries = skills.map((skill) => {
-    const instruction = (agentInstructions[skill.id] ?? skill.instruction).trim();
-    const toolRefs = skill.recommendedToolIds.length > 0
-      ? [
-          "    <recommended_tools>",
-          ...skill.recommendedToolIds.map((toolId) => `      <tool_ref id="${escapeXml(toolId)}" />`),
-          "    </recommended_tools>",
-        ].join("\n")
-      : "";
-    const mcpRefs = skill.recommendedMcpIds.length > 0
-      ? [
-          "    <recommended_mcps>",
-          ...skill.recommendedMcpIds.map((mcpId) => `      <mcp_ref id="${escapeXml(mcpId)}" />`),
-          "    </recommended_mcps>",
-        ].join("\n")
-      : "";
-
-    return [
-      `  <skill id="${escapeXml(skill.id)}" name="${escapeXml(skill.name)}" path="${escapeXml(skill.path)}" source="${escapeXml(skill.source ?? "custom")}" modes="${escapeXml(skill.allowedModes.join(","))}">`,
-      `    <description>${escapeXml(skill.description)}</description>`,
-      toolRefs,
-      mcpRefs,
-      `    <instruction format="markdown">${toCData(instruction)}</instruction>`,
-      "  </skill>",
-    ].filter(Boolean).join("\n");
-  });
-
-  return ["<skills>", ...entries, "</skills>"].join("\n");
+export function buildSkillCatalogSection(skills: SkillDefinition[]): string {
+  return buildSkillsCatalogSection(skills);
 }
 
-export function buildActiveSkillPromptSection(
+export function buildActiveSkillCatalogSection(
   activeSkillIds: string[],
-  agentInstructions: Record<string, string> = {},
   mode?: ChatMode,
 ): string {
   const activeSkills = activeSkillIds
@@ -183,7 +143,7 @@ export function buildActiveSkillPromptSection(
     .filter((skill) => skill.active)
     .filter((skill) => !mode || skill.allowedModes.includes(mode));
 
-  return buildSkillPromptSection(activeSkills, agentInstructions);
+  return buildSkillCatalogSection(activeSkills);
 }
 
 export async function createSkill(body: CreateSkillBody): Promise<SkillDefinition> {

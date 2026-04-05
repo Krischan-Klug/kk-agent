@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { StreamingToolExecutor } from "./tool-executor.js";
+import { createTranscriptMessage, textBlock } from "../../lib/transcript.js";
 import type { TranscriptToolUseBlock } from "../../lib/transcript.js";
 
 function toolUse(id: string, name: string, input: Record<string, unknown>): TranscriptToolUseBlock {
@@ -160,4 +161,32 @@ test("StreamingToolExecutor discards queued tools cleanly", async () => {
   const secondResult = results[1]?.content[0];
   assert.ok(secondResult && "content" in secondResult);
   assert.equal(secondResult?.content.includes("discarded for retry"), true);
+});
+
+test("StreamingToolExecutor appends hidden tool-generated messages after the tool result", async () => {
+  const executor = new StreamingToolExecutor(
+    async () => ({
+      content: "Skill loaded",
+      additionalMessages: [
+        createTranscriptMessage({
+          role: "user",
+          isMeta: true,
+          content: [textBlock("<skill_context id=\"repo-analysis\" />")],
+        }),
+      ],
+    }),
+    "edit",
+    {
+      ...runtimeTool("Skill", false),
+    },
+    async () => ({ allowed: true }),
+  );
+
+  executor.addTool(toolUse("1", "Skill", { skill: "repo-analysis" }));
+  const results = await executor.getFinalResults();
+
+  assert.equal(results.length, 2);
+  assert.equal(results[0]?.role, "tool");
+  assert.equal(results[1]?.role, "user");
+  assert.equal(results[1]?.isMeta, true);
 });

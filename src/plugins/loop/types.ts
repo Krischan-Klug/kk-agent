@@ -56,6 +56,7 @@ export interface LoopResult {
 export interface ToolExecutionResult {
   content: string;
   isError?: boolean;
+  additionalMessages?: TranscriptMessage[];
   contextModifier?: (context: ToolRuntimeContext) => ToolRuntimeContext;
 }
 
@@ -72,7 +73,9 @@ export interface ModeRuntimeConfig {
   promptSections: AgentPromptSections;
   modeInstruction: string;
   mcpInstructions: string;
-  skillInstructions: string;
+  skillsCatalog: string;
+  activeSkillIds: string[];
+  skillInstructionsById: Record<string, string>;
   runtimeVariables?: Record<string, string>;
   allTools: UnifiedToolDefinition[];
   runtimeToolsByName: Record<string, RuntimeToolDefinition>;
@@ -96,6 +99,7 @@ export interface LoopOptions {
     mode: ChatMode,
     context: ToolRuntimeContext,
   ) => Promise<ToolExecutionResult>;
+  toolContext?: ToolRuntimeContext;
   reasoningEffort?: string;
   temperature?: number;
   maxOutputTokens?: number;

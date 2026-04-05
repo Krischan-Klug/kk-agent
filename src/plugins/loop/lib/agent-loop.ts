@@ -75,7 +75,7 @@ async function runModelPass(
     modeConfig.promptSections,
     modeConfig.modeInstruction,
     modeConfig.mcpInstructions,
-    modeConfig.skillInstructions,
+    modeConfig.skillsCatalog,
     variables,
     {
       sessionId: opts.sessionId,
@@ -140,6 +140,9 @@ export async function runAgentLoop(opts: LoopOptions): Promise<LoopResult> {
   let invalidToolRetryCount = 0;
   let providerState = opts.providerState;
   let providerDebug: LoopResult["providerDebug"] = undefined;
+  let runtimeContext = {
+    values: { ...(opts.toolContext?.values ?? {}) },
+  };
   const defaults = getDefaults();
 
   while (iteration < opts.maxIterations) {
@@ -168,6 +171,7 @@ export async function runAgentLoop(opts: LoopOptions): Promise<LoopResult> {
           update.summary,
         );
       },
+      runtimeContext,
     );
 
     const streamedToolUseIds = new Set<string>();
@@ -241,6 +245,7 @@ export async function runAgentLoop(opts: LoopOptions): Promise<LoopResult> {
       }
     }
     const toolResults = await executor.getFinalResults();
+    runtimeContext = executor.getRuntimeContext();
     messages.push(...toolResults);
   }
 

@@ -1,5 +1,5 @@
 export type McpSource = "system" | "custom";
-export type SystemMcpKey = "filesystem" | "web-search" | "terminal" | "user-interaction" | "task" | "memory" | "attachment";
+export type SystemMcpKey = "filesystem" | "web-search" | "terminal" | "user-interaction" | "task" | "memory" | "attachment" | "skill";
 export type AccessScope = "user" | "system";
 
 export interface ToolResultPolicy {

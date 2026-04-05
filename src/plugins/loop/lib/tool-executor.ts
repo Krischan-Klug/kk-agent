@@ -33,6 +33,7 @@ type TrackedTool = {
   result?: { content: string; isError: boolean };
   streamedResult?: TranscriptMessage;
   finalResult?: TranscriptMessage;
+  additionalMessages?: TranscriptMessage[];
   yielded: boolean;
   promise?: Promise<void>;
   contextModifier?: (context: ToolRuntimeContext) => ToolRuntimeContext;
@@ -74,7 +75,12 @@ export class StreamingToolExecutor {
       mode: ChatMode,
     ) => Promise<{ allowed: boolean; reason?: string }>,
     private readonly onUpdate?: (update: ToolExecutionUpdate) => void,
-  ) {}
+    initialContext: ToolRuntimeContext = { values: {} },
+  ) {
+    this.runtimeContext = {
+      values: { ...initialContext.values },
+    };
+  }
 
   addTool(toolUse: TranscriptToolUseBlock): void {
     if (this.tools.some((entry) => entry.toolUse.id === toolUse.id)) return;
@@ -168,6 +174,9 @@ export class StreamingToolExecutor {
       const finalMessage = toToolResultMessage(entry.tool.toolUse, content, entry.isError);
       entry.tool.finalResult = finalMessage;
       results.push(finalMessage);
+      if (entry.tool.additionalMessages?.length) {
+        results.push(...entry.tool.additionalMessages);
+      }
     });
 
     return results;
@@ -251,6 +260,7 @@ export class StreamingToolExecutor {
           content: execution.content,
           isError: execution.isError === true,
         };
+        tracked.additionalMessages = execution.additionalMessages;
         tracked.streamedResult = toToolResultMessage(
           tracked.toolUse,
           tracked.result.content,

@@ -74,6 +74,7 @@ const CODE_DEFAULTS: AppDefaults = {
         "Nutze Tools proaktiv, aber nur wenn sie die Aufgabe wirklich voranbringen.",
         "Parallelisiere voneinander unabhaengige Read-, Glob-, Grep-, WebSearch- und WebFetch-Aufrufe.",
         "Verwende fuer echte Rueckfragen oder Entscheidungen das Tool ask_user.",
+        "Wenn eine gelistete Skill klar zur Aufgabe passt, lade sie mit Skill bevor du ihrer Workflow-Beschreibung folgst.",
         "Frage den Nutzer nur, wenn nach eigener Pruefung eine echte Blockade oder Entscheidung offen bleibt.",
         "Grosse Tool-Ergebnisse koennen fuer den Modellkontext als Preview mit Abschneidehinweis erscheinen.",
         "Halte dich an die im aktuellen Mode verfuegbaren Tools.",

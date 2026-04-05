@@ -4,7 +4,7 @@ import { mkdtemp, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import type { SkillDefinition } from "./types.js";
-import { buildSkillPromptSection, createSkill, initSkillService, listSkills, updateSkill } from "./service.js";
+import { buildSkillCatalogSection, createSkill, initSkillService, listSkills, updateSkill } from "./service.js";
 
 const BASE_SKILL: SkillDefinition = {
   id: "repo-analysis",
@@ -19,24 +19,15 @@ const BASE_SKILL: SkillDefinition = {
   instruction: "Use Read, Glob and Grep before proposing edits.",
 };
 
-test("buildSkillPromptSection emits XML with tool and mcp references", () => {
-  const xml = buildSkillPromptSection([BASE_SKILL]);
+test("buildSkillCatalogSection emits metadata XML with tool and mcp references", () => {
+  const xml = buildSkillCatalogSection([BASE_SKILL]);
 
-  assert.ok(xml.includes("<skills>"));
+  assert.ok(xml.includes("<skills_catalog>"));
   assert.ok(xml.includes('<skill id="repo-analysis"'));
   assert.ok(xml.includes("<recommended_tools>"));
   assert.ok(xml.includes('<tool_ref id="filesystem" />'));
   assert.ok(xml.includes("<recommended_mcps>"));
   assert.ok(xml.includes('<mcp_ref id="git-inspector" />'));
-  assert.ok(xml.includes("<![CDATA[Use Read, Glob and Grep before proposing edits.]]>"));
-});
-
-test("buildSkillPromptSection applies agent instruction overrides", () => {
-  const xml = buildSkillPromptSection([BASE_SKILL], {
-    "repo-analysis": "Custom agent override.",
-  });
-
-  assert.ok(xml.includes("<![CDATA[Custom agent override.]]>"));
   assert.ok(!xml.includes("Use Read, Glob and Grep before proposing edits."));
 });
 

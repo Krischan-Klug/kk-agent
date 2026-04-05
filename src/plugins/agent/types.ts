@@ -16,9 +16,11 @@ export interface AgentModeConfig {
   modeInstruction: string;
   toolIds: string[];
   mcpIds: string[];
+  skillIds: string[];
   toolAccessScopes: Record<string, ToolAccessScope>;
   toolInstructions: Record<string, string>;
   mcpInstructions: Record<string, string>;
+  skillInstructions: Record<string, string>;
   allowedToolNames: string[];
 }
 
@@ -27,9 +29,11 @@ export interface AgentModeConfigPatch {
   modeInstruction?: string;
   toolIds?: string[];
   mcpIds?: string[];
+  skillIds?: string[];
   toolAccessScopes?: Record<string, ToolAccessScope>;
   toolInstructions?: Record<string, string>;
   mcpInstructions?: Record<string, string>;
+  skillInstructions?: Record<string, string>;
   allowedToolNames?: string[];
 }
 

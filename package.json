@@ -11,7 +11,7 @@
     "start": "node dist/index.js",
     "dev": "tsx watch index.ts",
     "lint": "tsc --noEmit",
-    "test": "node --import tsx --test src/plugins/provider/lib/transport.test.ts src/plugins/provider/lib/endpoints/responses.test.ts src/plugins/loop/lib/tool-executor.test.ts src/plugins/loop/lib/tool-result-storage.test.ts src/plugins/lib/transcript.test.ts src/plugins/tools/lib/read-output.test.ts src/plugins/tools/lib/filesystem/runtime.test.ts src/plugins/tools/lib/terminal/command-policy.test.ts",
+    "test": "node --import tsx --test src/plugins/provider/lib/transport.test.ts src/plugins/provider/lib/endpoints/responses.test.ts src/plugins/loop/lib/tool-executor.test.ts src/plugins/loop/lib/tool-result-storage.test.ts src/plugins/lib/transcript.test.ts src/plugins/tools/lib/read-output.test.ts src/plugins/tools/lib/filesystem/runtime.test.ts src/plugins/tools/lib/terminal/command-policy.test.ts src/plugins/skills/lib/loader.test.ts src/plugins/skills/service.test.ts src/plugins/systemprompt/lib/builder.test.ts",
     "smoke:provider": "node --import tsx scripts/smoke-provider.ts"
   },
   "engines": {
@@ -33,7 +33,8 @@
     "multer": "^2.1.1",
     "pdf-parse": "^2.4.5",
     "semver": "^7.6.2",
-    "uuid": "^13.0.0"
+    "uuid": "^13.0.0",
+    "yaml": "^2.8.1"
   },
   "devDependencies": {
     "@types/cors": "^2.8.19",

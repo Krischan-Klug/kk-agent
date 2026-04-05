@@ -1,6 +1,7 @@
 import { buildCapabilityInstructions } from "../../systemprompt/service.js";
 import { getKnownMcpIds, getRunnableMcpIds } from "../../mcp/service.js";
 import { getKnownSystemMcpIds, getRunnableSystemMcpIds } from "../../tools/service.js";
+import { listSkills } from "../../skills/service.js";
 import type { AgentDefinition } from "../../agent/types.js";
 import { getChatModes } from "../../agent/lib/modes.js";
 import { getModeConfig } from "../../agent/lib/mode-config.js";
@@ -15,6 +16,15 @@ export function sanitizeMcpIds(mcpIds: string[]): string[] {
 export function sanitizeToolIds(toolIds: string[]): string[] {
   const knownIds = new Set(getKnownSystemMcpIds());
   return [...new Set([...toolIds, ...REQUIRED_SESSION_TOOL_IDS])].filter((id) => knownIds.has(id));
+}
+
+export function sanitizeSkillIds(skillIds: string[]): string[] {
+  const knownIds = new Set(
+    listSkills()
+      .filter((skill) => skill.active)
+      .map((skill) => skill.id),
+  );
+  return [...new Set(skillIds)].filter((id) => knownIds.has(id));
 }
 
 export function getSessionRunnableMcpIds(activeToolIds: string[], activeMcpIds: string[]): string[] {
@@ -46,4 +56,13 @@ export function resolveSessionMcpIds(
   if (activeMcpIds !== undefined) return sanitizeMcpIds(activeMcpIds);
   const modeMcpIds = getChatModes().flatMap((mode) => getModeConfig(agent, mode).mcpIds);
   return sanitizeMcpIds(modeMcpIds);
+}
+
+export function resolveSessionSkillIds(
+  agent: Pick<AgentDefinition, "modeConfigs">,
+  activeSkillIds?: string[],
+): string[] {
+  if (activeSkillIds !== undefined) return sanitizeSkillIds(activeSkillIds);
+  const modeSkillIds = getChatModes().flatMap((mode) => getModeConfig(agent, mode).skillIds);
+  return sanitizeSkillIds(modeSkillIds);
 }

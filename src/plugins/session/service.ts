@@ -6,6 +6,7 @@ import { getActiveProviderId, getModelCapabilities } from "../provider/service.j
 import {
   buildResolvedSystemToolRuntime,
 } from "../tools/service.js";
+import { buildActiveSkillPromptSection } from "../skills/service.js";
 import { runLoop } from "../loop/service.js";
 import type { LoopMessage, ModeRuntimeConfig } from "../loop/types.js";
 import { getAgent, getLoopState, setLoopState, clearLoopState } from "../agent/service.js";
@@ -66,13 +67,14 @@ interface SessionModeRuntimeConfig extends ModeRuntimeConfig {
 }
 
 function buildModeRuntimeConfig(
-  session: Pick<SessionState, "activeToolIds" | "activeMcpIds" | "model">,
+  session: Pick<SessionState, "activeToolIds" | "activeMcpIds" | "activeSkillIds" | "model">,
   agent: AgentDefinition,
   mode: ChatMode,
 ): SessionModeRuntimeConfig {
   const config = getModeConfig(agent, mode);
   const activeToolIds = intersectIds(session.activeToolIds, config.toolIds);
   const activeMcpIds = intersectIds(session.activeMcpIds, config.mcpIds);
+  const activeSkillIds = intersectIds(session.activeSkillIds, config.skillIds);
   const systemToolRuntime = buildResolvedSystemToolRuntime(
     activeToolIds,
     config.toolAccessScopes,
@@ -96,6 +98,11 @@ function buildModeRuntimeConfig(
       activeMcpIds,
       effectiveInstructions,
     ),
+    skillInstructions: buildActiveSkillPromptSection(
+      activeSkillIds,
+      config.skillInstructions,
+      mode,
+    ),
     runtimeVariables: systemToolRuntime.runtimeVariables,
     allTools: runtimeToolCollection.allTools,
     runtimeToolsByName: runtimeToolCollection.runtimeToolsByName,
@@ -105,7 +112,7 @@ function buildModeRuntimeConfig(
 
 function buildCurrentSystemPrompt(
   sessionId: string,
-  session: Pick<SessionState, "activeToolIds" | "activeMcpIds" | "activeMode" | "model">,
+  session: Pick<SessionState, "activeToolIds" | "activeMcpIds" | "activeSkillIds" | "activeMode" | "model">,
   agent: AgentDefinition,
 ): string {
   const modeRuntimeConfig = buildModeRuntimeConfig(session, agent, session.activeMode);
@@ -120,6 +127,7 @@ function buildCurrentSystemPrompt(
     modeRuntimeConfig.promptSections,
     modeRuntimeConfig.modeInstruction,
     modeRuntimeConfig.mcpInstructions,
+    modeRuntimeConfig.skillInstructions,
     variables,
     {
       sessionId,
@@ -146,6 +154,7 @@ export async function createSession(body: CreateSessionBody): Promise<SessionSta
     activeMode: defaults.activeMode,
     activeToolIds: defaults.activeToolIds,
     activeMcpIds: defaults.activeMcpIds,
+    activeSkillIds: defaults.activeSkillIds,
     reasoningEffort: defaults.reasoningEffort,
     temperature: defaults.temperature,
   }));
@@ -443,6 +452,7 @@ export async function updateSession(id: string, body: Partial<CreateSessionBody>
     ? {
         activeToolIds: body.activeToolIds,
         activeMcpIds: body.activeMcpIds,
+        activeSkillIds: body.activeSkillIds,
         activeMode: body.activeMode,
         model: body.model,
         reasoningEffort: body.reasoningEffort,
@@ -451,6 +461,7 @@ export async function updateSession(id: string, body: Partial<CreateSessionBody>
     : {
         activeToolIds: body.activeToolIds,
         activeMcpIds: body.activeMcpIds,
+        activeSkillIds: body.activeSkillIds,
         activeMode: body.activeMode ?? session.activeMode,
         model: body.model ?? session.model,
         reasoningEffort: body.reasoningEffort ?? session.reasoningEffort,
@@ -469,6 +480,7 @@ export async function updateSession(id: string, body: Partial<CreateSessionBody>
     activeMode: defaults.activeMode,
     activeToolIds: defaults.activeToolIds,
     activeMcpIds: defaults.activeMcpIds,
+    activeSkillIds: defaults.activeSkillIds,
     reasoningEffort: defaults.reasoningEffort,
     temperature: defaults.temperature,
     ...(switchingAgent || session.providerId !== defaults.providerId || session.model !== defaults.model
@@ -501,6 +513,15 @@ export function removeToolFromSessions(toolId: string): void {
     if (!session.activeToolIds.includes(toolId)) continue;
     store.updateSession(session.id, {
       activeToolIds: session.activeToolIds.filter((entry) => entry !== toolId),
+    });
+  }
+}
+
+export function removeSkillFromSessions(skillId: string): void {
+  for (const session of listSessions()) {
+    if (!session.activeSkillIds.includes(skillId)) continue;
+    store.updateSession(session.id, {
+      activeSkillIds: session.activeSkillIds.filter((entry) => entry !== skillId),
     });
   }
 }

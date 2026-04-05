@@ -10,10 +10,11 @@ export function buildPrompt(
   promptSections: AgentPromptSections,
   modeInstruction: string,
   mcpInstructions: string,
+  skillInstructions: string,
   variables: Record<string, string>,
   context: PromptBuildContext = {},
 ): string {
-  return build(promptSections, modeInstruction, mcpInstructions, variables, context);
+  return build(promptSections, modeInstruction, mcpInstructions, skillInstructions, variables, context);
 }
 
 export function buildCapabilityInstructions(

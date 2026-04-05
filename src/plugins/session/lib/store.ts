@@ -10,6 +10,7 @@ export function createSession(data: {
   activeMode: SessionState["activeMode"];
   activeToolIds: string[];
   activeMcpIds: string[];
+  activeSkillIds: string[];
   reasoningEffort?: SessionState["reasoningEffort"];
   temperature?: number;
 }): SessionRecord {
@@ -23,6 +24,7 @@ export function createSession(data: {
     activeMode: data.activeMode,
     activeToolIds: data.activeToolIds,
     activeMcpIds: data.activeMcpIds,
+    activeSkillIds: data.activeSkillIds,
     reasoningEffort: data.reasoningEffort,
     temperature: data.temperature,
     messages: [],

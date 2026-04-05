@@ -126,6 +126,17 @@ function removeCapabilityFromModeConfig(
   return { ...modeConfig, toolIds, mcpIds, toolAccessScopes, toolInstructions, mcpInstructions };
 }
 
+function removeSkillFromModeConfig(
+  modeConfig: AgentDefinition["modeConfigs"][ChatMode] | undefined,
+  skillId: string,
+) {
+  if (!modeConfig) return modeConfig;
+  const skillIds = modeConfig.skillIds.filter((entry) => entry !== skillId);
+  const skillInstructions = { ...modeConfig.skillInstructions };
+  delete skillInstructions[skillId];
+  return { ...modeConfig, skillIds, skillInstructions };
+}
+
 export async function removeMcpFromAgents(mcpId: string): Promise<void> {
   const updates = listAgents().map(async (agent) => {
     const nextModeConfigs = { ...agent.modeConfigs };
@@ -152,6 +163,25 @@ export async function removeToolFromAgents(toolId: string): Promise<void> {
     for (const mode of getChatModes()) {
       const current = agent.modeConfigs[mode];
       const next = removeCapabilityFromModeConfig(current, toolId, "tool");
+      if (JSON.stringify(next) !== JSON.stringify(current)) {
+        nextModeConfigs[mode] = next!;
+        changed = true;
+      }
+    }
+    if (changed) {
+      await store.updateAgent(agent.id, { modeConfigs: nextModeConfigs });
+    }
+  });
+  await Promise.all(updates);
+}
+
+export async function removeSkillFromAgents(skillId: string): Promise<void> {
+  const updates = listAgents().map(async (agent) => {
+    const nextModeConfigs = { ...agent.modeConfigs };
+    let changed = false;
+    for (const mode of getChatModes()) {
+      const current = agent.modeConfigs[mode];
+      const next = removeSkillFromModeConfig(current, skillId);
       if (JSON.stringify(next) !== JSON.stringify(current)) {
         nextModeConfigs[mode] = next!;
         changed = true;

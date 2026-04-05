@@ -1,4 +1,5 @@
 import { getDefaults } from "../../lib/defaults.js";
+import { getKnownSkillIds } from "../../skills/service.js";
 import type {
   AgentDefinition,
   AgentModeConfig,
@@ -17,6 +18,11 @@ function normalizeToolIds(toolIds: string[]): string[] {
 
 function normalizeMcpIds(mcpIds: string[]): string[] {
   return [...new Set(mcpIds)];
+}
+
+function normalizeSkillIds(skillIds: string[]): string[] {
+  const knownIds = new Set(getKnownSkillIds());
+  return [...new Set(skillIds)].filter((id) => knownIds.has(id));
 }
 
 function normalizeInstructions(instructions: Record<string, string> = {}): Record<string, string> {
@@ -41,9 +47,11 @@ export function buildDefaultModeConfig(mode: ChatMode): AgentModeConfig {
     modeInstruction: defaults.agent.modeInstructions[mode],
     toolIds: normalizeToolIds(defaults.agent.modeToolIds[mode]),
     mcpIds: [],
+    skillIds: [],
     toolAccessScopes: {},
     toolInstructions: { ...defaults.agent.modeToolInstructions[mode] },
     mcpInstructions: {},
+    skillInstructions: {},
     allowedToolNames: [...defaults.agent.modeAllowedToolNames[mode]],
   };
 }
@@ -58,9 +66,11 @@ export function normalizeModeConfig(
     modeInstruction: current?.modeInstruction ?? defaults.modeInstruction,
     toolIds: normalizeToolIds(current?.toolIds ?? defaults.toolIds),
     mcpIds: normalizeMcpIds(current?.mcpIds ?? defaults.mcpIds),
+    skillIds: normalizeSkillIds(current?.skillIds ?? defaults.skillIds),
     toolAccessScopes: { ...defaults.toolAccessScopes, ...normalizeToolAccessScopes(current?.toolAccessScopes) },
     toolInstructions: { ...defaults.toolInstructions, ...normalizeInstructions(current?.toolInstructions) },
     mcpInstructions: { ...defaults.mcpInstructions, ...normalizeInstructions(current?.mcpInstructions) },
+    skillInstructions: { ...defaults.skillInstructions, ...normalizeInstructions(current?.skillInstructions) },
     allowedToolNames: [...new Set(current?.allowedToolNames ?? defaults.allowedToolNames)],
   };
 }
@@ -102,6 +112,7 @@ export function compactModeConfig(mode: ChatMode, current?: Partial<AgentModeCon
   if (normalized.modeInstruction !== defaults.modeInstruction) compacted.modeInstruction = normalized.modeInstruction;
   if (JSON.stringify(normalized.toolIds) !== JSON.stringify(defaults.toolIds)) compacted.toolIds = normalized.toolIds;
   if (normalized.mcpIds.length > 0) compacted.mcpIds = normalized.mcpIds;
+  if (normalized.skillIds.length > 0) compacted.skillIds = normalized.skillIds;
   if (Object.keys(normalized.toolAccessScopes).length > 0) compacted.toolAccessScopes = normalized.toolAccessScopes;
 
   const toolInstructions = compactInstructions(normalized.toolInstructions, defaults.toolInstructions);
@@ -109,6 +120,9 @@ export function compactModeConfig(mode: ChatMode, current?: Partial<AgentModeCon
 
   const mcpInstructions = compactInstructions(normalized.mcpInstructions);
   if (mcpInstructions) compacted.mcpInstructions = mcpInstructions;
+
+  const skillInstructions = compactInstructions(normalized.skillInstructions);
+  if (skillInstructions) compacted.skillInstructions = skillInstructions;
 
   if (JSON.stringify(normalized.allowedToolNames) !== JSON.stringify(defaults.allowedToolNames)) {
     compacted.allowedToolNames = normalized.allowedToolNames;
@@ -139,6 +153,7 @@ export function applyModeConfigPatch(
     modeInstruction: patch?.modeInstruction ?? normalizedCurrent.modeInstruction,
     toolIds: patch?.toolIds ? normalizeToolIds(patch.toolIds) : normalizedCurrent.toolIds,
     mcpIds: patch?.mcpIds ? normalizeMcpIds(patch.mcpIds) : normalizedCurrent.mcpIds,
+    skillIds: patch?.skillIds ? normalizeSkillIds(patch.skillIds) : normalizedCurrent.skillIds,
     toolAccessScopes: patch?.toolAccessScopes
       ? normalizeToolAccessScopes(patch.toolAccessScopes)
       : normalizedCurrent.toolAccessScopes,
@@ -148,6 +163,9 @@ export function applyModeConfigPatch(
     mcpInstructions: patch?.mcpInstructions
       ? normalizeInstructions(patch.mcpInstructions)
       : normalizedCurrent.mcpInstructions,
+    skillInstructions: patch?.skillInstructions
+      ? normalizeInstructions(patch.skillInstructions)
+      : normalizedCurrent.skillInstructions,
     allowedToolNames: [...new Set(patch?.allowedToolNames ?? normalizedCurrent.allowedToolNames)],
   };
 }

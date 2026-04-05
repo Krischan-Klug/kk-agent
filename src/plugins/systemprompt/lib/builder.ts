@@ -228,6 +228,7 @@ export function buildPrompt(
   promptSections: AgentPromptSections,
   modeInstruction: string,
   mcpInstructions: string,
+  skillInstructions: string,
   variables: Record<string, string>,
   context: PromptBuildContext = {},
 ): string {
@@ -247,6 +248,7 @@ export function buildPrompt(
     resolveVariables(promptSections.security, resolvedVariables),
     "</security>",
     buildToolUsageSection(promptSections.toolUsage, resolvedVariables),
+    resolveVariables(skillInstructions, resolvedVariables),
     "<communication>",
     resolveVariables(promptSections.communication, resolvedVariables),
     "</communication>",

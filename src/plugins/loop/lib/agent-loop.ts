@@ -75,6 +75,7 @@ async function runModelPass(
     modeConfig.promptSections,
     modeConfig.modeInstruction,
     modeConfig.mcpInstructions,
+    modeConfig.skillInstructions,
     variables,
     {
       sessionId: opts.sessionId,

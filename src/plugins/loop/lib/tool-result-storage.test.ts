@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { access, rm } from "node:fs/promises";
 import { join } from "node:path";
-import { STATE_DIR } from "../../lib/state.js";
+import { getStateDirPath, STATE_DIR } from "../../lib/state.js";
 import { fitToolResultsToBudget, persistLargeToolResult } from "./tool-result-storage.js";
 
 test("persistLargeToolResult skips persistence for self-bounded read tools", async () => {
@@ -18,11 +18,12 @@ test("persistLargeToolResult skips persistence for self-bounded read tools", asy
 
 test("persistLargeToolResult stores oversized outputs for regular tools and returns a preview", async () => {
   const content = "A".repeat(13_000);
-  const storedPath = join(STATE_DIR, "tool-results", "tool-test-grep.txt");
+  const storedPath = getStateDirPath("tool-results", "tool-test-grep.txt");
   await rm(storedPath, { force: true });
   const preview = await persistLargeToolResult("tool-test-grep", "Grep", content);
 
   assert.ok(preview.includes("stored full Grep result"));
+  assert.ok(preview.includes(storedPath));
   await access(storedPath);
   await rm(storedPath, { force: true });
 });

@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { existsSync, rmSync } from "node:fs";
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { basename, extname, join, resolve } from "node:path";
-import { STATE_DIR } from "../../lib/state.js";
+import { getStateDirPath } from "../../lib/state.js";
 import type { StoredAttachment, AttachmentMeta } from "./attachment-types.js";
 
 interface AllowedType {
@@ -57,7 +57,7 @@ const EXTENSION_FALLBACKS = new Map<string, AllowedType>([
   [".pdf", { category: "pdf", maxSize: 20 * 1024 * 1024 }],
 ]);
 
-const ATTACHMENTS_ROOT = resolve(STATE_DIR, "session-attachments");
+const ATTACHMENTS_ROOT = resolve(getStateDirPath("session-attachments"));
 const INDEX_FILENAME = "index.json";
 
 function getSessionDir(sessionId: string): string {

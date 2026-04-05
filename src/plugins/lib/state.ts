@@ -31,4 +31,8 @@ export function getStatePath(filename: string): string {
   return join(STATE_DIR, filename);
 }
 
+export function getStateDirPath(...segments: string[]): string {
+  return join(STATE_DIR, ...segments);
+}
+
 export { STATE_DIR };

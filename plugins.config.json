@@ -29,6 +29,10 @@
     "enabled": true,
     "settings": {}
   },
+  "skills": {
+    "enabled": true,
+    "settings": {}
+  },
   "agent": {
     "enabled": true,
     "settings": {}

@@ -4,7 +4,7 @@ import { REASONING_LEVEL_DEFAULTS } from "../../provider/defaults.js";
 import { normalizeCanonicalReasoningLevel } from "../../provider/lib/capabilities.js";
 import { getDefaults } from "../../lib/defaults.js";
 import { getModelSettings, resolveProviderModel } from "../../provider/service.js";
-import { resolveSessionMcpIds, resolveSessionToolIds } from "./tool-selection.js";
+import { resolveSessionMcpIds, resolveSessionSkillIds, resolveSessionToolIds } from "./tool-selection.js";
 import type { AgentDefinition } from "../../agent/types.js";
 
 type SessionLikeAgent = Pick<
@@ -14,7 +14,7 @@ type SessionLikeAgent = Pick<
 
 export async function resolveSessionDefaults(
   agent: SessionLikeAgent,
-  body: Pick<CreateSessionBody, "activeToolIds" | "activeMcpIds" | "activeMode" | "model" | "reasoningEffort" | "temperature">,
+  body: Pick<CreateSessionBody, "activeToolIds" | "activeMcpIds" | "activeSkillIds" | "activeMode" | "model" | "reasoningEffort" | "temperature">,
   providerId: string,
 ) {
   const selection = await resolveProviderModel(providerId, body.model ?? agent.defaultModel);
@@ -24,6 +24,7 @@ export async function resolveSessionDefaults(
     activeMode: body.activeMode ?? agent.defaultChatMode ?? getDefaults().agent.defaultChatMode,
     activeToolIds: resolveSessionToolIds(agent, body.activeToolIds),
     activeMcpIds: resolveSessionMcpIds(agent, body.activeMcpIds),
+    activeSkillIds: resolveSessionSkillIds(agent, body.activeSkillIds),
     reasoningEffort: normalizeCanonicalReasoningLevel(body.reasoningEffort ?? agent.reasoningEffort),
     temperature: body.temperature ?? agent.temperature,
   };

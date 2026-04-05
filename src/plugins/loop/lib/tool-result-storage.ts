@@ -1,8 +1,8 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { STATE_DIR } from "../../lib/state.js";
+import { getStateDirPath } from "../../lib/state.js";
 
-const TOOL_RESULT_DIR = join(STATE_DIR, "tool-results");
+const TOOL_RESULT_DIR = getStateDirPath("tool-results");
 const PREVIEW_THRESHOLD_CHARS = 12_000;
 const PREVIEW_CHARS = 2_400;
 const AGGREGATED_CONTEXT_BUDGET = 32_000;
@@ -55,12 +55,13 @@ export async function persistLargeToolResult(
 
   await mkdir(TOOL_RESULT_DIR, { recursive: true });
   const filename = `${toolUseId}.txt`;
-  await writeFile(join(TOOL_RESULT_DIR, filename), normalized, "utf-8");
+  const storedPath = join(TOOL_RESULT_DIR, filename);
+  await writeFile(storedPath, normalized, "utf-8");
 
   return [
     buildPreview(normalized, previewChars),
     "",
-    `[stored full ${toolName} result in state/tool-results/${filename}; ${normalized.length} chars total]`,
+    `[stored full ${toolName} result in ${storedPath}; ${normalized.length} chars total]`,
   ].join("\n");
 }
 

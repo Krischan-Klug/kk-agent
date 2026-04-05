@@ -30,6 +30,7 @@ export interface SessionState {
   activeMode: ChatMode;
   activeToolIds: string[];
   activeMcpIds: string[];
+  activeSkillIds: string[];
   reasoningEffort?: ReasoningEffort;
   temperature?: number;
   messages: SessionMessage[];
@@ -48,6 +49,7 @@ export interface CreateSessionBody {
   model?: string;
   activeToolIds?: string[];
   activeMcpIds?: string[];
+  activeSkillIds?: string[];
   reasoningEffort?: ReasoningEffort;
   temperature?: number;
 }
@@ -58,6 +60,7 @@ export interface UpdateSessionBody {
   model?: string;
   activeToolIds?: string[];
   activeMcpIds?: string[];
+  activeSkillIds?: string[];
   reasoningEffort?: ReasoningEffort;
   temperature?: number;
 }

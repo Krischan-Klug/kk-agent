@@ -105,13 +105,14 @@ export async function doChatStream(req: Request, res: Response): Promise<void> {
 
 export async function doPatch(req: Request, res: Response): Promise<Response> {
   try {
-    const { agentId, activeMode, model, activeToolIds, activeMcpIds, reasoningEffort, temperature } = req.body as PatchSessionBody;
+    const { agentId, activeMode, model, activeToolIds, activeMcpIds, activeSkillIds, reasoningEffort, temperature } = req.body as PatchSessionBody;
     const session = await patchSession(req.params.id, {
       agentId,
       activeMode,
       model,
       activeToolIds,
       activeMcpIds,
+      activeSkillIds,
       reasoningEffort,
       temperature,
     });

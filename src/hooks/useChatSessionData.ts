@@ -90,7 +90,7 @@ export function useChatSessionData({ onDebugOpen, setDebugOpen }: Options) {
         setMcps(mcps);
         setSkills(availableSkills);
       })
-      .catch(() => {});
+      .catch((err) => console.warn("[debug] Failed to load debug data:", err));
     void loadContextData(sessionId);
   }, [loadAvailableMcps, loadContextData, onDebugOpen]);
 

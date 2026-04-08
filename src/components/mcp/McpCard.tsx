@@ -109,6 +109,8 @@ const ScopeSelect = styled.select`
   }
 `;
 
+type SkillOption = { id: string; name: string };
+
 type Props = {
   mcp: McpListItem;
   instruction: string;
@@ -116,6 +118,7 @@ type Props = {
   editOpen: boolean;
   toolsOpen: boolean;
   instructionsOpen: boolean;
+  availableSkills?: SkillOption[];
   onStateToggle: () => void;
   onEditToggle: () => void;
   onDelete: () => void;
@@ -126,7 +129,67 @@ type Props = {
   onOpenEdit: () => void;
   onEditFormChange: (form: EditForm) => void;
   onSaveEdit: (restart?: boolean) => void;
+  onSkillToggle?: (skillId: string, linked: boolean) => void;
 };
+
+const INSTRUCTION_TEMPLATES: { label: string; body: string }[] = [
+  {
+    label: "Standard Workflow",
+    body: [
+      "## Standard Workflow",
+      "1. Identify the user's intent and required inputs.",
+      "2. Call the relevant tool with minimal arguments first.",
+      "3. Verify the result before chaining further calls.",
+      "4. Summarize the outcome for the user in 1-3 sentences.",
+    ].join("\n"),
+  },
+  {
+    label: "Common Errors",
+    body: [
+      "## Common Errors",
+      "- Missing required field: re-read the user's request and ask if it cannot be inferred.",
+      "- Permission denied: do not retry; explain the limitation.",
+      "- Timeout / no response: retry once, then escalate.",
+    ].join("\n"),
+  },
+  {
+    label: "When to Use",
+    body: [
+      "## When to Use",
+      "- Use this MCP only when the user explicitly references its domain.",
+      "- Prefer internal tools for generic file or shell tasks.",
+      "- Do not use it for actions outside its declared scope.",
+    ].join("\n"),
+  },
+];
+
+const SkillList = styled.div`
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-xs);
+  margin-top: var(--space-sm);
+`;
+
+const SkillChip = styled.button<{ $active: boolean }>`
+  border: 1px solid ${(props) => (props.$active ? "var(--accent)" : "var(--border)")};
+  background: ${(props) => (props.$active ? "var(--accent-soft, var(--bg-elevated))" : "var(--bg-elevated)")};
+  color: var(--text-primary);
+  padding: 4px 10px;
+  border-radius: var(--radius-sm);
+  font-size: var(--font-size-sm);
+  cursor: pointer;
+
+  &:hover {
+    border-color: var(--accent);
+  }
+`;
+
+const TemplateRow = styled.div`
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-xs);
+  margin-top: var(--space-sm);
+`;
 
 export default function McpCard({
   mcp,
@@ -135,6 +198,7 @@ export default function McpCard({
   editOpen,
   toolsOpen,
   instructionsOpen,
+  availableSkills,
   onStateToggle,
   onEditToggle,
   onDelete,
@@ -145,7 +209,16 @@ export default function McpCard({
   onOpenEdit,
   onEditFormChange,
   onSaveEdit,
+  onSkillToggle,
 }: Props) {
+  const linkedSkillIds = mcp.skillIds ?? [];
+
+  function appendTemplate(body: string) {
+    const next = instruction.trim().length > 0
+      ? `${instruction.trim()}\n\n${body}`
+      : body;
+    onInstructionChange(next);
+  }
   const handleEditToggle = editOpen ? onEditToggle : onOpenEdit;
   const configSummary = getConfigSummary(mcp);
   const customEnv = mcp.source !== "system" && mcp.transport === "stdio"
@@ -348,12 +421,49 @@ export default function McpCard({
       </ActionsRow>
 
       {instructionsOpen && (
-        <TextArea
-          value={instruction}
-          onChange={(e) => onInstructionChange(e.target.value)}
-          rows={14}
-          style={{ marginTop: "var(--space-sm)" }}
-        />
+        <>
+          <TemplateRow>
+            {INSTRUCTION_TEMPLATES.map((template) => (
+              <Button
+                key={template.label}
+                size="sm"
+                variant="secondary"
+                onClick={() => appendTemplate(template.body)}
+              >
+                + {template.label}
+              </Button>
+            ))}
+          </TemplateRow>
+          <TextArea
+            value={instruction}
+            onChange={(e) => onInstructionChange(e.target.value)}
+            rows={14}
+            style={{ marginTop: "var(--space-sm)" }}
+          />
+          {availableSkills && availableSkills.length > 0 && onSkillToggle && (
+            <div style={{ marginTop: "var(--space-md)" }}>
+              <SectionTitle as="span">Linked Skills</SectionTitle>
+              <div style={{ fontSize: "var(--font-size-sm)", color: "var(--text-secondary)", marginTop: "var(--space-xs)" }}>
+                Skills linked here are automatically added to the skill catalog of any session that uses this {mcp.source === "system" ? "tool" : "MCP"}.
+              </div>
+              <SkillList>
+                {availableSkills.map((skill) => {
+                  const linked = linkedSkillIds.includes(skill.id);
+                  return (
+                    <SkillChip
+                      key={skill.id}
+                      type="button"
+                      $active={linked}
+                      onClick={() => onSkillToggle(skill.id, !linked)}
+                    >
+                      {linked ? "✓ " : "+ "}{skill.name}
+                    </SkillChip>
+                  );
+                })}
+              </SkillList>
+            </div>
+          )}
+        </>
       )}
 
       {toolsOpen && (

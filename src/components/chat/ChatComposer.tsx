@@ -377,7 +377,9 @@ function formatTokens(n: number): string {
 }
 
 function formatModeLabel(mode: ChatMode): string {
-  return mode === "plan" ? "Plan" : "Edit";
+  if (mode === "plan") return "Plan";
+  if (mode === "autonomous") return "Autonomous";
+  return "Edit";
 }
 
 type Props = {
@@ -404,6 +406,7 @@ type Props = {
   onAgentSwitch: (agentId: string) => void;
   onModeSwitch: (mode: ChatMode) => void;
   onSend: () => void;
+  onAbort?: () => void;
   onFilesSelected: (files: FileList) => void;
   onRemoveAttachment: (id: string) => void;
 };
@@ -431,6 +434,7 @@ export default function ChatComposer({
   onAgentSwitch,
   onModeSwitch,
   onSend,
+  onAbort,
   onFilesSelected,
   onRemoveAttachment,
 }: Props) {
@@ -497,7 +501,7 @@ export default function ChatComposer({
     <InputArea>
       <ComposerLayout>
         <ModeStrip>
-          {(["plan", "edit"] as ChatMode[]).map((mode) => (
+          {(["plan", "edit", "autonomous"] as ChatMode[]).map((mode) => (
             <ModeButton
               key={mode}
               type="button"
@@ -623,9 +627,15 @@ export default function ChatComposer({
                 >
                   +
                 </AttachIconButton>
-                <SendIconButton onClick={onSend} disabled={!canSend} aria-label="Nachricht senden">
-                  ^
-                </SendIconButton>
+                {sending && onAbort ? (
+                  <SendIconButton onClick={onAbort} aria-label="Abbrechen" title="Abbrechen">
+                    x
+                  </SendIconButton>
+                ) : (
+                  <SendIconButton onClick={onSend} disabled={!canSend} aria-label="Nachricht senden">
+                    ^
+                  </SendIconButton>
+                )}
               </ComposerActions>
             </ComposerFooter>
           </Composer>

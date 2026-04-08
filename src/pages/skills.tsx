@@ -84,7 +84,7 @@ const EMPTY_DRAFT: SkillDraft = {
   active: true,
   recommendedToolIds: [],
   recommendedMcpIds: [],
-  allowedModes: ["plan", "edit"],
+  allowedModes: ["plan", "edit", "autonomous"],
 };
 
 function toggleEntry(list: string[], value: string, enabled: boolean): string[] {
@@ -93,7 +93,7 @@ function toggleEntry(list: string[], value: string, enabled: boolean): string[] 
 
 function toggleMode(list: ChatMode[], value: ChatMode, enabled: boolean): ChatMode[] {
   const next = enabled ? [...new Set([...list, value])] : list.filter((entry) => entry !== value);
-  return next.length > 0 ? next : ["plan", "edit"];
+  return next.length > 0 ? next : ["plan", "edit", "autonomous"];
 }
 
 function toUpdateBody(draft: SkillDraft): UpdateSkillBody {
@@ -122,6 +122,25 @@ export default function SkillsPage() {
     () => [...skills].sort((left, right) => left.name.localeCompare(right.name)),
     [skills],
   );
+
+  const usageBySkillId = useMemo(() => {
+    const map = new Map<string, { tools: string[]; mcps: string[] }>();
+    const ensure = (id: string) => {
+      let entry = map.get(id);
+      if (!entry) {
+        entry = { tools: [], mcps: [] };
+        map.set(id, entry);
+      }
+      return entry;
+    };
+    for (const tool of toolCapabilities) {
+      for (const skillId of tool.skillIds ?? []) ensure(skillId).tools.push(tool.name);
+    }
+    for (const mcp of mcpCapabilities) {
+      for (const skillId of mcp.skillIds ?? []) ensure(skillId).mcps.push(mcp.name);
+    }
+    return map;
+  }, [toolCapabilities, mcpCapabilities]);
 
   useEffect(() => {
     void loadAll();
@@ -265,14 +284,14 @@ export default function SkillsPage() {
           <Section>
             <FieldLabel>Verfuegbare Modes</FieldLabel>
             <CapabilityGrid>
-              {(["plan", "edit"] as ChatMode[]).map((mode) => (
+              {(["plan", "edit", "autonomous"] as ChatMode[]).map((mode) => (
                 <CapabilityToggle key={mode}>
                   <input
                     type="checkbox"
                     checked={createDraft.allowedModes?.includes(mode) ?? true}
                     onChange={(e) => setCreateDraft((previous) => ({
                       ...previous,
-                      allowedModes: toggleMode(previous.allowedModes ?? ["plan", "edit"], mode, e.target.checked),
+                      allowedModes: toggleMode(previous.allowedModes ?? ["plan", "edit", "autonomous"], mode, e.target.checked),
                     }))}
                   />
                   <span>{mode}</span>
@@ -332,6 +351,7 @@ export default function SkillsPage() {
           <Grid>
             {sortedSkills.map((skill) => {
               const draft = editDrafts[skill.id] ?? EMPTY_DRAFT;
+              const usage = usageBySkillId.get(skill.id);
               return (
                 <Card key={skill.id}>
                   <SectionTitle>{SKILL_EMOJI} {skill.name}</SectionTitle>
@@ -343,6 +363,12 @@ export default function SkillsPage() {
                   <SurfaceBox>
                     <strong>Pfad:</strong> {skill.path}
                   </SurfaceBox>
+                  {usage && (usage.tools.length > 0 || usage.mcps.length > 0) ? (
+                    <SurfaceBox>
+                      <strong>Verknuepft mit:</strong>{" "}
+                      {[...usage.tools, ...usage.mcps].join(", ")}
+                    </SurfaceBox>
+                  ) : null}
 
                   <FormField>
                     <FieldLabel>Name</FieldLabel>
@@ -393,7 +419,7 @@ export default function SkillsPage() {
                   <Section>
                     <FieldLabel>Modes</FieldLabel>
                     <CapabilityGrid>
-                      {(["plan", "edit"] as ChatMode[]).map((mode) => (
+                      {(["plan", "edit", "autonomous"] as ChatMode[]).map((mode) => (
                         <CapabilityToggle key={mode}>
                           <input
                             type="checkbox"
@@ -402,7 +428,7 @@ export default function SkillsPage() {
                               ...previous,
                               [skill.id]: {
                                 ...draft,
-                                allowedModes: toggleMode(draft.allowedModes ?? ["plan", "edit"], mode, e.target.checked),
+                                allowedModes: toggleMode(draft.allowedModes ?? ["plan", "edit", "autonomous"], mode, e.target.checked),
                               },
                             }))}
                           />

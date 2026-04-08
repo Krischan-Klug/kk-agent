@@ -221,28 +221,8 @@ export default function ChatDebugPanel({
 
   let content = "";
 
-  function renderDefinitions(items: McpListItem[], emptyLabel: string): string {
-    const activeItems = items.filter((m) => activeMcpIds.includes(m.id));
-    return activeItems.length === 0
-      ? emptyLabel
-      : activeItems
-          .map((m) => {
-            const header = `-- ${m.emoji || "🛠️"} ${m.name} (${m.id}) --`;
-            const tools = m.tools.map((t) => {
-              const params = t.inputSchema?.properties
-                ? Object.entries(t.inputSchema.properties as Record<string, { type?: string; description?: string }>)
-                    .map(([k, v]) => `    ${k}: ${v.type ?? "any"} - ${v.description ?? ""}`)
-                    .join("\n")
-                : "    (keine Parameter)";
-              return `  ${t.name}\n    ${t.description ?? ""}\n${params}`;
-            });
-            return `${header}\n${tools.join("\n\n")}`;
-          })
-          .join("\n\n");
-  }
-
-  function renderToolDefinitions(items: McpListItem[], emptyLabel: string): string {
-    const activeItems = items.filter((m) => activeToolIds.includes(m.id));
+  function renderDefinitions(items: McpListItem[], activeIds: string[], emptyLabel: string): string {
+    const activeItems = items.filter((m) => activeIds.includes(m.id));
     return activeItems.length === 0
       ? emptyLabel
       : activeItems
@@ -270,9 +250,9 @@ export default function ChatDebugPanel({
         ? "Keine aktuellen Meta-Messages."
         : debugMetaMessages.join("\n\n");
   } else if (debugTab === "tools") {
-    content = renderToolDefinitions(internalTools, "Keine aktiven Tools.");
+    content = renderDefinitions(internalTools, activeToolIds, "Keine aktiven Tools.");
   } else if (debugTab === "mcps") {
-    content = renderDefinitions(debugMcps, "Keine aktiven MCPs.");
+    content = renderDefinitions(debugMcps, activeMcpIds, "Keine aktiven MCPs.");
   } else if (debugTab === "skills") {
     const activeSkills = skills.filter((skill) => activeSkillIds.includes(skill.id));
     content = activeSkills.length === 0

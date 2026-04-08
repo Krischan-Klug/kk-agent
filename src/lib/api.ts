@@ -363,4 +363,14 @@ export const session = {
       }
     }
   },
+
+  abort: async (id: string): Promise<{ ok: boolean }> => {
+    const res = await fetch(`${BASE}/session/${id}/abort`, { method: "POST" });
+    if (!res.ok) {
+      if (res.status === 404) return { ok: false };
+      const text = await res.text();
+      throw new Error(`${res.status}: ${text}`);
+    }
+    return { ok: true };
+  },
 };

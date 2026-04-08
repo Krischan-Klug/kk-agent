@@ -155,6 +155,7 @@ export interface McpServerConfig {
       previewChars?: number;
     };
   };
+  skillIds?: string[];
   transport: "stdio" | "sse";
   server: McpStdioConfig | McpSseConfig;
 }
@@ -251,6 +252,7 @@ export interface CreateMcpBody {
   url?: string;
   instruction?: string;
   emoji?: string;
+  skillIds?: string[];
 }
 
 export interface UpdateMcpBody {
@@ -272,12 +274,13 @@ export interface UpdateMcpBody {
       previewChars?: number;
     };
   };
+  skillIds?: string[];
 }
 
 /* Agent */
 
 export type ReasoningEffort = string;
-export type ChatMode = "plan" | "edit";
+export type ChatMode = "plan" | "edit" | "autonomous";
 export type ToolAccessScope = "user" | "system";
 export type ToolExecutionStatus = "queued" | "executing" | "yielded" | "completed" | "error" | "discarded" | "invalid";
 
@@ -291,6 +294,13 @@ export interface AgentPromptSections {
   communication: string;
 }
 
+export interface AutonomousBudget {
+  maxInputTokens?: number;
+  maxOutputTokens?: number;
+  maxWallClockMs?: number;
+  maxConsecutiveAutoContinues?: number;
+}
+
 export interface AgentModeConfig {
   promptSections: AgentPromptSections;
   modeInstruction: string;
@@ -302,6 +312,8 @@ export interface AgentModeConfig {
   mcpInstructions: Record<string, string>;
   skillInstructions: Record<string, string>;
   allowedToolNames: string[];
+  autonomous?: boolean;
+  autonomousBudget?: AutonomousBudget;
 }
 
 export interface AgentModeConfigPatch {
@@ -315,6 +327,8 @@ export interface AgentModeConfigPatch {
   mcpInstructions?: Record<string, string>;
   skillInstructions?: Record<string, string>;
   allowedToolNames?: string[];
+  autonomous?: boolean;
+  autonomousBudget?: AutonomousBudget;
 }
 
 export type SkillSource = "system" | "custom";
@@ -414,6 +428,7 @@ export interface AppDefaults {
     maxIterations: number;
     promptSections: AgentPromptSections;
     modeInstructions: Record<ChatMode, string>;
+    modeAutonomousBudgets: Record<ChatMode, AutonomousBudget>;
     modeToolIds: Record<ChatMode, string[]>;
     modeAllowedToolNames: Record<ChatMode, string[]>;
     modeToolInstructions: Record<ChatMode, Record<string, string>>;

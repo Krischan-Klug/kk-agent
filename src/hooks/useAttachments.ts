@@ -36,7 +36,7 @@ export function useAttachments() {
 
   const setPendingState = useCallback((next: PendingAttachment[] | ((prev: PendingAttachment[]) => PendingAttachment[])) => {
     setPending((prev) => {
-      const resolved = typeof next === "function" ? (next as (prev: PendingAttachment[]) => PendingAttachment[])(prev) : next;
+      const resolved = typeof next === "function" ? next(prev) : next;
       pendingRef.current = resolved;
       return resolved;
     });

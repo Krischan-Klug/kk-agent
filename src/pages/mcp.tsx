@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react";
 import styled from "styled-components";
-import { mcp as mcpApi } from "@/lib/api";
+import { mcp as mcpApi, skills as skillsApi } from "@/lib/api";
 import { logUiError } from "@/lib/uiLogger";
-import type { CreateMcpBody, McpListItem } from "@/types/api";
+import type { CreateMcpBody, McpListItem, SkillDefinition } from "@/types/api";
 import { useToggleSet } from "@/hooks/useToggleSet";
 import { PageTitle } from "@/components/Layout.styled";
 import Button from "@/components/Button";
@@ -44,13 +44,36 @@ export default function McpPage() {
   const [createForm, setCreateForm] = useState<CreateMcpBody>(EMPTY_MCP_FORM);
   const [creating, setCreating] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
+  const [skillList, setSkillList] = useState<SkillDefinition[]>([]);
   const expandedTools = useToggleSet();
   const expandedInstructions = useToggleSet();
   const expandedEdit = useToggleSet();
 
   useEffect(() => {
     void loadMcps();
+    void loadSkills();
   }, []);
+
+  async function loadSkills() {
+    try {
+      setSkillList(await skillsApi.list());
+    } catch (err) {
+      logUiError("mcp-skills-load", err);
+    }
+  }
+
+  async function handleSkillToggle(mcp: McpListItem, skillId: string, linked: boolean) {
+    const current = mcp.skillIds ?? [];
+    const next = linked
+      ? [...new Set([...current, skillId])]
+      : current.filter((id) => id !== skillId);
+    try {
+      await mcpApi.update(mcp.id, { skillIds: next });
+      await loadMcps();
+    } catch (err) {
+      logUiError("mcp-skill-toggle", err);
+    }
+  }
 
   async function loadMcps() {
     try {
@@ -188,6 +211,8 @@ export default function McpPage() {
             onOpenEdit={() => openEdit(mcp)}
             onEditFormChange={(form) => setEditForms((prev) => ({ ...prev, [mcp.id]: form }))}
             onSaveEdit={(restart) => void handleSaveEdit(mcp, restart)}
+            availableSkills={skillList.map((skill) => ({ id: skill.id, name: skill.name }))}
+            onSkillToggle={(skillId, linked) => void handleSkillToggle(mcp, skillId, linked)}
           />
         ))}
         {mcps.length === 0 && <EmptyHint>Keine externen MCP Server konfiguriert.</EmptyHint>}

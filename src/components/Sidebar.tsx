@@ -1,7 +1,9 @@
 import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
 import { useRouter } from "next/router";
-import { session as sessionApi } from "@/lib/api";
+import Spinner from "@/components/Spinner";
+import { agent as agentApi, session as sessionApi } from "@/lib/api";
+import { getRunningChatStreamSessionIds, subscribeChatStreamStore } from "@/lib/chatStreamState";
 import type { SessionState } from "@/types/api";
 import { addAppEventListener, emitAppEvent, SESSION_CHANGED_EVENT } from "@/lib/appEvents";
 import {
@@ -27,6 +29,8 @@ import {
   SidebarSectionRow,
   SidebarSectionActions,
   SessionItem,
+  SessionMeta,
+  SessionActivity,
   SessionName,
   SessionAdd,
   SessionDelete,
@@ -59,12 +63,24 @@ function isNavActive(pathname: string, href: string): boolean {
 export default function Sidebar() {
   const router = useRouter();
   const [sessions, setSessions] = useState<SessionState[]>([]);
+  const [serverRunningSessionIds, setServerRunningSessionIds] = useState<string[]>([]);
+  const [clientRunningSessionIds, setClientRunningSessionIds] = useState<string[]>(getRunningChatStreamSessionIds());
   const activeSessionId = useStoredActiveSessionId();
   const collapsed = useStoredSidebarCollapsed();
 
   const loadSessions = useCallback(async () => {
     try {
-      setSessions(await sessionApi.list());
+      const nextSessions = await sessionApi.list();
+      setSessions(nextSessions);
+      const runningStates = await Promise.all(nextSessions.map(async (session) => {
+        try {
+          const state = await agentApi.loopState(session.id);
+          return state.status === "running" ? session.id : null;
+        } catch {
+          return null;
+        }
+      }));
+      setServerRunningSessionIds(runningStates.filter((sessionId): sessionId is string => Boolean(sessionId)));
     } catch {
       // ignore
     }
@@ -80,10 +96,14 @@ export default function Sidebar() {
     }, 0);
 
     const unsubscribe = addAppEventListener(SESSION_CHANGED_EVENT, syncSessionState);
+    const unsubscribeStreamStore = subscribeChatStreamStore(() => {
+      setClientRunningSessionIds(getRunningChatStreamSessionIds());
+    });
     window.addEventListener("storage", syncSessionState);
     return () => {
       window.clearTimeout(loadTimer);
       unsubscribe();
+      unsubscribeStreamStore();
       window.removeEventListener("storage", syncSessionState);
     };
   }, [loadSessions, syncSessionState]);
@@ -122,6 +142,8 @@ export default function Sidebar() {
       logUiError("sidebar-delete-session", err);
     }
   }
+
+  const runningSessionIds = new Set([...serverRunningSessionIds, ...clientRunningSessionIds]);
 
   return (
     <SidebarWrapper $collapsed={collapsed} onClick={() => collapsed && updateSidebarCollapsed(false)}>
@@ -168,7 +190,14 @@ export default function Sidebar() {
             $active={session.id === activeSessionId}
             onClick={() => selectSession(session.id)}
           >
-            <SessionName>{session.name || session.id.slice(0, 8)}</SessionName>
+            <SessionMeta>
+              <SessionName>{session.name || session.id.slice(0, 8)}</SessionName>
+              {runningSessionIds.has(session.id) && (
+                <SessionActivity>
+                  <Spinner size={12} />
+                </SessionActivity>
+              )}
+            </SessionMeta>
             <SessionDelete
               type="button"
               aria-label="Session loeschen"

@@ -14,6 +14,7 @@ import Spinner from "@/components/Spinner";
 import ChatDebugPanel, { type ChatDebugTab } from "@/components/ChatDebugPanel";
 import ChatComposer from "@/components/chat/ChatComposer";
 import ChatMessages from "@/components/chat/ChatMessages";
+import { EmptyState } from "@/components/chat/ChatMessages.styled";
 import { emitAppEvent, CHAT_DEBUG_TOGGLE_EVENT } from "@/lib/appEvents";
 import { useChatAutoScroll } from "@/hooks/useChatAutoScroll";
 import { useAttachments } from "@/hooks/useAttachments";
@@ -26,16 +27,6 @@ const ChatWrapper = styled.div`
   flex-direction: column;
   height: 100%;
   max-height: calc(100vh - 2 * var(--space-lg));
-`;
-
-const EmptyState = styled.div`
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  flex: 1;
-  gap: var(--space-md);
-  color: var(--text-secondary);
 `;
 
 const FloatingDebugButton = styled.button`
@@ -70,7 +61,6 @@ export default function ChatPage() {
   const [debugPrompt, setDebugPrompt] = useState<string | null>(null);
   const [debugMetaMessages, setDebugMetaMessages] = useState<string[] | null>(null);
   const debugPromptRequestRef = useRef(0);
-  const { ref: messagesRef, scrollToBottom, handleScroll } = useChatAutoScroll();
   const attachments = useAttachments();
 
   const refreshDebugPrompt = useCallback(async (sessionId: string) => {
@@ -93,6 +83,7 @@ export default function ChatPage() {
     setDebugOpen,
     onDebugOpen: refreshDebugPrompt,
   });
+  const { ref: messagesRef, scrollToBottom, handleScroll } = useChatAutoScroll(sessionData.session?.id);
 
   const streaming = useChatStreaming({
     session: sessionData.session,
@@ -233,6 +224,7 @@ export default function ChatPage() {
         onAgentSwitch={(agentId) => void streaming.handleAgentSwitch(agentId, sessionData.handleAgentSwitch)}
         onModeSwitch={(mode) => void sessionData.handleModeSwitch(mode)}
         onSend={() => void streaming.handleSend()}
+        onAbort={() => void sessionApi.abort(activeSession.id)}
         onFilesSelected={(files) => { void attachments.addFiles(activeSession.id, files); }}
         onRemoveAttachment={attachments.removeAttachment}
       />

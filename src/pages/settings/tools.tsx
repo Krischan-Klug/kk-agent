@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react";
 import styled from "styled-components";
-import { tools as toolsApi } from "@/lib/api";
+import { skills as skillsApi, tools as toolsApi } from "@/lib/api";
 import { logUiError } from "@/lib/uiLogger";
-import type { McpListItem } from "@/types/api";
+import type { McpListItem, SkillDefinition } from "@/types/api";
 import { useToggleSet } from "@/hooks/useToggleSet";
 import Spinner from "@/components/Spinner";
 import SettingsLayout from "@/components/SettingsLayout";
@@ -33,12 +33,14 @@ export default function SettingsToolsPage() {
   const [loading, setLoading] = useState(true);
   const [instructions, setInstructions] = useState<Record<string, string>>({});
   const [editForms, setEditForms] = useState<Record<string, EditForm>>({});
+  const [skillList, setSkillList] = useState<SkillDefinition[]>([]);
   const expandedTools = useToggleSet();
   const expandedInstructions = useToggleSet();
   const expandedEdit = useToggleSet();
 
   useEffect(() => {
     void loadTools();
+    void loadSkills();
   }, []);
 
   async function loadTools() {
@@ -50,6 +52,27 @@ export default function SettingsToolsPage() {
       logUiError("tools-load", err);
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function loadSkills() {
+    try {
+      setSkillList(await skillsApi.list());
+    } catch (err) {
+      logUiError("tools-skills-load", err);
+    }
+  }
+
+  async function handleSkillToggle(tool: McpListItem, skillId: string, linked: boolean) {
+    const current = tool.skillIds ?? [];
+    const next = linked
+      ? [...new Set([...current, skillId])]
+      : current.filter((id) => id !== skillId);
+    try {
+      await toolsApi.update(tool.id, { skillIds: next });
+      await loadTools();
+    } catch (err) {
+      logUiError("tools-skill-toggle", err);
     }
   }
 
@@ -132,6 +155,8 @@ export default function SettingsToolsPage() {
               onOpenEdit={() => openEdit(tool)}
               onEditFormChange={(form) => setEditForms((prev) => ({ ...prev, [tool.id]: form }))}
               onSaveEdit={() => void handleSaveEdit(tool)}
+              availableSkills={skillList.map((skill) => ({ id: skill.id, name: skill.name }))}
+              onSkillToggle={(skillId, linked) => void handleSkillToggle(tool, skillId, linked)}
             />
           ))}
           {toolMcps.length === 0 && <EmptyHint>Keine internen Tools gefunden.</EmptyHint>}

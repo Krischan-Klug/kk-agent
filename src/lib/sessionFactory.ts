@@ -6,7 +6,7 @@ import { setActiveSessionId } from "@/lib/sessionState";
 export function resolveDefaultSessionAgentId(agents: Pick<AgentDefinition, "id">[], fallbackAgentId?: string): string {
   const resolved = fallbackAgentId ?? agents[0]?.id;
   if (!resolved) {
-    throw new Error("Kein Agent verfuegbar fuer die Session-Erstellung.");
+    throw new Error("No agent available for session creation.");
   }
   return resolved;
 }

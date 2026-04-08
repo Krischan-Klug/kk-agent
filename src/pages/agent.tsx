@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
 import styled from "styled-components";
 import { agent as agentApi, mcp as mcpApi, provider as providerApi, settings as settingsApi, skills as skillsApi, tools as toolsApi } from "@/lib/api";
-import { cloneDraft } from "@/lib/draft";
 import { logUiError } from "@/lib/uiLogger";
 import type { AgentDefinition, AppDefaults, CreateAgentBody, McpListItem, ModelInfo, ModelSettings, SkillDefinition } from "@/types/api";
 import { PageTitle } from "@/components/Layout.styled";
@@ -46,7 +45,7 @@ export default function AgentPage() {
         setDefaults(appDefaults);
         if (agentList.length > 0) {
           setSelectedId(agentList[0].id);
-          setEditAgent(cloneDraft(agentList[0]));
+          setEditAgent(structuredClone(agentList[0]));
         }
       })
       .finally(() => setLoading(false));
@@ -56,7 +55,7 @@ export default function AgentPage() {
     const agent = agents.find((entry) => entry.id === id);
     if (!agent) return;
     setSelectedId(id);
-    setEditAgent(cloneDraft(agent));
+    setEditAgent(structuredClone(agent));
   }
 
   async function handleCreate() {
@@ -65,7 +64,7 @@ export default function AgentPage() {
       const created = await agentApi.create({ name: newName.trim() } satisfies CreateAgentBody);
       setAgents((prev) => [...prev, created]);
       setSelectedId(created.id);
-      setEditAgent(cloneDraft(created));
+      setEditAgent(structuredClone(created));
       setShowCreate(false);
       setNewName("");
     } catch (err) {
@@ -89,7 +88,7 @@ export default function AgentPage() {
         temperature: editAgent.temperature,
       });
       setAgents((prev) => prev.map((agent) => (agent.id === selectedId ? updated : agent)));
-      setEditAgent(cloneDraft(updated));
+      setEditAgent(structuredClone(updated));
     } catch (err) {
       logUiError("agent-save", err);
     } finally {

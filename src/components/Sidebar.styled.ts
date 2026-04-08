@@ -199,9 +199,25 @@ export const SessionItem = styled.a<{ $active?: boolean; $collapsed?: boolean }>
 `;
 
 export const SessionName = styled.span`
+  flex: 1 1 auto;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
+`;
+
+export const SessionMeta = styled.span`
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
+  min-width: 0;
+  flex: 1 1 auto;
+`;
+
+export const SessionActivity = styled.span`
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
 `;
 
 export const SessionDelete = styled.button`

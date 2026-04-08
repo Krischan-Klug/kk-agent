@@ -1,9 +1,14 @@
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { session as sessionApi } from "@/lib/api";
 import { emitAppEvent, SESSION_CHANGED_EVENT } from "@/lib/appEvents";
+import {
+  getChatStreamSnapshot,
+  resetChatStreamSnapshot,
+  subscribeChatStreamSnapshot,
+  updateChatStreamSnapshot,
+} from "@/lib/chatStreamState";
 import { logUiError } from "@/lib/uiLogger";
 import type {
-  AgentLoopState,
   SessionMessage,
   SessionState,
   StreamEvent,
@@ -13,7 +18,7 @@ import type {
   TranscriptToolResultBlock,
 } from "@/types/api";
 import type { PendingAttachment } from "@/hooks/useAttachments";
-import type { ActiveToolCall, PendingPrompt, StreamingTurnState, TokenDisplayStats } from "@/components/chat/types";
+import type { ActiveToolCall, StreamingTurnState } from "@/components/chat/types";
 
 type Options = {
   session: SessionState | null;
@@ -245,28 +250,42 @@ export function useChatStreaming({
   debugOpen,
 }: Options) {
   const [input, setInput] = useState("");
-  const [sending, setSending] = useState(false);
-  const [streaming, setStreaming] = useState(false);
-  const [streamTurn, setStreamTurn] = useState<StreamingTurnState | null>(null);
-  const [streamSystemNotices, setStreamSystemNotices] = useState<string[]>([]);
-  const [loopState, setLoopState] = useState<AgentLoopState | null>(null);
-  const [tokenStats, setTokenStats] = useState<TokenDisplayStats | null>(null);
-  const [pendingPrompt, setPendingPrompt] = useState<PendingPrompt | null>(null);
-  const [customAnswer, setCustomAnswer] = useState("");
+  const [streamSnapshot, setStreamSnapshot] = useState(() => getChatStreamSnapshot(session?.id));
   const optimisticPreviewUrlsRef = useRef<string[]>([]);
+  const mountedRef = useRef(true);
+
+  const setCustomAnswer = useCallback((value: string) => {
+    if (!session) {
+      setStreamSnapshot((previous) => ({ ...previous, customAnswer: value }));
+      return;
+    }
+    updateChatStreamSnapshot(session.id, (previous) => ({ ...previous, customAnswer: value }));
+  }, [session]);
 
   const resetStreamingState = useCallback(() => {
-    setStreaming(false);
-    setStreamTurn(null);
-    setStreamSystemNotices([]);
-    setLoopState(null);
-    setPendingPrompt(null);
+    if (!session) return;
+    resetChatStreamSnapshot(session.id);
+  }, [session]);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
   }, []);
+
+  useEffect(() => {
+    setStreamSnapshot(getChatStreamSnapshot(session?.id));
+    if (!session) return;
+    return subscribeChatStreamSnapshot(session.id, () => {
+      setStreamSnapshot(getChatStreamSnapshot(session.id));
+    });
+  }, [session]);
 
   const handleSend = useCallback(async () => {
     const hasText = input.trim().length > 0;
     const hasAttachments = pendingAttachments.length > 0;
-    if ((!hasText && !hasAttachments) || !session || sending) return;
+    if ((!hasText && !hasAttachments) || !session || streamSnapshot.sending) return;
 
     const message = input.trim() || " ";
     const optimisticAttachments = consumePendingAttachments();
@@ -277,12 +296,16 @@ export function useChatStreaming({
       .filter((previewUrl): previewUrl is string => Boolean(previewUrl));
 
     setInput("");
-    setSending(true);
-    setStreaming(true);
-    setStreamTurn(null);
-    setStreamSystemNotices([]);
-    setLoopState(null);
-    setTokenStats(null);
+    updateChatStreamSnapshot(session.id, (previous) => ({
+      ...previous,
+      sending: true,
+      streaming: true,
+      streamTurn: null,
+      streamSystemNotices: [],
+      loopState: null,
+      tokenStats: null,
+      pendingPrompt: null,
+    }));
 
     setSession((previous) => {
       if (!previous) return previous;
@@ -296,36 +319,54 @@ export function useChatStreaming({
       await sessionApi.chatStream(session.id, message, async (event: StreamEvent) => {
         switch (event.type) {
           case "assistant_block_delta":
-            setStreamTurn((previous) => updateIterationAssistant(previous, event.messageId, (assistant) => {
-              if (!assistant) return createDraftAssistantMessage(event.messageId, event.block);
-              return {
-                ...assistant,
-                content: mergeStreamBlock(assistant.content, event.block),
-              };
+            updateChatStreamSnapshot(session.id, (previous) => ({
+              ...previous,
+              streamTurn: updateIterationAssistant(previous.streamTurn, event.messageId, (assistant) => {
+                if (!assistant) return createDraftAssistantMessage(event.messageId, event.block);
+                return {
+                  ...assistant,
+                  content: mergeStreamBlock(assistant.content, event.block),
+                };
+              }),
             }));
             break;
           case "assistant_message_complete":
-            setStreamTurn((previous) => updateIterationAssistant(previous, event.message.id, () => event.message));
+            updateChatStreamSnapshot(session.id, (previous) => ({
+              ...previous,
+              streamTurn: updateIterationAssistant(previous.streamTurn, event.message.id, () => event.message),
+            }));
             break;
           case "tool_execution_update":
-            setStreamTurn((previous) => updateIterationToolCall(previous, event));
+            updateChatStreamSnapshot(session.id, (previous) => ({
+              ...previous,
+              streamTurn: updateIterationToolCall(previous.streamTurn, event),
+            }));
             if (event.result && ["create_tasks", "update_tasks", "solve_tasks"].includes(event.toolName)) {
-              await loadContextData(session.id);
+              if (mountedRef.current) await loadContextData(session.id);
             }
             break;
           case "turn_state":
-            setLoopState(event.state);
+            updateChatStreamSnapshot(session.id, (previous) => ({ ...previous, loopState: event.state }));
             break;
           case "system_notice":
-            setStreamSystemNotices((previous) => [...previous, event.message]);
+            updateChatStreamSnapshot(session.id, (previous) => ({
+              ...previous,
+              streamSystemNotices: [...previous.streamSystemNotices, event.message],
+            }));
             break;
           case "stats":
             if (event.source === "provider") {
-              setTokenStats({ input: event.inputTokens, output: event.outputTokens, reasoning: event.reasoningTokens });
+              updateChatStreamSnapshot(session.id, (previous) => ({
+                ...previous,
+                tokenStats: { input: event.inputTokens, output: event.outputTokens, reasoning: event.reasoningTokens },
+              }));
             }
             break;
           case "user_prompt":
-            setPendingPrompt({ promptId: event.promptId, question: event.question, choices: event.choices });
+            updateChatStreamSnapshot(session.id, (previous) => ({
+              ...previous,
+              pendingPrompt: { promptId: event.promptId, question: event.question, choices: event.choices },
+            }));
             break;
           case "done":
             for (const previewUrl of optimisticPreviewUrlsRef.current) {
@@ -333,11 +374,15 @@ export function useChatStreaming({
             }
             optimisticPreviewUrlsRef.current = [];
             clearAttachments();
-            setSession(event.session);
+            if (mountedRef.current) {
+              setSession(event.session);
+            }
             resetStreamingState();
-            await loadContextData(event.session.id);
+            if (mountedRef.current) {
+              await loadContextData(event.session.id);
+            }
             emitAppEvent(SESSION_CHANGED_EVENT);
-            if (debugOpen) loadDebugData(event.session.id);
+            if (debugOpen && mountedRef.current) loadDebugData(event.session.id);
             break;
           case "error":
             logUiError("chat-stream", event.message);
@@ -349,7 +394,7 @@ export function useChatStreaming({
       logUiError("chat-stream", err);
       resetStreamingState();
     } finally {
-      setSending(false);
+      updateChatStreamSnapshot(session.id, (previous) => ({ ...previous, sending: false }));
     }
   }, [
     clearAttachments,
@@ -360,20 +405,20 @@ export function useChatStreaming({
     loadDebugData,
     pendingAttachments.length,
     resetStreamingState,
-    sending,
     session,
     setSession,
+    streamSnapshot.sending,
   ]);
 
   const handlePromptResponse = useCallback(async (selectedKey: string) => {
-    if (!session || !pendingPrompt) return;
+    if (!session || !streamSnapshot.pendingPrompt) return;
     try {
-      await sessionApi.respondToPrompt(session.id, pendingPrompt.promptId, selectedKey);
-      setPendingPrompt(null);
+      await sessionApi.respondToPrompt(session.id, streamSnapshot.pendingPrompt.promptId, selectedKey);
+      updateChatStreamSnapshot(session.id, (previous) => ({ ...previous, pendingPrompt: null }));
     } catch (err) {
       logUiError("chat-prompt-response", err);
     }
-  }, [pendingPrompt, session]);
+  }, [session, streamSnapshot.pendingPrompt]);
 
   const handleKeyDown = useCallback((event: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (event.key === "Enter" && !event.shiftKey) {
@@ -387,21 +432,23 @@ export function useChatStreaming({
     onSwitch: (agentId: string) => Promise<void>,
   ) => {
     await onSwitch(agentId);
-    setTokenStats(null);
+    if (session) {
+      updateChatStreamSnapshot(session.id, (previous) => ({ ...previous, tokenStats: null }));
+    }
     emitAppEvent(SESSION_CHANGED_EVENT);
-  }, []);
+  }, [session]);
 
   return {
     input,
     setInput,
-    sending,
-    streaming,
-    streamTurn,
-    streamSystemNotices,
-    loopState,
-    tokenStats,
-    pendingPrompt,
-    customAnswer,
+    sending: streamSnapshot.sending,
+    streaming: streamSnapshot.streaming,
+    streamTurn: streamSnapshot.streamTurn,
+    streamSystemNotices: streamSnapshot.streamSystemNotices,
+    loopState: streamSnapshot.loopState,
+    tokenStats: streamSnapshot.tokenStats,
+    pendingPrompt: streamSnapshot.pendingPrompt,
+    customAnswer: streamSnapshot.customAnswer,
     setCustomAnswer,
     handleSend,
     handlePromptResponse,

@@ -145,7 +145,7 @@ const PROMPT_SECTION_META: Array<{ key: keyof AgentPromptSections; label: string
   { key: "communication", label: "\u{1F4AC} Communication" },
 ];
 
-const CHAT_MODES: ChatMode[] = ["plan", "edit"];
+const CHAT_MODES: ChatMode[] = ["plan", "edit", "autonomous"];
 
 export default function DefaultsPage() {
   const [defaults, setDefaults] = useState<AppDefaults | null>(null);
@@ -175,6 +175,7 @@ export default function DefaultsPage() {
   if (!draft) return <Spinner />;
 
   const dirty = JSON.stringify(draft) !== JSON.stringify(defaults);
+  const selectedModeAutonomousBudget = draft.agent.modeAutonomousBudgets?.[selectedMode] ?? {};
 
   function toggleSection(key: keyof typeof expandedSections) {
     setExpandedSections((prev) => ({ ...prev, [key]: !prev[key] }));
@@ -296,6 +297,106 @@ export default function DefaultsPage() {
                     })}
                   />
                 </Field>
+                {selectedMode === "autonomous" && (
+                <Row>
+                  <Field style={{ minWidth: "180px" }}>
+                    <FieldLabel>Max Input Tokens</FieldLabel>
+                    <Input
+                      type="number"
+                      min={0}
+                      value={selectedModeAutonomousBudget.maxInputTokens ?? ""}
+                      onChange={(e) => {
+                        const value = e.target.value === "" ? undefined : Number(e.target.value);
+                        setDraft({
+                          ...draft,
+                          agent: {
+                            ...draft.agent,
+                            modeAutonomousBudgets: {
+                              ...draft.agent.modeAutonomousBudgets,
+                              [selectedMode]: {
+                                ...selectedModeAutonomousBudget,
+                                maxInputTokens: value,
+                              },
+                            },
+                          },
+                        });
+                      }}
+                    />
+                  </Field>
+                  <Field style={{ minWidth: "180px" }}>
+                    <FieldLabel>Max Output Tokens</FieldLabel>
+                    <Input
+                      type="number"
+                      min={0}
+                      value={selectedModeAutonomousBudget.maxOutputTokens ?? ""}
+                      onChange={(e) => {
+                        const value = e.target.value === "" ? undefined : Number(e.target.value);
+                        setDraft({
+                          ...draft,
+                          agent: {
+                            ...draft.agent,
+                            modeAutonomousBudgets: {
+                              ...draft.agent.modeAutonomousBudgets,
+                              [selectedMode]: {
+                                ...selectedModeAutonomousBudget,
+                                maxOutputTokens: value,
+                              },
+                            },
+                          },
+                        });
+                      }}
+                    />
+                  </Field>
+                  <Field style={{ minWidth: "180px" }}>
+                    <FieldLabel>Max Wall Clock Ms</FieldLabel>
+                    <Input
+                      type="number"
+                      min={0}
+                      value={selectedModeAutonomousBudget.maxWallClockMs ?? ""}
+                      onChange={(e) => {
+                        const value = e.target.value === "" ? undefined : Number(e.target.value);
+                        setDraft({
+                          ...draft,
+                          agent: {
+                            ...draft.agent,
+                            modeAutonomousBudgets: {
+                              ...draft.agent.modeAutonomousBudgets,
+                              [selectedMode]: {
+                                ...selectedModeAutonomousBudget,
+                                maxWallClockMs: value,
+                              },
+                            },
+                          },
+                        });
+                      }}
+                    />
+                  </Field>
+                  <Field style={{ minWidth: "180px" }}>
+                    <FieldLabel>Max Auto Continues</FieldLabel>
+                    <Input
+                      type="number"
+                      min={0}
+                      value={selectedModeAutonomousBudget.maxConsecutiveAutoContinues ?? ""}
+                      onChange={(e) => {
+                        const value = e.target.value === "" ? undefined : Number(e.target.value);
+                        setDraft({
+                          ...draft,
+                          agent: {
+                            ...draft.agent,
+                            modeAutonomousBudgets: {
+                              ...draft.agent.modeAutonomousBudgets,
+                              [selectedMode]: {
+                                ...selectedModeAutonomousBudget,
+                                maxConsecutiveAutoContinues: value,
+                              },
+                            },
+                          },
+                        });
+                      }}
+                    />
+                  </Field>
+                </Row>
+                )}
               </>
             )}
           </SectionCard>
@@ -434,5 +535,3 @@ export default function DefaultsPage() {
     </SettingsLayout>
   );
 }
-
-

@@ -202,7 +202,7 @@ const ScopeRow = styled.div`
   margin-top: var(--space-xs);
 `;
 
-const MODE_ORDER: ChatMode[] = ["plan", "edit"];
+const MODE_ORDER: ChatMode[] = ["plan", "edit", "autonomous"];
 const PROMPT_SECTION_META: Array<{ key: keyof AgentModeConfig["promptSections"]; label: string }> = [
   { key: "identity", label: "\u{1FAAA} Identity" },
   { key: "system", label: "\u{1F9E0} System" },
@@ -547,6 +547,44 @@ export default function AgentEditor({
           placeholder={defaultModeInstruction}
         />
       </Section>
+
+      {effectiveSelectedMode === "autonomous" && (
+        <Section>
+          <SectionTitle>Autonomous Budget</SectionTitle>
+          <FormRow style={{ gap: "0.5rem", flexWrap: "wrap" }}>
+            <label style={{ display: "flex", flexDirection: "column", gap: "0.25rem" }}>
+              <span>Max input tokens</span>
+              <input
+                type="number"
+                min={0}
+                value={selectedModeConfig.autonomousBudget?.maxInputTokens ?? ""}
+                onChange={(e) => {
+                  const value = e.target.value === "" ? undefined : Number(e.target.value);
+                  updateModeConfig({
+                    ...selectedModeConfig,
+                    autonomousBudget: { ...selectedModeConfig.autonomousBudget, maxInputTokens: value },
+                  });
+                }}
+              />
+            </label>
+            <label style={{ display: "flex", flexDirection: "column", gap: "0.25rem" }}>
+              <span>Max output tokens</span>
+              <input
+                type="number"
+                min={0}
+                value={selectedModeConfig.autonomousBudget?.maxOutputTokens ?? ""}
+                onChange={(e) => {
+                  const value = e.target.value === "" ? undefined : Number(e.target.value);
+                  updateModeConfig({
+                    ...selectedModeConfig,
+                    autonomousBudget: { ...selectedModeConfig.autonomousBudget, maxOutputTokens: value },
+                  });
+                }}
+              />
+            </label>
+          </FormRow>
+        </Section>
+      )}
 
       <Section>
         <SectionTitle>Internal Tools</SectionTitle>
@@ -975,5 +1013,4 @@ export default function AgentEditor({
     </EditorArea>
   );
 }
-
 

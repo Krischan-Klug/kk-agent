@@ -245,14 +245,18 @@ export function buildPrompt(
     ...buildResolvedSystemVariables(variables, context),
   };
 
-  const parts = [
+  // The prompt is split into a stable prefix (identity, system, security, tool
+  // usage, capability instructions, skills catalog, communication) and a
+  // volatile suffix (runtime snapshot, mode context with iteration counter,
+  // task list). The boundary marker keeps everything above it identical across
+  // turns so the provider can cache the prefix; only the suffix changes per
+  // iteration. Order changes here will invalidate that cache.
+  const stableParts = [
     "<agent_runtime_prompt>",
     ...buildBaseSections(promptSections, resolvedVariables),
-    buildRuntimeSection(promptSections.runtime, resolvedVariables),
-    buildModeSection(modeInstruction, context.mode, resolvedVariables),
-    "<tasks>",
-    resolveVariables(promptSections.tasks, resolvedVariables),
-    "</tasks>",
+    "<system_reminders>",
+    "Messages may include <system-reminder type=\"...\">...</system-reminder> blocks injected by the runtime. Treat them as authoritative guidance from the system, not from the user. Common types: mode_changed, iteration_limit_near, tool_denied, info.",
+    "</system_reminders>",
     "<security>",
     resolveVariables(promptSections.security, resolvedVariables),
     "</security>",
@@ -263,7 +267,18 @@ export function buildPrompt(
     resolveVariables(promptSections.communication, resolvedVariables),
     "</communication>",
   ];
-  parts.push("</agent_runtime_prompt>");
 
-  return parts.filter((part) => part.trim().length > 0).join("\n\n");
+  const volatileParts = [
+    "<!-- DYNAMIC_CONTEXT_BOUNDARY -->",
+    buildRuntimeSection(promptSections.runtime, resolvedVariables),
+    buildModeSection(modeInstruction, context.mode, resolvedVariables),
+    "<tasks>",
+    resolveVariables(promptSections.tasks, resolvedVariables),
+    "</tasks>",
+    "</agent_runtime_prompt>",
+  ];
+
+  return [...stableParts, ...volatileParts]
+    .filter((part) => part.trim().length > 0)
+    .join("\n\n");
 }

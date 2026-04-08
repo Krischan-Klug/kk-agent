@@ -23,6 +23,7 @@ export interface McpServerConfig {
   source?: McpSource;
   systemKey?: SystemMcpKey;
   systemConfig?: SystemMcpConfig;
+  skillIds?: string[];
   transport: "stdio" | "sse";
   server: McpStdioConfig | McpSseConfig;
 }
@@ -58,6 +59,7 @@ export interface CreateMcpBody {
   url?: string;
   instruction?: string;
   emoji?: string;
+  skillIds?: string[];
 }
 
 export interface UpdateMcpBody {
@@ -71,4 +73,5 @@ export interface UpdateMcpBody {
   instruction?: string;
   emoji?: string;
   systemConfig?: SystemMcpConfig;
+  skillIds?: string[];
 }

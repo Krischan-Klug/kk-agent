@@ -1,5 +1,5 @@
 import { loadState, saveState } from "./state.js";
-import type { ChatMode, AgentPromptSections } from "../agent/types.js";
+import type { ChatMode, AgentPromptSections, AutonomousBudget } from "../agent/types.js";
 import { getDefaultAllowedToolNames, getDefaultToolIds } from "../agent/lib/modes.js";
 
 const STATE_FILE = "defaults.json";
@@ -10,6 +10,7 @@ export interface AppDefaults {
     maxIterations: number;
     promptSections: AgentPromptSections;
     modeInstructions: Record<ChatMode, string>;
+    modeAutonomousBudgets: Record<ChatMode, AutonomousBudget>;
     modeToolIds: Record<ChatMode, string[]>;
     modeAllowedToolNames: Record<ChatMode, string[]>;
     modeToolInstructions: Record<ChatMode, Record<string, string>>;
@@ -116,14 +117,28 @@ const CODE_DEFAULTS: AppDefaults = {
         "When the work benefits from explicit tracking, maintain tasks as you go and close them with solve_tasks when completed.",
         "After non-trivial implementation, run an appropriate verification step if possible and report the result honestly.",
       ].join("\n"),
+      autonomous: [
+        "You are running in autonomous mode. Keep working on the user's goal across multiple turns without waiting for further instructions.",
+        "Plan, execute, verify, and iterate on your own until the goal is demonstrably met.",
+        "Do not stop mid-task, do not ask the user to confirm routine steps, and do not hand work back prematurely.",
+        "When the goal is fully complete, respond with exactly TASK_COMPLETE on its own line and nothing else.",
+        "If you hit a hard blocker you cannot resolve (missing credentials, out-of-scope permission), summarize the blocker and ask the user.",
+      ].join("\n"),
+    },
+    modeAutonomousBudgets: {
+      plan: {},
+      edit: {},
+      autonomous: {},
     },
     modeToolIds: {
       plan: getDefaultToolIds("plan"),
       edit: getDefaultToolIds("edit"),
+      autonomous: getDefaultToolIds("edit"),
     },
     modeAllowedToolNames: {
       plan: getDefaultAllowedToolNames("plan"),
       edit: getDefaultAllowedToolNames("edit"),
+      autonomous: getDefaultAllowedToolNames("edit"),
     },
     modeToolInstructions: {
       plan: {
@@ -213,6 +228,7 @@ const CODE_DEFAULTS: AppDefaults = {
           "Do not mention a skill as if it were loaded when it is not.",
         ].join(" "),
       },
+      autonomous: {},
     },
   },
   retry: {
@@ -239,27 +255,31 @@ let cache: AppDefaults = { ...CODE_DEFAULTS };
 function deepMerge(target: Record<string, unknown>, source: Record<string, unknown>): Record<string, unknown> {
   const result = { ...target };
   for (const key of Object.keys(source)) {
+    const sourceVal = source[key];
+    const targetVal = target[key];
     if (
-      source[key] !== null &&
-      typeof source[key] === "object" &&
-      !Array.isArray(source[key]) &&
-      typeof target[key] === "object" &&
-      target[key] !== null
+      sourceVal !== null &&
+      sourceVal !== undefined &&
+      typeof sourceVal === "object" &&
+      !Array.isArray(sourceVal) &&
+      typeof targetVal === "object" &&
+      targetVal !== null
     ) {
-      result[key] = deepMerge(target[key] as Record<string, unknown>, source[key] as Record<string, unknown>);
+      result[key] = deepMerge(targetVal as Record<string, unknown>, sourceVal as Record<string, unknown>);
     } else {
-      result[key] = source[key];
+      result[key] = sourceVal;
     }
   }
   return result;
 }
 
+function mergeDefaults(target: AppDefaults, source: Partial<AppDefaults>): AppDefaults {
+  return deepMerge(target as unknown as Record<string, unknown>, source as unknown as Record<string, unknown>) as unknown as AppDefaults;
+}
+
 export async function initDefaults(): Promise<void> {
-  const stored = await loadState<AppDefaults>(STATE_FILE, CODE_DEFAULTS);
-  cache = deepMerge(
-    CODE_DEFAULTS as unknown as Record<string, unknown>,
-    stored as unknown as Record<string, unknown>,
-  ) as unknown as AppDefaults;
+  const stored = await loadState<Partial<AppDefaults>>(STATE_FILE, CODE_DEFAULTS);
+  cache = mergeDefaults(CODE_DEFAULTS, stored);
 }
 
 export function getDefaults(): AppDefaults {
@@ -267,10 +287,7 @@ export function getDefaults(): AppDefaults {
 }
 
 export async function updateDefaults(partial: Partial<AppDefaults>): Promise<AppDefaults> {
-  cache = deepMerge(
-    cache as unknown as Record<string, unknown>,
-    partial as Record<string, unknown>,
-  ) as unknown as AppDefaults;
+  cache = mergeDefaults(cache, partial);
   await saveState(STATE_FILE, cache);
   return cache;
 }

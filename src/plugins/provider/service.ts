@@ -249,56 +249,39 @@ export async function resolveProviderModel(
   return { providerId: provider.id, model: resolvedModel };
 }
 
-export async function callProvider(request: UnifiedRequest): Promise<UnifiedResponse> {
+async function prepareRequest(request: UnifiedRequest) {
   const provider = resolveProvider(request.providerId);
   const models = await getModels(provider.id);
   const model = models.find((entry) => entry.id === request.model);
   const settings = getModelSettings(provider.id, request.model);
   const normalized = normalizeRequestOptions(model, settings, request);
+  const prepared = { ...request, providerId: provider.id, ...normalized };
+  return { provider, prepared };
+}
 
-  const response = await getAdapter(provider.id).chat({
-    ...request,
-    providerId: provider.id,
-    ...normalized,
-  });
+async function trackObservedReasoning(provider: ProviderConfig, model: string, response: UnifiedResponse) {
   if (hasObservedReasoning(response)) {
-    await markObservedReasoning(provider.id, request.model);
+    await markObservedReasoning(provider.id, model);
   }
+}
+
+export async function callProvider(request: UnifiedRequest): Promise<UnifiedResponse> {
+  const { provider, prepared } = await prepareRequest(request);
+  const response = await getAdapter(provider.id).chat(prepared);
+  await trackObservedReasoning(provider, request.model, response);
   return response;
 }
 
 export async function callProviderStream(request: UnifiedRequest, onChunk: OnChunkFn): Promise<UnifiedResponse> {
-  const provider = resolveProvider(request.providerId);
-  const models = await getModels(provider.id);
-  const model = models.find((entry) => entry.id === request.model);
-  const settings = getModelSettings(provider.id, request.model);
-  const normalized = normalizeRequestOptions(model, settings, request);
-
-  const response = await getAdapter(provider.id).chatStream(
-    {
-      ...request,
-      providerId: provider.id,
-      ...normalized,
-    },
-    onChunk,
-  );
-  if (hasObservedReasoning(response)) {
-    await markObservedReasoning(provider.id, request.model);
-  }
+  const { provider, prepared } = await prepareRequest(request);
+  const response = await getAdapter(provider.id).chatStream(prepared, onChunk);
+  await trackObservedReasoning(provider, request.model, response);
   return response;
 }
 
 export async function estimateProviderTokens(request: UnifiedRequest): Promise<TokenStats> {
-  const provider = resolveProvider(request.providerId);
-  const models = await getModels(provider.id);
-  const model = models.find((entry) => entry.id === request.model);
-  const settings = getModelSettings(provider.id, request.model);
-  const mapped = {
-    ...request,
-    providerId: provider.id,
-    ...normalizeRequestOptions(model, settings, request),
-  };
-  return estimateRequestTokens(mapped, provider.baseUrl);
+  const { provider, prepared } = await prepareRequest(request);
+  return estimateRequestTokens(prepared, provider.baseUrl);
 }
 
 export function getModelCapabilities(providerId: string, modelId: string): ModelCapabilities | undefined {

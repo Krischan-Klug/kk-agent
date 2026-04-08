@@ -1,5 +1,4 @@
-import type { SessionState } from "../types.js";
-import type { LoopMessage } from "../../loop/types.js";
+import type { TranscriptMessage } from "../../lib/transcript.js";
 
 export function generateSessionName(content: string): string {
   const clean = content.trim();
@@ -10,18 +9,8 @@ export function generateSessionName(content: string): string {
   return (lastSpace > 20 ? cut.slice(0, lastSpace) : cut) + "...";
 }
 
-export function toLoopMessages(messages: SessionState["messages"]): LoopMessage[] {
+export function cloneMessages(messages: TranscriptMessage[]): TranscriptMessage[] {
   return messages.map((message) => ({ ...message, content: [...message.content] }));
 }
 
-export function fromLoopMessages(messages: LoopMessage[]): SessionState["messages"] {
-  return messages.map((message) => ({ ...message, content: [...message.content] }));
-}
-
-export function mergeMessageDisplayState(
-  nextMessages: SessionState["messages"],
-  _previousMessages: SessionState["messages"],
-): SessionState["messages"] {
-  return nextMessages;
-}
 

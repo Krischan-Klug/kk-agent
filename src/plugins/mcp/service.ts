@@ -23,6 +23,10 @@ export async function getAllMcps(): Promise<McpServerConfig[]> {
   return cachedCustomMcps;
 }
 
+export function getAllMcpsCached(): McpServerConfig[] {
+  return cachedCustomMcps;
+}
+
 export async function toggleMcp(id: string, active: boolean): Promise<McpServerConfig> {
   return withRegistryUpdate(id, async (mcp) => {
     mcp.active = active;
@@ -82,7 +86,7 @@ export async function stopMcpServer(id: string): Promise<void> {
 export async function createMcp(body: CreateMcpBody): Promise<McpServerConfig> {
   const id = createSlugId(body.name);
 
-  if (getSystemMcpById(id)) throw new Error(`MCP "${id}" ist als System-MCP reserviert`);
+  if (getSystemMcpById(id)) throw new Error(`MCP "${id}" is reserved as a system MCP`);
   const existing = await getRegistry();
   if (getMcpById(existing, id)) throw new Error(`MCP "${id}" already exists`);
 
@@ -93,6 +97,7 @@ export async function createMcp(body: CreateMcpBody): Promise<McpServerConfig> {
     instruction: body.instruction ?? "",
     emoji: body.emoji,
     source: "custom",
+    skillIds: body.skillIds ?? [],
     transport: body.transport,
     server:
       body.transport === "stdio"
@@ -122,6 +127,7 @@ export async function updateMcpConfig(id: string, body: UpdateMcpBody): Promise<
     if (body.name !== undefined) mcp.name = body.name;
     if (body.instruction !== undefined) mcp.instruction = body.instruction;
     if (body.emoji !== undefined) mcp.emoji = body.emoji;
+    if (body.skillIds !== undefined) mcp.skillIds = body.skillIds;
 
     if (body.transport !== undefined) {
       mcp.transport = body.transport;

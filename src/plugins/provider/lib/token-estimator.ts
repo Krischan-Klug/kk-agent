@@ -8,8 +8,8 @@ import {
   type FunctionToolCallRequest,
   type LLMTool,
 } from "@lmstudio/sdk";
-import type { UnifiedMessage, UnifiedRequest, UnifiedToolDefinition, TokenStats } from "./types.js";
-import { getMessageText, getToolResults, getToolUses } from "../../lib/transcript.js";
+import type { UnifiedRequest, UnifiedToolDefinition, TokenStats } from "./types.js";
+import { type TranscriptMessage, getMessageText, getToolResults, getToolUses } from "../../lib/transcript.js";
 
 const clientCache = new Map<string, LMStudioClient>();
 
@@ -31,7 +31,7 @@ function toSdkTools(tools?: UnifiedToolDefinition[]): LLMTool[] | undefined {
   }));
 }
 
-function toSdkHistory(messages: UnifiedMessage[]): ChatHistoryData {
+function toSdkHistory(messages: TranscriptMessage[]): ChatHistoryData {
   return {
     messages: messages.map((message): ChatMessageData => {
       if (message.role === "assistant") {

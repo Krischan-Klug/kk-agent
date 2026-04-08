@@ -56,10 +56,14 @@ export const CHAT_MODE_META: Record<ChatMode, ChatModeMeta> = {
     mode: "edit",
     label: "Edit",
   },
+  autonomous: {
+    mode: "autonomous",
+    label: "Autonomous",
+  },
 };
 
 export function getChatModes(): ChatMode[] {
-  return ["plan", "edit"];
+  return ["plan", "edit", "autonomous"];
 }
 
 export function getChatModeMeta(mode: ChatMode): ChatModeMeta {

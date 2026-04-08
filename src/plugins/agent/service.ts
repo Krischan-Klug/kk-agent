@@ -109,89 +109,75 @@ export async function deleteAgent(id: string): Promise<void> {
   if (!removed) throw new Error(`Agent "${id}" not found`);
 }
 
-function removeCapabilityFromModeConfig(
-  modeConfig: AgentDefinition["modeConfigs"][ChatMode] | undefined,
-  capabilityId: string,
-  kind: "tool" | "mcp",
-) {
-  if (!modeConfig) return modeConfig;
-  const toolIds = kind === "tool" ? modeConfig.toolIds.filter((entry) => entry !== capabilityId) : modeConfig.toolIds;
-  const mcpIds = kind === "mcp" ? modeConfig.mcpIds.filter((entry) => entry !== capabilityId) : modeConfig.mcpIds;
-  const toolAccessScopes = { ...modeConfig.toolAccessScopes };
-  const toolInstructions = { ...modeConfig.toolInstructions };
-  const mcpInstructions = { ...modeConfig.mcpInstructions };
-  if (kind === "tool") delete toolAccessScopes[capabilityId];
-  if (kind === "tool") delete toolInstructions[capabilityId];
-  if (kind === "mcp") delete mcpInstructions[capabilityId];
-  return { ...modeConfig, toolIds, mcpIds, toolAccessScopes, toolInstructions, mcpInstructions };
-}
+type ModeConfigTransform = (
+  modeConfig: AgentDefinition["modeConfigs"][ChatMode],
+  id: string,
+) => AgentDefinition["modeConfigs"][ChatMode];
 
-function removeSkillFromModeConfig(
-  modeConfig: AgentDefinition["modeConfigs"][ChatMode] | undefined,
-  skillId: string,
-) {
-  if (!modeConfig) return modeConfig;
-  const skillIds = modeConfig.skillIds.filter((entry) => entry !== skillId);
-  const skillInstructions = { ...modeConfig.skillInstructions };
-  delete skillInstructions[skillId];
-  return { ...modeConfig, skillIds, skillInstructions };
+const REMOVE_TRANSFORMS: Record<"tool" | "mcp" | "skill", ModeConfigTransform> = {
+  tool(modeConfig, id) {
+    const toolAccessScopes = { ...modeConfig.toolAccessScopes };
+    const toolInstructions = { ...modeConfig.toolInstructions };
+    delete toolAccessScopes[id];
+    delete toolInstructions[id];
+    return {
+      ...modeConfig,
+      toolIds: modeConfig.toolIds.filter((entry) => entry !== id),
+      toolAccessScopes,
+      toolInstructions,
+    };
+  },
+  mcp(modeConfig, id) {
+    const mcpInstructions = { ...modeConfig.mcpInstructions };
+    delete mcpInstructions[id];
+    return {
+      ...modeConfig,
+      mcpIds: modeConfig.mcpIds.filter((entry) => entry !== id),
+      mcpInstructions,
+    };
+  },
+  skill(modeConfig, id) {
+    const skillInstructions = { ...modeConfig.skillInstructions };
+    delete skillInstructions[id];
+    return {
+      ...modeConfig,
+      skillIds: modeConfig.skillIds.filter((entry) => entry !== id),
+      skillInstructions,
+    };
+  },
+};
+
+async function removeFromAllAgents(id: string, kind: "tool" | "mcp" | "skill"): Promise<void> {
+  const transform = REMOVE_TRANSFORMS[kind];
+  const updates = listAgents().map(async (agent) => {
+    const nextModeConfigs = { ...agent.modeConfigs };
+    let changed = false;
+    for (const mode of getChatModes()) {
+      const current = nextModeConfigs[mode];
+      if (!current) continue;
+      const next = transform(current, id);
+      if (next !== current) {
+        nextModeConfigs[mode] = next;
+        changed = true;
+      }
+    }
+    if (changed) {
+      await store.updateAgent(agent.id, { modeConfigs: nextModeConfigs });
+    }
+  });
+  await Promise.all(updates);
 }
 
 export async function removeMcpFromAgents(mcpId: string): Promise<void> {
-  const updates = listAgents().map(async (agent) => {
-    const nextModeConfigs = { ...agent.modeConfigs };
-    let changed = false;
-    for (const mode of getChatModes()) {
-      const current = agent.modeConfigs[mode];
-      const next = removeCapabilityFromModeConfig(current, mcpId, "mcp");
-      if (JSON.stringify(next) !== JSON.stringify(current)) {
-        nextModeConfigs[mode] = next!;
-        changed = true;
-      }
-    }
-    if (changed) {
-      await store.updateAgent(agent.id, { modeConfigs: nextModeConfigs });
-    }
-  });
-  await Promise.all(updates);
+  return removeFromAllAgents(mcpId, "mcp");
 }
 
 export async function removeToolFromAgents(toolId: string): Promise<void> {
-  const updates = listAgents().map(async (agent) => {
-    const nextModeConfigs = { ...agent.modeConfigs };
-    let changed = false;
-    for (const mode of getChatModes()) {
-      const current = agent.modeConfigs[mode];
-      const next = removeCapabilityFromModeConfig(current, toolId, "tool");
-      if (JSON.stringify(next) !== JSON.stringify(current)) {
-        nextModeConfigs[mode] = next!;
-        changed = true;
-      }
-    }
-    if (changed) {
-      await store.updateAgent(agent.id, { modeConfigs: nextModeConfigs });
-    }
-  });
-  await Promise.all(updates);
+  return removeFromAllAgents(toolId, "tool");
 }
 
 export async function removeSkillFromAgents(skillId: string): Promise<void> {
-  const updates = listAgents().map(async (agent) => {
-    const nextModeConfigs = { ...agent.modeConfigs };
-    let changed = false;
-    for (const mode of getChatModes()) {
-      const current = agent.modeConfigs[mode];
-      const next = removeSkillFromModeConfig(current, skillId);
-      if (JSON.stringify(next) !== JSON.stringify(current)) {
-        nextModeConfigs[mode] = next!;
-        changed = true;
-      }
-    }
-    if (changed) {
-      await store.updateAgent(agent.id, { modeConfigs: nextModeConfigs });
-    }
-  });
-  await Promise.all(updates);
+  return removeFromAllAgents(skillId, "skill");
 }
 
 const loopStates = new Map<string, AgentLoopState>();
@@ -212,6 +198,26 @@ export function setLoopState(sessionId: string, state: AgentLoopState): void {
 export function clearLoopState(sessionId: string): void {
   loopStates.delete(sessionId);
   loopStateListeners.delete(sessionId);
+}
+
+const loopAbortControllers = new Map<string, AbortController>();
+
+export function createLoopAbortController(sessionId: string): AbortController {
+  loopAbortControllers.get(sessionId)?.abort();
+  const controller = new AbortController();
+  loopAbortControllers.set(sessionId, controller);
+  return controller;
+}
+
+export function abortLoop(sessionId: string): boolean {
+  const controller = loopAbortControllers.get(sessionId);
+  if (!controller) return false;
+  controller.abort();
+  return true;
+}
+
+export function clearLoopAbortController(sessionId: string): void {
+  loopAbortControllers.delete(sessionId);
 }
 
 export function subscribeLoopState(sessionId: string, cb: (state: AgentLoopState) => void): () => void {

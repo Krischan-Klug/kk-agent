@@ -285,6 +285,7 @@ export async function updateSystemMcpConfig(id: string, body: UpdateMcpBody): Pr
 
   if (body.name !== undefined) next.name = body.name;
   if (body.emoji !== undefined) next.emoji = body.emoji;
+  if (body.skillIds !== undefined) next.skillIds = body.skillIds;
 
   setSystemMcp(next);
   await persistSystemOverrides();

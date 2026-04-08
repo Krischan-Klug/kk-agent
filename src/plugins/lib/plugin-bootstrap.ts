@@ -4,10 +4,6 @@ import type { PluginAnalysis, PluginAnalysisEntry } from "./plugin-runtime-types
 
 export const CORE_PLUGIN_NAME = "core";
 
-function cloneSettings(settings: Record<string, unknown> | undefined) {
-  return settings ? { ...settings } : {};
-}
-
 function buildContext(analysis: PluginAnalysis, entry: PluginAnalysisEntry): PluginLifecycleContext {
   const resolved: Record<string, PluginSummary> = {};
 
@@ -19,7 +15,7 @@ function buildContext(analysis: PluginAnalysis, entry: PluginAnalysisEntry): Plu
   }
 
   return {
-    settings: cloneSettings(entry.info.config.settings),
+    settings: { ...entry.info.config.settings },
     registry: analysis.registry,
     resolvedDependencies: resolved,
   };

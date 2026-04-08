@@ -45,14 +45,6 @@ export interface RuntimeToolDefinition extends UnifiedToolDefinition {
   ) => Promise<RuntimeToolPermissionPolicy> | RuntimeToolPermissionPolicy;
 }
 
-export interface LoopResult {
-  messages: LoopMessage[];
-  finalResponse: string;
-  iterations: number;
-  providerState?: ProviderTransportState;
-  providerDebug?: ProviderTurnDebug;
-}
-
 export interface ToolExecutionResult {
   content: string;
   isError?: boolean;
@@ -131,7 +123,7 @@ export interface LoopOptions {
   onLoopState?: (state: {
     sessionId: string;
     agentId: string;
-    status: "idle" | "running" | "completed" | "error";
+    status: "idle" | "running" | "completed" | "error" | "aborted";
     mode: ChatMode;
     iteration: number;
     maxIterations: number;
@@ -139,4 +131,21 @@ export interface LoopOptions {
     updatedAt: string;
   }) => void;
   onStats?: (stats: TokenStats) => void;
+  abortSignal?: AbortSignal;
+  autonomous?: boolean;
+  autonomousBudget?: {
+    maxInputTokens?: number;
+    maxOutputTokens?: number;
+    maxWallClockMs?: number;
+    maxConsecutiveAutoContinues?: number;
+  };
+}
+
+export interface LoopResult {
+  messages: LoopMessage[];
+  finalResponse: string;
+  iterations: number;
+  providerState?: ProviderTransportState;
+  providerDebug?: ProviderTurnDebug;
+  aborted?: boolean;
 }

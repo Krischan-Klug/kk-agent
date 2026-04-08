@@ -1,5 +1,5 @@
 export type ReasoningEffort = string;
-export type ChatMode = "plan" | "edit";
+export type ChatMode = "plan" | "edit" | "autonomous";
 export type ToolAccessScope = "user" | "system";
 
 export interface AgentPromptSections {
@@ -10,6 +10,13 @@ export interface AgentPromptSections {
   security: string;
   toolUsage: string;
   communication: string;
+}
+
+export interface AutonomousBudget {
+  maxInputTokens?: number;
+  maxOutputTokens?: number;
+  maxWallClockMs?: number;
+  maxConsecutiveAutoContinues?: number;
 }
 
 export interface AgentModeConfig {
@@ -23,6 +30,8 @@ export interface AgentModeConfig {
   mcpInstructions: Record<string, string>;
   skillInstructions: Record<string, string>;
   allowedToolNames: string[];
+  autonomous?: boolean;
+  autonomousBudget?: AutonomousBudget;
 }
 
 export interface AgentModeConfigPatch {
@@ -36,6 +45,8 @@ export interface AgentModeConfigPatch {
   mcpInstructions?: Record<string, string>;
   skillInstructions?: Record<string, string>;
   allowedToolNames?: string[];
+  autonomous?: boolean;
+  autonomousBudget?: AutonomousBudget;
 }
 
 export interface AgentDefinition {
@@ -56,7 +67,7 @@ export interface AgentDefinition {
 export interface AgentLoopState {
   sessionId: string;
   agentId: string;
-  status: "idle" | "running" | "completed" | "error";
+  status: "idle" | "running" | "completed" | "error" | "aborted";
   mode: ChatMode;
   iteration: number;
   maxIterations: number;

@@ -173,10 +173,9 @@ export function commitResponsesTransportState(input: {
 
   for (const item of input.output) {
     if (item.type !== "function_call") continue;
-    const toolUseId = typeof item.call_id === "string" ? item.call_id : typeof item.id === "string" ? item.id : undefined;
-    const callId = typeof item.call_id === "string" ? item.call_id : toolUseId;
-    if (toolUseId && callId) {
-      next.callIdByToolUseId[toolUseId] = callId;
+    const callId = typeof item.call_id === "string" ? item.call_id : typeof item.id === "string" ? item.id : undefined;
+    if (callId) {
+      next.callIdByToolUseId[callId] = callId;
     }
   }
 

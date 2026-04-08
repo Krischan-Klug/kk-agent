@@ -9,9 +9,15 @@ import {
 } from "../tools/service.js";
 import { getMemoryPromptContext, getTaskSummary } from "../tools/service.js";
 import { buildActiveSkillCatalogSection, getSkillsRootDir } from "../skills/service.js";
-import { runLoop } from "../loop/service.js";
-import type { LoopMessage, ModeRuntimeConfig } from "../loop/types.js";
-import { getAgent, getLoopState, setLoopState, clearLoopState } from "../agent/service.js";
+import { runAgentLoop } from "../loop/lib/agent-loop.js";
+import {
+  buildSystemReminderMessages,
+  clearSystemReminders,
+  drainSystemReminders,
+  enqueueSystemReminder,
+} from "../loop/lib/system-reminder.js";
+import type { LoopMessage, LoopOptions, ModeRuntimeConfig } from "../loop/types.js";
+import { getAgent, getLoopState, setLoopState, clearLoopState, createLoopAbortController, abortLoop, clearLoopAbortController } from "../agent/service.js";
 import { getDefaults } from "../lib/defaults.js";
 import { clearSessionFacts, clearTasks } from "../tools/service.js";
 import { clearFilesystemReadState } from "../tools/lib/filesystem/read-state.js";
@@ -23,16 +29,21 @@ import {
   runWithSessionId,
 } from "../tools/lib/user-interaction/interaction-store.js";
 import {
-  fromLoopMessages,
+  cloneMessages,
   generateSessionName,
-  mergeMessageDisplayState,
-  toLoopMessages,
 } from "./lib/message-state.js";
 import {
   buildRunnableMcpInstructions,
+  collectLinkedSkillIds,
 } from "./lib/tool-selection.js";
 import { buildRuntimeToolCollection, executeRuntimeTool } from "./lib/runtime-tools.js";
 import { resolveReasoningConfig, resolveSessionDefaults } from "./lib/session-resolution.js";
+import {
+  buildDenialReminderBody,
+  clearSessionDenials,
+  listSessionDenials,
+  recordSessionDenial,
+} from "./lib/denial-log.js";
 import { getChatModes } from "../agent/lib/modes.js";
 import { getModeConfig } from "../agent/lib/mode-config.js";
 import type { AgentDefinition, ChatMode } from "../agent/types.js";
@@ -77,7 +88,9 @@ function buildModeRuntimeConfig(
   const config = getModeConfig(agent, mode);
   const activeToolIds = intersectIds(session.activeToolIds, config.toolIds);
   const activeMcpIds = intersectIds(session.activeMcpIds, config.mcpIds);
-  const activeSkillIds = intersectIds(session.activeSkillIds, config.skillIds);
+  const baseActiveSkillIds = intersectIds(session.activeSkillIds, config.skillIds);
+  const linkedSkillIds = collectLinkedSkillIds(activeToolIds, activeMcpIds);
+  const activeSkillIds = [...new Set([...baseActiveSkillIds, ...linkedSkillIds])];
   const systemToolRuntime = buildResolvedSystemToolRuntime(
     activeToolIds,
     config.toolAccessScopes,
@@ -331,6 +344,8 @@ export function deleteSession(id: string): void {
   clearSessionFacts(id);
   clearFilesystemReadState(id);
   clearSessionAttachments(id);
+  clearSystemReminders(id);
+  clearSessionDenials(id);
 }
 
 export function getCurrentSystemPrompt(sessionId: string): string {
@@ -440,13 +455,12 @@ async function prepareLoopRun(sessionId: string, message: string, attachmentIds?
 function finalizeLoopSession(
   sessionId: string,
   session: SessionRecord,
-  previousMessages: SessionState["messages"],
   messages: LoopMessage[],
   finalResponse: string,
   providerState?: SessionRecord["providerState"],
   providerDebug?: SessionRecord["providerDebug"],
 ): SessionRecord {
-  const nextMessages = mergeMessageDisplayState(fromLoopMessages(messages), previousMessages);
+  const nextMessages = cloneMessages(messages);
   const patch: Partial<SessionRecord> = {
     messages: nextMessages,
     providerState,
@@ -462,10 +476,11 @@ function finalizeLoopSession(
 function buildLoopRequest(
   prepared: Awaited<ReturnType<typeof prepareLoopRun>>,
   sessionId: string,
-  handlers: Partial<Parameters<typeof runLoop>[0]> = {},
+  handlers: Partial<Pick<LoopOptions, "onAssistantBlockDelta" | "onAssistantMessage" | "onSystemNotice" | "onToolExecutionUpdate" | "onLoopState" | "onStats">> = {},
 ) {
-  const loopMessages = toLoopMessages(prepared.messages);
+  const loopMessages = cloneMessages(prepared.messages);
   const activeModeConfig = prepared.modeRuntimeConfigs[prepared.session.activeMode] as SessionModeRuntimeConfig;
+  const activeAgentModeConfig = prepared.agent.modeConfigs[prepared.session.activeMode];
   const loadedSkillIds = getLoadedSkillIds(loopMessages);
 
   return {
@@ -495,9 +510,23 @@ function buildLoopRequest(
         maxIterations,
         runtimeVariables: activeModeConfig.runtimeVariables,
       });
+      const denials = listSessionDenials(sessionId);
+      if (denials.length > 0) {
+        enqueueSystemReminder(sessionId, {
+          type: "tool_denied",
+          body: buildDenialReminderBody(denials),
+        });
+      }
+      if (iteration >= maxIterations - 1 && maxIterations > 1) {
+        enqueueSystemReminder(sessionId, {
+          type: "iteration_limit_near",
+          body: `You are on iteration ${iteration} of ${maxIterations}. Wrap up: finish the current task or hand off cleanly. After this turn the loop will stop.`,
+        });
+      }
+      const reminderMessages = buildSystemReminderMessages(drainSystemReminders(sessionId));
       return iteration === 1
-        ? [...runtimeMessages, ...prepared.attachmentMetaMessages]
-        : runtimeMessages;
+        ? [...runtimeMessages, ...prepared.attachmentMetaMessages, ...reminderMessages]
+        : [...runtimeMessages, ...reminderMessages];
     },
     reasoningEffort: prepared.reasoning.reasoningEffort,
     temperature: prepared.reasoning.temperature,
@@ -545,6 +574,7 @@ function buildLoopRequest(
         case "allow":
           return { allowed: true };
         case "deny":
+          recordSessionDenial(sessionId, toolName, args, policy.reason ?? "denied by policy");
           return { allowed: false, reason: policy.reason };
         case "prompt": {
           const promptId = `${toolName}-${Date.now()}`;
@@ -555,6 +585,7 @@ function buildLoopRequest(
           });
           const result = await waitForResponse(sessionId, promptId);
           if (result.isError) {
+            recordSessionDenial(sessionId, toolName, args, result.content);
             return { allowed: false, reason: result.content };
           }
           try {
@@ -565,14 +596,15 @@ function buildLoopRequest(
           } catch {
             // fall through
           }
-          return {
-            allowed: false,
-            reason: policy.deniedMessage ?? `Tool "${toolName}" was rejected by the user.`,
-          };
+          const reason = policy.deniedMessage ?? `Tool "${toolName}" was rejected by the user.`;
+          recordSessionDenial(sessionId, toolName, args, reason);
+          return { allowed: false, reason };
         }
       }
       return { allowed: true };
     },
+    autonomous: prepared.session.activeMode === "autonomous" || activeAgentModeConfig?.autonomous === true,
+    autonomousBudget: activeAgentModeConfig?.autonomousBudget,
     ...handlers,
   };
 }
@@ -583,13 +615,20 @@ export async function chat(
   attachmentIds?: string[],
 ): Promise<{ response: string; session: SessionState }> {
   const prepared = await prepareLoopRun(sessionId, message, attachmentIds);
-  const result = await runWithSessionId(sessionId, () => runLoop(buildLoopRequest(prepared, sessionId)));
+  const abortController = createLoopAbortController(sessionId);
+  let result;
+  try {
+    result = await runWithSessionId(sessionId, () =>
+      runAgentLoop({ ...buildLoopRequest(prepared, sessionId), abortSignal: abortController.signal }),
+    );
+  } finally {
+    clearLoopAbortController(sessionId);
+  }
   return {
     response: result.finalResponse,
     session: toPublicSession(finalizeLoopSession(
       sessionId,
       prepared.session,
-      prepared.messages,
       result.messages,
       result.finalResponse,
       result.providerState,
@@ -618,9 +657,10 @@ export async function chatStream(
     });
   });
 
+  const abortController = createLoopAbortController(sessionId);
   try {
     const result = await runWithSessionId(sessionId, () =>
-      runLoop(buildLoopRequest(prepared, sessionId, {
+      runAgentLoop({ ...buildLoopRequest(prepared, sessionId, {
         onAssistantBlockDelta: (messageId, block) => emit({ type: "assistant_block_delta", messageId, block }),
         onAssistantMessage: (messageObject) => emit({ type: "assistant_message_complete", message: messageObject }),
         onSystemNotice: (level, messageText) => emit({ type: "system_notice", level, message: messageText }),
@@ -638,13 +678,12 @@ export async function chatStream(
             reasoningTokens: stats.reasoningTokens,
             source: stats.source,
           }),
-      })),
+      }), abortSignal: abortController.signal }),
     );
 
     const updated = finalizeLoopSession(
       sessionId,
       prepared.session,
-      prepared.messages,
       result.messages,
       result.finalResponse,
       result.providerState,
@@ -652,8 +691,13 @@ export async function chatStream(
     );
     emit({ type: "done", session: toPublicSession(updated) });
   } finally {
+    clearLoopAbortController(sessionId);
     unregisterSession(sessionId);
   }
+}
+
+export function abortSessionLoop(sessionId: string): boolean {
+  return abortLoop(sessionId);
 }
 
 export async function updateSession(id: string, body: Partial<CreateSessionBody>): Promise<SessionState> {
@@ -704,6 +748,12 @@ export async function updateSession(id: string, body: Partial<CreateSessionBody>
   const updated = normalizeSessionReasoning(store.updateSession(id, patch));
   if (switchingAgent) {
     clearLoopState(id);
+  }
+  if (defaults.activeMode !== session.activeMode) {
+    enqueueSystemReminder(id, {
+      type: "mode_changed",
+      body: `The user switched the chat mode from "${session.activeMode}" to "${defaults.activeMode}". Re-evaluate which tools are now allowed and proceed in the new mode.`,
+    });
   }
   return toPublicSession(updated);
 }

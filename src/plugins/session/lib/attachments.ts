@@ -10,51 +10,59 @@ interface AllowedType {
   maxSize: number;
 }
 
+const IMAGE_MAX_SIZE = 10 * 1024 * 1024;
+const TEXT_MAX_SIZE = 5 * 1024 * 1024;
+const PDF_MAX_SIZE = 20 * 1024 * 1024;
+
+const IMAGE: AllowedType = { category: "image", maxSize: IMAGE_MAX_SIZE };
+const TEXT: AllowedType = { category: "text", maxSize: TEXT_MAX_SIZE };
+const PDF: AllowedType = { category: "pdf", maxSize: PDF_MAX_SIZE };
+
 const ALLOWED_TYPES = new Map<string, AllowedType>([
-  ["image/png", { category: "image", maxSize: 10 * 1024 * 1024 }],
-  ["image/jpeg", { category: "image", maxSize: 10 * 1024 * 1024 }],
-  ["image/gif", { category: "image", maxSize: 10 * 1024 * 1024 }],
-  ["image/webp", { category: "image", maxSize: 10 * 1024 * 1024 }],
-  ["text/plain", { category: "text", maxSize: 5 * 1024 * 1024 }],
-  ["text/markdown", { category: "text", maxSize: 5 * 1024 * 1024 }],
-  ["text/csv", { category: "text", maxSize: 5 * 1024 * 1024 }],
-  ["text/xml", { category: "text", maxSize: 5 * 1024 * 1024 }],
-  ["text/html", { category: "text", maxSize: 5 * 1024 * 1024 }],
-  ["application/json", { category: "text", maxSize: 5 * 1024 * 1024 }],
-  ["application/xml", { category: "text", maxSize: 5 * 1024 * 1024 }],
-  ["application/x-yaml", { category: "text", maxSize: 5 * 1024 * 1024 }],
-  ["text/yaml", { category: "text", maxSize: 5 * 1024 * 1024 }],
-  ["application/pdf", { category: "pdf", maxSize: 20 * 1024 * 1024 }],
+  ["image/png", IMAGE],
+  ["image/jpeg", IMAGE],
+  ["image/gif", IMAGE],
+  ["image/webp", IMAGE],
+  ["text/plain", TEXT],
+  ["text/markdown", TEXT],
+  ["text/csv", TEXT],
+  ["text/xml", TEXT],
+  ["text/html", TEXT],
+  ["application/json", TEXT],
+  ["application/xml", TEXT],
+  ["application/x-yaml", TEXT],
+  ["text/yaml", TEXT],
+  ["application/pdf", PDF],
 ]);
 
 const EXTENSION_FALLBACKS = new Map<string, AllowedType>([
-  [".txt", { category: "text", maxSize: 5 * 1024 * 1024 }],
-  [".md", { category: "text", maxSize: 5 * 1024 * 1024 }],
-  [".json", { category: "text", maxSize: 5 * 1024 * 1024 }],
-  [".csv", { category: "text", maxSize: 5 * 1024 * 1024 }],
-  [".xml", { category: "text", maxSize: 5 * 1024 * 1024 }],
-  [".yaml", { category: "text", maxSize: 5 * 1024 * 1024 }],
-  [".yml", { category: "text", maxSize: 5 * 1024 * 1024 }],
-  [".html", { category: "text", maxSize: 5 * 1024 * 1024 }],
-  [".css", { category: "text", maxSize: 5 * 1024 * 1024 }],
-  [".js", { category: "text", maxSize: 5 * 1024 * 1024 }],
-  [".ts", { category: "text", maxSize: 5 * 1024 * 1024 }],
-  [".tsx", { category: "text", maxSize: 5 * 1024 * 1024 }],
-  [".jsx", { category: "text", maxSize: 5 * 1024 * 1024 }],
-  [".py", { category: "text", maxSize: 5 * 1024 * 1024 }],
-  [".rs", { category: "text", maxSize: 5 * 1024 * 1024 }],
-  [".go", { category: "text", maxSize: 5 * 1024 * 1024 }],
-  [".java", { category: "text", maxSize: 5 * 1024 * 1024 }],
-  [".c", { category: "text", maxSize: 5 * 1024 * 1024 }],
-  [".cpp", { category: "text", maxSize: 5 * 1024 * 1024 }],
-  [".h", { category: "text", maxSize: 5 * 1024 * 1024 }],
-  [".sh", { category: "text", maxSize: 5 * 1024 * 1024 }],
-  [".sql", { category: "text", maxSize: 5 * 1024 * 1024 }],
-  [".toml", { category: "text", maxSize: 5 * 1024 * 1024 }],
-  [".ini", { category: "text", maxSize: 5 * 1024 * 1024 }],
-  [".env", { category: "text", maxSize: 5 * 1024 * 1024 }],
-  [".log", { category: "text", maxSize: 5 * 1024 * 1024 }],
-  [".pdf", { category: "pdf", maxSize: 20 * 1024 * 1024 }],
+  [".txt", TEXT],
+  [".md", TEXT],
+  [".json", TEXT],
+  [".csv", TEXT],
+  [".xml", TEXT],
+  [".yaml", TEXT],
+  [".yml", TEXT],
+  [".html", TEXT],
+  [".css", TEXT],
+  [".js", TEXT],
+  [".ts", TEXT],
+  [".tsx", TEXT],
+  [".jsx", TEXT],
+  [".py", TEXT],
+  [".rs", TEXT],
+  [".go", TEXT],
+  [".java", TEXT],
+  [".c", TEXT],
+  [".cpp", TEXT],
+  [".h", TEXT],
+  [".sh", TEXT],
+  [".sql", TEXT],
+  [".toml", TEXT],
+  [".ini", TEXT],
+  [".env", TEXT],
+  [".log", TEXT],
+  [".pdf", PDF],
 ]);
 
 const ATTACHMENTS_ROOT = resolve(getStateDirPath("session-attachments"));
@@ -227,6 +235,6 @@ async function extractPdfText(buffer: Buffer): Promise<string> {
     return result.text;
   } catch (err) {
     console.warn("[attachments] PDF text extraction failed:", (err as Error).message);
-    return "[PDF-Textextraktion fehlgeschlagen]";
+    return "[PDF text extraction failed]";
   }
 }

@@ -1,10 +1,14 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { getStateDirPath } from "../../lib/state.js";
+import { truncateAtLine } from "../../lib/truncate.js";
 
 const TOOL_RESULT_DIR = getStateDirPath("tool-results");
+// Above this limit, tool output is persisted to disk and only a preview is sent to the model.
 const PREVIEW_THRESHOLD_CHARS = 12_000;
+// How many chars of a large result to keep inline as the preview.
 const PREVIEW_CHARS = 2_400;
+// Total char budget across all tool results in a single iteration before truncation kicks in.
 const AGGREGATED_CONTEXT_BUDGET = 32_000;
 
 type ResultPolicy = {
@@ -17,10 +21,7 @@ type ResultPolicy = {
 
 function buildPreview(content: string, previewChars: number): string {
   if (content.length <= previewChars) return content;
-  const truncated = content.slice(0, previewChars);
-  const lastNewline = truncated.lastIndexOf("\n");
-  const cutPoint = lastNewline > Math.floor(previewChars * 0.5) ? lastNewline : previewChars;
-  return `${content.slice(0, cutPoint)}\n...`;
+  return `${truncateAtLine(content, previewChars)}\n...`;
 }
 
 function resolvePreviewThreshold(policy?: ResultPolicy): number {

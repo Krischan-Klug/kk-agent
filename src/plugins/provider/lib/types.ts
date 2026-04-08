@@ -1,14 +1,10 @@
 import type { TranscriptBlock, TranscriptMessage, TranscriptStopReason } from "../../lib/transcript.js";
 import type { ContinuationMode, EndpointTransportProfile, EndpointType } from "../types.js";
 
-export type ProviderMessage = TranscriptMessage;
-export type ProviderBlock = TranscriptBlock;
-export type UnifiedMessage = ProviderMessage;
-
 export interface UnifiedRequest {
   providerId?: string;
   model: string;
-  messages: ProviderMessage[];
+  messages: TranscriptMessage[];
   tools?: UnifiedToolDefinition[];
   stream?: boolean;
   reasoningEffort?: string;
@@ -113,7 +109,7 @@ export interface ProviderTurnDebug {
 }
 
 export interface UnifiedResponse {
-  message: ProviderMessage;
+  message: TranscriptMessage;
   finishReason: TranscriptStopReason;
   stats?: TokenStats;
   notices?: ProviderNotice[];
@@ -123,8 +119,8 @@ export interface UnifiedResponse {
 }
 
 export type StreamChunk =
-  | { type: "assistant_block_delta"; messageId: string; block: ProviderBlock }
-  | { type: "assistant_message"; message: ProviderMessage; finishReason: TranscriptStopReason }
+  | { type: "assistant_block_delta"; messageId: string; block: TranscriptBlock }
+  | { type: "assistant_message"; message: TranscriptMessage; finishReason: TranscriptStopReason }
   | { type: "done"; finishReason: TranscriptStopReason }
   | { type: "stats"; stats: TokenStats };
 

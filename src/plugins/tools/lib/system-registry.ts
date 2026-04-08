@@ -7,6 +7,7 @@ interface SystemMcpOverrideEntry {
   active?: boolean;
   instruction?: string;
   systemConfig?: SystemMcpConfig;
+  skillIds?: string[];
 }
 
 interface SystemMcpOverrideState {
@@ -40,6 +41,7 @@ export function buildSystemMcps(overrides: SystemMcpOverrideState): McpServerCon
       active: override?.active ?? base.active,
       instruction: override?.instruction ?? base.instruction,
       systemConfig: mergedSystemConfig,
+      skillIds: override?.skillIds ?? base.skillIds ?? [],
     };
   });
 }
@@ -56,6 +58,9 @@ export function createOverrideState(mcps: McpServerConfig[]): SystemMcpOverrideS
     if (mcp.active !== base.active) entry.active = mcp.active;
     if (mcp.instruction !== base.instruction) entry.instruction = mcp.instruction;
     if (JSON.stringify(normalizedConfig) !== JSON.stringify(baseConfig)) entry.systemConfig = normalizedConfig;
+    const baseSkillIds = base.skillIds ?? [];
+    const mcpSkillIds = mcp.skillIds ?? [];
+    if (JSON.stringify(mcpSkillIds) !== JSON.stringify(baseSkillIds)) entry.skillIds = mcpSkillIds;
     if (Object.keys(entry).length > 0) state.mcps[mcp.systemKey] = entry;
   }
   return state;

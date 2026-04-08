@@ -6,6 +6,7 @@ import {
   deleteSession,
   chat,
   chatStream,
+  abortSessionLoop,
   patchSession,
   getCurrentPromptDebug,
 } from "./service.js";
@@ -101,6 +102,12 @@ export async function doChatStream(req: Request, res: Response): Promise<void> {
       res.end();
     }
   }
+}
+
+export async function doAbort(req: Request, res: Response): Promise<Response> {
+  const ok = abortSessionLoop(req.params.id);
+  if (!ok) return res.status(404).json({ error: "No active loop for this session" });
+  return res.json({ ok: true });
 }
 
 export async function doPatch(req: Request, res: Response): Promise<Response> {

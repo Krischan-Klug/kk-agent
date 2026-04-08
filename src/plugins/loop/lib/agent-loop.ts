@@ -8,8 +8,29 @@ import { getSystemVariables } from "../../systemprompt/lib/builder.js";
 import { getTaskSummary } from "../../tools/service.js";
 import { StreamingToolExecutor } from "./tool-executor.js";
 import { getDefaults } from "../../lib/defaults.js";
+import { classifyProviderError, computeBackoffMs } from "../../provider/lib/errors.js";
+import { snipOldestToolCycles, estimateTranscriptChars, OUTPUT_CONTINUE_INSTRUCTION, PTL_SNIP_NOTICE } from "./recovery.js";
+import { createTokenBudget, recordTurn, shouldContinue } from "./token-budget.js";
+
+const TASK_COMPLETE_SENTINEL = "TASK_COMPLETE";
+const AUTONOMOUS_CONTINUE_INSTRUCTION = `Continue working on the task autonomously. If you believe the task is fully complete, respond with exactly "${TASK_COMPLETE_SENTINEL}" on its own line and nothing else.`;
 
 const EMPTY_RESPONSE_RETRY_BUDGET = 1;
+const TRANSIENT_RETRY_BUDGET = 3;
+const PTL_RETRY_BUDGET = 3;
+const MAX_OUTPUT_RECOVERY_RETRIES = 3;
+const PTL_SNIP_TARGET_RATIO = 0.6;
+
+class AbortedError extends Error {
+  constructor() {
+    super("Loop aborted by signal");
+    this.name = "AbortedError";
+  }
+}
+
+function throwIfAborted(signal?: AbortSignal): void {
+  if (signal?.aborted) throw new AbortedError();
+}
 
 function buildLoopState(opts: LoopOptions): AgentLoopState {
   const now = new Date().toISOString();
@@ -138,6 +159,16 @@ export async function runAgentLoop(opts: LoopOptions): Promise<LoopResult> {
   let retryInstruction: string | undefined;
   let emptyResponseRetryCount = 0;
   let invalidToolRetryCount = 0;
+  let ptlRetries = 0;
+  let maxOutputRetries = 0;
+  const tokenBudget = createTokenBudget({
+    maxInputTokens: opts.autonomousBudget?.maxInputTokens,
+    maxOutputTokens: opts.autonomousBudget?.maxOutputTokens,
+  });
+  const autonomousStart = Date.now();
+  const maxWallClockMs = opts.autonomousBudget?.maxWallClockMs ?? 30 * 60 * 1000;
+  const maxConsecutiveAutoContinues = opts.autonomousBudget?.maxConsecutiveAutoContinues ?? 20;
+  let consecutiveAutoContinues = 0;
   let providerState = opts.providerState;
   let providerDebug: LoopResult["providerDebug"] = undefined;
   let runtimeContext = {
@@ -145,7 +176,19 @@ export async function runAgentLoop(opts: LoopOptions): Promise<LoopResult> {
   };
   const defaults = getDefaults();
 
+  let lastTurnStats: import("../../provider/lib/types.js").TokenStats | undefined;
+  const loopOpts: LoopOptions = {
+    ...opts,
+    onStats: (stats) => {
+      lastTurnStats = stats;
+      opts.onStats?.(stats);
+    },
+  };
+
+  let aborted = false;
+  try {
   while (iteration < opts.maxIterations) {
+    throwIfAborted(opts.abortSignal);
     iteration++;
     emitLoopState(loopState, opts, { iteration, status: "running", mode: opts.activeMode });
 
@@ -184,23 +227,72 @@ export async function runAgentLoop(opts: LoopOptions): Promise<LoopResult> {
       maxIterations: opts.maxIterations,
     }) ?? [];
     let response;
-    try {
-      response = await runModelPass(
-        opts,
-        messages,
-        providerState,
-        (toolUse) => {
-          if (streamedToolUseIds.has(toolUse.id)) return;
-          streamedToolUseIds.add(toolUse.id);
-          executor.addTool(toolUse);
-        },
-        retryInstruction,
-        metaMessages,
-      );
-    } catch (error) {
-      executor.discardPending("Tool execution was discarded because the provider stream failed.");
-      await executor.getFinalResults().catch(() => []);
-      throw error;
+    let transientRetries = 0;
+    // eslint-disable-next-line no-constant-condition
+    while (true) {
+      try {
+        throwIfAborted(opts.abortSignal);
+        response = await runModelPass(
+          loopOpts,
+          messages,
+          providerState,
+          (toolUse) => {
+            if (streamedToolUseIds.has(toolUse.id)) return;
+            streamedToolUseIds.add(toolUse.id);
+            executor.addTool(toolUse);
+          },
+          retryInstruction,
+          metaMessages,
+        );
+        break;
+      } catch (error) {
+        if (error instanceof AbortedError) {
+          executor.discardPending("Tool execution aborted by user.");
+          await executor.getFinalResults().catch(() => []);
+          throw error;
+        }
+        const classified = classifyProviderError(error);
+        if (classified.kind === "prompt_too_long") {
+          if (ptlRetries >= PTL_RETRY_BUDGET) {
+            executor.discardPending("Provider stream failed after repeated prompt_too_long.");
+            await executor.getFinalResults().catch(() => []);
+            throw error;
+          }
+          ptlRetries++;
+          const before = estimateTranscriptChars(messages);
+          const target = Math.max(2000, Math.floor(before * PTL_SNIP_TARGET_RATIO));
+          const snipped = snipOldestToolCycles(messages, target);
+          messages.length = 0;
+          messages.push(...snipped.messages);
+          opts.onSystemNotice?.(
+            "warning",
+            `Context overflow — trimmed ${snipped.removed} older messages and retrying.`,
+          );
+          retryInstruction = PTL_SNIP_NOTICE;
+          // Reset streamed tool tracking since no tools fired this attempt.
+          streamedToolUseIds.clear();
+          continue;
+        }
+        if (classified.kind === "rate_limit" || classified.kind === "transient") {
+          if (transientRetries >= TRANSIENT_RETRY_BUDGET) {
+            executor.discardPending("Tool execution was discarded because the provider stream failed.");
+            await executor.getFinalResults().catch(() => []);
+            throw error;
+          }
+          transientRetries++;
+          const delayMs = computeBackoffMs(transientRetries);
+          opts.onSystemNotice?.(
+            "warning",
+            `Provider ${classified.kind} error — retrying in ${Math.round(delayMs / 100) / 10}s (${transientRetries}/${TRANSIENT_RETRY_BUDGET}).`,
+          );
+          await new Promise((resolve) => setTimeout(resolve, delayMs));
+          streamedToolUseIds.clear();
+          continue;
+        }
+        executor.discardPending("Tool execution was discarded because the provider stream failed.");
+        await executor.getFinalResults().catch(() => []);
+        throw error;
+      }
     }
     retryInstruction = undefined;
     for (const notice of response.notices ?? []) {
@@ -215,7 +307,7 @@ export async function runAgentLoop(opts: LoopOptions): Promise<LoopResult> {
     if (toolUses.length === 0 && !hasVisibleAssistantContent(assistantMessage)) {
       if (hasToolParseErrors && invalidToolRetryCount < EMPTY_RESPONSE_RETRY_BUDGET) {
         invalidToolRetryCount++;
-        opts.onSystemNotice?.("warning", "Modell hat ungueltige Tool-Calls erzeugt. Korrekturversuch.");
+        opts.onSystemNotice?.("warning", "Model produced invalid tool calls. Retrying.");
         retryInstruction = [
           defaults.retry.invalidToolInstruction,
           "If you call a tool, use only registered tool names and valid JSON object arguments.",
@@ -226,7 +318,7 @@ export async function runAgentLoop(opts: LoopOptions): Promise<LoopResult> {
 
       emptyResponseRetryCount++;
       if (emptyResponseRetryCount <= EMPTY_RESPONSE_RETRY_BUDGET) {
-        opts.onSystemNotice?.("warning", "Modellantwort war leer. Korrekturversuch.");
+        opts.onSystemNotice?.("warning", "Model returned an empty response. Retrying.");
         retryInstruction = defaults.retry.emptyResponseInstruction;
         iteration--;
         continue;
@@ -237,28 +329,89 @@ export async function runAgentLoop(opts: LoopOptions): Promise<LoopResult> {
 
     emptyResponseRetryCount = 0;
     invalidToolRetryCount = 0;
+    ptlRetries = 0;
     messages.push(assistantMessage);
     finalResponse = assistantText || finalResponse;
     providerState = response.transportState ?? providerState;
     providerDebug = response.debug ?? providerDebug;
 
-    if (toolUses.length === 0) {
-      break;
+    if (response.finishReason === "length" && toolUses.length === 0) {
+      if (maxOutputRetries < MAX_OUTPUT_RECOVERY_RETRIES) {
+        maxOutputRetries++;
+        opts.onSystemNotice?.(
+          "warning",
+          `Response hit output limit — continuing (${maxOutputRetries}/${MAX_OUTPUT_RECOVERY_RETRIES}).`,
+        );
+        retryInstruction = OUTPUT_CONTINUE_INSTRUCTION;
+        continue;
+      }
+      opts.onSystemNotice?.(
+        "warning",
+        "Response hit output limit after max retries — stopping.",
+      );
+    } else {
+      maxOutputRetries = 0;
     }
+
+    if (lastTurnStats) recordTurn(tokenBudget, lastTurnStats);
+
+    if (toolUses.length === 0) {
+      if (!opts.autonomous) break;
+      // Explicit task-complete sentinel: always honored.
+      if (assistantText.includes(TASK_COMPLETE_SENTINEL)) break;
+      // Anti-runaway caps.
+      if (Date.now() - autonomousStart >= maxWallClockMs) {
+        opts.onSystemNotice?.("info", "Autonomous mode stopped: wall-clock budget reached.");
+        break;
+      }
+      if (consecutiveAutoContinues >= maxConsecutiveAutoContinues) {
+        opts.onSystemNotice?.("info", "Autonomous mode stopped: consecutive auto-continue limit reached.");
+        break;
+      }
+      const verdict = shouldContinue(tokenBudget);
+      if (!verdict.continue) {
+        opts.onSystemNotice?.("info", `Autonomous mode stopped: ${verdict.reason}.`);
+        break;
+      }
+      consecutiveAutoContinues++;
+      opts.onSystemNotice?.(
+        "info",
+        `Auto-continue (${consecutiveAutoContinues}/${maxConsecutiveAutoContinues}) — budget ok.`,
+      );
+      retryInstruction = AUTONOMOUS_CONTINUE_INSTRUCTION;
+      continue;
+    }
+    consecutiveAutoContinues = 0;
 
     for (const toolUse of toolUses) {
       if (!streamedToolUseIds.has(toolUse.id)) {
         executor.addTool(toolUse);
       }
     }
+    if (opts.abortSignal?.aborted) {
+      executor.discardPending("Tool execution aborted by user.");
+    }
     const toolResults = await executor.getFinalResults();
     runtimeContext = executor.getRuntimeContext();
     messages.push(...toolResults);
+    throwIfAborted(opts.abortSignal);
+  }
+  } catch (error) {
+    if (error instanceof AbortedError) {
+      aborted = true;
+    } else {
+      throw error;
+    }
   }
 
   const repaired = repairTranscript(messages);
+  const finalStatus: AgentLoopState["status"] = aborted
+    ? "aborted"
+    : loopState.status === "error"
+      ? "error"
+      : "completed";
   emitLoopState(loopState, opts, {
-    status: loopState.status === "error" ? "error" : "completed",
+    status: finalStatus,
     iteration,
     mode: opts.activeMode,
   });
@@ -269,5 +422,6 @@ export async function runAgentLoop(opts: LoopOptions): Promise<LoopResult> {
     iterations: iteration,
     providerState,
     providerDebug,
+    aborted,
   };
 }

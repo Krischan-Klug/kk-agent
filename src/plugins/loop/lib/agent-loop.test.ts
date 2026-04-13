@@ -129,3 +129,55 @@ test("runAgentLoop autonomous mode still stops on TASK_COMPLETE", async () => {
   assert.equal(result.iterations, 1);
   assert.equal(result.finalResponse, "TASK_COMPLETE");
 });
+
+test("runAgentLoop appends tool-provided assistant attachment blocks to the owning assistant turn", async () => {
+  let callCount = 0;
+  const streamedBlocks: string[] = [];
+  const modelPassRunner: LoopOptions["modelPassRunner"] = async () => {
+    callCount += 1;
+    if (callCount === 1) {
+      return {
+        message: createTranscriptMessage({
+          role: "assistant",
+          id: "assistant-1",
+          content: [toolUseBlock("tool-1", "demo_tool", { filename: "summary.md" })],
+        }),
+        finishReason: "tool_use" as const,
+      };
+    }
+    return {
+      message: createTranscriptMessage({
+        role: "assistant",
+        content: [textBlock("done")],
+      }),
+      finishReason: "stop" as const,
+    };
+  };
+
+  const result = await runAgentLoop(buildOptions({
+    executeTool: async () => ({
+      content: "attachment ready",
+      assistantBlocks: [{
+        type: "attachment_ref",
+        attachmentId: "att-1",
+        filename: "summary.md",
+        mimeType: "text/markdown",
+        category: "text",
+        source: "assistant",
+        size: 22,
+      }],
+    }),
+    modelPassRunner,
+    onAssistantBlockDelta: (_messageId, block) => {
+      if (block.type === "attachment_ref") streamedBlocks.push(block.filename);
+    },
+  }));
+
+  const firstAssistant = result.messages.find((message) => message.role === "assistant");
+  const attachmentBlock = firstAssistant?.content.find((block) => block.type === "attachment_ref");
+
+  assert.equal(streamedBlocks[0], "summary.md");
+  assert.ok(attachmentBlock && attachmentBlock.type === "attachment_ref");
+  assert.equal(attachmentBlock?.source, "assistant");
+  assert.equal(attachmentBlock?.attachmentId, "att-1");
+});

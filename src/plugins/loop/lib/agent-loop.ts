@@ -387,6 +387,13 @@ export async function runAgentLoop(opts: LoopOptions): Promise<LoopResult> {
       executor.discardPending("Tool execution aborted by user.");
     }
     const toolResults = await executor.getFinalResults();
+    const assistantBlocks = executor.getAssistantBlocks();
+    if (assistantBlocks.length > 0) {
+      assistantMessage.content = [...assistantMessage.content, ...assistantBlocks];
+      for (const block of assistantBlocks) {
+        opts.onAssistantBlockDelta?.(assistantMessage.id, block);
+      }
+    }
     runtimeContext = executor.getRuntimeContext();
     messages.push(...toolResults);
     throwIfAborted(opts.abortSignal);

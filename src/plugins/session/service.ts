@@ -1,14 +1,19 @@
 import { basename } from "node:path";
-import type { SessionRecord, SessionState, CreateSessionBody, SSEEvent } from "./types.js";
+import type { SessionPromptDebug, SessionRecord, SessionState, CreateSessionBody, SSEEvent } from "./types.js";
 import * as store from "./lib/store.js";
-import { clearSessionAttachments, getSessionAttachmentsByIds, readAttachmentData } from "./lib/attachments.js";
+import {
+  buildAttachmentPreviewDataUrl,
+  clearSessionAttachments,
+  getSessionAttachmentsByIds,
+} from "./lib/attachments.js";
 import { buildPrompt, getSystemVariables } from "../systemprompt/service.js";
+import { getAllMcpsCached, getMcpTools, getRunnableMcpIds } from "../mcp/service.js";
 import { getActiveProviderId, getModelCapabilities } from "../provider/service.js";
 import {
   buildResolvedSystemToolRuntime,
 } from "../tools/service.js";
 import { getMemoryPromptContext, getTaskSummary } from "../tools/service.js";
-import { buildActiveSkillCatalogSection, getSkillsRootDir } from "../skills/service.js";
+import { buildActiveSkillCatalogSection, getSkillsRootDir, listSkills } from "../skills/service.js";
 import { runAgentLoop } from "../loop/lib/agent-loop.js";
 import {
   buildSystemReminderMessages,
@@ -78,6 +83,8 @@ function intersectIds(sessionIds: string[], modeIds: string[]): string[] {
 
 interface SessionModeRuntimeConfig extends ModeRuntimeConfig {
   runtimeNotices: string[];
+  activeToolIds: string[];
+  activeMcpIds: string[];
 }
 
 function buildModeRuntimeConfig(
@@ -128,6 +135,8 @@ function buildModeRuntimeConfig(
     allTools: runtimeToolCollection.allTools,
     runtimeToolsByName: runtimeToolCollection.runtimeToolsByName,
     runtimeNotices: runtimeToolCollection.notices,
+    activeToolIds,
+    activeMcpIds,
   };
 }
 
@@ -353,7 +362,7 @@ export function getCurrentSystemPrompt(sessionId: string): string {
   return buildCurrentSystemPrompt(sessionId, session, agent);
 }
 
-export function getCurrentPromptDebug(sessionId: string): { systemPrompt: string; metaMessages: string[] } {
+export function getCurrentPromptDebug(sessionId: string): SessionPromptDebug {
   const session = getSessionRecordOrThrow(sessionId);
   const agent = getAgent(session.agentId);
   const modeRuntimeConfig = buildModeRuntimeConfig(session, agent, session.activeMode);
@@ -382,6 +391,42 @@ export function getCurrentPromptDebug(sessionId: string): { systemPrompt: string
   return {
     systemPrompt,
     metaMessages: extractMetaMessageTexts([...runtimeMetaMessages, ...attachmentMetaMessages]),
+    runtimeTools: Object.values(modeRuntimeConfig.runtimeToolsByName).map((tool) => ({
+      name: tool.name,
+      description: tool.description,
+      capabilityId: tool.capabilityId,
+      source: tool.source,
+      inputSchema: tool.inputSchema,
+    })),
+    runtimeMcps: getAllMcpsCached()
+      .filter((mcp) => modeRuntimeConfig.activeMcpIds.includes(mcp.id))
+      .map((mcp) => ({
+        id: mcp.id,
+        name: mcp.name,
+        instruction: mcp.instruction,
+        emoji: mcp.emoji,
+        source: mcp.source === "custom" ? "custom" : undefined,
+        active: mcp.active,
+        running: getRunnableMcpIds().includes(mcp.id),
+        tools: getMcpTools(mcp.id).map((tool) => ({
+          name: tool.name,
+          description: tool.description,
+          inputSchema: tool.inputSchema,
+        })),
+      })),
+    runtimeSkills: listSkills()
+      .filter((skill) => modeRuntimeConfig.activeSkillIds.includes(skill.id))
+      .map((skill) => ({
+        id: skill.id,
+        name: skill.name,
+        description: skill.description,
+        instruction: skill.instruction,
+        active: skill.active,
+        source: skill.source,
+        recommendedToolIds: [...skill.recommendedToolIds],
+        recommendedMcpIds: [...skill.recommendedMcpIds],
+        allowedModes: [...skill.allowedModes],
+      })),
   };
 }
 
@@ -398,17 +443,16 @@ async function prepareLoopRun(sessionId: string, message: string, attachmentIds?
     const attachments = await getSessionAttachmentsByIds(sessionId, attachmentIds);
     if (attachments.length > 0) {
       for (const att of attachments) {
-        let previewDataUrl: string | undefined;
-        if (att.category === "image" && visionSupported) {
-          const base64 = (await readAttachmentData(att)).toString("base64");
-          previewDataUrl = `data:${att.mimeType};base64,${base64}`;
-        }
+        const previewDataUrl = att.category === "image" && visionSupported
+          ? await buildAttachmentPreviewDataUrl(att)
+          : undefined;
 
         userBlocks.push(attachmentRefBlock({
           attachmentId: att.id,
           filename: att.filename,
           mimeType: att.mimeType,
           category: att.category,
+          source: att.source,
           size: att.size,
           previewDataUrl,
         }));

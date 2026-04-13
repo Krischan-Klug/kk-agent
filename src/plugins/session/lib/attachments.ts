@@ -3,7 +3,7 @@ import { existsSync, rmSync } from "node:fs";
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { basename, extname, join, resolve } from "node:path";
 import { getStateDirPath } from "../../lib/state.js";
-import type { StoredAttachment, AttachmentMeta } from "./attachment-types.js";
+import type { StoredAttachment, AttachmentMeta, AttachmentSource } from "./attachment-types.js";
 
 interface AllowedType {
   category: "image" | "text" | "pdf";
@@ -72,6 +72,10 @@ function getSessionDir(sessionId: string): string {
   return join(ATTACHMENTS_ROOT, sessionId);
 }
 
+function getSessionSourceDir(sessionId: string, source: AttachmentSource): string {
+  return join(getSessionDir(sessionId), source);
+}
+
 function getIndexPath(sessionId: string): string {
   return join(getSessionDir(sessionId), INDEX_FILENAME);
 }
@@ -87,13 +91,26 @@ async function ensureSessionDir(sessionId: string): Promise<string> {
   return dir;
 }
 
+async function ensureSourceDir(sessionId: string, source: AttachmentSource): Promise<string> {
+  const dir = getSessionSourceDir(sessionId, source);
+  await mkdir(dir, { recursive: true });
+  return dir;
+}
+
+function normalizeStoredAttachment(entry: StoredAttachment | Record<string, unknown>): StoredAttachment {
+  return {
+    ...(entry as StoredAttachment),
+    source: (entry as StoredAttachment).source ?? "user",
+  };
+}
+
 async function loadSessionIndex(sessionId: string): Promise<StoredAttachment[]> {
   const indexPath = getIndexPath(sessionId);
   if (!existsSync(indexPath)) return [];
   try {
     const raw = await readFile(indexPath, "utf-8");
     const parsed = JSON.parse(raw) as StoredAttachment[];
-    return Array.isArray(parsed) ? parsed : [];
+    return Array.isArray(parsed) ? parsed.map((entry) => normalizeStoredAttachment(entry)) : [];
   } catch {
     return [];
   }
@@ -130,7 +147,9 @@ export async function initAttachmentStore(): Promise<void> {
 export async function storeAttachment(
   sessionId: string,
   file: { originalname: string; mimetype: string; buffer: Buffer; size: number },
+  options: { source?: AttachmentSource; createdByTool?: string } = {},
 ): Promise<AttachmentMeta> {
+  const source = options.source ?? "user";
   const typeInfo = resolveType(file.mimetype, file.originalname);
   if (!typeInfo) throw new Error(`Unsupported file type: ${file.mimetype} (${file.originalname})`);
   if (file.size > typeInfo.maxSize) {
@@ -143,7 +162,8 @@ export async function storeAttachment(
 
   const id = randomUUID();
   const safeFilename = sanitizeFilename(file.originalname);
-  const dir = await ensureSessionDir(sessionId);
+  await ensureSessionDir(sessionId);
+  const dir = await ensureSourceDir(sessionId, source);
   const storedPath = join(dir, `${id}-${safeFilename}`);
 
   await writeFile(storedPath, file.buffer);
@@ -154,10 +174,12 @@ export async function storeAttachment(
     filename: file.originalname,
     mimeType: file.mimetype,
     category: typeInfo.category,
+    source,
     size: file.size,
     storedPath,
     extractedText,
     createdAt: Date.now(),
+    createdByTool: options.createdByTool,
   };
 
   await upsertAttachment(sessionId, attachment);
@@ -167,8 +189,42 @@ export async function storeAttachment(
     filename: attachment.filename,
     mimeType: attachment.mimeType,
     category: attachment.category,
+    source: attachment.source,
     size: attachment.size,
   };
+}
+
+export async function storeProvidedAttachment(
+  sessionId: string,
+  input: {
+    filename: string;
+    mimeType: string;
+    content: string;
+    encoding: "utf8" | "base64";
+  },
+): Promise<AttachmentMeta> {
+  const buffer = input.encoding === "base64"
+    ? Buffer.from(input.content, "base64")
+    : Buffer.from(input.content, "utf-8");
+
+  if (buffer.length === 0) {
+    throw new Error("Attachment content must not be empty.");
+  }
+
+  if (input.encoding === "base64" && buffer.toString("base64").replace(/=+$/u, "") !== input.content.replace(/\s+/gu, "").replace(/=+$/u, "")) {
+    throw new Error("Invalid base64 content for attachment.");
+  }
+
+  return storeAttachment(
+    sessionId,
+    {
+      originalname: input.filename,
+      mimetype: input.mimeType,
+      buffer,
+      size: buffer.length,
+    },
+    { source: "assistant", createdByTool: "provide_attachment" },
+  );
 }
 
 export async function listSessionAttachments(sessionId: string): Promise<StoredAttachment[]> {
@@ -186,6 +242,15 @@ export async function getSessionAttachmentsByIds(
     .map((id) => byId.get(id))
     .filter((entry): entry is StoredAttachment => Boolean(entry))
     .filter((entry) => entry.sessionId === sessionId);
+}
+
+export async function getSessionAttachmentById(
+  sessionId: string,
+  attachmentId: string,
+): Promise<StoredAttachment | null> {
+  if (!attachmentId.trim()) return null;
+  const entries = await loadSessionIndex(sessionId);
+  return entries.find((entry) => entry.id === attachmentId && entry.sessionId === sessionId) ?? null;
 }
 
 export async function resolveAttachmentReference(
@@ -217,13 +282,19 @@ export async function readAttachmentData(attachment: StoredAttachment): Promise<
   return readFile(attachment.storedPath);
 }
 
+export async function buildAttachmentPreviewDataUrl(attachment: StoredAttachment): Promise<string | undefined> {
+  if (attachment.category !== "image") return undefined;
+  const base64 = (await readAttachmentData(attachment)).toString("base64");
+  return `data:${attachment.mimeType};base64,${base64}`;
+}
+
 export function clearSessionAttachments(sessionId: string): void {
   const dir = getSessionDir(sessionId);
   if (existsSync(dir)) rmSync(dir, { recursive: true, force: true });
 }
 
 export function describeAttachment(attachment: StoredAttachment): string {
-  return `${attachment.filename} (${attachment.category}, ${formatSize(attachment.size)}, id=${attachment.id})`;
+  return `${attachment.filename} (${attachment.category}, ${formatSize(attachment.size)}, id=${attachment.id}, source=${attachment.source})`;
 }
 
 async function extractPdfText(buffer: Buffer): Promise<string> {

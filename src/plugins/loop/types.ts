@@ -48,6 +48,7 @@ export interface RuntimeToolDefinition extends UnifiedToolDefinition {
 export interface ToolExecutionResult {
   content: string;
   isError?: boolean;
+  assistantBlocks?: import("../lib/transcript.js").TranscriptBlock[];
   additionalMessages?: TranscriptMessage[];
   contextModifier?: (context: ToolRuntimeContext) => ToolRuntimeContext;
 }

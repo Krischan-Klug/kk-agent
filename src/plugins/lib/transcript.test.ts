@@ -140,6 +140,20 @@ test("hasVisibleAssistantContent returns true for tool_use blocks", () => {
   assert.equal(hasVisibleAssistantContent({ content: [toolUseBlock("id", "Glob", {})] }), true);
 });
 
+test("hasVisibleAssistantContent returns true for attachment_ref blocks", () => {
+  assert.equal(hasVisibleAssistantContent({
+    content: [{
+      type: "attachment_ref",
+      attachmentId: "att-1",
+      filename: "report.md",
+      mimeType: "text/markdown",
+      category: "text",
+      source: "assistant",
+      size: 42,
+    }],
+  }), true);
+});
+
 test("hasVisibleAssistantContent returns false for whitespace-only text", () => {
   assert.equal(hasVisibleAssistantContent({ content: [textBlock("  \n  ")] }), false);
 });

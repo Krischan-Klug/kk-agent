@@ -5,10 +5,10 @@ export const attachmentDefinition: McpServerConfig = {
   name: "Attachments",
   active: true,
   instruction: [
-    "Use this tool for files that were uploaded through the chat composer.",
-    "Prefer list_attachments and read_attachment over searching the main filesystem for uploaded files.",
+    "Use this tool as the session attachment store for files moving into and out of KK-Agent chat.",
+    "Prefer list_attachments, read_attachment, and provide_attachment over searching the main filesystem for chat-related files.",
     "Use attachmentId when available because filenames may be ambiguous.",
-    "Do not assume chat uploads live in the normal project tree.",
+    "Do not assume attachments live in the normal project tree or on the same local machine as the agent runtime.",
   ].join(" "),
   emoji: "📎",
   source: "system",

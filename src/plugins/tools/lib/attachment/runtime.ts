@@ -1,5 +1,15 @@
-import type { McpServerConfig, ToolCallResult } from "../../../mcp/types.js";
-import { describeAttachment, listSessionAttachments, readAttachmentData, resolveAttachmentReference } from "../../../session/lib/attachments.js";
+import type { McpServerConfig } from "../../../mcp/types.js";
+import { attachmentRefBlock } from "../../../lib/transcript.js";
+import type { ToolExecutionResult } from "../../../loop/types.js";
+import {
+  buildAttachmentPreviewDataUrl,
+  describeAttachment,
+  listSessionAttachments,
+  readAttachmentData,
+  resolveAttachmentReference,
+  storeProvidedAttachment,
+  getSessionAttachmentById,
+} from "../../../session/lib/attachments.js";
 import type { StoredAttachment } from "../../../session/lib/attachment-types.js";
 import { getCurrentSessionId } from "../user-interaction/interaction-store.js";
 import { truncateSelfBoundedReadOutput } from "../read-output.js";
@@ -31,8 +41,8 @@ function renderTextAttachment(attachment: StoredAttachment, rawText: string, off
     `Attachment: ${attachment.filename}`,
     `Id: ${attachment.id}`,
     `Type: ${attachment.category}`,
+    `Source: ${attachment.source}`,
     `Size: ${formatSize(attachment.size)}`,
-    `Stored path: ${attachment.storedPath}`,
     "",
     numbered,
     footer,
@@ -43,14 +53,14 @@ export async function executeAttachmentTool(
   _config: McpServerConfig,
   toolName: string,
   args: Record<string, unknown>,
-): Promise<ToolCallResult | null> {
+): Promise<ToolExecutionResult | null> {
   const sessionId = getSessionIdOrThrow();
 
   if (toolName === "list_attachments") {
     const attachments = await listSessionAttachments(sessionId);
     if (attachments.length === 0) return { content: "No chat attachments available in this session.", isError: false };
     return {
-      content: attachments.map((attachment) => `${describeAttachment(attachment)}\n  storedPath: ${attachment.storedPath}`).join("\n"),
+      content: attachments.map((attachment) => describeAttachment(attachment)).join("\n"),
       isError: false,
     };
   }
@@ -66,9 +76,9 @@ export async function executeAttachmentTool(
           `Attachment: ${attachment.filename}`,
           `Id: ${attachment.id}`,
           `Type: image`,
+          `Source: ${attachment.source}`,
           `Mime: ${attachment.mimeType}`,
           `Size: ${formatSize(attachment.size)}`,
-          `Stored path: ${attachment.storedPath}`,
           "",
           "Image attachments should usually be analyzed from the original chat turn via model vision rather than as text.",
         ].join("\n"),
@@ -80,6 +90,46 @@ export async function executeAttachmentTool(
     const limit = typeof args.limit === "number" ? args.limit : READ_LINE_LIMIT;
     const text = attachment.extractedText ?? (await readAttachmentData(attachment)).toString("utf-8");
     return { content: truncateSelfBoundedReadOutput(renderTextAttachment(attachment, text, offset, limit)), isError: false };
+  }
+
+  if (toolName === "provide_attachment") {
+    const filename = typeof args.filename === "string" ? args.filename.trim() : "";
+    const mimeType = typeof args.mimeType === "string" ? args.mimeType.trim() : "";
+    const content = typeof args.content === "string" ? args.content : "";
+    if (args.encoding !== undefined && args.encoding !== "utf8" && args.encoding !== "base64") {
+      throw new Error('provide_attachment encoding must be "utf8" or "base64".');
+    }
+    const encoding = args.encoding === "base64" ? "base64" : "utf8";
+
+    if (!filename) throw new Error("provide_attachment requires a filename.");
+    if (!mimeType) throw new Error("provide_attachment requires a mimeType.");
+    if (content.length === 0) throw new Error("provide_attachment requires non-empty content.");
+
+    const meta = await storeProvidedAttachment(sessionId, {
+      filename,
+      mimeType,
+      content,
+      encoding,
+    });
+    const stored = await getSessionAttachmentById(sessionId, meta.id);
+    if (!stored) throw new Error(`Stored attachment "${meta.id}" could not be resolved.`);
+    const previewDataUrl = await buildAttachmentPreviewDataUrl(stored);
+
+    return {
+      content: `Attachment "${meta.filename}" is now available in chat as id=${meta.id}.`,
+      isError: false,
+      assistantBlocks: [
+        attachmentRefBlock({
+          attachmentId: meta.id,
+          filename: meta.filename,
+          mimeType: meta.mimeType,
+          category: meta.category,
+          source: meta.source,
+          size: meta.size,
+          previewDataUrl,
+        }),
+      ],
+    };
   }
 
   return null;

@@ -190,3 +190,37 @@ test("StreamingToolExecutor appends hidden tool-generated messages after the too
   assert.equal(results[1]?.role, "user");
   assert.equal(results[1]?.isMeta, true);
 });
+
+test("StreamingToolExecutor exposes assistant blocks produced by tools in tool order", async () => {
+  const executor = new StreamingToolExecutor(
+    async (toolName) => ({
+      content: `${toolName} ready`,
+      assistantBlocks: [{
+        type: "attachment_ref",
+        attachmentId: `att-${toolName}`,
+        filename: `${toolName}.md`,
+        mimeType: "text/markdown",
+        category: "text",
+        source: "assistant",
+        size: 12,
+      }],
+    }),
+    "edit",
+    {
+      ...runtimeTool("First", false),
+      ...runtimeTool("Second", false),
+    },
+    async () => ({ allowed: true }),
+  );
+
+  executor.addTool(toolUse("1", "First", {}));
+  executor.addTool(toolUse("2", "Second", {}));
+  await executor.getFinalResults();
+
+  const assistantBlocks = executor.getAssistantBlocks();
+  assert.equal(assistantBlocks.length, 2);
+  assert.ok(assistantBlocks[0] && assistantBlocks[0].type === "attachment_ref");
+  assert.ok(assistantBlocks[1] && assistantBlocks[1].type === "attachment_ref");
+  assert.equal(assistantBlocks[0]?.type === "attachment_ref" ? assistantBlocks[0].filename : "", "First.md");
+  assert.equal(assistantBlocks[1]?.type === "attachment_ref" ? assistantBlocks[1].filename : "", "Second.md");
+});

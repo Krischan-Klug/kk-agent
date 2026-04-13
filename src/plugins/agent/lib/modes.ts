@@ -15,6 +15,7 @@ export const READ_ONLY_TOOL_NAMES = [
   "WebFetch",
   "list_attachments",
   "read_attachment",
+  "provide_attachment",
   "ask_user",
 ];
 
@@ -36,6 +37,7 @@ export const EDIT_TOOL_NAMES = [
   "Skill",
   "list_attachments",
   "read_attachment",
+  "provide_attachment",
   "ask_user",
   "create_tasks",
   "update_tasks",

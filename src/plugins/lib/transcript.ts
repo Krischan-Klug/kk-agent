@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 
 export type AttachmentCategory = "image" | "text" | "pdf";
+export type AttachmentSource = "user" | "assistant";
 export type TranscriptRole = "system" | "user" | "assistant" | "tool";
 export type TranscriptStopReason = "stop" | "tool_use" | "length";
 
@@ -40,6 +41,7 @@ export interface TranscriptAttachmentRefBlock {
   filename: string;
   mimeType: string;
   category: AttachmentCategory;
+  source: AttachmentSource;
   size: number;
   previewDataUrl?: string;
 }
@@ -108,6 +110,7 @@ export function attachmentRefBlock(input: {
   filename: string;
   mimeType: string;
   category: AttachmentCategory;
+  source: AttachmentSource;
   size: number;
   previewDataUrl?: string;
 }): TranscriptAttachmentRefBlock {
@@ -139,7 +142,7 @@ export function getToolResults(message: Pick<TranscriptMessage, "content">): Tra
 export function hasVisibleAssistantContent(message: Pick<TranscriptMessage, "content">): boolean {
   return message.content.some((block) => {
     if (block.type === "text") return block.text.trim().length > 0;
-    return block.type === "tool_use";
+    return block.type === "tool_use" || block.type === "attachment_ref";
   });
 }
 

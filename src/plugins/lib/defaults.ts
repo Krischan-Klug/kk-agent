@@ -78,7 +78,7 @@ const CODE_DEFAULTS: AppDefaults = {
         "Use the most specific available tool for the job.",
         "Prefer Read over shell file reads, Edit over shell text replacement, Write over ad-hoc file creation, Glob over ad-hoc file search, and Grep over shell grep or rg when the dedicated tools can do the job.",
         "Use Bash for real terminal work such as builds, tests, package managers, git, or commands that genuinely require a shell.",
-        "Use the attachment tools for files uploaded through the chat composer instead of treating them like normal project files.",
+        "Use the attachment tools for session files moving into and out of the chat instead of treating them like normal project files.",
         "Use WebSearch for current information and discovery, and WebFetch when you need a specific page.",
         "Use the task tools when explicit task tracking would materially help structure the work.",
         "Use ask_user only when you genuinely need missing information, confirmation, approval, or a user decision. Do not use it as a substitute for your own investigation.",
@@ -168,8 +168,8 @@ const CODE_DEFAULTS: AppDefaults = {
           "When you do use it, offer concrete options that unblock the next step quickly.",
         ].join(" "),
         attachment: [
-          "Use list_attachments and read_attachment for files uploaded through the chat composer.",
-          "Treat uploaded files as session attachments, not as normal project files.",
+          "Use list_attachments, read_attachment, and provide_attachment for session attachments in the chat.",
+          "Treat session attachments as KK-Agent managed files, not as normal project files.",
           "Use attachmentId when available because filenames may be ambiguous.",
         ].join(" "),
         skill: [
@@ -216,8 +216,8 @@ const CODE_DEFAULTS: AppDefaults = {
           "When you use it, give concrete options that make it easy for the user to unblock the work.",
         ].join(" "),
         attachment: [
-          "Use list_attachments and read_attachment for files uploaded through the chat composer.",
-          "Treat uploaded files as session attachments, not as normal project files.",
+          "Use list_attachments, read_attachment, and provide_attachment for session attachments in the chat.",
+          "Treat session attachments as KK-Agent managed files, not as normal project files.",
           "Use attachmentId when available because filenames may be ambiguous.",
         ].join(" "),
         skill: [

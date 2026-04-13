@@ -1,5 +1,5 @@
 import type { ChatMode, ReasoningEffort } from "../agent/types.js";
-import type { AttachmentCategory, TranscriptMessage } from "../lib/transcript.js";
+import type { AttachmentCategory, AttachmentSource, TranscriptMessage } from "../lib/transcript.js";
 import type { ToolExecutionStatus } from "../loop/types.js";
 import type { ProviderTransportState, ProviderTurnDebug } from "../provider/lib/types.js";
 
@@ -8,13 +8,16 @@ export interface AttachmentMeta {
   filename: string;
   mimeType: string;
   category: AttachmentCategory;
+  source: AttachmentSource;
   size: number;
 }
 
 export interface AttachmentDisplayMeta {
+  attachmentId?: string;
   filename: string;
   mimeType: string;
   category: AttachmentCategory;
+  source: AttachmentSource;
   size: number;
   previewDataUrl?: string;
 }
@@ -71,6 +74,49 @@ export interface ChatBody {
 }
 
 export type PatchSessionBody = UpdateSessionBody;
+
+export interface SessionRuntimeToolDebug {
+  name: string;
+  description: string;
+  capabilityId: string;
+  source: "system" | "mcp";
+  inputSchema: Record<string, unknown>;
+}
+
+export interface SessionRuntimeMcpDebug {
+  id: string;
+  name: string;
+  instruction: string;
+  emoji?: string;
+  source?: "custom";
+  active: boolean;
+  running: boolean;
+  tools: Array<{
+    name: string;
+    description: string;
+    inputSchema: Record<string, unknown>;
+  }>;
+}
+
+export interface SessionRuntimeSkillDebug {
+  id: string;
+  name: string;
+  description: string;
+  instruction: string;
+  active: boolean;
+  source?: "system" | "custom";
+  recommendedToolIds: string[];
+  recommendedMcpIds: string[];
+  allowedModes: ChatMode[];
+}
+
+export interface SessionPromptDebug {
+  systemPrompt: string;
+  metaMessages: string[];
+  runtimeTools: SessionRuntimeToolDebug[];
+  runtimeMcps: SessionRuntimeMcpDebug[];
+  runtimeSkills: SessionRuntimeSkillDebug[];
+}
 
 export type SSEEvent =
   | { type: "assistant_block_delta"; messageId: string; block: import("../lib/transcript.js").TranscriptBlock }

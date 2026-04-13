@@ -2,6 +2,7 @@ import {
   createTranscriptMessage,
   normalizeToolResultContent,
   toolResultBlock,
+  type TranscriptBlock,
   type TranscriptMessage,
   type TranscriptToolUseBlock,
 } from "../../lib/transcript.js";
@@ -33,6 +34,7 @@ type TrackedTool = {
   result?: { content: string; isError: boolean };
   streamedResult?: TranscriptMessage;
   finalResult?: TranscriptMessage;
+  assistantBlocks?: TranscriptBlock[];
   additionalMessages?: TranscriptMessage[];
   yielded: boolean;
   promise?: Promise<void>;
@@ -186,6 +188,16 @@ export class StreamingToolExecutor {
     return this.runtimeContext;
   }
 
+  getAssistantBlocks(): TranscriptBlock[] {
+    const blocks: TranscriptBlock[] = [];
+    for (const tracked of this.tools) {
+      if (tracked.assistantBlocks?.length) {
+        blocks.push(...tracked.assistantBlocks);
+      }
+    }
+    return blocks;
+  }
+
   private async processQueue(): Promise<void> {
     while (true) {
       const executing = this.tools.filter((entry) => entry.status === "executing");
@@ -260,6 +272,7 @@ export class StreamingToolExecutor {
           content: execution.content,
           isError: execution.isError === true,
         };
+        tracked.assistantBlocks = execution.assistantBlocks;
         tracked.additionalMessages = execution.additionalMessages;
         tracked.streamedResult = toToolResultMessage(
           tracked.toolUse,

@@ -1,6 +1,6 @@
 import { Router } from "express";
 import multer from "multer";
-import { doCreate, doList, doGet, doDelete, doChat, doChatStream, doPatch, doGetPrompt, doRespondToPrompt, doUploadAttachment, doAbort } from "./controller.js";
+import { doCreate, doList, doGet, doDelete, doChat, doChatStream, doPatch, doGetPrompt, doRespondToPrompt, doUploadAttachment, doAbort, doGetAttachment } from "./controller.js";
 
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -15,6 +15,7 @@ router.get("/:id", doGet);
 router.delete("/:id", doDelete);
 router.patch("/:id", doPatch);
 router.post("/:id/attachments", upload.single("file"), doUploadAttachment);
+router.get("/:id/attachments/:attachmentId", doGetAttachment);
 router.post("/:id/chat", doChat);
 router.post("/:id/chat/stream", doChatStream);
 router.post("/:id/abort", doAbort);

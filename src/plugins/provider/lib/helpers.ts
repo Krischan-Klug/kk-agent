@@ -218,6 +218,7 @@ export function attachmentMetaToBlock(meta: {
   filename: string;
   mimeType: string;
   category: "image" | "text" | "pdf";
+  source: "user" | "assistant";
   size: number;
   previewDataUrl?: string;
 }) {
@@ -226,6 +227,7 @@ export function attachmentMetaToBlock(meta: {
     filename: meta.filename,
     mimeType: meta.mimeType,
     category: meta.category,
+    source: meta.source,
     size: meta.size,
     previewDataUrl: meta.previewDataUrl,
   });

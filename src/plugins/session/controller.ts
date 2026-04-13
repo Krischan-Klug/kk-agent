@@ -12,7 +12,7 @@ import {
 } from "./service.js";
 import type { CreateSessionBody, ChatBody, PatchSessionBody } from "./types.js";
 import { resolvePrompt } from "../tools/lib/user-interaction/interaction-store.js";
-import { storeAttachment } from "./lib/attachments.js";
+import { getSessionAttachmentById, readAttachmentData, storeAttachment } from "./lib/attachments.js";
 
 export async function doCreate(req: Request, res: Response): Promise<Response> {
   try {
@@ -55,11 +55,29 @@ export async function doUploadAttachment(req: Request, res: Response): Promise<R
     // Validate session exists
     getSession(req.params.id);
 
-    const meta = await storeAttachment(req.params.id, file);
+    const meta = await storeAttachment(req.params.id, file, { source: "user" });
     return res.status(201).json(meta);
   } catch (err) {
     const message = (err as Error).message;
     const status = message.includes("not found") ? 404 : message.includes("Unsupported") || message.includes("too large") ? 400 : 500;
+    return res.status(status).json({ error: message });
+  }
+}
+
+export async function doGetAttachment(req: Request, res: Response): Promise<Response> {
+  try {
+    getSession(req.params.id);
+    const attachment = await getSessionAttachmentById(req.params.id, req.params.attachmentId);
+    if (!attachment) return res.status(404).json({ error: "Attachment not found" });
+
+    const data = await readAttachmentData(attachment);
+    res.attachment(attachment.filename);
+    res.setHeader("Content-Type", attachment.mimeType);
+    res.setHeader("Content-Length", String(data.length));
+    return res.status(200).send(data);
+  } catch (err) {
+    const message = (err as Error).message;
+    const status = message.includes("not found") ? 404 : 500;
     return res.status(status).json({ error: message });
   }
 }

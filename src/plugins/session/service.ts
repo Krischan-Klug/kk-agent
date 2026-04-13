@@ -199,7 +199,6 @@ function buildRuntimeMetaMessages(input: {
   sessionId: string;
   mode: ChatMode;
   model: string;
-  iteration: number;
   runtimeVariables?: Record<string, string>;
 }): TranscriptMessage[] {
   const variables = getSystemVariables({
@@ -221,7 +220,6 @@ function buildRuntimeMetaMessages(input: {
     "",
     `Current model: ${variables.CURRENT_MODEL ?? input.model}`,
     `Current mode: ${input.mode}`,
-    `Current iteration: ${input.iteration}`,
     "",
     "Current tasks:",
     getTaskSummary(input.sessionId),
@@ -296,9 +294,15 @@ function getLatestAttachmentRefs(messages: TranscriptMessage[]): TranscriptAttac
   return [];
 }
 
+function decodeDebugMetaText(text: string): string {
+  const systemReminderMatch = text.match(/<system-reminder\b[^>]*>\s*<!\[CDATA\[([\s\S]*)\]\]>\s*<\/system-reminder>/i);
+  if (!systemReminderMatch) return text;
+  return systemReminderMatch[1]!.replaceAll("]]]]><![CDATA[>", "]]>").trim();
+}
+
 function extractMetaMessageTexts(messages: TranscriptMessage[]): string[] {
   return messages
-    .map((message) => getMessageText(message).trim())
+    .map((message) => decodeDebugMetaText(getMessageText(message).trim()))
     .filter((text) => text.length > 0);
 }
 
@@ -359,7 +363,6 @@ export function getCurrentPromptDebug(sessionId: string): { systemPrompt: string
     sessionId,
     mode: session.activeMode,
     model: session.model,
-    iteration: loopState?.iteration ?? 1,
     runtimeVariables: modeRuntimeConfig.runtimeVariables,
   });
 
@@ -498,7 +501,6 @@ function buildLoopRequest(
         sessionId,
         mode,
         model,
-        iteration,
         runtimeVariables: activeModeConfig.runtimeVariables,
       });
       const denials = listSessionDenials(sessionId);

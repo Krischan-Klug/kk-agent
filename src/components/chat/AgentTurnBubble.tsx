@@ -34,30 +34,6 @@ type Props = {
   loopState?: AgentLoopState | null;
 };
 
-function isActiveToolCall(toolCall: ActiveToolCall): boolean {
-  return toolCall.status === "queued" || toolCall.status === "executing" || toolCall.status === "yielded";
-}
-
-function collectStreamingActiveToolCalls(iterations: Props["turn"]["iterations"]): ActiveToolCall[] {
-  const byId = new Map<string, ActiveToolCall>();
-  for (const iteration of iterations) {
-    for (const toolCall of iteration.toolCalls) {
-      if (!isActiveToolCall(toolCall)) continue;
-      byId.set(toolCall.id, toolCall);
-    }
-  }
-  return [...byId.values()];
-}
-
-function collectLatestToolCall(iterations: Props["turn"]["iterations"]): ActiveToolCall | null {
-  for (let index = iterations.length - 1; index >= 0; index -= 1) {
-    const iteration = iterations[index];
-    const lastToolCall = iteration?.toolCalls.at(-1);
-    if (lastToolCall) return lastToolCall;
-  }
-  return null;
-}
-
 function collectLatestAttachments(iterations: Props["turn"]["iterations"]) {
   for (let index = iterations.length - 1; index >= 0; index -= 1) {
     const iteration = iterations[index];
@@ -67,21 +43,9 @@ function collectLatestAttachments(iterations: Props["turn"]["iterations"]) {
   return [];
 }
 
-function buildToolCallSignature(toolCalls: ActiveToolCall[]): string {
-  return JSON.stringify(
-    toolCalls.map((toolCall) => ({
-      id: toolCall.id,
-      name: toolCall.name,
-      status: toolCall.status,
-      input: toolCall.input,
-      detail: toolCall.detail,
-      summary: toolCall.summary,
-      result: toolCall.result,
-    })),
-  );
-}
 
-const TOOLCALL_HIDE_DELAY_MS = 1200;
+
+
 
 function formatChatTime(value: string): string {
   const date = new Date(value);
@@ -109,44 +73,8 @@ export default function AgentTurnBubble({ sessionId, currentAgentName, mcps, tur
   const finalReasoning = collectReasoning(finalIteration.assistant.content).trim();
   const finalText = collectText(finalIteration.assistant.content).trim();
   const collapsedAttachments = collectLatestAttachments(iterations);
-  const activeToolCalls = collectStreamingActiveToolCalls(iterations);
-  const latestToolCall = collectLatestToolCall(iterations);
-  const targetCollapsedToolCalls = useMemo(() => {
-    if (turn.streaming) {
-      if (activeToolCalls.length > 0) return activeToolCalls;
-      return latestToolCall ? [latestToolCall] : [];
-    }
-    return latestToolCall ? [latestToolCall] : [];
-  }, [activeToolCalls, latestToolCall, turn.streaming]);
-  const targetCollapsedToolCallsSignature = useMemo(
-    () => buildToolCallSignature(targetCollapsedToolCalls),
-    [targetCollapsedToolCalls],
-  );
-  const [retainedToolCalls, setRetainedToolCalls] = useState<ActiveToolCall[]>(targetCollapsedToolCalls);
-  const collapsedToolCalls = targetCollapsedToolCalls.length > 0 ? targetCollapsedToolCalls : retainedToolCalls;
   const showThinking = Boolean(turn.streaming) && finalReasoning.length > 0;
   const animateThinking = showThinking && finalText.length === 0;
-
-  useEffect(() => {
-    if (targetCollapsedToolCalls.length > 0) {
-      const timeout = window.setTimeout(() => {
-        setRetainedToolCalls((previous) =>
-          buildToolCallSignature(previous) === targetCollapsedToolCallsSignature ? previous : targetCollapsedToolCalls,
-        );
-      }, 0);
-      return () => window.clearTimeout(timeout);
-    }
-
-    if (retainedToolCalls.length === 0) {
-      return undefined;
-    }
-
-    const timeout = window.setTimeout(() => {
-      setRetainedToolCalls([]);
-    }, TOOLCALL_HIDE_DELAY_MS);
-
-    return () => window.clearTimeout(timeout);
-  }, [retainedToolCalls.length, targetCollapsedToolCalls, targetCollapsedToolCallsSignature]);
 
   return (
     <MessageBubble $role="assistant">
@@ -161,12 +89,12 @@ export default function AgentTurnBubble({ sessionId, currentAgentName, mcps, tur
             aria-label={expanded ? "Details ausblenden" : "Details einblenden"}
             title={expanded ? "Details ausblenden" : "Details einblenden"}
           >
-            {!turn.streaming && (
+            {expanded && !turn.streaming && (
               <IterationPill>
                 {iterations.length} Iteration{iterations.length > 1 ? "en" : ""}
               </IterationPill>
             )}
-            {totalToolCalls > 0 && (
+            {expanded && totalToolCalls > 0 && (
               <PhasePill>
                 {totalToolCalls} Tool Call{totalToolCalls > 1 ? "s" : ""}
               </PhasePill>
@@ -175,7 +103,6 @@ export default function AgentTurnBubble({ sessionId, currentAgentName, mcps, tur
           </RoleMetaGroup>
         )}
       </RoleLabel>
-
       {expanded && iterations.map((iteration, index) => {
         const reasoning = collectReasoning(iteration.assistant.content).trim();
         const text = collectText(iteration.assistant.content).trim();
@@ -218,9 +145,7 @@ export default function AgentTurnBubble({ sessionId, currentAgentName, mcps, tur
 
       {!expanded && finalText && <MarkdownMessage content={finalText} />}
 
-      {!expanded && collapsedToolCalls.length > 0 && (
-        <ToolCallCards mcps={mcps} toolCalls={collapsedToolCalls} />
-      )}
+
 
       {!expanded && collapsedAttachments.length > 0 && (
         <MessageAttachments sessionId={sessionId} attachments={collapsedAttachments} />

@@ -17,6 +17,7 @@ import Input from "@/components/Input";
 import TextArea from "@/components/TextArea";
 import ModelSelect from "@/components/ModelSelect";
 import CapabilitySelect from "@/components/CapabilitySelect";
+import SelectMenu, { type SelectMenuOption } from "@/components/SelectMenu";
 
 export type ChatDebugTab = "prompt" | "meta" | "tools" | "mcps" | "skills" | "session" | "messages" | "tasks" | "memory";
 
@@ -143,6 +144,14 @@ type Props = {
   onSaveTasks: (tasks: TaskItem[]) => Promise<void>;
   onSaveSessionFacts: (facts: MemoryFact[]) => Promise<void>;
   onSaveUserFacts: (facts: MemoryFact[]) => Promise<void>;
+  showReasoningControl: boolean;
+  showTemperatureControl: boolean;
+  resolvedEffort: string;
+  resolvedTemp: number;
+  reasoningOptions: SelectMenuOption[];
+  temperatureOptions: SelectMenuOption[];
+  onReasoningSelect: (value: string) => void;
+  onTemperatureSelect: (value: string) => void;
 };
 
 function parseFactsDraft(value: string): MemoryFact[] {
@@ -181,6 +190,14 @@ export default function ChatDebugPanel({
   onSaveTasks,
   onSaveSessionFacts,
   onSaveUserFacts,
+  showReasoningControl,
+  showTemperatureControl,
+  resolvedEffort,
+  resolvedTemp,
+  reasoningOptions,
+  temperatureOptions,
+  onReasoningSelect,
+  onTemperatureSelect,
 }: Props) {
   const [taskDraft, setTaskDraft] = useState<TaskItem[]>(debugTasks);
   const [sessionMemoryDraft, setSessionMemoryDraft] = useState(toFactDraft(debugSessionFacts));
@@ -366,6 +383,22 @@ export default function ChatDebugPanel({
             <ModelSelect models={models} currentModel={session.model} onSelect={onModelSwitch} />
           ) : (
             <Badge variant="info">{session.model}</Badge>
+          )}
+          {showReasoningControl && (
+            <SelectMenu
+              value={resolvedEffort}
+              options={reasoningOptions}
+              onSelect={onReasoningSelect}
+              variant="neutral"
+            />
+          )}
+          {showTemperatureControl && (
+            <SelectMenu
+              value={resolvedTemp.toFixed(1)}
+              options={temperatureOptions}
+              onSelect={onTemperatureSelect}
+              variant="neutral"
+            />
           )}
           <CapabilitySelect
             items={internalTools}

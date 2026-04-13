@@ -37,19 +37,11 @@ const Composer = styled.div<{ $dragOver?: boolean }>`
 const ComposerLayout = styled.div`
   width: 100%;
   display: grid;
-  grid-template-columns: max-content minmax(0, 900px);
+  grid-template-columns: minmax(0, 900px);
   justify-content: center;
   align-items: end;
   gap: 6px;
   padding: 0 var(--space-md);
-
-  @media (max-width: 1360px) {
-    grid-template-columns: max-content minmax(0, 900px);
-  }
-
-  @media (max-width: 1180px) {
-    grid-template-columns: 1fr;
-  }
 `;
 
 const ComposerStack = styled.div`
@@ -59,52 +51,7 @@ const ComposerStack = styled.div`
   align-items: flex-end;
 `;
 
-const ModeStrip = styled.div`
-  display: flex;
-  flex-direction: column;
-  align-items: stretch;
-  gap: var(--space-xs);
-  flex-shrink: 0;
-  align-self: center;
 
-  @media (max-width: 1180px) {
-    flex-direction: row;
-    flex-wrap: wrap;
-    align-self: stretch;
-  }
-`;
-
-const ModeButton = styled.button<{ $active: boolean; $mode: ChatMode }>`
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  min-width: 72px;
-  min-height: 38px;
-  padding: 8px 14px;
-  border-radius: 12px;
-  border: 1px solid ${({ $active, $mode }) => {
-    if (!$active) return "var(--border)";
-    return $mode === "plan" ? "rgba(59, 130, 246, 0.45)" : "var(--accent)";
-  }};
-  background: ${({ $active, $mode }) => {
-    if (!$active) return "var(--bg-elevated)";
-    return $mode === "plan" ? "rgba(59, 130, 246, 0.14)" : "var(--accent-muted)";
-  }};
-  color: ${({ $active, $mode }) => {
-    if (!$active) return "var(--text-secondary)";
-    return $mode === "plan" ? "rgb(37, 99, 235)" : "var(--accent)";
-  }};
-  font-size: var(--font-size-sm);
-  font-weight: 600;
-  cursor: pointer;
-  box-shadow: ${({ $active }) => ($active ? "0 8px 20px rgba(0, 0, 0, 0.08)" : "none")};
-
-  &:hover {
-    border-color: var(--accent);
-    color: var(--accent);
-  }
-`;
 
 const TasksDrawer = styled.div<{ $open: boolean }>`
   position: absolute;
@@ -376,11 +323,7 @@ function formatTokens(n: number): string {
   return String(n);
 }
 
-function formatModeLabel(mode: ChatMode): string {
-  if (mode === "plan") return "Plan";
-  if (mode === "autonomous") return "Autonomous";
-  return "Edit";
-}
+
 
 type Props = {
   input: string;
@@ -388,12 +331,6 @@ type Props = {
   agents: AgentDefinition[];
   currentAgentId: string;
   activeMode: ChatMode;
-  showReasoningControl: boolean;
-  showTemperatureControl: boolean;
-  resolvedEffort: string;
-  resolvedTemp: number;
-  reasoningOptions: SelectMenuOption[];
-  temperatureOptions: SelectMenuOption[];
   maxCtx: number;
   tokenStats: TokenDisplayStats | null;
   tasks: TaskItem[];
@@ -401,8 +338,6 @@ type Props = {
   pendingAttachments: PendingAttachment[];
   onInputChange: (value: string) => void;
   onKeyDown: (e: React.KeyboardEvent<HTMLTextAreaElement>) => void;
-  onReasoningSelect: (value: string) => void;
-  onTemperatureSelect: (value: string) => void;
   onAgentSwitch: (agentId: string) => void;
   onModeSwitch: (mode: ChatMode) => void;
   onSend: () => void;
@@ -417,20 +352,12 @@ export default function ChatComposer({
   agents,
   currentAgentId,
   activeMode,
-  showReasoningControl,
-  showTemperatureControl,
-  resolvedEffort,
-  resolvedTemp,
-  reasoningOptions,
-  temperatureOptions,
   maxCtx,
   tokenStats,
   tasks,
   pendingAttachments,
   onInputChange,
   onKeyDown,
-  onReasoningSelect,
-  onTemperatureSelect,
   onAgentSwitch,
   onModeSwitch,
   onSend,
@@ -441,7 +368,7 @@ export default function ChatComposer({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const textAreaRef = useRef<HTMLTextAreaElement>(null);
   const [dragOver, setDragOver] = useState(false);
-  const [tasksOpen, setTasksOpen] = useState(true);
+  const [tasksOpen, setTasksOpen] = useState(false);
 
   const canSend = !sending && (input.trim().length > 0 || pendingAttachments.length > 0);
 
@@ -500,20 +427,7 @@ export default function ChatComposer({
   return (
     <InputArea>
       <ComposerLayout>
-        <ModeStrip>
-          {(["plan", "edit", "autonomous"] as ChatMode[]).map((mode) => (
-            <ModeButton
-              key={mode}
-              type="button"
-              $active={activeMode === mode}
-              $mode={mode}
-              onClick={() => onModeSwitch(mode)}
-              disabled={sending}
-            >
-              {formatModeLabel(mode)}
-            </ModeButton>
-          ))}
-        </ModeStrip>
+
         <ComposerStack>
           {tasks.length > 0 && (
             <TasksDrawer $open={tasksOpen}>
@@ -558,30 +472,20 @@ export default function ChatComposer({
             <AttachmentPreview attachments={pendingAttachments} onRemove={onRemoveAttachment} />
             <ComposerFooter>
               <ComposerMeta>
-                {showReasoningControl && (
-                  <ControlGroup>
-                    <ControlEmoji>{"\u{1F4A1}"}</ControlEmoji>
-                    <SelectMenu
-                      value={resolvedEffort}
-                      options={reasoningOptions}
-                      onSelect={onReasoningSelect}
-                      direction="up"
-                      variant="neutral"
-                    />
-                  </ControlGroup>
-                )}
-                {showTemperatureControl && (
-                  <ControlGroup>
-                    <ControlEmoji>🔥</ControlEmoji>
-                    <SelectMenu
-                      value={resolvedTemp.toFixed(1)}
-                      options={temperatureOptions}
-                      onSelect={onTemperatureSelect}
-                      direction="up"
-                      variant="neutral"
-                    />
-                  </ControlGroup>
-                )}
+                <ControlGroup>
+                  <ControlEmoji>🎯</ControlEmoji>
+                  <SelectMenu
+                    value={activeMode}
+                    options={[
+                      { value: "plan", label: "Plan" },
+                      { value: "edit", label: "Edit" },
+                      { value: "autonomous", label: "Autonomous" }
+                    ]}
+                    onSelect={(val) => onModeSwitch(val as ChatMode)}
+                    direction="up"
+                    variant="neutral"
+                  />
+                </ControlGroup>
                 {agents.length > 0 && (
                   <AgentSelect agents={agents} currentAgentId={currentAgentId} onSelect={onAgentSwitch} direction="up" />
                 )}

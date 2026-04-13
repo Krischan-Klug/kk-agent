@@ -197,6 +197,14 @@ export default function ChatPage() {
         onSaveTasks={sessionData.handleSaveTasks}
         onSaveSessionFacts={sessionData.handleSaveSessionFacts}
         onSaveUserFacts={sessionData.handleSaveUserFacts}
+        showReasoningControl={showReasoningControl}
+        showTemperatureControl={showTemperatureControl}
+        resolvedEffort={resolvedEffort}
+        resolvedTemp={resolvedTemp}
+        reasoningOptions={reasoningOptions}
+        temperatureOptions={temperatureOptions}
+        onReasoningSelect={sessionData.handleReasoningEffort}
+        onTemperatureSelect={sessionData.handleTemperature}
       />
       <ChatMessages
         session={sessionData.session}
@@ -219,12 +227,6 @@ export default function ChatPage() {
         agents={sessionData.agents}
         currentAgentId={activeSession.agentId}
         activeMode={activeSession.activeMode}
-        showReasoningControl={showReasoningControl}
-        showTemperatureControl={showTemperatureControl}
-        resolvedEffort={resolvedEffort}
-        resolvedTemp={resolvedTemp}
-        reasoningOptions={reasoningOptions}
-        temperatureOptions={temperatureOptions}
         maxCtx={maxCtx}
         tokenStats={streaming.tokenStats}
         tasks={sessionData.tasks}
@@ -232,8 +234,6 @@ export default function ChatPage() {
         pendingAttachments={attachments.pendingAttachments}
         onInputChange={streaming.setInput}
         onKeyDown={streaming.handleKeyDown}
-        onReasoningSelect={sessionData.handleReasoningEffort}
-        onTemperatureSelect={sessionData.handleTemperature}
         onAgentSwitch={(agentId) => void streaming.handleAgentSwitch(agentId, sessionData.handleAgentSwitch)}
         onModeSwitch={(mode) => void sessionData.handleModeSwitch(mode)}
         onSend={() => void streaming.handleSend()}

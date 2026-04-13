@@ -7,8 +7,7 @@ function buildAgent(
   name: string,
   description: string,
   defaultChatMode: ChatMode,
-  defaultModel: string,
-  maxIterations?: number,
+  defaultModel?: string,
 ): AgentDefinition {
   const defaults = getDefaults();
   const now = new Date().toISOString();
@@ -17,8 +16,9 @@ function buildAgent(
     name,
     description,
     defaultChatMode,
-    modeConfigs: compactModeConfigs(normalizeModeConfigs()) as AgentDefinition["modeConfigs"],
-    maxIterations: maxIterations ?? defaults.agent.maxIterations,
+    modeConfigs: compactModeConfigs(
+      normalizeModeConfigs(),
+    ) as AgentDefinition["modeConfigs"],
     variables: {},
     defaultModel,
     reasoningEffort: defaults.reasoning.defaultEffort,
@@ -29,32 +29,13 @@ function buildAgent(
 
 export function getDefaultAgent(): AgentDefinition {
   return buildAgent(
-    "general-assistant",
-    "Claude Default",
-    "Claude-style default agent for coding, investigation, and technical task work.",
+    "swagos",
+    "Swagos",
+    "Von Krischan entwickelter allgemeiner Agent fuer vielseitige Aufgaben.",
     "edit",
-    "qwen3.5-27b-claude-4.6-opus-reasoning-distilled-v2",
   );
 }
 
 export function getBundledAgents(): AgentDefinition[] {
-  return [
-    getDefaultAgent(),
-    buildAgent(
-      "krikinator",
-      "Direct Agent",
-      "Lean general-purpose agent for fast direct execution.",
-      "edit",
-      "qwen3.5-35b-a3b-uncensored-hauhaucs-aggressive",
-      10,
-    ),
-    buildAgent(
-      "coding-agent",
-      "Claude Coding Agent",
-      "Claude-style coding agent with explicit plan and edit modes.",
-      "edit",
-      "qwen3.5-27b-claude-4.6-opus-reasoning-distilled-v2",
-      50,
-    ),
-  ];
+  return [getDefaultAgent()];
 }

@@ -86,10 +86,8 @@ export interface LoopOptions {
     mode: ChatMode;
     model: string;
     iteration: number;
-    maxIterations: number;
   }) => LoopMessage[];
   modeConfigs: Partial<Record<ChatMode, ModeRuntimeConfig>>;
-  maxIterations: number;
   activeMode: ChatMode;
   agentVariables: Record<string, string>;
   executeTool: (
@@ -103,6 +101,22 @@ export interface LoopOptions {
   temperature?: number;
   maxOutputTokens?: number;
   providerState?: ProviderTransportState;
+  modelPassRunner?: (
+    opts: LoopOptions,
+    messages: LoopMessage[],
+    providerState: LoopOptions["providerState"],
+    onToolUseBlock?: (toolUse: import("../lib/transcript.js").TranscriptToolUseBlock) => void,
+    retryInstruction?: string,
+    metaMessages?: LoopMessage[],
+  ) => Promise<{
+    message: LoopMessage;
+    finishReason: import("../lib/transcript.js").TranscriptStopReason;
+    stats?: TokenStats;
+    notices?: import("../provider/lib/types.js").ProviderNotice[];
+    parseIssues?: import("../provider/lib/types.js").ToolCallParseIssue[];
+    transportState?: ProviderTransportState;
+    debug?: ProviderTurnDebug;
+  }>;
   onAssistantBlockDelta?: (messageId: string, block: import("../lib/transcript.js").TranscriptBlock) => void;
   onAssistantMessage?: (message: LoopMessage) => void;
   onSystemNotice?: (level: "info" | "warning" | "error", message: string) => void;
@@ -126,7 +140,6 @@ export interface LoopOptions {
     status: "idle" | "running" | "completed" | "error" | "aborted";
     mode: ChatMode;
     iteration: number;
-    maxIterations: number;
     startedAt: string;
     updatedAt: string;
   }) => void;

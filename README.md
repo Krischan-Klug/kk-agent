@@ -146,7 +146,7 @@ The final prompt is assembled from four layers:
 2. **Agent Overrides** — Per-agent customizations of prompt sections, tool access, and instructions.
 3. **System Variables** — Runtime-resolved placeholders substituted into the prompt:
    - `{{CURRENT_DATE}}`, `{{CURRENT_TIME}}`, `{{CURRENT_TIMESTAMP}}`
-   - `{{CURRENT_MODEL}}`, `{{iteration}}`, `{{maxIterations}}`
+   - `{{CURRENT_MODEL}}`
    - `{{TASK_SUMMARY}}`, `{{SESSION_MEMORY}}`, `{{USER_MEMORY}}`
    - `{{FILESYSTEM_ACCESS_SCOPE}}`, `{{FILESYSTEM_BASE_PATH}}`, `{{FILESYSTEM_ALLOWED_ROOT}}`
    - `{{TERMINAL_ACCESS_SCOPE}}`, `{{TERMINAL_WORKING_DIRECTORY}}`, `{{TERMINAL_ALLOWED_ROOT}}`, `{{TERMINAL_ELEVATION}}`

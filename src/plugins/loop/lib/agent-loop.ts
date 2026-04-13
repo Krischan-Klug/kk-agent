@@ -40,7 +40,6 @@ function buildLoopState(opts: LoopOptions): AgentLoopState {
     status: "running",
     mode: opts.activeMode,
     iteration: 0,
-    maxIterations: opts.maxIterations,
     startedAt: now,
     updatedAt: now,
   };
@@ -85,8 +84,6 @@ async function runModelPass(
   const variables: Record<string, string> = {
     ...getSystemVariables({ CURRENT_MODEL: opts.model }),
     ...(modeConfig.runtimeVariables ?? {}),
-    iteration: String(messages.filter((message) => message.role === "assistant").length + 1),
-    maxIterations: String(opts.maxIterations),
     mode: opts.activeMode,
     TASK_SUMMARY: getTaskSummary(opts.sessionId),
     ...opts.agentVariables,
@@ -101,8 +98,6 @@ async function runModelPass(
     {
       sessionId: opts.sessionId,
       mode: opts.activeMode,
-      iteration: Number(variables.iteration),
-      maxIterations: opts.maxIterations,
     },
   );
 
@@ -187,7 +182,8 @@ export async function runAgentLoop(opts: LoopOptions): Promise<LoopResult> {
 
   let aborted = false;
   try {
-  while (iteration < opts.maxIterations) {
+  // eslint-disable-next-line no-constant-condition
+  while (true) {
     throwIfAborted(opts.abortSignal);
     iteration++;
     emitLoopState(loopState, opts, { iteration, status: "running", mode: opts.activeMode });
@@ -224,7 +220,6 @@ export async function runAgentLoop(opts: LoopOptions): Promise<LoopResult> {
       mode: opts.activeMode,
       model: opts.model,
       iteration,
-      maxIterations: opts.maxIterations,
     }) ?? [];
     let response;
     let transientRetries = 0;
@@ -232,7 +227,7 @@ export async function runAgentLoop(opts: LoopOptions): Promise<LoopResult> {
     while (true) {
       try {
         throwIfAborted(opts.abortSignal);
-        response = await runModelPass(
+        response = await (opts.modelPassRunner ?? runModelPass)(
           loopOpts,
           messages,
           providerState,

@@ -153,8 +153,6 @@ function buildCurrentSystemPrompt(
     {
       sessionId,
       mode: session.activeMode,
-      iteration: loopState?.iteration ?? 1,
-      maxIterations: agent.maxIterations,
     },
   );
 }
@@ -202,14 +200,11 @@ function buildRuntimeMetaMessages(input: {
   mode: ChatMode;
   model: string;
   iteration: number;
-  maxIterations: number;
   runtimeVariables?: Record<string, string>;
 }): TranscriptMessage[] {
   const variables = getSystemVariables({
     CURRENT_MODEL: input.model,
     mode: input.mode,
-    iteration: String(input.iteration),
-    maxIterations: String(input.maxIterations),
     ...(input.runtimeVariables ?? {}),
   });
   const memory = getMemoryPromptContext(input.sessionId);
@@ -226,7 +221,7 @@ function buildRuntimeMetaMessages(input: {
     "",
     `Current model: ${variables.CURRENT_MODEL ?? input.model}`,
     `Current mode: ${input.mode}`,
-    `Current iteration: ${input.iteration} of ${input.maxIterations}`,
+    `Current iteration: ${input.iteration}`,
     "",
     "Current tasks:",
     getTaskSummary(input.sessionId),
@@ -365,7 +360,6 @@ export function getCurrentPromptDebug(sessionId: string): { systemPrompt: string
     mode: session.activeMode,
     model: session.model,
     iteration: loopState?.iteration ?? 1,
-    maxIterations: agent.maxIterations,
     runtimeVariables: modeRuntimeConfig.runtimeVariables,
   });
 
@@ -491,7 +485,6 @@ function buildLoopRequest(
     model: prepared.session.model,
     buildEphemeralMetaMessages: ({
       iteration,
-      maxIterations,
       mode,
       model,
     }: {
@@ -500,14 +493,12 @@ function buildLoopRequest(
       mode: ChatMode;
       model: string;
       iteration: number;
-      maxIterations: number;
     }) => {
       const runtimeMessages = buildRuntimeMetaMessages({
         sessionId,
         mode,
         model,
         iteration,
-        maxIterations,
         runtimeVariables: activeModeConfig.runtimeVariables,
       });
       const denials = listSessionDenials(sessionId);
@@ -515,12 +506,6 @@ function buildLoopRequest(
         enqueueSystemReminder(sessionId, {
           type: "tool_denied",
           body: buildDenialReminderBody(denials),
-        });
-      }
-      if (iteration >= maxIterations - 1 && maxIterations > 1) {
-        enqueueSystemReminder(sessionId, {
-          type: "iteration_limit_near",
-          body: `You are on iteration ${iteration} of ${maxIterations}. Wrap up: finish the current task or hand off cleanly. After this turn the loop will stop.`,
         });
       }
       const reminderMessages = buildSystemReminderMessages(drainSystemReminders(sessionId));
@@ -541,7 +526,6 @@ function buildLoopRequest(
       },
     },
     modeConfigs: prepared.modeRuntimeConfigs,
-    maxIterations: prepared.agent.maxIterations,
     activeMode: prepared.session.activeMode,
     agentVariables: prepared.agent.variables ?? {},
     executeTool: (

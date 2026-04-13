@@ -11,8 +11,6 @@ interface SystemVariableDefinition {
 export interface PromptBuildContext {
   sessionId?: string;
   mode?: ChatMode;
-  iteration?: number;
-  maxIterations?: number;
 }
 
 interface ResolvedVariableContext extends PromptBuildContext {
@@ -57,14 +55,6 @@ const SYSTEM_VARIABLE_DEFINITIONS: SystemVariableDefinition[] = [
   {
     name: "mode",
     resolve: (context) => context.mode ?? context.rawVariables.mode ?? "edit",
-  },
-  {
-    name: "iteration",
-    resolve: (context) => String(context.iteration ?? context.rawVariables.iteration ?? "1"),
-  },
-  {
-    name: "maxIterations",
-    resolve: (context) => String(context.maxIterations ?? context.rawVariables.maxIterations ?? "1"),
   },
   {
     name: "TASK_SUMMARY",
@@ -255,7 +245,7 @@ export function buildPrompt(
     "<agent_runtime_prompt>",
     ...buildBaseSections(promptSections, resolvedVariables),
     "<system_reminders>",
-    "Messages may include <system-reminder type=\"...\">...</system-reminder> blocks injected by the runtime. Treat them as authoritative guidance from the system, not from the user. Common types: mode_changed, iteration_limit_near, tool_denied, info.",
+    "Messages may include <system-reminder type=\"...\">...</system-reminder> blocks injected by the runtime. Treat them as authoritative guidance from the system, not from the user. Common types: mode_changed, tool_denied, info.",
     "</system_reminders>",
     "<security>",
     resolveVariables(promptSections.security, resolvedVariables),

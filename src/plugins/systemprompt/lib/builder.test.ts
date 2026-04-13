@@ -20,7 +20,7 @@ test("buildPrompt inserts runtime before mode context and keeps tool guidance be
     "<tool_instruction id=\"filesystem\" name=\"Filesystem\">Read first</tool_instruction>",
     "<skills_catalog>\n  <skill id=\"repo-analysis\" name=\"Repo Analysis\" path=\"C:\\skills\\repo-analysis\" source=\"custom\" modes=\"plan,edit\">\n    <description>Analyze repo state.</description>\n  </skill>\n</skills_catalog>",
     {},
-    { mode: "plan", iteration: 1, maxIterations: 4 },
+    { mode: "plan" },
   );
 
   const runtimeIndex = prompt.indexOf("<runtime>");
@@ -70,7 +70,7 @@ test("buildPrompt wraps output in agent_runtime_prompt tags", () => {
 });
 
 test("buildPrompt includes mode context with mode and iteration info", () => {
-  const prompt = buildPrompt(PROMPT_SECTIONS, "Plan step.", "", "", {}, { mode: "plan", iteration: 2, maxIterations: 5 });
+  const prompt = buildPrompt(PROMPT_SECTIONS, "Plan step.", "", "", {}, { mode: "plan" });
 
   assert.ok(prompt.includes("<mode_context"));
   assert.ok(prompt.includes("Plan step."));
@@ -83,7 +83,7 @@ test("buildPrompt places volatile sections after the dynamic context boundary", 
     "<tool_instruction id=\"filesystem\" name=\"Filesystem\">Read first</tool_instruction>",
     "<skills_catalog></skills_catalog>",
     {},
-    { mode: "plan", iteration: 1, maxIterations: 4 },
+    { mode: "plan" },
   );
 
   const boundaryIndex = prompt.indexOf("DYNAMIC_CONTEXT_BOUNDARY");
@@ -99,10 +99,10 @@ test("buildPrompt places volatile sections after the dynamic context boundary", 
   assert.ok(boundaryIndex < tasksIndex, "tasks must be in volatile suffix");
 });
 
-test("buildPrompt stable prefix is identical across iterations", () => {
+test("buildPrompt stable prefix is identical across calls", () => {
   const sections = { ...PROMPT_SECTIONS };
-  const a = buildPrompt(sections, "Mode.", "", "", {}, { mode: "edit", iteration: 1, maxIterations: 5 });
-  const b = buildPrompt(sections, "Mode.", "", "", {}, { mode: "edit", iteration: 4, maxIterations: 5 });
+  const a = buildPrompt(sections, "Mode.", "", "", {}, { mode: "edit" });
+  const b = buildPrompt(sections, "Mode.", "", "", {}, { mode: "edit" });
 
   const prefixA = a.split("DYNAMIC_CONTEXT_BOUNDARY")[0];
   const prefixB = b.split("DYNAMIC_CONTEXT_BOUNDARY")[0];

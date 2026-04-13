@@ -7,7 +7,6 @@ const STATE_FILE = "defaults.json";
 export interface AppDefaults {
   agent: {
     defaultChatMode: ChatMode;
-    maxIterations: number;
     promptSections: AgentPromptSections;
     modeInstructions: Record<ChatMode, string>;
     modeAutonomousBudgets: Record<ChatMode, AutonomousBudget>;
@@ -33,10 +32,9 @@ export interface AppDefaults {
 const CODE_DEFAULTS: AppDefaults = {
   agent: {
     defaultChatMode: "edit",
-    maxIterations: 12,
     promptSections: {
       identity: [
-        "You are kk-agent, a local agent for software engineering and adjacent technical work.",
+        "You are Swagos, a general-purpose local agent developed by Krischan.",
       ].join("\n"),
       system: [
         "Use the instructions below and the available tools to help the user.",
@@ -57,7 +55,7 @@ const CODE_DEFAULTS: AppDefaults = {
       ].join("\n"),
       tasks: [
         "{{TASKS_INSTRUCTION}}",
-        "The user will usually want software engineering work such as debugging, implementation, refactoring, code explanation, investigation, or planning.",
+        "The user may want general assistance such as investigation, planning, explanation, research, writing, technical execution, or adjacent practical task work.",
         "Read the relevant files before suggesting or making changes.",
         "Do not create files unless they are actually needed for the task.",
         "Do not add features, refactors, abstractions, comments, validations, fallbacks, or backwards-compatibility hacks that the task does not require.",

@@ -73,7 +73,6 @@ export async function createAgent(body: CreateAgentBody): Promise<AgentDefinitio
     description: body.description ?? "",
     defaultChatMode,
     modeConfigs: normalizeModePatches({} as AgentDefinition["modeConfigs"], body.modeConfigs),
-    maxIterations: body.maxIterations ?? defaults.agent.maxIterations,
     variables: body.variables ?? {},
     defaultModel: body.defaultModel,
     reasoningEffort: normalizeCanonicalReasoningLevel(body.reasoningEffort),
@@ -96,7 +95,6 @@ export async function updateAgent(id: string, body: UpdateAgentBody): Promise<Ag
       normalizeModePatches(existing.modeConfigs, body.modeConfigs),
     ) as AgentDefinition["modeConfigs"];
   }
-  if (body.maxIterations !== undefined) patch.maxIterations = body.maxIterations;
   if (body.variables !== undefined) patch.variables = body.variables;
   if (body.defaultModel !== undefined) patch.defaultModel = body.defaultModel;
   if (body.reasoningEffort !== undefined) patch.reasoningEffort = normalizeCanonicalReasoningLevel(body.reasoningEffort);

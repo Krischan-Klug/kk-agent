@@ -6,7 +6,6 @@ import {
 
 export type SystemReminderType =
   | "mode_changed"
-  | "iteration_limit_near"
   | "tool_denied"
   | "info";
 

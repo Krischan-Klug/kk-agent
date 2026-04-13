@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { existsSync, rmSync } from "node:fs";
-import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { basename, extname, join, resolve } from "node:path";
 import { getStateDirPath } from "../../lib/state.js";
 import type { StoredAttachment, AttachmentMeta, AttachmentSource } from "./attachment-types.js";
@@ -140,8 +140,24 @@ export function resolveType(mimeType: string, filename: string): AllowedType | u
 }
 
 export async function initAttachmentStore(): Promise<void> {
-  await rm(ATTACHMENTS_ROOT, { recursive: true, force: true });
   await mkdir(ATTACHMENTS_ROOT, { recursive: true });
+
+  // Clean orphaned attachment directories whose session no longer exists
+  const { listPersistedSessionIds } = await import("../../lib/session-persistence.js");
+  const persistedIds = new Set(await listPersistedSessionIds());
+
+  try {
+    const { readdir } = await import("node:fs/promises");
+    const entries = await readdir(ATTACHMENTS_ROOT, { withFileTypes: true });
+    for (const entry of entries) {
+      if (entry.isDirectory() && !persistedIds.has(entry.name)) {
+        const orphanDir = join(ATTACHMENTS_ROOT, entry.name);
+        rmSync(orphanDir, { recursive: true, force: true });
+      }
+    }
+  } catch {
+    // ignore readdir errors
+  }
 }
 
 export async function storeAttachment(

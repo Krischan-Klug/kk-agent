@@ -1,6 +1,22 @@
 import type { TaskDraft, TaskItem, TaskUpdateInput } from "../types.js";
+import { loadSessionData, saveSessionData } from "../../lib/session-persistence.js";
 
+const TASKS_FILE = "tasks.json";
 const sessionTasks = new Map<string, TaskItem[]>();
+const loadedSessions = new Set<string>();
+
+function persistTasks(sessionId: string): void {
+  void saveSessionData(sessionId, TASKS_FILE, sessionTasks.get(sessionId) ?? []);
+}
+
+export async function ensureTasksLoaded(sessionId: string): Promise<void> {
+  if (loadedSessions.has(sessionId)) return;
+  loadedSessions.add(sessionId);
+  const tasks = await loadSessionData<TaskItem[]>(sessionId, TASKS_FILE, []);
+  if (tasks.length > 0 && !sessionTasks.has(sessionId)) {
+    sessionTasks.set(sessionId, tasks);
+  }
+}
 
 function createTaskId(index: number): string {
   return String(index + 1);
@@ -47,6 +63,7 @@ export function replaceTasks(sessionId: string, tasks: TaskItem[]): TaskItem[] {
   }
 
   sessionTasks.set(sessionId, reconcileTaskStatuses(normalized));
+  persistTasks(sessionId);
   return listTasks(sessionId);
 }
 
@@ -64,6 +81,7 @@ export function createTasks(sessionId: string, drafts: TaskDraft[]): TaskItem[] 
   });
 
   sessionTasks.set(sessionId, reconcileTaskStatuses(created));
+  persistTasks(sessionId);
   return listTasks(sessionId);
 }
 
@@ -102,6 +120,7 @@ export function updateTasks(sessionId: string, updates: TaskUpdateInput[]): Task
   }
 
   sessionTasks.set(sessionId, reconcileTaskStatuses(current));
+  persistTasks(sessionId);
   return listTasks(sessionId);
 }
 
@@ -124,11 +143,13 @@ export function solveTasks(sessionId: string, taskIds: string[]): TaskItem[] {
   ));
 
   sessionTasks.set(sessionId, reconcileTaskStatuses(next));
+  persistTasks(sessionId);
   return listTasks(sessionId);
 }
 
 export function clearTasks(sessionId: string): void {
   sessionTasks.delete(sessionId);
+  loadedSessions.delete(sessionId);
 }
 
 export function getTaskSummary(sessionId: string): string {

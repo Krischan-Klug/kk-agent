@@ -1,11 +1,28 @@
 import { randomUUID } from "node:crypto";
 import { loadState, saveState } from "../../lib/state.js";
+import { loadSessionData, saveSessionData } from "../../lib/session-persistence.js";
 import type { MemoryFact } from "../types.js";
+
+const FACTS_FILE = "facts.json";
 
 const USER_MEMORY_FILE = "user-memory.json";
 
 let userMemory: { facts: MemoryFact[] } = { facts: [] };
 const sessionMemory = new Map<string, MemoryFact[]>();
+const loadedSessions = new Set<string>();
+
+function persistSessionFacts(sessionId: string): void {
+  void saveSessionData(sessionId, FACTS_FILE, sessionMemory.get(sessionId) ?? []);
+}
+
+export async function ensureSessionFactsLoaded(sessionId: string): Promise<void> {
+  if (loadedSessions.has(sessionId)) return;
+  loadedSessions.add(sessionId);
+  const facts = await loadSessionData<MemoryFact[]>(sessionId, FACTS_FILE, []);
+  if (facts.length > 0 && !sessionMemory.has(sessionId)) {
+    sessionMemory.set(sessionId, facts);
+  }
+}
 
 function normalizeFacts(facts: MemoryFact[]): MemoryFact[] {
   return facts
@@ -37,11 +54,14 @@ export function listSessionFacts(sessionId: string): MemoryFact[] {
 export function replaceSessionFacts(sessionId: string, facts: MemoryFact[]): MemoryFact[] {
   const normalized = normalizeFacts(facts);
   sessionMemory.set(sessionId, normalized);
+  loadedSessions.add(sessionId);
+  persistSessionFacts(sessionId);
   return listSessionFacts(sessionId);
 }
 
 export function clearSessionFacts(sessionId: string): void {
   sessionMemory.delete(sessionId);
+  loadedSessions.delete(sessionId);
 }
 
 export function getMemoryPromptContext(sessionId: string): { userMemory: string; sessionMemory: string } {

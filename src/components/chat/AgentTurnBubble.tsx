@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Badge from "@/components/Badge";
 import MarkdownMessage from "@/components/MarkdownMessage";
 import type { AgentLoopState, McpListItem } from "@/types/api";
@@ -48,6 +48,17 @@ function collectStreamingActiveToolCalls(iterations: Props["turn"]["iterations"]
   return [...byId.values()];
 }
 
+function collectLatestToolCall(iterations: Props["turn"]["iterations"]): ActiveToolCall | null {
+  for (let index = iterations.length - 1; index >= 0; index -= 1) {
+    const iteration = iterations[index];
+    const lastToolCall = iteration?.toolCalls.at(-1);
+    if (lastToolCall) return lastToolCall;
+  }
+  return null;
+}
+
+const TOOLCALL_HIDE_DELAY_MS = 1200;
+
 function formatChatTime(value: string): string {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return "";
@@ -75,8 +86,32 @@ export default function AgentTurnBubble({ currentAgentName, mcps, turn, loopStat
   const finalText = collectText(finalIteration.assistant.content).trim();
   const finalAttachments = collectAttachments(finalIteration.assistant.content);
   const activeToolCalls = collectStreamingActiveToolCalls(iterations);
+  const latestToolCall = collectLatestToolCall(iterations);
+  const targetCollapsedToolCalls = useMemo(() => {
+    if (turn.streaming) {
+      if (activeToolCalls.length > 0) return activeToolCalls;
+      return latestToolCall ? [latestToolCall] : [];
+    }
+    return latestToolCall ? [latestToolCall] : [];
+  }, [activeToolCalls, latestToolCall, turn.streaming]);
+  const [collapsedToolCalls, setCollapsedToolCalls] = useState<ActiveToolCall[]>(targetCollapsedToolCalls);
   const showThinking = Boolean(turn.streaming) && finalReasoning.length > 0;
   const animateThinking = showThinking && finalText.length === 0;
+
+  useEffect(() => {
+    if (targetCollapsedToolCalls.length > 0) {
+      setCollapsedToolCalls(targetCollapsedToolCalls);
+      return undefined;
+    }
+
+    if (collapsedToolCalls.length === 0) return undefined;
+
+    const timeout = window.setTimeout(() => {
+      setCollapsedToolCalls([]);
+    }, TOOLCALL_HIDE_DELAY_MS);
+
+    return () => window.clearTimeout(timeout);
+  }, [collapsedToolCalls.length, targetCollapsedToolCalls]);
 
   return (
     <MessageBubble $role="assistant">
@@ -150,8 +185,8 @@ export default function AgentTurnBubble({ currentAgentName, mcps, turn, loopStat
 
       {!expanded && finalAttachments.length > 0 && <MessageAttachments attachments={finalAttachments} />}
 
-      {!expanded && activeToolCalls.length > 0 && (
-        <ToolCallCards mcps={mcps} toolCalls={activeToolCalls} />
+      {!expanded && collapsedToolCalls.length > 0 && (
+        <ToolCallCards mcps={mcps} toolCalls={collapsedToolCalls} />
       )}
 
       <MessageFooter>

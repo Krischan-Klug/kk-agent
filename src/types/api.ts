@@ -372,7 +372,6 @@ export interface AgentDefinition {
   description: string;
   defaultChatMode: ChatMode;
   modeConfigs: Record<ChatMode, AgentModeConfig>;
-  maxIterations: number;
   variables: Record<string, string>;
   defaultModel?: string;
   reasoningEffort?: ReasoningEffort;
@@ -387,7 +386,6 @@ export interface AgentLoopState {
   status: "idle" | "running" | "completed" | "error";
   mode: ChatMode;
   iteration: number;
-  maxIterations: number;
   startedAt: string;
   updatedAt: string;
 }
@@ -397,7 +395,6 @@ export interface CreateAgentBody {
   description?: string;
   defaultChatMode?: ChatMode;
   modeConfigs?: Partial<Record<ChatMode, AgentModeConfigPatch>>;
-  maxIterations?: number;
   variables?: Record<string, string>;
   defaultModel?: string;
   reasoningEffort?: ReasoningEffort;
@@ -409,7 +406,6 @@ export interface UpdateAgentBody {
   description?: string;
   defaultChatMode?: ChatMode;
   modeConfigs?: Partial<Record<ChatMode, AgentModeConfigPatch>>;
-  maxIterations?: number;
   variables?: Record<string, string>;
   defaultModel?: string;
   reasoningEffort?: ReasoningEffort;
@@ -425,7 +421,6 @@ export interface SystemVariablesResponse {
 export interface AppDefaults {
   agent: {
     defaultChatMode: ChatMode;
-    maxIterations: number;
     promptSections: AgentPromptSections;
     modeInstructions: Record<ChatMode, string>;
     modeAutonomousBudgets: Record<ChatMode, AutonomousBudget>;

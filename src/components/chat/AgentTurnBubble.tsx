@@ -83,7 +83,7 @@ export default function AgentTurnBubble({ currentAgentName, mcps, turn, loopStat
       <RoleLabel>
         <Badge variant="info">{currentAgentName}</Badge>
         {turn.streaming && <StreamingDot />}
-        {turn.streaming && loopState && <IterationPill>Iteration {loopState.iteration}/{loopState.maxIterations}</IterationPill>}
+        {turn.streaming && loopState && <IterationPill>Iteration {loopState.iteration}</IterationPill>}
         {hasToggle && (
           <RoleMetaGroup
             type="button"

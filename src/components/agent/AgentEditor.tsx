@@ -460,15 +460,6 @@ export default function AgentEditor({
               </Select>
             </FormField>
           )}
-          <FormField>
-            <FieldLabel>Max Iterationen</FieldLabel>
-            <Input
-              type="number"
-              value={currentAgent.maxIterations}
-              onChange={(e) => onChange({ ...currentAgent, maxIterations: parseInt(e.target.value, 10) || 10 })}
-              style={{ width: 100 }}
-            />
-          </FormField>
         </FormRow>
       </Section>
 
@@ -1013,4 +1004,3 @@ export default function AgentEditor({
     </EditorArea>
   );
 }
-

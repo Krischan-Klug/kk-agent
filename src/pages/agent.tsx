@@ -81,7 +81,6 @@ export default function AgentPage() {
         description: editAgent.description,
         defaultChatMode: editAgent.defaultChatMode,
         modeConfigs: editAgent.modeConfigs,
-        maxIterations: editAgent.maxIterations,
         variables: editAgent.variables,
         defaultModel: editAgent.defaultModel,
         reasoningEffort: editAgent.reasoningEffort,

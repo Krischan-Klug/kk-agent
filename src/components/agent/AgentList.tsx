@@ -66,7 +66,6 @@ export default function AgentList({ agents, mcps, selectedId, onSelect, onCreate
             <Name>{agent.name}</Name>
             {agent.description && <Description>{agent.description}</Description>}
             <Meta>
-              <Badge variant="info">{agent.maxIterations} Iterationen</Badge>
               {capabilityIds.length > 0 && (
                 <Badge variant="success">
                   {capabilityIds.map((id) => mcps.find((mcp) => mcp.id === id)?.emoji || "🛠️").join("")}

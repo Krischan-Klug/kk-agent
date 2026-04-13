@@ -224,19 +224,6 @@ export default function DefaultsPage() {
                     {CHAT_MODES.map((mode) => <option key={mode} value={mode}>{mode}</option>)}
                   </Select>
                 </Field>
-                <Field>
-                  <FieldLabel>Max Iterations</FieldLabel>
-                  <Input
-                    type="number"
-                    min={1}
-                    max={100}
-                    value={draft.agent.maxIterations}
-                    onChange={(e) => setDraft({
-                      ...draft,
-                      agent: { ...draft.agent, maxIterations: Number(e.target.value) },
-                    })}
-                  />
-                </Field>
               </Row>
             )}
           </SectionCard>

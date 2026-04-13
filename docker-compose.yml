@@ -8,7 +8,7 @@ services:
     container_name: kk-agent-frontend
     restart: unless-stopped
     ports:
-      - '3000:3000'
+      - '3002:3000'
     environment:
       - BACKEND_API_URL=http://kk-agent-backend:3001
       - PORT=3000

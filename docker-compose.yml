@@ -10,5 +10,5 @@ services:
     ports:
       - '3002:3000'
     environment:
-      - BACKEND_API_URL=http://kk-agent-backend:3001
+      - BACKEND_API_URL=http://host.docker.internal:3001
       - PORT=3000

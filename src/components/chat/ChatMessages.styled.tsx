@@ -41,7 +41,9 @@ export const SystemNotice = styled.div`
 
 export const MessageBubble = styled.div<{ $role: string }>`
   max-width: 80%;
+  position: relative;
   padding: var(--space-md);
+  padding-bottom: calc(var(--space-md) + 18px);
   border-radius: var(--radius-md);
   align-self: ${(p) => (p.$role === "user" ? "flex-end" : "flex-start")};
   background: ${(p) =>
@@ -337,15 +339,19 @@ export const ExpandArrow = styled.span<{ $expanded: boolean }>`
 `;
 
 export const MessageFooter = styled.div`
-  display: flex;
+  position: absolute;
+  right: var(--space-md);
+  bottom: var(--space-md);
+  display: inline-flex;
+  align-items: center;
   justify-content: flex-end;
-  margin-top: var(--space-sm);
 `;
 
 export const MessageTimestamp = styled.span`
   font-size: 11px;
   color: var(--text-muted);
   font-family: var(--font-mono);
+  white-space: nowrap;
 `;
 
 export const ThinkingLabel = styled.span`

@@ -30,13 +30,16 @@ export interface AttachmentMeta {
   filename: string;
   mimeType: string;
   category: "image" | "text" | "pdf";
+  source: "user" | "assistant";
   size: number;
 }
 
 export interface AttachmentDisplayMeta {
+  attachmentId?: string;
   filename: string;
   mimeType: string;
   category: "image" | "text" | "pdf";
+  source: "user" | "assistant";
   size: number;
   previewDataUrl?: string;
 }
@@ -67,7 +70,6 @@ export interface TranscriptToolResultBlock {
 
 export interface TranscriptAttachmentRefBlock extends AttachmentDisplayMeta {
   type: "attachment_ref";
-  attachmentId?: string;
 }
 
 export type TranscriptBlock =
@@ -120,6 +122,44 @@ export interface UpdateSessionBody {
 export interface SessionPromptDebug {
   systemPrompt: string;
   metaMessages: string[];
+  runtimeTools: SessionRuntimeToolDebug[];
+  runtimeMcps: SessionRuntimeMcpDebug[];
+  runtimeSkills: SessionRuntimeSkillDebug[];
+}
+
+export interface SessionRuntimeToolDebug {
+  name: string;
+  description: string;
+  capabilityId: string;
+  source: "system" | "mcp";
+  inputSchema: Record<string, unknown>;
+}
+
+export interface SessionRuntimeMcpDebug {
+  id: string;
+  name: string;
+  instruction: string;
+  emoji?: string;
+  source?: "custom";
+  active: boolean;
+  running: boolean;
+  tools: Array<{
+    name: string;
+    description: string;
+    inputSchema: Record<string, unknown>;
+  }>;
+}
+
+export interface SessionRuntimeSkillDebug {
+  id: string;
+  name: string;
+  description: string;
+  instruction: string;
+  active: boolean;
+  source?: "system" | "custom";
+  recommendedToolIds: string[];
+  recommendedMcpIds: string[];
+  allowedModes: ChatMode[];
 }
 
 export type TaskStatus = "pending" | "in_progress" | "completed";

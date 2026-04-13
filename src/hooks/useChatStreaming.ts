@@ -218,6 +218,7 @@ function buildOptimisticUserMessage(message: string, attachments: PendingAttachm
       filename: attachment.filename,
       mimeType: attachment.mimeType,
       category: attachment.category,
+      source: attachment.source,
       size: attachment.size,
       previewDataUrl: attachment.previewUrl,
     };

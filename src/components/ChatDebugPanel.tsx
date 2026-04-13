@@ -1,6 +1,16 @@
 import { useEffect, useState } from "react";
 import styled from "styled-components";
-import type { McpListItem, SessionState, TaskItem, MemoryFact, AgentLoopState, SkillDefinition } from "@/types/api";
+import type {
+  McpListItem,
+  SessionState,
+  TaskItem,
+  MemoryFact,
+  AgentLoopState,
+  SkillDefinition,
+  SessionRuntimeMcpDebug,
+  SessionRuntimeSkillDebug,
+  SessionRuntimeToolDebug,
+} from "@/types/api";
 import Badge from "@/components/Badge";
 import Button from "@/components/Button";
 import Input from "@/components/Input";
@@ -116,6 +126,9 @@ type Props = {
   loopState: AgentLoopState | null;
   debugPrompt: string | null;
   debugMetaMessages: string[] | null;
+  debugRuntimeTools: SessionRuntimeToolDebug[] | null;
+  debugRuntimeMcps: SessionRuntimeMcpDebug[] | null;
+  debugRuntimeSkills: SessionRuntimeSkillDebug[] | null;
   internalTools: McpListItem[];
   debugMcps: McpListItem[];
   skills: SkillDefinition[];
@@ -151,6 +164,9 @@ export default function ChatDebugPanel({
   loopState,
   debugPrompt,
   debugMetaMessages,
+  debugRuntimeTools,
+  debugRuntimeMcps,
+  debugRuntimeSkills,
   internalTools,
   debugMcps,
   skills,
@@ -176,9 +192,6 @@ export default function ChatDebugPanel({
   useEffect(() => setUserMemoryDraft(toFactDraft(debugUserFacts)), [debugUserFacts]);
 
   if (!open || !session) return null;
-  const activeMcpIds = session.activeMcpIds;
-  const activeToolIds = session.activeToolIds;
-  const activeSkillIds = session.activeSkillIds;
 
   function updateTask(index: number, patch: Partial<TaskItem>) {
     setTaskDraft((prev) => prev.map((task, i) => (i === index ? { ...task, ...patch } : task)));
@@ -221,24 +234,57 @@ export default function ChatDebugPanel({
 
   let content = "";
 
-  function renderDefinitions(items: McpListItem[], activeIds: string[], emptyLabel: string): string {
-    const activeItems = items.filter((m) => activeIds.includes(m.id));
-    return activeItems.length === 0
-      ? emptyLabel
-      : activeItems
-          .map((m) => {
-            const header = `-- ${m.emoji || "🛠️"} ${m.name} (${m.id}) --`;
-            const tools = m.tools.map((t) => {
-              const params = t.inputSchema?.properties
-                ? Object.entries(t.inputSchema.properties as Record<string, { type?: string; description?: string }>)
-                    .map(([k, v]) => `    ${k}: ${v.type ?? "any"} - ${v.description ?? ""}`)
+  function renderRuntimeTools(tools: SessionRuntimeToolDebug[] | null): string {
+    if (tools === null) return "Lade...";
+    if (tools.length === 0) return "Keine aktuell verfuegbaren Runtime-Tools.";
+    return tools
+      .map((tool) => {
+        const params = tool.inputSchema?.properties
+          ? Object.entries(tool.inputSchema.properties as Record<string, { type?: string; description?: string }>)
+              .map(([key, value]) => `    ${key}: ${value.type ?? "any"} - ${value.description ?? ""}`)
+              .join("\n")
+          : "    (keine Parameter)";
+        return `-- ${tool.name} [${tool.source}:${tool.capabilityId}] --\n${tool.description}\n${params}`;
+      })
+      .join("\n\n");
+  }
+
+  function renderRuntimeMcps(mcps: SessionRuntimeMcpDebug[] | null): string {
+    if (mcps === null) return "Lade...";
+    if (mcps.length === 0) return "Keine aktuell verfuegbaren Runtime-MCPs.";
+    return mcps
+      .map((mcp) => {
+        const header = `-- ${mcp.emoji || "🔌"} ${mcp.name} (${mcp.id}) --`;
+        const tools = mcp.tools.length === 0
+          ? "  (keine Tools)"
+          : mcp.tools.map((tool) => {
+              const params = tool.inputSchema?.properties
+                ? Object.entries(tool.inputSchema.properties as Record<string, { type?: string; description?: string }>)
+                    .map(([key, value]) => `    ${key}: ${value.type ?? "any"} - ${value.description ?? ""}`)
                     .join("\n")
                 : "    (keine Parameter)";
-              return `  ${t.name}\n    ${t.description ?? ""}\n${params}`;
-            });
-            return `${header}\n${tools.join("\n\n")}`;
-          })
-          .join("\n\n");
+              return `  ${tool.name}\n    ${tool.description ?? ""}\n${params}`;
+            }).join("\n\n");
+        return `${header}\nsource=${mcp.source ?? "custom"} active=${mcp.active} running=${mcp.running}\n${mcp.instruction}\n\n${tools}`;
+      })
+      .join("\n\n");
+  }
+
+  function renderRuntimeSkills(skillsSnapshot: SessionRuntimeSkillDebug[] | null): string {
+    if (skillsSnapshot === null) return "Lade...";
+    if (skillsSnapshot.length === 0) return "Keine aktuell aktiven Runtime-Skills.";
+    return skillsSnapshot
+      .map((skill) => {
+        const toolRefs = skill.recommendedToolIds.length > 0
+          ? `Tools: ${skill.recommendedToolIds.join(", ")}`
+          : "Tools: -";
+        const mcpRefs = skill.recommendedMcpIds.length > 0
+          ? `MCPs: ${skill.recommendedMcpIds.join(", ")}`
+          : "MCPs: -";
+        const modes = `Modes: ${skill.allowedModes.join(", ")}`;
+        return `-- ${skill.name} (${skill.id}) --\nsource=${skill.source ?? "custom"} active=${skill.active}\n${skill.description}\n${toolRefs}\n${mcpRefs}\n${modes}\n\n${skill.instruction}`;
+      })
+      .join("\n\n");
   }
 
   if (debugTab === "prompt") {
@@ -250,24 +296,11 @@ export default function ChatDebugPanel({
         ? "Keine aktuellen Meta-Messages."
         : debugMetaMessages.join("\n\n");
   } else if (debugTab === "tools") {
-    content = renderDefinitions(internalTools, activeToolIds, "Keine aktiven Tools.");
+    content = renderRuntimeTools(debugRuntimeTools);
   } else if (debugTab === "mcps") {
-    content = renderDefinitions(debugMcps, activeMcpIds, "Keine aktiven MCPs.");
+    content = renderRuntimeMcps(debugRuntimeMcps);
   } else if (debugTab === "skills") {
-    const activeSkills = skills.filter((skill) => activeSkillIds.includes(skill.id));
-    content = activeSkills.length === 0
-      ? "Keine aktiven Skills."
-      : activeSkills
-          .map((skill) => {
-            const toolRefs = skill.recommendedToolIds.length > 0
-              ? `Tools: ${skill.recommendedToolIds.join(", ")}`
-              : "Tools: -";
-            const mcpRefs = skill.recommendedMcpIds.length > 0
-              ? `MCPs: ${skill.recommendedMcpIds.join(", ")}`
-              : "MCPs: -";
-            return `-- ${skill.name} (${skill.id}) --\n${skill.description}\n${toolRefs}\n${mcpRefs}\n\n${skill.instruction}`;
-          })
-          .join("\n\n");
+    content = renderRuntimeSkills(debugRuntimeSkills);
   } else if (debugTab === "session") {
     content = JSON.stringify(
       {

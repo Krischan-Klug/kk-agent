@@ -1,5 +1,6 @@
 import styled from "styled-components";
-import type { AttachmentDisplayMeta } from "@/types/api";
+import type { TranscriptAttachmentRefBlock } from "@/types/api";
+import { getSessionAttachmentUrl } from "@/lib/api";
 import {
   formatAttachmentSize,
   getAttachmentEmoji,
@@ -25,6 +26,12 @@ const ImageCard = styled.figure`
   border: 1px solid var(--border);
   border-radius: calc(var(--radius-md) - 2px);
   background: color-mix(in srgb, var(--bg-elevated) 88%, black 12%);
+`;
+
+const ImageLink = styled.a`
+  display: block;
+  color: inherit;
+  text-decoration: none;
 `;
 
 const PreviewImage = styled.img`
@@ -53,7 +60,7 @@ const FileList = styled.div`
   flex-wrap: wrap;
 `;
 
-const FileChip = styled.div`
+const FileChip = styled.a`
   display: inline-flex;
   align-items: center;
   gap: var(--space-sm);
@@ -64,6 +71,12 @@ const FileChip = styled.div`
   font-size: 11px;
   font-family: var(--font-mono);
   color: var(--text-secondary);
+  text-decoration: none;
+
+  &:hover {
+    border-color: var(--accent);
+    color: var(--text-primary);
+  }
 `;
 
 const FileIcon = styled.span`
@@ -91,14 +104,17 @@ const FileSize = styled.span`
 `;
 
 type Props = {
-  attachments: AttachmentDisplayMeta[];
+  sessionId: string;
+  attachments: TranscriptAttachmentRefBlock[];
 };
 
-export default function MessageAttachments({ attachments }: Props) {
+export default function MessageAttachments({ sessionId, attachments }: Props) {
   if (!attachments.length) return null;
 
   const imageAttachments = attachments.filter(isImageAttachment);
   const fileAttachments = attachments.filter((attachment) => !isImageAttachment(attachment));
+  const resolveHref = (attachment: TranscriptAttachmentRefBlock) =>
+    attachment.attachmentId ? getSessionAttachmentUrl(sessionId, attachment.attachmentId) : undefined;
 
   return (
     <Strip>
@@ -106,15 +122,20 @@ export default function MessageAttachments({ attachments }: Props) {
         <ImageGrid>
           {imageAttachments.map((attachment, index) => (
             <ImageCard key={`${attachment.filename}-${index}`}>
-              {attachment.previewDataUrl && (
-                <PreviewImage src={attachment.previewDataUrl} alt={attachment.filename} />
-              )}
-              <ImageMeta>
-                <span>{attachment.filename}</span>
-                <span style={{ color: "var(--text-muted)" }}>
-                  {formatAttachmentSize(attachment.size)}
-                </span>
-              </ImageMeta>
+              <ImageLink
+                href={resolveHref(attachment)}
+                download={attachment.filename}
+              >
+                {attachment.previewDataUrl && (
+                  <PreviewImage src={attachment.previewDataUrl} alt={attachment.filename} />
+                )}
+                <ImageMeta>
+                  <span>{attachment.filename}</span>
+                  <span style={{ color: "var(--text-muted)" }}>
+                    {formatAttachmentSize(attachment.size)}
+                  </span>
+                </ImageMeta>
+              </ImageLink>
             </ImageCard>
           ))}
         </ImageGrid>
@@ -123,7 +144,11 @@ export default function MessageAttachments({ attachments }: Props) {
       {fileAttachments.length > 0 && (
         <FileList>
           {fileAttachments.map((attachment, index) => (
-            <FileChip key={`${attachment.filename}-${index}`}>
+            <FileChip
+              key={`${attachment.filename}-${index}`}
+              href={resolveHref(attachment)}
+              download={attachment.filename}
+            >
               <FileIcon aria-hidden="true">{getAttachmentEmoji(attachment)}</FileIcon>
               <FileMeta>
                 <FileName title={attachment.filename}>{attachment.filename}</FileName>

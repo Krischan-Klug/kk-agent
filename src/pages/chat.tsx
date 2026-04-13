@@ -21,6 +21,7 @@ import { useAttachments } from "@/hooks/useAttachments";
 import { useChatSessionData } from "@/hooks/useChatSessionData";
 import { useChatStreaming } from "@/hooks/useChatStreaming";
 import { session as sessionApi } from "@/lib/api";
+import type { SessionRuntimeMcpDebug, SessionRuntimeSkillDebug, SessionRuntimeToolDebug } from "@/types/api";
 
 const ChatWrapper = styled.div`
   display: flex;
@@ -60,6 +61,9 @@ export default function ChatPage() {
   const [debugTab, setDebugTab] = useState<ChatDebugTab | null>("prompt");
   const [debugPrompt, setDebugPrompt] = useState<string | null>(null);
   const [debugMetaMessages, setDebugMetaMessages] = useState<string[] | null>(null);
+  const [debugRuntimeTools, setDebugRuntimeTools] = useState<SessionRuntimeToolDebug[] | null>(null);
+  const [debugRuntimeMcps, setDebugRuntimeMcps] = useState<SessionRuntimeMcpDebug[] | null>(null);
+  const [debugRuntimeSkills, setDebugRuntimeSkills] = useState<SessionRuntimeSkillDebug[] | null>(null);
   const debugPromptRequestRef = useRef(0);
   const attachments = useAttachments();
 
@@ -70,11 +74,17 @@ export default function ChatPage() {
       if (requestId === debugPromptRequestRef.current) {
         setDebugPrompt(result.systemPrompt);
         setDebugMetaMessages(result.metaMessages);
+        setDebugRuntimeTools(result.runtimeTools);
+        setDebugRuntimeMcps(result.runtimeMcps);
+        setDebugRuntimeSkills(result.runtimeSkills);
       }
     } catch {
       if (requestId === debugPromptRequestRef.current) {
         setDebugPrompt("[Fehler beim Laden]");
         setDebugMetaMessages(["[Fehler beim Laden]"]);
+        setDebugRuntimeTools([]);
+        setDebugRuntimeMcps([]);
+        setDebugRuntimeSkills([]);
       }
     }
   }, []);
@@ -170,6 +180,9 @@ export default function ChatPage() {
         loopState={streaming.loopState}
         debugPrompt={debugPrompt}
         debugMetaMessages={debugMetaMessages}
+        debugRuntimeTools={debugRuntimeTools}
+        debugRuntimeMcps={debugRuntimeMcps}
+        debugRuntimeSkills={debugRuntimeSkills}
         internalTools={sessionData.toolMcps}
         debugMcps={sessionData.mcps}
         skills={sessionData.skills}

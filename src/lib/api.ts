@@ -29,6 +29,10 @@ import type {
 
 const BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3001";
 
+export function getSessionAttachmentUrl(sessionId: string, attachmentId: string): string {
+  return `${BASE}/session/${encodeURIComponent(sessionId)}/attachments/${encodeURIComponent(attachmentId)}`;
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`${BASE}${path}`, {
     headers: { "Content-Type": "application/json", ...init?.headers },

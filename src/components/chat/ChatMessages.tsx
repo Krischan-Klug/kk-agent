@@ -47,6 +47,7 @@ type Props = {
 
 function renderSingleMessage(
   message: SessionMessage,
+  sessionId: string,
   currentAgentName: string,
   mcps: McpListItem[],
 ) {
@@ -80,7 +81,7 @@ function renderSingleMessage(
         : text)}
 
       {attachments.length > 0 && (
-        <MessageAttachments attachments={attachments} />
+        <MessageAttachments sessionId={sessionId} attachments={attachments} />
       )}
 
       {toolCalls.length > 0 && (
@@ -130,13 +131,14 @@ export default function ChatMessages({
 
       {messageGroups.map((group) => (
         group.kind === "agent-turn"
-          ? <AgentTurnBubble key={group.key} currentAgentName={currentAgentName} mcps={mcps} turn={group} />
-          : renderSingleMessage(group.message, currentAgentName, mcps)
+          ? <AgentTurnBubble key={group.key} sessionId={session.id} currentAgentName={currentAgentName} mcps={mcps} turn={group} />
+          : renderSingleMessage(group.message, session.id, currentAgentName, mcps)
       ))}
 
       {streamingGroup && (
         <AgentTurnBubble
           key={streamingGroup.key}
+          sessionId={session.id}
           currentAgentName={currentAgentName}
           mcps={mcps}
           turn={streamingGroup}

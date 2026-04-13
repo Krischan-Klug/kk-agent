@@ -1,0 +1,17 @@
+version: '3.8'
+
+services:
+  kk-agent-backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: kk-agent-backend
+    restart: unless-stopped
+    volumes:
+      - kk-agent-data:/app/state
+    environment:
+      - OLLAMA_BASE_URL=http://host.docker.internal:11434
+      - PORT=3001
+
+volumes:
+  kk-agent-data: null

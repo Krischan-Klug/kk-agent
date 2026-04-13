@@ -7,6 +7,8 @@ services:
       dockerfile: Dockerfile
     container_name: kk-agent-backend
     restart: unless-stopped
+    ports:
+      - '3001:3001'
     volumes:
       - kk-agent-data:/app/state
     environment:

@@ -8,9 +8,7 @@ services:
     container_name: kk-agent-frontend
     restart: unless-stopped
     ports:
-      - '3002:3000'
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
+      - '127.0.0.1:3002:3000'
     environment:
-      - BACKEND_API_URL=http://host.docker.internal:3001
+      - NEXT_PUBLIC_API_URL=http://127.0.0.1:3001
       - PORT=3000

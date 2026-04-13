@@ -27,7 +27,7 @@ import type {
   UpdateSkillBody,
 } from "@/types/api";
 
-const BASE = process.env.NEXT_PUBLIC_API_URL || "/api";
+const BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://127.0.0.1:3001";
 
 export function getSessionAttachmentUrl(sessionId: string, attachmentId: string): string {
   return `${BASE}/session/${encodeURIComponent(sessionId)}/attachments/${encodeURIComponent(attachmentId)}`;

@@ -161,12 +161,12 @@ export default function AgentTurnBubble({ sessionId, currentAgentName, mcps, tur
             aria-label={expanded ? "Details ausblenden" : "Details einblenden"}
             title={expanded ? "Details ausblenden" : "Details einblenden"}
           >
-            {!turn.streaming && (
+            {expanded && !turn.streaming && (
               <IterationPill>
                 {iterations.length} Iteration{iterations.length > 1 ? "en" : ""}
               </IterationPill>
             )}
-            {totalToolCalls > 0 && (
+            {expanded && totalToolCalls > 0 && (
               <PhasePill>
                 {totalToolCalls} Tool Call{totalToolCalls > 1 ? "s" : ""}
               </PhasePill>

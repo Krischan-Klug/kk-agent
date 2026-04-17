@@ -1,0 +1,9 @@
+⚠ Port 3000 is in use by an unknown process, using available port 3002 instead.
+⨯ Another next dev server is already running.
+
+- Local:        http://localhost:3000
+- PID:          8688
+- Dir:          C:\Users\KriKra\dev\ai\kk-agent\kk-agent-frontend
+- Log:          .next\dev\logs\next-development.log
+
+Run taskkill /PID 8688 /F to stop it.

@@ -17,11 +17,11 @@ npm run build   # Production build
 
 ### Environment Variables
 
-Create a `.env.local` file in the frontend root:
+Create a `.env.local` file in the frontend root (or copy `.env.example`):
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `NEXT_PUBLIC_API_URL` | `http://localhost:3001` | Backend API base URL |
+| `NEXT_PUBLIC_API_URL` | `http://127.0.0.1:3001` | Backend API base URL |
 
 > The frontend expects the backend to be running at the configured URL.
 

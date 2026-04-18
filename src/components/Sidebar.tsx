@@ -14,7 +14,6 @@ import {
   useStoredSidebarCollapsed,
 } from "@/lib/sessionState";
 import { createAndActivateSession } from "@/lib/sessionFactory";
-import { logUiError } from "@/lib/uiLogger";
 import {
   SidebarWrapper,
   LogoRow,
@@ -125,7 +124,7 @@ export default function Sidebar() {
       await loadSessions();
       await router.push("/chat");
     } catch (err) {
-      logUiError("sidebar-create-session", err);
+      console.error("[sidebar-create-session]", err);
     }
   }
 
@@ -139,7 +138,7 @@ export default function Sidebar() {
       await loadSessions();
       if (router.pathname === "/chat") await router.replace("/chat");
     } catch (err) {
-      logUiError("sidebar-delete-session", err);
+      console.error("[sidebar-delete-session]", err);
     }
   }
 

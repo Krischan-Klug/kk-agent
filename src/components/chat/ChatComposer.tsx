@@ -2,7 +2,6 @@ import { useRef, useState, useCallback, useLayoutEffect } from "react";
 import styled from "styled-components";
 import type { AgentDefinition, AgentLoopState, ChatMode, TaskItem } from "@/types/api";
 import type { PendingAttachment } from "@/hooks/useAttachments";
-import AgentSelect from "@/components/AgentSelect";
 import SelectMenu, { type SelectMenuOption } from "@/components/SelectMenu";
 import Spinner from "@/components/Spinner";
 import AttachmentPreview from "./AttachmentPreview";
@@ -487,7 +486,17 @@ export default function ChatComposer({
                   />
                 </ControlGroup>
                 {agents.length > 0 && (
-                  <AgentSelect agents={agents} currentAgentId={currentAgentId} onSelect={onAgentSwitch} direction="up" />
+                  <SelectMenu
+                    value={currentAgentId}
+                    direction="up"
+                    minWidth="220px"
+                    options={agents.map((agent) => ({
+                      value: agent.id,
+                      label: agent.name,
+                      description: agent.description || undefined,
+                    }))}
+                    onSelect={onAgentSwitch}
+                  />
                 )}
               </ComposerMeta>
               <ComposerActions>

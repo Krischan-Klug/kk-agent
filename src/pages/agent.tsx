@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
 import styled from "styled-components";
 import { agent as agentApi, mcp as mcpApi, provider as providerApi, settings as settingsApi, skills as skillsApi, tools as toolsApi } from "@/lib/api";
-import { logUiError } from "@/lib/uiLogger";
 import type { AgentDefinition, AppDefaults, CreateAgentBody, McpListItem, ModelInfo, ModelSettings, SkillDefinition } from "@/types/api";
 import { PageTitle } from "@/components/Layout.styled";
 import Spinner from "@/components/Spinner";
@@ -68,7 +67,7 @@ export default function AgentPage() {
       setShowCreate(false);
       setNewName("");
     } catch (err) {
-      logUiError("agent-create", err);
+      console.error("[agent-create]", err);
     }
   }
 
@@ -89,7 +88,7 @@ export default function AgentPage() {
       setAgents((prev) => prev.map((agent) => (agent.id === selectedId ? updated : agent)));
       setEditAgent(structuredClone(updated));
     } catch (err) {
-      logUiError("agent-save", err);
+      console.error("[agent-save]", err);
     } finally {
       setSaving(false);
     }
@@ -108,7 +107,7 @@ export default function AgentPage() {
       }
       selectAgent(remaining[0].id);
     } catch (err) {
-      logUiError("agent-delete", err);
+      console.error("[agent-delete]", err);
     }
   }
 

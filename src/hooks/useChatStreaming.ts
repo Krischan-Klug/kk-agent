@@ -7,7 +7,6 @@ import {
   subscribeChatStreamSnapshot,
   updateChatStreamSnapshot,
 } from "@/lib/chatStreamState";
-import { logUiError } from "@/lib/uiLogger";
 import type {
   SessionMessage,
   SessionState,
@@ -386,13 +385,13 @@ export function useChatStreaming({
             if (debugOpen && mountedRef.current) loadDebugData(event.session.id);
             break;
           case "error":
-            logUiError("chat-stream", event.message);
+            console.error("[chat-stream]", event.message);
             resetStreamingState();
             break;
         }
       }, attachmentIds.length > 0 ? attachmentIds : undefined);
     } catch (err) {
-      logUiError("chat-stream", err);
+      console.error("[chat-stream]", err);
       resetStreamingState();
     } finally {
       updateChatStreamSnapshot(session.id, (previous) => ({ ...previous, sending: false }));
@@ -417,7 +416,7 @@ export function useChatStreaming({
       await sessionApi.respondToPrompt(session.id, streamSnapshot.pendingPrompt.promptId, selectedKey);
       updateChatStreamSnapshot(session.id, (previous) => ({ ...previous, pendingPrompt: null }));
     } catch (err) {
-      logUiError("chat-prompt-response", err);
+      console.error("[chat-prompt-response]", err);
     }
   }, [session, streamSnapshot.pendingPrompt]);
 

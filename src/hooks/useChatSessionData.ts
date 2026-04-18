@@ -13,7 +13,6 @@ import type {
 import { addAppEventListener, CHAT_DEBUG_TOGGLE_EVENT, SESSION_CHANGED_EVENT } from "@/lib/appEvents";
 import { clearActiveSessionId, getActiveSessionId } from "@/lib/sessionState";
 import { createAndActivateSession, resolveDefaultSessionAgentId } from "@/lib/sessionFactory";
-import { logUiError } from "@/lib/uiLogger";
 
 type DebugToggleHandler = (updater: (previous: boolean) => boolean) => void;
 
@@ -67,7 +66,7 @@ export function useChatSessionData({ onDebugOpen, setDebugOpen }: Options) {
       setSessionFacts(sessionMemoryResult.facts);
       setUserFacts(userMemoryResult.facts);
     } catch (err) {
-      logUiError("chat-context-load", err);
+      console.error("[chat-context-load]", err);
     }
   }, []);
 
@@ -190,7 +189,7 @@ export function useChatSessionData({ onDebugOpen, setDebugOpen }: Options) {
     try {
       await updateSessionAndSet({ model });
     } catch (err) {
-      logUiError("chat-model-switch", err);
+      console.error("[chat-model-switch]", err);
     }
   }, [session, updateSessionAndSet]);
 
@@ -203,7 +202,7 @@ export function useChatSessionData({ onDebugOpen, setDebugOpen }: Options) {
           : session.activeMcpIds.filter((id) => id !== mcpId),
       });
     } catch (err) {
-      logUiError("chat-mcp-toggle", err);
+      console.error("[chat-mcp-toggle]", err);
     }
   }, [session, updateSessionAndSet]);
 
@@ -216,7 +215,7 @@ export function useChatSessionData({ onDebugOpen, setDebugOpen }: Options) {
           : session.activeToolIds.filter((id) => id !== toolId),
       });
     } catch (err) {
-      logUiError("chat-tool-toggle", err);
+      console.error("[chat-tool-toggle]", err);
     }
   }, [session, updateSessionAndSet]);
 
@@ -229,7 +228,7 @@ export function useChatSessionData({ onDebugOpen, setDebugOpen }: Options) {
           : session.activeSkillIds.filter((id) => id !== skillId),
       });
     } catch (err) {
-      logUiError("chat-skill-toggle", err);
+      console.error("[chat-skill-toggle]", err);
     }
   }, [session, updateSessionAndSet]);
 
@@ -238,7 +237,7 @@ export function useChatSessionData({ onDebugOpen, setDebugOpen }: Options) {
     try {
       await updateSessionAndSet({ reasoningEffort: value || undefined });
     } catch (err) {
-      logUiError("chat-reasoning", err);
+      console.error("[chat-reasoning]", err);
     }
   }, [session, updateSessionAndSet]);
 
@@ -247,7 +246,7 @@ export function useChatSessionData({ onDebugOpen, setDebugOpen }: Options) {
     try {
       await updateSessionAndSet({ temperature: Number(value) });
     } catch (err) {
-      logUiError("chat-temperature", err);
+      console.error("[chat-temperature]", err);
     }
   }, [session, updateSessionAndSet]);
 
@@ -256,7 +255,7 @@ export function useChatSessionData({ onDebugOpen, setDebugOpen }: Options) {
     try {
       await updateSessionAndSet({ agentId });
     } catch (err) {
-      logUiError("chat-agent-switch", err);
+      console.error("[chat-agent-switch]", err);
     }
   }, [session, updateSessionAndSet]);
 
@@ -265,7 +264,7 @@ export function useChatSessionData({ onDebugOpen, setDebugOpen }: Options) {
     try {
       await updateSessionAndSet({ activeMode });
     } catch (err) {
-      logUiError("chat-mode-switch", err);
+      console.error("[chat-mode-switch]", err);
     }
   }, [session, updateSessionAndSet]);
 
@@ -275,7 +274,7 @@ export function useChatSessionData({ onDebugOpen, setDebugOpen }: Options) {
       setSession(newSession);
       await loadContextData(newSession.id);
     } catch (err) {
-      logUiError("chat-new-session", err);
+      console.error("[chat-new-session]", err);
     }
   }, [agents, loadContextData]);
 
@@ -285,7 +284,7 @@ export function useChatSessionData({ onDebugOpen, setDebugOpen }: Options) {
       const result = await toolsApi.replaceTasks(session.id, nextTasks);
       setTasks(result.tasks);
     } catch (err) {
-      logUiError("chat-save-tasks", err);
+      console.error("[chat-save-tasks]", err);
     }
   }, [session]);
 
@@ -295,7 +294,7 @@ export function useChatSessionData({ onDebugOpen, setDebugOpen }: Options) {
       const result = await toolsApi.replaceSessionMemory(session.id, nextFacts);
       setSessionFacts(result.facts);
     } catch (err) {
-      logUiError("chat-save-session-memory", err);
+      console.error("[chat-save-session-memory]", err);
     }
   }, [session]);
 
@@ -304,7 +303,7 @@ export function useChatSessionData({ onDebugOpen, setDebugOpen }: Options) {
       const result = await toolsApi.replaceUserMemory(nextFacts);
       setUserFacts(result.facts);
     } catch (err) {
-      logUiError("chat-save-user-memory", err);
+      console.error("[chat-save-user-memory]", err);
     }
   }, []);
 

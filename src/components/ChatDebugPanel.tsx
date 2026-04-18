@@ -15,7 +15,6 @@ import Badge from "@/components/Badge";
 import Button from "@/components/Button";
 import Input from "@/components/Input";
 import TextArea from "@/components/TextArea";
-import ModelSelect from "@/components/ModelSelect";
 import CapabilitySelect from "@/components/CapabilitySelect";
 import SelectMenu, { type SelectMenuOption } from "@/components/SelectMenu";
 
@@ -380,7 +379,12 @@ export default function ChatDebugPanel({
         <DebugControls>
           {loopState && <Badge variant="info">{loopState.mode}</Badge>}
           {models.length > 0 ? (
-            <ModelSelect models={models} currentModel={session.model} onSelect={onModelSwitch} />
+            <SelectMenu
+              value={session.model}
+              options={models.map((model) => ({ value: model, label: model }))}
+              onSelect={onModelSwitch}
+              mono
+            />
           ) : (
             <Badge variant="info">{session.model}</Badge>
           )}

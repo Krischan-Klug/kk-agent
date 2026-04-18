@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import styled from "styled-components";
 import { provider as providerApi } from "@/lib/api";
-import { logUiError } from "@/lib/uiLogger";
 import type { ModelInfo, ModelSettings, ProviderConfig } from "@/types/api";
 import { useToggleSet } from "@/hooks/useToggleSet";
 import Card from "@/components/Card";
@@ -49,7 +48,7 @@ export default function SettingsProviderPage() {
       setModelSettings(modelsData.modelSettings ?? {});
       setActiveProviderId(modelsData.activeProviderId ?? activeId);
     } catch (err) {
-      logUiError("provider-load", err);
+      console.error("[provider-load]", err);
     } finally {
       setLoading(false);
     }
@@ -77,7 +76,7 @@ export default function SettingsProviderPage() {
       setShowCreate(false);
       resetCreateForm();
     } catch (err) {
-      logUiError("provider-create", err);
+      console.error("[provider-create]", err);
     }
   }
 
@@ -93,7 +92,7 @@ export default function SettingsProviderPage() {
       const result = await providerApi.activateProvider(id);
       await loadProviderModels(result.activeProviderId);
     } catch (err) {
-      logUiError("provider-activate", err);
+      console.error("[provider-activate]", err);
     }
   }
 
@@ -110,7 +109,7 @@ export default function SettingsProviderPage() {
         setModelSettings({});
       }
     } catch (err) {
-      logUiError("provider-delete", err);
+      console.error("[provider-delete]", err);
     }
   }
 
@@ -133,7 +132,7 @@ export default function SettingsProviderPage() {
       });
       setProviders((prev) => prev.map((provider) => (provider.id === id ? updated : provider)));
     } catch (err) {
-      logUiError("provider-update", err);
+      console.error("[provider-update]", err);
     }
   }
 
@@ -143,7 +142,7 @@ export default function SettingsProviderPage() {
     try {
       await providerApi.setModelSettings(activeProviderId, modelId, settings);
     } catch (err) {
-      logUiError("provider-model-settings", err);
+      console.error("[provider-model-settings]", err);
     }
   }
 

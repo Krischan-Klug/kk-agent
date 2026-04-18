@@ -136,12 +136,6 @@ export const tools = {
       body: JSON.stringify({ instruction }),
     }),
 
-  start: (id: string) =>
-    request<{ status: string }>(`/tools/${id}/start`, { method: "POST" }),
-
-  stop: (id: string) =>
-    request<{ status: string }>(`/tools/${id}/stop`, { method: "POST" }),
-
   update: (id: string, body: UpdateMcpBody) =>
     request<McpServerConfig>(`/tools/${id}`, {
       method: "PUT",

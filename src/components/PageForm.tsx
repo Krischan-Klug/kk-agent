@@ -36,6 +36,7 @@ export const FieldLabel = styled.label`
 export const ActionsRow = styled.div`
   display: flex;
   gap: var(--space-sm);
+  align-items: center;
   flex-wrap: wrap;
 `;
 

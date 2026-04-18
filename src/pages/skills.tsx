@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import styled from "styled-components";
 import { mcp as mcpApi, skills as skillsApi, tools as toolsApi } from "@/lib/api";
-import { logUiError } from "@/lib/uiLogger";
 import type { ChatMode, CreateSkillBody, McpListItem, SkillDefinition, UpdateSkillBody } from "@/types/api";
 import { PageTitle } from "@/components/Layout.styled";
 import Button from "@/components/Button";
@@ -169,7 +168,7 @@ export default function SkillsPage() {
         },
       ])));
     } catch (err) {
-      logUiError("skills-load", err);
+      console.error("[skills-load]", err);
     } finally {
       setLoading(false);
     }
@@ -191,7 +190,7 @@ export default function SkillsPage() {
       setCreateDraft(EMPTY_DRAFT);
       await loadAll();
     } catch (err) {
-      logUiError("skills-create", err);
+      console.error("[skills-create]", err);
     } finally {
       setCreating(false);
     }
@@ -210,7 +209,7 @@ export default function SkillsPage() {
       }));
       await loadAll();
     } catch (err) {
-      logUiError("skills-save", err);
+      console.error("[skills-save]", err);
     } finally {
       setSavingId(null);
     }
@@ -222,7 +221,7 @@ export default function SkillsPage() {
       await skillsApi.delete(id);
       await loadAll();
     } catch (err) {
-      logUiError("skills-delete", err);
+      console.error("[skills-delete]", err);
     } finally {
       setSavingId(null);
     }

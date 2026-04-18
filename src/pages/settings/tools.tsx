@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
 import styled from "styled-components";
 import { skills as skillsApi, tools as toolsApi } from "@/lib/api";
-import { logUiError } from "@/lib/uiLogger";
 import type { McpListItem, SkillDefinition } from "@/types/api";
 import { useToggleSet } from "@/hooks/useToggleSet";
 import Spinner from "@/components/Spinner";
@@ -49,7 +48,7 @@ export default function SettingsToolsPage() {
       setToolMcps(data);
       setInstructions(Object.fromEntries(data.map((tool) => [tool.id, tool.instruction])));
     } catch (err) {
-      logUiError("tools-load", err);
+      console.error("[tools-load]", err);
     } finally {
       setLoading(false);
     }
@@ -59,7 +58,7 @@ export default function SettingsToolsPage() {
     try {
       setSkillList(await skillsApi.list());
     } catch (err) {
-      logUiError("tools-skills-load", err);
+      console.error("[tools-skills-load]", err);
     }
   }
 
@@ -72,7 +71,7 @@ export default function SettingsToolsPage() {
       await toolsApi.update(tool.id, { skillIds: next });
       await loadTools();
     } catch (err) {
-      logUiError("tools-skill-toggle", err);
+      console.error("[tools-skill-toggle]", err);
     }
   }
 
@@ -86,7 +85,7 @@ export default function SettingsToolsPage() {
       await toolsApi.toggle(tool.id, !tool.active);
       await loadTools();
     } catch (err) {
-      logUiError("tools-toggle", err);
+      console.error("[tools-toggle]", err);
     }
   }
 
@@ -95,7 +94,7 @@ export default function SettingsToolsPage() {
       await toolsApi.setInstruction(id, instructions[id] ?? "");
       await loadTools();
     } catch (err) {
-      logUiError("tools-save-instruction", err);
+      console.error("[tools-save-instruction]", err);
     }
   }
 
@@ -126,7 +125,7 @@ export default function SettingsToolsPage() {
       expandedEdit.remove(tool.id);
       await loadTools();
     } catch (err) {
-      logUiError("tools-save-edit", err);
+      console.error("[tools-save-edit]", err);
     }
   }
 

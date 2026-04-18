@@ -9,8 +9,6 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-app.get("/health", (_req: Request, res: Response) => res.json({ ok: true }));
-
 await initDefaults();
 app.use("/settings/defaults", defaultsRoutes);
 

@@ -1,36 +1,25 @@
-import { readFile, writeFile, mkdir } from "node:fs/promises";
 import { existsSync } from "node:fs";
-import { dirname } from "node:path";
 import type { McpServerConfig } from "../types.js";
-import { getStatePath } from "../../lib/state.js";
+import { SYSTEM_MCP_KEYS } from "../types.js";
+import { getStatePath, readJsonFile, writeJsonFile } from "../../lib/state.js";
 
 const REGISTRY_PATH = getStatePath("mcps.json");
-const SYSTEM_IDS = new Set(["filesystem", "web-search", "terminal", "user-interaction", "task", "memory", "attachment"]);
+const SYSTEM_IDS = new Set<string>(SYSTEM_MCP_KEYS);
 const DEFAULT_REGISTRY: { mcps: McpServerConfig[] } = { mcps: [] };
-
-async function ensureDir(): Promise<void> {
-  const dir = dirname(REGISTRY_PATH);
-  if (!existsSync(dir)) {
-    await mkdir(dir, { recursive: true });
-  }
-}
 
 export async function loadRegistry(): Promise<McpServerConfig[]> {
   if (!existsSync(REGISTRY_PATH)) {
-    await ensureDir();
-    await writeFile(REGISTRY_PATH, JSON.stringify(DEFAULT_REGISTRY, null, 2), "utf-8");
+    await writeJsonFile(REGISTRY_PATH, DEFAULT_REGISTRY);
     return DEFAULT_REGISTRY.mcps;
   }
-  const raw = await readFile(REGISTRY_PATH, "utf-8");
-  const data = JSON.parse(raw) as { mcps: McpServerConfig[] };
-  return (data.mcps ?? [])
+  const data = await readJsonFile<{ mcps: McpServerConfig[] }>(REGISTRY_PATH);
+  return (data?.mcps ?? [])
     .filter((mcp) => !SYSTEM_IDS.has(mcp.id))
     .map((mcp) => ({ ...mcp, source: "custom" as const }));
 }
 
 export async function saveRegistry(mcps: McpServerConfig[]): Promise<void> {
-  await ensureDir();
-  await writeFile(REGISTRY_PATH, JSON.stringify({ mcps }, null, 2), "utf-8");
+  await writeJsonFile(REGISTRY_PATH, { mcps });
 }
 
 let cachedRegistry: McpServerConfig[] | null = null;

@@ -1,6 +1,6 @@
 import type { Express } from "express";
 import type { PluginLifecycleContext, PluginSummary } from "../types.js";
-import type { PluginAnalysis, PluginAnalysisEntry } from "./plugin-runtime-types.js";
+import type { PluginAnalysis, PluginAnalysisEntry } from "./plugin-loader.js";
 
 export const CORE_PLUGIN_NAME = "core";
 

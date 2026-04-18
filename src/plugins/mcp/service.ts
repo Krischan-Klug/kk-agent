@@ -1,5 +1,4 @@
 import type { McpServerConfig, McpStdioConfig, McpToolDefinition, CreateMcpBody, UpdateMcpBody } from "./types.js";
-import type { UnifiedToolDefinition } from "../provider/lib/types.js";
 import { getSystemMcpById } from "../tools/service.js";
 import { createSlugId } from "../lib/ids.js";
 import { getRegistry, updateRegistry, getMcpById, addMcp, removeMcp } from "./lib/registry.js";
@@ -7,7 +6,6 @@ import {
   startMcp,
   stopMcp,
   getToolsForMcp,
-  getAllTools,
   executeToolForMcp as executeMcpTool,
   getRunningMcps,
 } from "./lib/process-manager.js";
@@ -55,14 +53,6 @@ export function getRunnableMcpIds(): string[] {
   return cachedCustomMcps
     .filter((m) => m.active && runningIds.has(m.id))
     .map((m) => m.id);
-}
-
-export function getToolDefinitions(activeMcpIds: string[]): UnifiedToolDefinition[] {
-  return getAllTools(activeMcpIds).map((t) => ({
-    name: t.name,
-    description: t.description,
-    parameters: t.inputSchema,
-  }));
 }
 
 export function getMcpTools(id: string): McpToolDefinition[] {
@@ -158,7 +148,6 @@ export async function executeToolForMcp(
   return executeMcpTool(mcpId, toolName, args);
 }
 
-export { getAllTools };
 async function withRegistryUpdate(
   id: string,
   updater: (mcp: McpServerConfig, mcps: McpServerConfig[]) => Promise<void> | void,

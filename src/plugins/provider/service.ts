@@ -9,7 +9,7 @@ import type {
   ProvidersState,
 } from "./types.js";
 import type { ProviderAdapter } from "./lib/adapter.js";
-import { createAdapter } from "./lib/adapters/index.js";
+import { createLocalProviderAdapter } from "./lib/adapters/local.js";
 import {
   clampNumber,
   coerceReasoningSelection,
@@ -53,7 +53,7 @@ function getAdapter(providerId: string): ProviderAdapter {
   const provider = getProviderById(providerId);
   if (!provider) throw new Error(`Provider not found: ${providerId}`);
 
-  const adapter = createAdapter(provider);
+  const adapter = createLocalProviderAdapter(provider);
   adapterCache.set(providerId, adapter);
   return adapter;
 }

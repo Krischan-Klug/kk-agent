@@ -292,14 +292,6 @@ export async function updateSystemMcpConfig(id: string, body: UpdateMcpBody): Pr
   return next;
 }
 
-export async function startInternalTool(id: string): Promise<McpServerConfig> {
-  return toggleSystemMcp(id, true);
-}
-
-export async function stopInternalTool(id: string): Promise<McpServerConfig> {
-  return toggleSystemMcp(id, false);
-}
-
 export async function updateInternalToolInstruction(id: string, instruction: string): Promise<McpServerConfig> {
   return updateSystemMcpConfig(id, { instruction });
 }

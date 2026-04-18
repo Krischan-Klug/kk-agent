@@ -9,7 +9,7 @@ import * as store from "./lib/store.js";
 import { getDefaults } from "../lib/defaults.js";
 import { createSlugId } from "../lib/ids.js";
 import { normalizeCanonicalReasoningLevel } from "../provider/lib/capabilities.js";
-import { getSystemVariableNames } from "../systemprompt/lib/builder.js";
+import { getSystemVariableNames } from "../systemprompt/index.js";
 import { getChatModes } from "./lib/modes.js";
 import { applyModeConfigPatch, compactModeConfigs, normalizeModeConfigs } from "./lib/mode-config.js";
 

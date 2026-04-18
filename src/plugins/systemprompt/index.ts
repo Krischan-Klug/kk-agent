@@ -10,4 +10,10 @@ export const SystempromptPlugin: ModulePlugin = {
 
 export default SystempromptPlugin;
 
-export * from "./service.js";
+export {
+  buildPrompt,
+  buildCapabilityInstructions,
+  getSystemVariables,
+  getSystemVariableNames,
+  type PromptBuildContext,
+} from "./lib/builder.js";

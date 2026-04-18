@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { loadState, saveState } from "../../lib/state.js";
-import { loadSessionData, saveSessionData } from "../../lib/session-persistence.js";
+import { loadSessionData, saveSessionData } from "../../lib/state.js";
 import type { MemoryFact } from "../types.js";
 
 const FACTS_FILE = "facts.json";

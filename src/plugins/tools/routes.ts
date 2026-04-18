@@ -4,8 +4,6 @@ import {
   doToggleTool,
   doUpdateToolInstruction,
   listToolDefinitions,
-  doStartTool,
-  doStopTool,
   doUpdateTool,
   listTaskState,
   replaceTaskState,
@@ -27,8 +25,6 @@ router.put("/memory/session/:sessionId", replaceSessionMemoryState);
 router.get("/:id/tools", listToolDefinitions);
 router.post("/:id/toggle", doToggleTool);
 router.put("/:id/instruction", doUpdateToolInstruction);
-router.post("/:id/start", doStartTool);
-router.post("/:id/stop", doStopTool);
 router.put("/:id", doUpdateTool);
 
 export default router;

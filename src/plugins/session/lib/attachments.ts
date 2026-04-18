@@ -143,7 +143,7 @@ export async function initAttachmentStore(): Promise<void> {
   await mkdir(ATTACHMENTS_ROOT, { recursive: true });
 
   // Clean orphaned attachment directories whose session no longer exists
-  const { listPersistedSessionIds } = await import("../../lib/session-persistence.js");
+  const { listPersistedSessionIds } = await import("../../lib/state.js");
   const persistedIds = new Set(await listPersistedSessionIds());
 
   try {

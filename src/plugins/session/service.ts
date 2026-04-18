@@ -6,7 +6,7 @@ import {
   clearSessionAttachments,
   getSessionAttachmentsByIds,
 } from "./lib/attachments.js";
-import { buildPrompt, getSystemVariables } from "../systemprompt/service.js";
+import { buildPrompt, getSystemVariables } from "../systemprompt/index.js";
 import { getAllMcpsCached, getMcpTools, getRunnableMcpIds } from "../mcp/service.js";
 import { getActiveProviderId, getModelCapabilities } from "../provider/service.js";
 import {
@@ -792,29 +792,26 @@ export async function patchSession(id: string, body: Partial<CreateSessionBody>)
   return updateSession(id, body);
 }
 
-export function removeMcpFromSessions(mcpId: string): void {
+type SessionIdArrayField = "activeMcpIds" | "activeToolIds" | "activeSkillIds";
+
+function removeIdFromSessionField(id: string, field: SessionIdArrayField): void {
   for (const session of listSessions()) {
-    if (!session.activeMcpIds.includes(mcpId)) continue;
+    const current = session[field];
+    if (!current.includes(id)) continue;
     store.updateSession(session.id, {
-      activeMcpIds: session.activeMcpIds.filter((entry) => entry !== mcpId),
+      [field]: current.filter((entry) => entry !== id),
     });
   }
+}
+
+export function removeMcpFromSessions(mcpId: string): void {
+  removeIdFromSessionField(mcpId, "activeMcpIds");
 }
 
 export function removeToolFromSessions(toolId: string): void {
-  for (const session of listSessions()) {
-    if (!session.activeToolIds.includes(toolId)) continue;
-    store.updateSession(session.id, {
-      activeToolIds: session.activeToolIds.filter((entry) => entry !== toolId),
-    });
-  }
+  removeIdFromSessionField(toolId, "activeToolIds");
 }
 
 export function removeSkillFromSessions(skillId: string): void {
-  for (const session of listSessions()) {
-    if (!session.activeSkillIds.includes(skillId)) continue;
-    store.updateSession(session.id, {
-      activeSkillIds: session.activeSkillIds.filter((entry) => entry !== skillId),
-    });
-  }
+  removeIdFromSessionField(skillId, "activeSkillIds");
 }

@@ -12,8 +12,6 @@ import {
   replaceUserFacts,
   toggleSystemMcp,
   updateInternalToolInstruction,
-  startInternalTool,
-  stopInternalTool,
   updateInternalToolConfig,
 } from "./service.js";
 
@@ -48,24 +46,6 @@ export async function doUpdateToolInstruction(req: Request, res: Response): Prom
 
 export async function listToolDefinitions(req: Request, res: Response): Promise<Response> {
   return res.json(getSystemToolsForId(req.params.id));
-}
-
-export async function doStartTool(req: Request, res: Response): Promise<Response> {
-  try {
-    await startInternalTool(req.params.id);
-    return res.json({ status: "started" });
-  } catch (err) {
-    return res.status(404).json({ error: (err as Error).message });
-  }
-}
-
-export async function doStopTool(req: Request, res: Response): Promise<Response> {
-  try {
-    await stopInternalTool(req.params.id);
-    return res.json({ status: "stopped" });
-  } catch (err) {
-    return res.status(404).json({ error: (err as Error).message });
-  }
 }
 
 export async function doUpdateTool(req: Request, res: Response): Promise<Response> {

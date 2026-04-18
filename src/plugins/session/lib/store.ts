@@ -6,7 +6,7 @@ import {
   saveSessionData,
   deleteSessionData,
   listPersistedSessionIds,
-} from "../../lib/session-persistence.js";
+} from "../../lib/state.js";
 
 const SESSION_FILE = "session.json";
 const MESSAGES_FILE = "messages.json";

@@ -1,4 +1,4 @@
-import { buildCapabilityInstructions } from "../../systemprompt/service.js";
+import { buildCapabilityInstructions } from "../../systemprompt/index.js";
 import { getAllMcpsCached, getKnownMcpIds, getRunnableMcpIds } from "../../mcp/service.js";
 import { getInternalToolById, getKnownSystemMcpIds, getRunnableSystemMcpIds } from "../../tools/service.js";
 import { listSkills } from "../../skills/service.js";

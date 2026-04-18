@@ -1,9 +1,8 @@
 import type { Express } from "express";
 import type { PluginPlan } from "./types.js";
-import { analysePlugins } from "./lib/plugin-analysis.js";
+import { analysePlugins, discoverPluginDirectories, importPluginModules } from "./lib/plugin-loader.js";
 import { initializePlannedPlugins } from "./lib/plugin-bootstrap.js";
 import { loadPluginConfig, writePluginConfig } from "./lib/plugin-config.js";
-import { discoverPluginDirectories, importPluginModules } from "./lib/plugin-discovery.js";
 
 async function preparePlugins() {
   const config = await loadPluginConfig();

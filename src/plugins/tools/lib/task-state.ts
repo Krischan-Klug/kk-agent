@@ -1,5 +1,5 @@
 import type { TaskDraft, TaskItem, TaskUpdateInput } from "../types.js";
-import { loadSessionData, saveSessionData } from "../../lib/session-persistence.js";
+import { loadSessionData, saveSessionData } from "../../lib/state.js";
 
 const TASKS_FILE = "tasks.json";
 const sessionTasks = new Map<string, TaskItem[]>();

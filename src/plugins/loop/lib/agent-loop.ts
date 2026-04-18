@@ -3,8 +3,7 @@ import { createTranscriptMessage, getMessageText, getToolUses, hasVisibleAssista
 import type { LoopOptions, LoopResult } from "../types.js";
 import type { AgentLoopState } from "../../agent/types.js";
 import { callProviderStream } from "../../provider/service.js";
-import { buildPrompt } from "../../systemprompt/service.js";
-import { getSystemVariables } from "../../systemprompt/lib/builder.js";
+import { buildPrompt, getSystemVariables } from "../../systemprompt/index.js";
 import { getTaskSummary } from "../../tools/service.js";
 import { StreamingToolExecutor } from "./tool-executor.js";
 import { getDefaults } from "../../lib/defaults.js";

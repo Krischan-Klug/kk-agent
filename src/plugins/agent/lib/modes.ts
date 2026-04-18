@@ -1,4 +1,5 @@
 import type { ChatMode } from "../types.js";
+import { SYSTEM_MCP_KEYS } from "../../mcp/types.js";
 
 export interface ChatModeMeta {
   mode: ChatMode;
@@ -45,9 +46,9 @@ export const EDIT_TOOL_NAMES = [
   "remember_facts",
 ];
 
-export const PLAN_TOOL_IDS = ["filesystem", "web-search", "terminal", "user-interaction", "task", "attachment", "skill"];
+export const EDIT_TOOL_IDS: string[] = [...SYSTEM_MCP_KEYS];
 
-export const EDIT_TOOL_IDS = ["filesystem", "web-search", "terminal", "user-interaction", "task", "memory", "attachment", "skill"];
+export const PLAN_TOOL_IDS: string[] = EDIT_TOOL_IDS.filter((id) => id !== "memory");
 
 export const CHAT_MODE_META: Record<ChatMode, ChatModeMeta> = {
   plan: {

@@ -1,4 +1,5 @@
-import { getAllTools as getAllMcpTools, executeToolForMcp } from "../../mcp/service.js";
+import { getAllTools as getAllMcpTools } from "../../mcp/lib/process-manager.js";
+import { executeToolForMcp } from "../../mcp/service.js";
 import type { AccessScope } from "../../mcp/types.js";
 import type { RuntimeToolDefinition, ToolExecutionResult } from "../../loop/types.js";
 import type { UnifiedToolDefinition } from "../../provider/lib/types.js";

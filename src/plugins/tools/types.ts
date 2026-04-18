@@ -1,5 +1,3 @@
-export type SystemToolKey = "filesystem" | "web-search" | "terminal" | "user-interaction" | "task" | "memory" | "attachment" | "skill";
-
 export type TaskStatus = "pending" | "in_progress" | "completed";
 
 export interface TaskItem {

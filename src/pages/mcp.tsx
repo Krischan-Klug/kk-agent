@@ -3,7 +3,7 @@ import styled from "styled-components";
 import { mcp as mcpApi, skills as skillsApi } from "@/lib/api";
 import type { CreateMcpBody, McpListItem, SkillDefinition } from "@/types/api";
 import { useToggleSet } from "@/hooks/useToggleSet";
-import { PageTitle } from "@/components/Layout.styled";
+import { PageBody } from "@/components/Layout.styled";
 import Button from "@/components/Button";
 import Spinner from "@/components/Spinner";
 import Modal from "@/components/Modal";
@@ -185,8 +185,7 @@ export default function McpPage() {
   if (loading) return <Spinner />;
 
   return (
-    <>
-      <PageTitle>MCP Server</PageTitle>
+    <PageBody>
       <HeaderActions>
         <Button onClick={() => setShowCreate(true)}>MCP hinzufügen</Button>
       </HeaderActions>
@@ -239,6 +238,6 @@ export default function McpPage() {
           </ActionsRow>
         </Modal>
       )}
-    </>
+    </PageBody>
   );
 }

@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import styled from "styled-components";
 import { mcp as mcpApi, skills as skillsApi, tools as toolsApi } from "@/lib/api";
 import type { ChatMode, CreateSkillBody, McpListItem, SkillDefinition, UpdateSkillBody } from "@/types/api";
-import { PageTitle } from "@/components/Layout.styled";
+import { PageBody } from "@/components/Layout.styled";
 import Button from "@/components/Button";
 import Input from "@/components/Input";
 import Spinner from "@/components/Spinner";
@@ -230,8 +230,7 @@ export default function SkillsPage() {
   if (loading) return <Spinner />;
 
   return (
-    <>
-      <PageTitle>{SKILL_EMOJI} Skills</PageTitle>
+    <PageBody>
       <PageStack>
         <Card>
           <SectionTitle>{SKILL_EMOJI} Skill erstellen</SectionTitle>
@@ -495,6 +494,6 @@ export default function SkillsPage() {
           </Grid>
         )}
       </PageStack>
-    </>
+    </PageBody>
   );
 }

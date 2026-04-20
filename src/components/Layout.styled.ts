@@ -14,9 +14,13 @@ export const MainContent = styled.main`
   padding: var(--space-lg);
 `;
 
-export const PageTitle = styled.h1`
-  font-size: var(--font-size-xl);
-  font-weight: 600;
-  margin-bottom: var(--space-lg);
-  color: var(--text-primary);
+export const PageBody = styled.div`
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  padding-right: var(--space-lg);
+
+  @media (max-width: 900px) {
+    padding-right: 0;
+  }
 `;

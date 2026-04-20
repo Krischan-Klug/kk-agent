@@ -1,7 +1,7 @@
 import { useRouter } from "next/router";
 import Link from "next/link";
 import styled from "styled-components";
-import { PageTitle } from "./Layout.styled";
+import { PageBody } from "./Layout.styled";
 
 const settingsNav = [
   { href: "/settings/defaults", label: "📋 Defaults" },
@@ -53,8 +53,7 @@ export default function SettingsLayout({ children }: { children: React.ReactNode
   const router = useRouter();
 
   return (
-    <>
-      <PageTitle>Settings</PageTitle>
+    <PageBody>
       <Wrapper>
         <SubNav>
           {settingsNav.map((item) => (
@@ -65,6 +64,6 @@ export default function SettingsLayout({ children }: { children: React.ReactNode
         </SubNav>
         <Content>{children}</Content>
       </Wrapper>
-    </>
+    </PageBody>
   );
 }

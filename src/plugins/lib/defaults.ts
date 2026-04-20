@@ -18,9 +18,6 @@ export interface AppDefaults {
     emptyResponseInstruction: string;
     invalidToolInstruction: string;
   };
-  misc: {
-    noTasksInstruction: string;
-  };
   reasoning: {
     defaultEffort: string;
   };
@@ -54,15 +51,12 @@ const CODE_DEFAULTS: AppDefaults = {
         "If a runtime reminder conflicts with older conversational context, follow the latest runtime reminder.",
       ].join("\n"),
       tasks: [
-        "{{TASKS_INSTRUCTION}}",
         "The user may want general assistance such as investigation, planning, explanation, research, writing, technical execution, or adjacent practical task work.",
-        "Read the relevant files before suggesting or making changes.",
-        "Do not create files unless they are actually needed for the task.",
+        "For any request with more than one concrete step or that spans more than one turn, your default first action is create_tasks. Drive execution through that task list: call solve_tasks the moment a step is actually done, and update_tasks when scope or wording shifts. Skip the task tool only for genuinely single-step requests such as one short answer or one trivial edit.",
+        "Treat the persisted task list as the authoritative plan for the turn. Do not re-narrate pending steps in prose when they already exist as tasks -- act on them.",
         "Do not add features, refactors, abstractions, comments, validations, fallbacks, or backwards-compatibility hacks that the task does not require.",
-        "If the user's request appears to rest on a misconception, or you notice a relevant adjacent issue, say so clearly.",
-        "When an approach fails, diagnose the reason before switching tactics.",
-        "Before reporting success after non-trivial changes, verify the result if you can. If you could not verify it, say that explicitly.",
-        "Report outcomes faithfully. Do not claim tests passed, checks ran, or work is complete if that did not actually happen.",
+        "If the user's request appears to rest on a misconception, or you notice a relevant adjacent issue, say so clearly before starting.",
+        "Report outcomes faithfully. Do not call solve_tasks, claim tests passed, or report work as done if that did not actually happen.",
       ].join("\n"),
       security: [
         "Carefully consider reversibility and blast radius before acting.",
@@ -234,10 +228,6 @@ const CODE_DEFAULTS: AppDefaults = {
       "Your last attempt was empty or contained no meaningful content. Return a substantive response or a real structured tool_call.",
     invalidToolInstruction:
       "Your last attempt emitted a tool call as plain text. Tools must be invoked only via structured tool_calls in the API.",
-  },
-  misc: {
-    noTasksInstruction:
-      "There are currently no open tasks. Create or update tasks only when explicit task tracking would materially help the work.",
   },
   reasoning: {
     defaultEffort: "medium",

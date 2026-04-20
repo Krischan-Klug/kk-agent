@@ -1,4 +1,4 @@
-import type { AgentDefinition, ChatMode } from "../types.js";
+import type { AgentDefinition, ChatMode, ReasoningEffort } from "../types.js";
 import { getDefaults } from "../../lib/defaults.js";
 import { compactModeConfigs, normalizeModeConfigs } from "./mode-config.js";
 
@@ -9,7 +9,6 @@ function buildAgent(
   defaultChatMode: ChatMode,
   defaultModel?: string,
 ): AgentDefinition {
-  const defaults = getDefaults();
   const now = new Date().toISOString();
   return {
     id,
@@ -21,7 +20,11 @@ function buildAgent(
     ) as AgentDefinition["modeConfigs"],
     variables: {},
     defaultModel,
-    reasoningEffort: defaults.reasoning.defaultEffort,
+    llmRequestConfig: {
+      common: {
+        reasoningEffort: getDefaults().reasoning.defaultEffort as ReasoningEffort,
+      },
+    },
     createdAt: now,
     updatedAt: now,
   };

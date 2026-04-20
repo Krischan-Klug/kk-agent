@@ -8,7 +8,7 @@ import type {
 import * as store from "./lib/store.js";
 import { getDefaults } from "../lib/defaults.js";
 import { createSlugId } from "../lib/ids.js";
-import { normalizeCanonicalReasoningLevel } from "../provider/lib/capabilities.js";
+import { compactLlmRequestConfig } from "../provider/lib/request-config.js";
 import { getSystemVariableNames } from "../systemprompt/index.js";
 import { getChatModes } from "./lib/modes.js";
 import { applyModeConfigPatch, compactModeConfigs, normalizeModeConfigs } from "./lib/mode-config.js";
@@ -26,7 +26,7 @@ function normalizeAgent(agent: AgentDefinition): AgentDefinition {
   return {
     ...agent,
     defaultChatMode,
-    reasoningEffort: normalizeCanonicalReasoningLevel(agent.reasoningEffort),
+    llmRequestConfig: compactLlmRequestConfig(agent.llmRequestConfig),
     modeConfigs: normalizeModeConfigs(agent.modeConfigs),
   };
 }
@@ -74,9 +74,9 @@ export async function createAgent(body: CreateAgentBody): Promise<AgentDefinitio
     defaultChatMode,
     modeConfigs: normalizeModePatches({} as AgentDefinition["modeConfigs"], body.modeConfigs),
     variables: body.variables ?? {},
+    defaultProviderId: body.defaultProviderId,
     defaultModel: body.defaultModel,
-    reasoningEffort: normalizeCanonicalReasoningLevel(body.reasoningEffort),
-    temperature: body.temperature,
+    llmRequestConfig: compactLlmRequestConfig(body.llmRequestConfig),
     createdAt: now,
     updatedAt: now,
   };
@@ -96,9 +96,9 @@ export async function updateAgent(id: string, body: UpdateAgentBody): Promise<Ag
     ) as AgentDefinition["modeConfigs"];
   }
   if (body.variables !== undefined) patch.variables = body.variables;
+  if (body.defaultProviderId !== undefined) patch.defaultProviderId = body.defaultProviderId;
   if (body.defaultModel !== undefined) patch.defaultModel = body.defaultModel;
-  if (body.reasoningEffort !== undefined) patch.reasoningEffort = normalizeCanonicalReasoningLevel(body.reasoningEffort);
-  if (body.temperature !== undefined) patch.temperature = body.temperature;
+  if (body.llmRequestConfig !== undefined) patch.llmRequestConfig = compactLlmRequestConfig(body.llmRequestConfig);
   return normalizeAgent(await store.updateAgent(id, patch));
 }
 

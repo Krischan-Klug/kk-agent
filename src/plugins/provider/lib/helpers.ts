@@ -1,6 +1,7 @@
 import {
   attachmentRefBlock,
   createTranscriptMessage,
+  getMessageReasoning,
   getMessageText,
   getToolResults,
   getToolUses,
@@ -42,9 +43,11 @@ export function buildMessages(messages: TranscriptMessage[]) {
   return messages.map((message) => {
     if (message.role === "assistant") {
       const toolUses = getToolUses(message);
+      const reasoning = getMessageReasoning(message) || undefined;
       return {
         role: "assistant" as const,
         content: getMessageText(message) || null,
+        ...(reasoning ? { reasoning } : {}),
         ...(toolUses.length > 0
           ? {
               tool_calls: toolUses.map((toolUse) => ({
@@ -81,18 +84,27 @@ export function buildTools(request: UnifiedRequest) {
 }
 
 export function buildChatCompletionsBody(request: UnifiedRequest, stream: boolean): Record<string, unknown> {
+  const resolved = request.resolvedLlmRequestConfig;
+  const common = resolved?.common;
   const body: Record<string, unknown> = {
     model: request.model,
     messages: buildMessages(request.messages),
     stream,
   };
 
+  if (resolved?.extraBody) {
+    Object.assign(body, resolved.extraBody);
+  }
   const tools = buildTools(request);
   if (tools?.length) body.tools = tools;
-  if (request.reasoningEffort) body.reasoning_effort = request.reasoningEffort;
-  if (request.temperature !== undefined) body.temperature = request.temperature;
-  if (request.maxOutputTokens !== undefined && request.maxOutputTokens > 0) {
-    body.max_tokens = request.maxOutputTokens;
+  if (common?.reasoningEffort) {
+    body.reasoning_effort = common.reasoningEffort;
+  }
+  if (common?.temperature !== undefined) {
+    body.temperature = common.temperature;
+  }
+  if (common?.maxOutputTokens !== undefined && common.maxOutputTokens > 0) {
+    body.max_tokens = common.maxOutputTokens;
   }
   if (stream) body.stream_options = { include_usage: true };
 

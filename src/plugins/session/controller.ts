@@ -10,7 +10,7 @@ import {
   patchSession,
   getCurrentPromptDebug,
 } from "./service.js";
-import type { CreateSessionBody, ChatBody, PatchSessionBody } from "./types.js";
+import type { CreateSessionBody, ChatBody, UpdateSessionBody } from "./types.js";
 import { resolvePrompt } from "../tools/lib/user-interaction/interaction-store.js";
 import { getSessionAttachmentById, readAttachmentData, storeAttachment } from "./lib/attachments.js";
 
@@ -130,16 +130,25 @@ export async function doAbort(req: Request, res: Response): Promise<Response> {
 
 export async function doPatch(req: Request, res: Response): Promise<Response> {
   try {
-    const { agentId, activeMode, model, activeToolIds, activeMcpIds, activeSkillIds, reasoningEffort, temperature } = req.body as PatchSessionBody;
-    const session = await patchSession(req.params.id, {
+    const {
       agentId,
+      providerId,
       activeMode,
       model,
       activeToolIds,
       activeMcpIds,
       activeSkillIds,
-      reasoningEffort,
-      temperature,
+      llmRequestConfig,
+    } = req.body as UpdateSessionBody;
+    const session = await patchSession(req.params.id, {
+      agentId,
+      providerId,
+      activeMode,
+      model,
+      activeToolIds,
+      activeMcpIds,
+      activeSkillIds,
+      llmRequestConfig,
     });
     return res.json(session);
   } catch (err) {

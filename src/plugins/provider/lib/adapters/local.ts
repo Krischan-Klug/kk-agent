@@ -1,8 +1,18 @@
+import { basename } from "node:path";
 import type { ProviderAdapter } from "../adapter.js";
-import type { EndpointCapabilities, EndpointTransportProfile, ModelCapabilities, ModelInfo, ProviderConfig } from "../../types.js";
+import type {
+  EndpointCapabilities,
+  EndpointTransportProfile,
+  ModelCapabilities,
+  ModelInfo,
+  ProviderConfig,
+  ReasoningControl,
+  ReasoningEffort,
+  VisionSupport,
+} from "../../types.js";
 import * as chatCompletions from "../endpoints/chat-completions.js";
 import * as responses from "../endpoints/responses.js";
-import { DEFAULT_REASONING_LEVELS } from "../../defaults.js";
+import { DEFAULT_REASONING_LEVELS } from "../capabilities.js";
 
 type DetectionResult = {
   models: ModelInfo[];
@@ -13,41 +23,24 @@ function buildHeaders(config: ProviderConfig): Record<string, string> {
 }
 
 function createEndpointCapabilities(
-  kind: "lmstudio" | "ollama" | "generic-openai",
   maxTokensMax = 131072,
 ): Partial<Record<"chat-completions" | "responses", EndpointCapabilities>> {
   const sharedRange = { min: 1, max: maxTokensMax, step: 1 };
-
-  if (kind === "lmstudio") {
-    return {
-      "chat-completions": {
-        temperatureSupported: true,
-        temperatureRange: { min: 0, max: 2, step: 0.1 },
-        maxOutputTokensSupported: true,
-        maxOutputTokensRange: sharedRange,
-      },
-      responses: {
-        temperatureSupported: true,
-        temperatureRange: { min: 0, max: 2, step: 0.1 },
-        maxOutputTokensSupported: true,
-        maxOutputTokensRange: sharedRange,
-      },
-    };
-  }
+  const sharedEndpoint = {
+    temperatureSupported: true,
+    temperatureRange: { min: 0, max: 2, step: 0.1 },
+    maxOutputTokensSupported: true,
+    maxOutputTokensRange: sharedRange,
+  } satisfies Pick<EndpointCapabilities, "temperatureSupported" | "temperatureRange" | "maxOutputTokensSupported" | "maxOutputTokensRange">;
 
   return {
-    "chat-completions": {
-      temperatureSupported: true,
-      temperatureRange: { min: 0, max: 2, step: 0.1 },
-      maxOutputTokensSupported: true,
-      maxOutputTokensRange: sharedRange,
-    },
+    "chat-completions": sharedEndpoint,
+    responses: sharedEndpoint,
   };
 }
 
 function createTransportProfiles(
-  kind: "lmstudio" | "ollama" | "generic-openai",
-  reasoningControl: "none" | "effort" | "on-off",
+  reasoningControl: ReasoningControl,
 ): Partial<Record<"chat-completions" | "responses", EndpointTransportProfile>> {
   const chatReasoningTransport =
     reasoningControl === "on-off"
@@ -56,33 +49,6 @@ function createTransportProfiles(
         ? "chat-completions-effort"
         : "none";
 
-  if (kind === "lmstudio") {
-    return {
-      "chat-completions": {
-        supported: true,
-        reasoningTransport: reasoningControl === "none" ? "none" : "chat-completions-effort",
-        toolSchemaTransport: "chat-completions-tools",
-        streamGrammar: "openai-chat-completions",
-        toolCallAssemblyMode: "chat-completions-indexed",
-        supportsParallelToolCalls: true,
-        supportsConcatenatedJsonSplit: true,
-        continuationMode: "none",
-        supportsStrictTools: true,
-      },
-      responses: {
-        supported: true,
-        reasoningTransport: reasoningControl === "none" ? "none" : "responses-effort",
-        toolSchemaTransport: "responses-tools",
-        streamGrammar: "openai-responses",
-        toolCallAssemblyMode: "responses-output-state",
-        supportsParallelToolCalls: true,
-        supportsConcatenatedJsonSplit: true,
-        continuationMode: "raw-output-replay",
-        supportsStrictTools: false,
-      },
-    };
-  }
-
   return {
     "chat-completions": {
       supported: true,
@@ -90,59 +56,43 @@ function createTransportProfiles(
       toolSchemaTransport: "chat-completions-tools",
       streamGrammar: "openai-chat-completions",
       toolCallAssemblyMode: "chat-completions-indexed",
-      supportsParallelToolCalls: true,
       supportsConcatenatedJsonSplit: true,
       continuationMode: "none",
       supportsStrictTools: true,
+    },
+    responses: {
+      supported: true,
+      reasoningTransport: reasoningControl === "none" ? "none" : "responses-effort",
+      toolSchemaTransport: "responses-tools",
+      streamGrammar: "openai-responses",
+      toolCallAssemblyMode: "responses-output-state",
+      supportsConcatenatedJsonSplit: true,
+      continuationMode: "previous-response-id",
+      supportsStrictTools: false,
     },
   };
 }
 
 function createCapabilities(
-  kind: "lmstudio" | "ollama" | "generic-openai",
   maxTokensMax?: number,
+  overrides: Partial<Pick<ModelCapabilities, "visionSupport" | "reasoningSource" | "reasoningControl" | "reasoningLevels">> = {},
 ): ModelCapabilities {
-  if (kind === "lmstudio") {
-    return {
-      supportsTools: true,
-      supportsReasoning: true,
-      supportsVision: false,
-      reasoningSource: "declared",
-      supportsStreaming: true,
-      supportedEndpoints: ["responses", "chat-completions"],
-      reasoningControl: "effort",
-      reasoningLevels: [...DEFAULT_REASONING_LEVELS],
-      endpointCapabilities: createEndpointCapabilities(kind, maxTokensMax),
-      transportProfiles: createTransportProfiles(kind, "effort"),
-    };
-  }
-
-  if (kind === "ollama") {
-    return {
-      supportsTools: true,
-      supportsReasoning: false,
-      supportsVision: false,
-      reasoningSource: "none",
-      supportsStreaming: true,
-      supportedEndpoints: ["chat-completions"],
-      reasoningControl: "none",
-      reasoningLevels: [],
-      endpointCapabilities: createEndpointCapabilities(kind, maxTokensMax),
-      transportProfiles: createTransportProfiles(kind, "none"),
-    };
-  }
-
+  const reasoningControl = overrides.reasoningControl ?? "effort";
+  const allowedEfforts = overrides.reasoningLevels ?? [...DEFAULT_REASONING_LEVELS];
   return {
     supportsTools: true,
-    supportsReasoning: false,
-    supportsVision: false,
-    reasoningSource: "none",
+    supportsReasoning: allowedEfforts.length > 0,
+    visionSupport: overrides.visionSupport ?? "unknown",
+    reasoningSource: overrides.reasoningSource ?? "inferred",
     supportsStreaming: true,
-    supportedEndpoints: ["chat-completions"],
-    reasoningControl: "none",
-    reasoningLevels: [],
-    endpointCapabilities: createEndpointCapabilities(kind, maxTokensMax),
-    transportProfiles: createTransportProfiles(kind, "none"),
+    supportedEndpoints: ["responses", "chat-completions"],
+    reasoningControl,
+    reasoningLevels: [...allowedEfforts],
+    reasoning: {
+      allowedEfforts: [...allowedEfforts],
+    },
+    endpointCapabilities: createEndpointCapabilities(maxTokensMax),
+    transportProfiles: createTransportProfiles(reasoningControl),
   };
 }
 
@@ -152,80 +102,115 @@ function buildLmStudioCapabilities(model: {
   capabilities?: { reasoning?: { allowed_options?: string[] }; vision?: unknown };
 }): ModelCapabilities {
   const contextWindow = model.loaded_instances?.[0]?.config?.context_length ?? model.max_context_length;
-  const supportsReasoning = !!model.capabilities?.reasoning;
-  const supportsVision = !!model.capabilities?.vision;
+  const visionSupport: VisionSupport = model.capabilities?.vision ? "supported" : "unknown";
   const allowedOptions = model.capabilities?.reasoning?.allowed_options ?? [];
   const usesOnOff = allowedOptions.length > 0 && allowedOptions.every((option) => option === "on" || option === "off");
+  const allowedEfforts = allowedOptions
+    .filter((option): option is ReasoningEffort => [...DEFAULT_REASONING_LEVELS].includes(option as ReasoningEffort));
 
-  return {
-    supportsTools: true,
-    supportsReasoning,
-    supportsVision,
-    reasoningSource: supportsReasoning ? "declared" : "none",
-    supportsStreaming: true,
-    supportedEndpoints: ["responses", "chat-completions"],
-    reasoningControl: !supportsReasoning ? "none" : usesOnOff ? "on-off" : "effort",
-    reasoningLevels: !supportsReasoning ? [] : [...DEFAULT_REASONING_LEVELS],
-    endpointCapabilities: createEndpointCapabilities("lmstudio", contextWindow),
-    transportProfiles: createTransportProfiles("lmstudio", !supportsReasoning ? "none" : usesOnOff ? "on-off" : "effort"),
-  };
+  return createCapabilities(contextWindow, {
+    visionSupport,
+    reasoningSource: model.capabilities?.reasoning ? "declared" : "inferred",
+    reasoningControl: usesOnOff ? "on-off" : "effort",
+    reasoningLevels: usesOnOff ? [] : (allowedEfforts.length > 0 ? allowedEfforts : undefined),
+  });
 }
 
-async function detectModels(baseUrl: string, headers: Record<string, string>, providerId: string): Promise<DetectionResult> {
+async function detectLmStudio(baseUrl: string, headers: Record<string, string>, providerId: string): Promise<ModelInfo[] | null> {
   try {
     const res = await fetch(`${baseUrl}/api/v1/models`, { headers });
-    if (res.ok) {
-      const data = (await res.json()) as {
-        models: Array<{
-          key: string;
-          max_context_length?: number;
-          loaded_instances?: Array<{ config?: { context_length?: number } }>;
-          capabilities?: { reasoning?: { allowed_options?: string[] }; vision?: unknown };
-        }>;
-      };
-      return {
-        models: data.models.map((model) => ({
-          id: model.key,
-          object: "model",
-          providerId,
-          maxContextLength: model.max_context_length,
-          contextLength: model.loaded_instances?.[0]?.config?.context_length,
-          capabilities: buildLmStudioCapabilities(model),
-        })),
-      };
-    }
-  } catch {
-    // try next discovery endpoint
-  }
+    if (!res.ok) return null;
 
+    const data = (await res.json()) as {
+      models: Array<{
+        key: string;
+        max_context_length?: number;
+        loaded_instances?: Array<{ config?: { context_length?: number } }>;
+        capabilities?: { reasoning?: { allowed_options?: string[] }; vision?: unknown };
+      }>;
+    };
+
+    return data.models.map((model) => ({
+      id: model.key,
+      object: "model",
+      providerId,
+      maxContextLength: model.max_context_length,
+      contextLength: model.loaded_instances?.[0]?.config?.context_length,
+      capabilities: buildLmStudioCapabilities(model),
+    }));
+  } catch {
+    return null;
+  }
+}
+
+async function detectOllama(baseUrl: string, headers: Record<string, string>, providerId: string): Promise<ModelInfo[] | null> {
   try {
     const res = await fetch(`${baseUrl}/api/tags`, { headers });
-    if (res.ok) {
-      const data = (await res.json()) as { models?: Array<{ name: string }> };
-      return {
-        models: (data.models ?? []).map((model) => ({
-          id: model.name,
-          object: "model",
-          providerId,
-          capabilities: createCapabilities("ollama"),
-        })),
-      };
-    }
-  } catch {
-    // try next discovery endpoint
-  }
+    if (!res.ok) return null;
 
+    const data = (await res.json()) as { models?: Array<{ name: string }> };
+    return (data.models ?? []).map((model) => ({
+      id: model.name,
+      object: "model",
+      providerId,
+      capabilities: createCapabilities(),
+    }));
+  } catch {
+    return null;
+  }
+}
+
+async function detectLlamaCpp(baseUrl: string, headers: Record<string, string>, providerId: string): Promise<ModelInfo[] | null> {
+  try {
+    const res = await fetch(`${baseUrl}/props`, { headers });
+    if (!res.ok) return null;
+
+    const data = (await res.json()) as {
+      model_path?: string;
+      default_generation_settings?: { n_ctx?: number };
+      n_ctx?: number;
+    };
+    const id = data.model_path ? basename(data.model_path) : "llama.cpp";
+    const contextLength = data.default_generation_settings?.n_ctx ?? data.n_ctx;
+
+    return [{
+      id,
+      object: "model",
+      providerId,
+      maxContextLength: contextLength,
+      contextLength,
+      capabilities: createCapabilities(contextLength),
+    }];
+  } catch {
+    return null;
+  }
+}
+
+async function detectGenericOpenAI(baseUrl: string, headers: Record<string, string>, providerId: string): Promise<ModelInfo[]> {
   const res = await fetch(`${baseUrl}/v1/models`, { headers });
   if (!res.ok) throw new Error(`Failed to fetch local models: ${res.status}`);
 
   const data = (await res.json()) as { data: Array<{ id: string }> };
+  return data.data.map((model) => ({
+    id: model.id,
+    object: "model",
+    providerId,
+    capabilities: createCapabilities(),
+  }));
+}
+
+async function detectModels(baseUrl: string, headers: Record<string, string>, providerId: string): Promise<DetectionResult> {
+  const lmStudioModels = await detectLmStudio(baseUrl, headers, providerId);
+  if (lmStudioModels) return { models: lmStudioModels };
+
+  const ollamaModels = await detectOllama(baseUrl, headers, providerId);
+  if (ollamaModels) return { models: ollamaModels };
+
+  const llamaCppModels = await detectLlamaCpp(baseUrl, headers, providerId);
+  if (llamaCppModels) return { models: llamaCppModels };
+
   return {
-    models: data.data.map((model) => ({
-      id: model.id,
-      object: "model",
-      providerId,
-      capabilities: createCapabilities("generic-openai"),
-    })),
+    models: await detectGenericOpenAI(baseUrl, headers, providerId),
   };
 }
 

@@ -1,9 +1,8 @@
-import type { TranscriptMessage } from "../lib/transcript.js";
+import type { RuntimeToolSource, ToolExecutionStatus, TranscriptMessage } from "kk-agent-contract";
 import type { ProviderTransportState, ProviderTurnDebug, TokenStats, UnifiedToolDefinition } from "../provider/lib/types.js";
 import type { ChatMode, AgentPromptSections } from "../agent/types.js";
+import type { LlmRequestConfig } from "../provider/types.js";
 
-export type LoopMessage = TranscriptMessage;
-export type RuntimeToolSource = "system" | "mcp";
 export type ToolInterruptBehavior = "cancel" | "block";
 
 export interface RuntimeToolResultPolicy {
@@ -53,15 +52,6 @@ export interface ToolExecutionResult {
   contextModifier?: (context: ToolRuntimeContext) => ToolRuntimeContext;
 }
 
-export type ToolExecutionStatus =
-  | "queued"
-  | "executing"
-  | "yielded"
-  | "completed"
-  | "error"
-  | "discarded"
-  | "invalid";
-
 export interface ModeRuntimeConfig {
   promptSections: AgentPromptSections;
   modeInstruction: string;
@@ -80,14 +70,14 @@ export interface LoopOptions {
   sessionId: string;
   providerId: string;
   model: string;
-  messages: LoopMessage[];
+  messages: TranscriptMessage[];
   buildEphemeralMetaMessages?: (input: {
     sessionId: string;
     agentId: string;
     mode: ChatMode;
     model: string;
     iteration: number;
-  }) => LoopMessage[];
+  }) => TranscriptMessage[];
   modeConfigs: Partial<Record<ChatMode, ModeRuntimeConfig>>;
   activeMode: ChatMode;
   agentVariables: Record<string, string>;
@@ -98,19 +88,17 @@ export interface LoopOptions {
     context: ToolRuntimeContext,
   ) => Promise<ToolExecutionResult>;
   toolContext?: ToolRuntimeContext;
-  reasoningEffort?: string;
-  temperature?: number;
-  maxOutputTokens?: number;
+  llmRequestConfig?: LlmRequestConfig;
   providerState?: ProviderTransportState;
   modelPassRunner?: (
     opts: LoopOptions,
-    messages: LoopMessage[],
+    messages: TranscriptMessage[],
     providerState: LoopOptions["providerState"],
     onToolUseBlock?: (toolUse: import("../lib/transcript.js").TranscriptToolUseBlock) => void,
     retryInstruction?: string,
-    metaMessages?: LoopMessage[],
+    metaMessages?: TranscriptMessage[],
   ) => Promise<{
-    message: LoopMessage;
+    message: TranscriptMessage;
     finishReason: import("../lib/transcript.js").TranscriptStopReason;
     stats?: TokenStats;
     notices?: import("../provider/lib/types.js").ProviderNotice[];
@@ -119,13 +107,13 @@ export interface LoopOptions {
     debug?: ProviderTurnDebug;
   }>;
   onAssistantBlockDelta?: (messageId: string, block: import("../lib/transcript.js").TranscriptBlock) => void;
-  onAssistantMessage?: (message: LoopMessage) => void;
+  onAssistantMessage?: (message: TranscriptMessage) => void;
   onSystemNotice?: (level: "info" | "warning" | "error", message: string) => void;
   onToolExecutionUpdate?: (
     toolUseId: string,
     toolName: string,
     status: ToolExecutionStatus,
-    result?: LoopMessage,
+    result?: TranscriptMessage,
     detail?: string,
     summary?: string,
   ) => void;
@@ -156,7 +144,7 @@ export interface LoopOptions {
 }
 
 export interface LoopResult {
-  messages: LoopMessage[];
+  messages: TranscriptMessage[];
   finalResponse: string;
   iterations: number;
   providerState?: ProviderTransportState;

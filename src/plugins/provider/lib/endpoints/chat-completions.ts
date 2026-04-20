@@ -106,6 +106,7 @@ export async function chatStream(
   let reasoning = "";
   let finishReason: UnifiedResponse["finishReason"] = "stop";
   let usage: ChatCompletionUsage | undefined;
+  let fatalStreamError: string | undefined;
 
   await readSSEStream(res, (parsed) => {
     if (parsed.error && typeof parsed.error === "object") {
@@ -113,18 +114,22 @@ export async function chatStream(
         "message" in parsed.error && typeof parsed.error.message === "string"
           ? parsed.error.message
           : JSON.stringify(parsed.error);
+      const isToolCallWarning = message.includes("tool call");
       providerNotices.push({
-        level: message.includes("tool call") ? "warning" : "error",
+        level: isToolCallWarning ? "warning" : "error",
         message: `Provider stream stopped early: ${message}`,
       });
+      if (!isToolCallWarning) fatalStreamError = message;
       return true;
     }
 
     if (parsed.type === "error" && typeof parsed.message === "string") {
+      const isToolCallWarning = parsed.message.includes("tool call");
       providerNotices.push({
-        level: parsed.message.includes("tool call") ? "warning" : "error",
+        level: isToolCallWarning ? "warning" : "error",
         message: `Provider stream stopped early: ${parsed.message}`,
       });
+      if (!isToolCallWarning) fatalStreamError = parsed.message;
       return true;
     }
 
@@ -189,6 +194,11 @@ export async function chatStream(
 
     return false;
   }, { throwOnProviderError: false });
+
+  const hasToolCallContent = rawToolCalls.size > 0;
+  if (fatalStreamError && !text && !reasoning && !hasToolCallContent) {
+    throw new Error(fatalStreamError);
+  }
 
   const turn = finalizeChatCompletionsTurn({
     messageId,

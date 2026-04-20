@@ -6,7 +6,6 @@ import {
   doAddProvider,
   doUpdateProvider,
   doRemoveProvider,
-  doActivateProvider,
   doTestProvider,
 } from "./controller.js";
 
@@ -19,7 +18,6 @@ router.get("/providers", doListProviders);
 router.post("/providers", doAddProvider);
 router.put("/providers/:id", doUpdateProvider);
 router.delete("/providers/:id", doRemoveProvider);
-router.post("/providers/:id/activate", doActivateProvider);
 router.post("/providers/:id/test", doTestProvider);
 
 export default router;

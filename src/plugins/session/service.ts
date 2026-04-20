@@ -8,7 +8,6 @@ import {
 } from "./lib/attachments.js";
 import { buildPrompt, getSystemVariables } from "../systemprompt/index.js";
 import { getAllMcpsCached, getMcpTools, getRunnableMcpIds } from "../mcp/service.js";
-import { getActiveProviderId, getModelCapabilities } from "../provider/service.js";
 import {
   buildResolvedSystemToolRuntime,
 } from "../tools/service.js";
@@ -21,7 +20,7 @@ import {
   drainSystemReminders,
   enqueueSystemReminder,
 } from "../loop/lib/system-reminder.js";
-import type { LoopMessage, LoopOptions, ModeRuntimeConfig } from "../loop/types.js";
+import type { LoopOptions, ModeRuntimeConfig } from "../loop/types.js";
 import { getAgent, getLoopState, setLoopState, clearLoopState, createLoopAbortController, abortLoop, clearLoopAbortController } from "../agent/service.js";
 import { getDefaults } from "../lib/defaults.js";
 import { clearSessionFacts, clearTasks } from "../tools/service.js";
@@ -42,7 +41,7 @@ import {
   collectLinkedSkillIds,
 } from "./lib/tool-selection.js";
 import { buildRuntimeToolCollection, executeRuntimeTool } from "./lib/runtime-tools.js";
-import { resolveReasoningConfig, resolveSessionDefaults } from "./lib/session-resolution.js";
+import { resolveSessionDefaults, resolveSessionLlmRequestConfig } from "./lib/session-resolution.js";
 import {
   buildDenialReminderBody,
   clearSessionDenials,
@@ -54,18 +53,20 @@ import { getModeConfig } from "../agent/lib/mode-config.js";
 import type { AgentDefinition, ChatMode } from "../agent/types.js";
 import type { RuntimeToolDefinition, ToolRuntimeContext } from "../loop/types.js";
 import { attachmentRefBlock, createTranscriptMessage, getMessageText, textBlock, type TranscriptAttachmentRefBlock, type TranscriptBlock, type TranscriptMessage } from "../lib/transcript.js";
-import { normalizeCanonicalReasoningLevel } from "../provider/lib/capabilities.js";
+import { compactLlmRequestConfig } from "../provider/lib/request-config.js";
+import { allowsVisionInputs } from "../provider/lib/capabilities.js";
 import { getLoadedSkillIds } from "../skills/lib/xml.js";
+import { getDefaultProviderId, getModelCapabilities } from "../provider/service.js";
 
-function normalizeSessionReasoning<T extends { reasoningEffort?: string }>(session: T): T {
+function normalizeSessionRequestConfig<T extends { llmRequestConfig?: unknown }>(session: T): T {
   return {
     ...session,
-    reasoningEffort: normalizeCanonicalReasoningLevel(session.reasoningEffort),
+    llmRequestConfig: compactLlmRequestConfig(session.llmRequestConfig as Parameters<typeof compactLlmRequestConfig>[0]),
   };
 }
 
 function toPublicSession(session: SessionRecord): SessionState {
-  const normalized = normalizeSessionReasoning(session);
+  const normalized = normalizeSessionRequestConfig(session);
   const { providerState: _providerState, ...publicSession } = normalized;
   return publicSession;
 }
@@ -73,7 +74,7 @@ function toPublicSession(session: SessionRecord): SessionState {
 function getSessionRecordOrThrow(id: string): SessionRecord {
   const session = store.getSession(id);
   if (!session) throw new Error(`Session "${id}" not found`);
-  return normalizeSessionReasoning(session);
+  return normalizeSessionRequestConfig(session);
 }
 
 function intersectIds(sessionIds: string[], modeIds: string[]): string[] {
@@ -262,7 +263,7 @@ function buildAttachmentMetaMessages(input: {
     category: "image" | "text" | "pdf";
     size: number;
   }>;
-  visionSupported: boolean;
+  visionSupport?: "supported" | "unsupported" | "unknown";
 }): TranscriptMessage[] {
   if (input.attachments.length === 0) return [];
 
@@ -284,7 +285,7 @@ function buildAttachmentMetaMessages(input: {
     ),
   ];
 
-  if (!input.visionSupported && input.attachments.some((att) => att.category === "image")) {
+  if (input.visionSupport === "unsupported" && input.attachments.some((att) => att.category === "image")) {
     messages.push(createMetaReminder("vision_warning", defaults.attachment.visionNotSupportedInstruction));
   }
 
@@ -323,7 +324,7 @@ function formatAttachmentSize(bytes: number): string {
 
 export async function createSession(body: CreateSessionBody): Promise<SessionState> {
   const agent = getAgent(body.agentId);
-  const defaults = await resolveSessionDefaults(agent, body, getActiveProviderId());
+  const defaults = await resolveSessionDefaults(agent, body, body.providerId ?? getDefaultProviderId());
   return toPublicSession(store.createSession({
     agentId: body.agentId,
     providerId: defaults.providerId,
@@ -332,8 +333,7 @@ export async function createSession(body: CreateSessionBody): Promise<SessionSta
     activeToolIds: defaults.activeToolIds,
     activeMcpIds: defaults.activeMcpIds,
     activeSkillIds: defaults.activeSkillIds,
-    reasoningEffort: defaults.reasoningEffort,
-    temperature: defaults.temperature,
+    llmRequestConfig: defaults.llmRequestConfig,
   }));
 }
 
@@ -385,7 +385,7 @@ export function getCurrentPromptDebug(sessionId: string): SessionPromptDebug {
       category: attachment.category,
       size: attachment.size,
     })),
-    visionSupported: capabilities?.supportsVision ?? false,
+    visionSupport: capabilities?.visionSupport,
   });
 
   return {
@@ -437,7 +437,7 @@ async function prepareLoopRun(sessionId: string, message: string, attachmentIds?
   const userBlocks: TranscriptBlock[] = [textBlock(message)];
   const attachmentMetaMessages: TranscriptMessage[] = [];
   const capabilities = getModelCapabilities(session.providerId, session.model);
-  const visionSupported = capabilities?.supportsVision ?? false;
+  const visionSupported = allowsVisionInputs(capabilities?.visionSupport);
 
   if (attachmentIds?.length) {
     const attachments = await getSessionAttachmentsByIds(sessionId, attachmentIds);
@@ -466,7 +466,7 @@ async function prepareLoopRun(sessionId: string, message: string, attachmentIds?
           category: att.category,
           size: att.size,
         })),
-        visionSupported,
+        visionSupport: capabilities?.visionSupport,
       }));
     }
   }
@@ -489,14 +489,14 @@ async function prepareLoopRun(sessionId: string, message: string, attachmentIds?
     messages,
     attachmentMetaMessages,
     modeRuntimeConfigs,
-    reasoning: resolveReasoningConfig(session),
+    reasoning: resolveSessionLlmRequestConfig(session),
   };
 }
 
 function finalizeLoopSession(
   sessionId: string,
   session: SessionRecord,
-  messages: LoopMessage[],
+  messages: TranscriptMessage[],
   finalResponse: string,
   providerState?: SessionRecord["providerState"],
   providerDebug?: SessionRecord["providerDebug"],
@@ -511,7 +511,7 @@ function finalizeLoopSession(
     const name = generateSessionName(finalResponse);
     if (name) patch.name = name;
   }
-  return normalizeSessionReasoning(store.updateSession(sessionId, patch));
+  return normalizeSessionRequestConfig(store.updateSession(sessionId, patch));
 }
 
 function buildLoopRequest(
@@ -559,9 +559,7 @@ function buildLoopRequest(
         ? [...runtimeMessages, ...prepared.attachmentMetaMessages, ...reminderMessages]
         : [...runtimeMessages, ...reminderMessages];
     },
-    reasoningEffort: prepared.reasoning.reasoningEffort,
-    temperature: prepared.reasoning.temperature,
-    maxOutputTokens: prepared.reasoning.maxOutputTokens,
+    llmRequestConfig: prepared.reasoning,
     providerState: prepared.session.providerState,
     toolContext: {
       values: {
@@ -736,28 +734,28 @@ export async function updateSession(id: string, body: Partial<CreateSessionBody>
   const agent = getAgent(nextAgentId);
   const switchingAgent = body.agentId !== undefined && body.agentId !== session.agentId;
   const defaultsInput = switchingAgent
-    ? {
+      ? {
+        providerId: body.providerId,
         activeToolIds: body.activeToolIds,
         activeMcpIds: body.activeMcpIds,
         activeSkillIds: body.activeSkillIds,
         activeMode: body.activeMode,
         model: body.model,
-        reasoningEffort: body.reasoningEffort,
-        temperature: body.temperature,
+        llmRequestConfig: body.llmRequestConfig,
       }
     : {
+        providerId: body.providerId ?? session.providerId,
         activeToolIds: body.activeToolIds,
         activeMcpIds: body.activeMcpIds,
         activeSkillIds: body.activeSkillIds,
         activeMode: body.activeMode ?? session.activeMode,
         model: body.model ?? session.model,
-        reasoningEffort: body.reasoningEffort ?? session.reasoningEffort,
-        temperature: body.temperature ?? session.temperature,
+        llmRequestConfig: body.llmRequestConfig ?? session.llmRequestConfig,
       };
   const defaults = await resolveSessionDefaults(
     agent,
     defaultsInput,
-    body.agentId ? getActiveProviderId() : session.providerId,
+    body.agentId ? (body.providerId ?? agent.defaultProviderId ?? session.providerId) : session.providerId,
   );
 
   const patch: Partial<SessionRecord> = {
@@ -768,14 +766,13 @@ export async function updateSession(id: string, body: Partial<CreateSessionBody>
     activeToolIds: defaults.activeToolIds,
     activeMcpIds: defaults.activeMcpIds,
     activeSkillIds: defaults.activeSkillIds,
-    reasoningEffort: defaults.reasoningEffort,
-    temperature: defaults.temperature,
+    llmRequestConfig: defaults.llmRequestConfig,
     ...(switchingAgent || session.providerId !== defaults.providerId || session.model !== defaults.model
       ? { providerState: undefined, providerDebug: undefined }
       : {}),
   };
 
-  const updated = normalizeSessionReasoning(store.updateSession(id, patch));
+  const updated = normalizeSessionRequestConfig(store.updateSession(id, patch));
   if (switchingAgent) {
     clearLoopState(id);
   }

@@ -9,10 +9,10 @@ import {
 import type {
   ChatMode,
 } from "../../agent/types.js";
+import type { ToolExecutionStatus } from "kk-agent-contract";
 import type {
   RuntimeToolDefinition,
   ToolExecutionResult,
-  ToolExecutionStatus,
   ToolRuntimeContext,
 } from "../types.js";
 import { fitToolResultsToBudget, persistLargeToolResult } from "./tool-result-storage.js";

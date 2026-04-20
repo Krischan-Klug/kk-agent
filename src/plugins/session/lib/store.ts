@@ -67,8 +67,7 @@ export function createSession(data: {
   activeToolIds: string[];
   activeMcpIds: string[];
   activeSkillIds: string[];
-  reasoningEffort?: SessionState["reasoningEffort"];
-  temperature?: number;
+  llmRequestConfig?: SessionState["llmRequestConfig"];
 }): SessionRecord {
   const now = new Date().toISOString();
   const session: SessionRecord = {
@@ -81,8 +80,7 @@ export function createSession(data: {
     activeToolIds: data.activeToolIds,
     activeMcpIds: data.activeMcpIds,
     activeSkillIds: data.activeSkillIds,
-    reasoningEffort: data.reasoningEffort,
-    temperature: data.temperature,
+    llmRequestConfig: data.llmRequestConfig,
     messages: [],
     createdAt: now,
     updatedAt: now,

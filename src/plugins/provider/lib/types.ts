@@ -1,5 +1,14 @@
 import type { TranscriptBlock, TranscriptMessage, TranscriptStopReason } from "../../lib/transcript.js";
-import type { ContinuationMode, EndpointTransportProfile, EndpointType } from "../types.js";
+import type {
+  ContinuationMode,
+  EndpointTransportProfile,
+  EndpointType,
+  LlmRequestConfig,
+  ProviderTurnDebug,
+  ResolvedLlmRequestConfig,
+} from "../types.js";
+
+export type { ProviderTurnDebug } from "../types.js";
 
 export interface UnifiedRequest {
   providerId?: string;
@@ -7,10 +16,9 @@ export interface UnifiedRequest {
   messages: TranscriptMessage[];
   tools?: UnifiedToolDefinition[];
   stream?: boolean;
-  reasoningEffort?: string;
-  temperature?: number;
-  maxOutputTokens?: number;
   endpoint?: EndpointType;
+  llmRequestConfig?: LlmRequestConfig;
+  resolvedLlmRequestConfig?: ResolvedLlmRequestConfig;
   transportProfile?: EndpointTransportProfile;
   transportState?: ProviderTransportState;
 }
@@ -97,16 +105,10 @@ export interface ResponsesTransportState {
   syncedMessageIds: string[];
   historyItems: ResponsesConversationItem[];
   callIdByToolUseId: Record<string, string>;
+  lastResponseId?: string;
 }
 
 export type ProviderTransportState = ChatCompletionsTransportState | ResponsesTransportState;
-
-export interface ProviderTurnDebug {
-  endpoint: EndpointType;
-  continuationMode?: ContinuationMode;
-  responseId?: string;
-  outputCount?: number;
-}
 
 export interface UnifiedResponse {
   message: TranscriptMessage;

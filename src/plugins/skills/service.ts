@@ -1,6 +1,6 @@
 import { mkdir, readdir, rm } from "node:fs/promises";
 import { basename, join, resolve } from "node:path";
-import { createSlugId } from "../lib/ids.js";
+import { createSlugId, filterToKnownIds } from "../lib/ids.js";
 import { getStateDirPath } from "../lib/state.js";
 import { getKnownMcpIds } from "../mcp/service.js";
 import { getKnownSystemMcpIds } from "../tools/service.js";
@@ -20,13 +20,11 @@ function normalizeModes(modes?: ChatMode[]): ChatMode[] {
 }
 
 function sanitizeToolIds(toolIds: string[] = []): string[] {
-  const known = new Set(getKnownSystemMcpIds());
-  return [...new Set(toolIds)].filter((id) => known.has(id));
+  return filterToKnownIds(toolIds, getKnownSystemMcpIds());
 }
 
 function sanitizeMcpIds(mcpIds: string[] = []): string[] {
-  const known = new Set(getKnownMcpIds());
-  return [...new Set(mcpIds)].filter((id) => known.has(id));
+  return filterToKnownIds(mcpIds, getKnownMcpIds());
 }
 
 function normalizeSkillMetadata(metadata: Partial<SkillMetadata>): SkillMetadata {

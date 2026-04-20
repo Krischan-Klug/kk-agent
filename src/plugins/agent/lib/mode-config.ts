@@ -1,4 +1,5 @@
 import { getDefaults } from "../../lib/defaults.js";
+import { dedupeIds, filterToKnownIds } from "../../lib/ids.js";
 import { getKnownSkillIds } from "../../skills/service.js";
 import type {
   AgentDefinition,
@@ -13,12 +14,11 @@ import { getChatModes } from "./modes.js";
 const REQUIRED_TOOL_IDS = ["attachment"];
 
 function normalizeToolIds(toolIds: string[]): string[] {
-  return [...new Set([...toolIds, ...REQUIRED_TOOL_IDS])];
+  return dedupeIds(toolIds, REQUIRED_TOOL_IDS);
 }
 
 function normalizeSkillIds(skillIds: string[]): string[] {
-  const knownIds = new Set(getKnownSkillIds());
-  return [...new Set(skillIds)].filter((id) => knownIds.has(id));
+  return filterToKnownIds(skillIds, getKnownSkillIds());
 }
 
 function normalizeToolAccessScopes(scopes: Record<string, ToolAccessScope> = {}): Record<string, ToolAccessScope> {

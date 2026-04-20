@@ -1,4 +1,4 @@
-export type TaskStatus = "pending" | "in_progress" | "completed";
+import type { TaskStatus } from "kk-agent-contract";
 
 export interface TaskItem {
   id: string;

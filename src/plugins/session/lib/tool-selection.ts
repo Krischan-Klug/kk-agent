@@ -2,6 +2,7 @@ import { buildCapabilityInstructions } from "../../systemprompt/index.js";
 import { getAllMcpsCached, getKnownMcpIds, getRunnableMcpIds } from "../../mcp/service.js";
 import { getInternalToolById, getKnownSystemMcpIds, getRunnableSystemMcpIds } from "../../tools/service.js";
 import { listSkills } from "../../skills/service.js";
+import { filterToKnownIds } from "../../lib/ids.js";
 import type { AgentDefinition } from "../../agent/types.js";
 import { getChatModes } from "../../agent/lib/modes.js";
 import { getModeConfig } from "../../agent/lib/mode-config.js";
@@ -9,25 +10,19 @@ import { getModeConfig } from "../../agent/lib/mode-config.js";
 const REQUIRED_SESSION_TOOL_IDS = ["attachment"];
 
 export function sanitizeMcpIds(mcpIds: string[]): string[] {
-  const knownIds = new Set(getKnownMcpIds());
-  return [...new Set(mcpIds)].filter((id) => knownIds.has(id));
+  return filterToKnownIds(mcpIds, getKnownMcpIds());
 }
 
 export function sanitizeToolIds(toolIds: string[]): string[] {
-  const knownIds = new Set(getKnownSystemMcpIds());
-  return [...new Set([...toolIds, ...REQUIRED_SESSION_TOOL_IDS])].filter((id) => knownIds.has(id));
+  return filterToKnownIds(toolIds, getKnownSystemMcpIds(), REQUIRED_SESSION_TOOL_IDS);
 }
 
 export function sanitizeSkillIds(skillIds: string[]): string[] {
-  const knownIds = new Set(
-    listSkills()
-      .filter((skill) => skill.active)
-      .map((skill) => skill.id),
-  );
-  return [...new Set(skillIds)].filter((id) => knownIds.has(id));
+  const knownActive = listSkills().filter((skill) => skill.active).map((skill) => skill.id);
+  return filterToKnownIds(skillIds, knownActive);
 }
 
-export function getSessionRunnableMcpIds(activeToolIds: string[], activeMcpIds: string[]): string[] {
+function getSessionRunnableMcpIds(activeToolIds: string[], activeMcpIds: string[]): string[] {
   const runnable = new Set([...getRunnableMcpIds(), ...getRunnableSystemMcpIds()]);
   return [...activeToolIds, ...activeMcpIds].filter((id) => runnable.has(id));
 }

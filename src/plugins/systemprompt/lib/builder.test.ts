@@ -76,7 +76,7 @@ test("buildPrompt includes mode context with mode and iteration info", () => {
   assert.ok(prompt.includes("Plan step."));
 });
 
-test("buildPrompt places volatile sections after the dynamic context boundary", () => {
+test("buildPrompt places only mode_context after the dynamic context boundary", () => {
   const prompt = buildPrompt(
     PROMPT_SECTIONS,
     "Plan carefully.",
@@ -94,9 +94,11 @@ test("buildPrompt places volatile sections after the dynamic context boundary", 
 
   assert.notEqual(boundaryIndex, -1);
   assert.ok(communicationIndex < boundaryIndex, "communication must be in stable prefix");
-  assert.ok(boundaryIndex < runtimeIndex, "runtime must be in volatile suffix");
+  assert.ok(tasksIndex < boundaryIndex, "tasks must be in stable prefix");
+  assert.ok(runtimeIndex < boundaryIndex, "runtime must be in stable prefix");
+  assert.ok(communicationIndex < tasksIndex, "tasks must come after communication");
+  assert.ok(tasksIndex < runtimeIndex, "runtime must come after tasks");
   assert.ok(boundaryIndex < modeIndex, "mode_context must be in volatile suffix");
-  assert.ok(boundaryIndex < tasksIndex, "tasks must be in volatile suffix");
 });
 
 test("buildPrompt stable prefix is identical across calls", () => {

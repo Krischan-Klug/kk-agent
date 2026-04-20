@@ -1,27 +1,29 @@
 import type { Request, Response } from "express";
 import {
   getModels,
-  getActiveProviderId,
   getAllModelSettings,
   setModelSettings,
   listProviders,
   addProvider,
   updateProvider,
   removeProvider,
-  setActiveProvider,
+  resolveProviderId,
   testProvider,
 } from "./service.js";
-import type { ModelSettings, ProviderConfig } from "./types.js";
+import type { CreateProviderBody, ModelSettings, UpdateProviderBody } from "./types.js";
 
 export async function listModels(req: Request, res: Response): Promise<Response> {
-  const providerId = typeof req.query.providerId === "string" ? req.query.providerId : undefined;
-  const activeProviderId = providerId ?? getActiveProviderId();
-  const models = await getModels(activeProviderId);
-  return res.json({
-    models,
-    activeProviderId,
-    modelSettings: getAllModelSettings(activeProviderId),
-  });
+  try {
+    const providerId = resolveProviderId(typeof req.query.providerId === "string" ? req.query.providerId : undefined);
+    const models = await getModels(providerId);
+    return res.json({
+      models,
+      providerId,
+      modelSettings: getAllModelSettings(providerId),
+    });
+  } catch (err) {
+    return res.status(400).json({ error: (err as Error).message });
+  }
 }
 
 export async function doSetModelSettings(req: Request, res: Response): Promise<Response> {
@@ -38,7 +40,7 @@ export async function doListProviders(_req: Request, res: Response): Promise<Res
 }
 
 export async function doAddProvider(req: Request, res: Response): Promise<Response> {
-  const body = req.body as Omit<ProviderConfig, "id">;
+  const body = req.body as CreateProviderBody;
   if (!body.name || !body.baseUrl) {
     return res.status(400).json({ error: "name and baseUrl are required" });
   }
@@ -48,7 +50,7 @@ export async function doAddProvider(req: Request, res: Response): Promise<Respon
 
 export async function doUpdateProvider(req: Request, res: Response): Promise<Response> {
   try {
-    const updated = await updateProvider(req.params.id, req.body);
+    const updated = await updateProvider(req.params.id, req.body as UpdateProviderBody);
     return res.json(updated);
   } catch (err) {
     return res.status(404).json({ error: (err as Error).message });
@@ -58,15 +60,6 @@ export async function doUpdateProvider(req: Request, res: Response): Promise<Res
 export async function doRemoveProvider(req: Request, res: Response): Promise<Response> {
   await removeProvider(req.params.id);
   return res.json({ deleted: true });
-}
-
-export async function doActivateProvider(req: Request, res: Response): Promise<Response> {
-  try {
-    await setActiveProvider(req.params.id);
-    return res.json({ activeProviderId: getActiveProviderId() });
-  } catch (err) {
-    return res.status(404).json({ error: (err as Error).message });
-  }
 }
 
 export async function doTestProvider(req: Request, res: Response): Promise<Response> {

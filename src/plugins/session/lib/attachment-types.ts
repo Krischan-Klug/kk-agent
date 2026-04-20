@@ -1,5 +1,6 @@
-export type AttachmentCategory = "image" | "text" | "pdf";
-export type AttachmentSource = "user" | "assistant";
+import type { AttachmentCategory, AttachmentSource } from "kk-agent-contract";
+
+export type { AttachmentCategory, AttachmentSource } from "kk-agent-contract";
 
 export interface StoredAttachment {
   id: string;

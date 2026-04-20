@@ -107,9 +107,7 @@ async function runModelPass(
       model: opts.model,
       messages: buildModelMessages(systemPrompt, messages, retryInstruction, metaMessages),
       tools: modeConfig.allTools.length > 0 ? modeConfig.allTools : undefined,
-      reasoningEffort: opts.reasoningEffort,
-      temperature: opts.temperature,
-      maxOutputTokens: opts.maxOutputTokens,
+      llmRequestConfig: opts.llmRequestConfig,
       transportState: providerState,
     },
     (chunk) => {
@@ -252,10 +250,15 @@ export async function runAgentLoop(opts: LoopOptions): Promise<LoopResult> {
             await executor.getFinalResults().catch(() => []);
             throw error;
           }
-          ptlRetries++;
           const before = estimateTranscriptChars(messages);
           const target = Math.max(2000, Math.floor(before * PTL_SNIP_TARGET_RATIO));
           const snipped = snipOldestToolCycles(messages, target);
+          if (snipped.removed === 0) {
+            executor.discardPending("Provider context length exceeded and transcript cannot be trimmed further.");
+            await executor.getFinalResults().catch(() => []);
+            throw error;
+          }
+          ptlRetries++;
           messages.length = 0;
           messages.push(...snipped.messages);
           opts.onSystemNotice?.(

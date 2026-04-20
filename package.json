@@ -1,0 +1,46 @@
+{
+  "name": "@krischan-klug/kk-agent-contract",
+  "version": "0.1.0",
+  "private": false,
+  "description": "Shared types and request/capability helpers for KK-Agent clients.",
+  "author": "Krischan Klug",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Krischan-Klug/kk-agent-contract.git"
+  },
+  "bugs": {
+    "url": "https://github.com/Krischan-Klug/kk-agent-contract/issues"
+  },
+  "homepage": "https://github.com/Krischan-Klug/kk-agent-contract#readme",
+  "publishConfig": {
+    "registry": "https://npm.pkg.github.com"
+  },
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    },
+    "./capabilities": {
+      "types": "./dist/capabilities.d.ts",
+      "import": "./dist/capabilities.js",
+      "default": "./dist/capabilities.js"
+    },
+    "./request-config": {
+      "types": "./dist/request-config.d.ts",
+      "import": "./dist/request-config.js",
+      "default": "./dist/request-config.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "lint": "tsc --noEmit",
+    "prepack": "npm run build"
+  }
+}

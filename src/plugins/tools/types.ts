@@ -1,4 +1,4 @@
-import type { TaskStatus } from "kk-agent-contract";
+import type { TaskStatus } from "@krischan-klug/kk-agent-contract";
 
 export interface TaskItem {
   id: string;

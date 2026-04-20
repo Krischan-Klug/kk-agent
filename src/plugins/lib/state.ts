@@ -1,8 +1,9 @@
 import { readFile, writeFile, mkdir, readdir, rm } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { dirname, resolve, join } from "node:path";
+import { resolveStateDir } from "../../runtime-config.js";
 
-const STATE_DIR = resolve("state");
+const STATE_DIR = resolve(resolveStateDir());
 const SESSIONS_ROOT = join(STATE_DIR, "sessions");
 
 async function ensureStateDir(): Promise<void> {

@@ -1,8 +1,8 @@
 import type { ChatMode, AgentLoopState } from "../agent/types.js";
 import type { TranscriptBlock, TranscriptMessage } from "../lib/transcript.js";
-import type { ToolExecutionStatus } from "kk-agent-contract";
+import type { ToolExecutionStatus } from "@krischan-klug/kk-agent-contract";
 import type { ProviderTransportState, ProviderTurnDebug } from "../provider/lib/types.js";
-import type { SessionState } from "kk-agent-contract";
+import type { SessionState } from "@krischan-klug/kk-agent-contract";
 
 export type {
   AttachmentDisplayMeta,
@@ -10,7 +10,7 @@ export type {
   CreateSessionBody,
   SessionState,
   UpdateSessionBody,
-} from "kk-agent-contract";
+} from "@krischan-klug/kk-agent-contract";
 
 export interface SessionRecord extends SessionState {
   providerState?: ProviderTransportState;

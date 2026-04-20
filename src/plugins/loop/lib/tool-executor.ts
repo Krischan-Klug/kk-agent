@@ -9,7 +9,7 @@ import {
 import type {
   ChatMode,
 } from "../../agent/types.js";
-import type { ToolExecutionStatus } from "kk-agent-contract";
+import type { ToolExecutionStatus } from "@krischan-klug/kk-agent-contract";
 import type {
   RuntimeToolDefinition,
   ToolExecutionResult,

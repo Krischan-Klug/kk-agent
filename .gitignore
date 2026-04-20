@@ -21,6 +21,7 @@ pids/
 
 # Build/Artifacts 
 dist/
+desktop-dist/
 build/
 coverage/
 .nyc_output/
@@ -41,4 +42,3 @@ state/
 .tmp/
 temp/
 tmp/
-

@@ -4,18 +4,22 @@ import initPlugins from "./plugins/index.js";
 import { initDefaults } from "./plugins/lib/defaults.js";
 import defaultsRoutes from "./plugins/lib/defaults-routes.js";
 
-const app = express();
+export async function createApp() {
+  const app = express();
 
-app.use(cors());
-app.use(express.json());
+  app.use(cors());
+  app.use(express.json());
 
-await initDefaults();
-app.use("/settings/defaults", defaultsRoutes);
+  app.get("/healthz", (_req: Request, res: Response) => res.json({ ok: true }));
 
-await initPlugins(app);
+  await initDefaults();
+  app.use("/settings/defaults", defaultsRoutes);
 
-app.use((req: Request, res: Response) =>
-  res.status(404).json({ error: "Not found" })
-);
+  await initPlugins(app);
 
-export default app;
+  app.use((req: Request, res: Response) =>
+    res.status(404).json({ error: "Not found" })
+  );
+
+  return app;
+}

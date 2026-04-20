@@ -15,9 +15,20 @@ Other common commands:
 
 ```bash
 npm run build
+npm run build:desktop
 npm run lint
 npm test
 ```
+
+Runtime configuration:
+
+- `PORT`: API port, `0` allowed for an ephemeral port
+- `KK_AGENT_STATE_DIR`: override the root directory for all persisted state
+- `KK_AGENT_PLUGIN_CONFIG_FILE`: override the plugin config file path
+
+Shared contract dependency:
+
+- `@krischan-klug/kk-agent-contract` from GitHub Packages
 
 ## Core Flow
 

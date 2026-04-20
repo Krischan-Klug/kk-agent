@@ -6,4 +6,4 @@ export {
   sanitizeEndpointExtraBody,
   stringifyJsonValue,
   tryParseJsonObject,
-} from "kk-agent-contract";
+} from "@krischan-klug/kk-agent-contract";

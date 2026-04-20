@@ -10,4 +10,4 @@ export type {
   ReasoningEffort,
   ToolAccessScope,
   UpdateAgentBody,
-} from "kk-agent-contract";
+} from "@krischan-klug/kk-agent-contract";

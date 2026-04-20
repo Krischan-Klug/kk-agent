@@ -1,8 +1,9 @@
 import path from "node:path";
 import type { PluginConfigMap } from "../types.js";
 import { readJsonFile, writeJsonFile } from "./state.js";
+import { resolvePluginConfigFile } from "../../runtime-config.js";
 
-const CONFIG_FILE = path.resolve(process.cwd(), "plugins.config.json");
+const CONFIG_FILE = path.resolve(resolvePluginConfigFile());
 
 export async function loadPluginConfig(): Promise<PluginConfigMap> {
   const config = await readJsonFile<PluginConfigMap>(CONFIG_FILE);

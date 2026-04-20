@@ -18,7 +18,7 @@ export {
   textBlock,
   toolResultBlock,
   toolUseBlock,
-} from "kk-agent-contract";
+} from "@krischan-klug/kk-agent-contract";
 
 export type {
   AttachmentCategory,
@@ -33,4 +33,4 @@ export type {
   TranscriptToolResultBlock,
   TranscriptToolUseBlock,
   TranscriptUsage,
-} from "kk-agent-contract";
+} from "@krischan-klug/kk-agent-contract";

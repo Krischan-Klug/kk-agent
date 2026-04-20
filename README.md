@@ -17,10 +17,10 @@ The packaged app embeds:
 
 Desktop runtime data is written under Electron `userData`, not the installation directory.
 
-This repository is intended to live beside:
+In this workspace the desktop shell sits beside:
 
 - `../kk-agent-backend`
 - `../kk-agent-frontend`
 - `../kk-agent-contract`
 
-Both local development and CI check out those repositories as siblings.
+For local development, the root workspace `npm run dev` starts backend, frontend, and Electron in the expected order.

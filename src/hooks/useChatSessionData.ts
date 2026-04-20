@@ -2,10 +2,12 @@ import { useCallback, useEffect, useState } from "react";
 import { agent as agentApi, mcp as mcpApi, provider as providerApi, session as sessionApi, skills as skillsApi, tools as toolsApi } from "@/lib/api";
 import type {
   AgentDefinition,
+  LlmRequestConfig,
   McpListItem,
   MemoryFact,
   ModelInfo,
   ModelSettings,
+  ProviderConfig,
   SessionState,
   SkillDefinition,
   TaskItem,
@@ -13,6 +15,8 @@ import type {
 import { addAppEventListener, CHAT_DEBUG_TOGGLE_EVENT, SESSION_CHANGED_EVENT } from "@/lib/appEvents";
 import { clearActiveSessionId, getActiveSessionId } from "@/lib/sessionState";
 import { createAndActivateSession, resolveDefaultSessionAgentId } from "@/lib/sessionFactory";
+import { compactLlmRequestConfig, mergeLlmRequestConfigs } from "@/lib/llmRequestConfig";
+import { normalizeCanonicalReasoningEffort } from "@/lib/modelCapabilities";
 
 type DebugToggleHandler = (updater: (previous: boolean) => boolean) => void;
 
@@ -38,6 +42,7 @@ export function useChatSessionData({ onDebugOpen, setDebugOpen }: Options) {
   const [toolMcps, setToolMcps] = useState<McpListItem[]>([]);
   const [skills, setSkills] = useState<SkillDefinition[]>([]);
   const [agents, setAgents] = useState<AgentDefinition[]>([]);
+  const [providers, setProviders] = useState<ProviderConfig[]>([]);
   const [tasks, setTasks] = useState<TaskItem[]>([]);
   const [sessionFacts, setSessionFacts] = useState<MemoryFact[]>([]);
   const [userFacts, setUserFacts] = useState<MemoryFact[]>([]);
@@ -142,11 +147,12 @@ export function useChatSessionData({ onDebugOpen, setDebugOpen }: Options) {
 
     void (async () => {
       try {
-        const [snapshot, availableMcps, availableAgents, availableSkills] = await Promise.all([
+        const [snapshot, availableMcps, availableAgents, availableSkills, availableProviders] = await Promise.all([
           fetchSessionSnapshot(),
           loadAvailableMcps(),
           agentApi.list(),
           skillsApi.list(),
+          providerApi.listProviders(),
         ]);
         if (disposed) return;
         applyBootstrapSnapshot(snapshot);
@@ -154,6 +160,7 @@ export function useChatSessionData({ onDebugOpen, setDebugOpen }: Options) {
         setMcps(availableMcps.mcps);
         setAgents(availableAgents);
         setSkills(availableSkills);
+        setProviders(availableProviders);
       } catch {
         if (!disposed) setLoading(false);
       }
@@ -192,6 +199,27 @@ export function useChatSessionData({ onDebugOpen, setDebugOpen }: Options) {
       console.error("[chat-model-switch]", err);
     }
   }, [session, updateSessionAndSet]);
+
+  const handleProviderSwitch = useCallback(async (providerId: string) => {
+    if (!session || providerId === session.providerId) return;
+    try {
+      const result = await providerApi.getModels(providerId);
+      const nextModel = result.models.some((model) => model.id === session.model)
+        ? session.model
+        : result.models[0]?.id;
+      const nextSession = await sessionApi.update(session.id, {
+        providerId,
+        ...(nextModel ? { model: nextModel } : {}),
+      });
+      setSession(nextSession);
+      setModels(result.models.map((model) => model.id));
+      setModelInfoMap(new Map(result.models.map((model) => [model.id, model])));
+      setModelSettingsMap(result.modelSettings ?? {});
+      await loadContextData(nextSession.id);
+    } catch (err) {
+      console.error("[chat-provider-switch]", err);
+    }
+  }, [loadContextData, session]);
 
   const handleMcpToggle = useCallback(async (mcpId: string, enabled: boolean) => {
     if (!session) return;
@@ -235,7 +263,13 @@ export function useChatSessionData({ onDebugOpen, setDebugOpen }: Options) {
   const handleReasoningEffort = useCallback(async (value: string) => {
     if (!session) return;
     try {
-      await updateSessionAndSet({ reasoningEffort: value || undefined });
+      await updateSessionAndSet({
+        llmRequestConfig: compactLlmRequestConfig(mergeLlmRequestConfigs(session.llmRequestConfig, {
+          common: {
+            reasoningEffort: normalizeCanonicalReasoningEffort(value),
+          },
+        })),
+      });
     } catch (err) {
       console.error("[chat-reasoning]", err);
     }
@@ -244,9 +278,24 @@ export function useChatSessionData({ onDebugOpen, setDebugOpen }: Options) {
   const handleTemperature = useCallback(async (value: string) => {
     if (!session) return;
     try {
-      await updateSessionAndSet({ temperature: Number(value) });
+      await updateSessionAndSet({
+        llmRequestConfig: compactLlmRequestConfig(mergeLlmRequestConfigs(session.llmRequestConfig, {
+          common: {
+            temperature: Number(value),
+          },
+        })),
+      });
     } catch (err) {
       console.error("[chat-temperature]", err);
+    }
+  }, [session, updateSessionAndSet]);
+
+  const handleLlmRequestConfig = useCallback(async (value: LlmRequestConfig | undefined) => {
+    if (!session) return;
+    try {
+      await updateSessionAndSet({ llmRequestConfig: value });
+    } catch (err) {
+      console.error("[chat-llm-request-config]", err);
     }
   }, [session, updateSessionAndSet]);
 
@@ -268,9 +317,9 @@ export function useChatSessionData({ onDebugOpen, setDebugOpen }: Options) {
     }
   }, [session, updateSessionAndSet]);
 
-  const handleNewSession = useCallback(async () => {
+  const handleNewSession = useCallback(async (providerId?: string) => {
     try {
-      const newSession = await createAndActivateSession(agents, resolveDefaultSessionAgentId(agents));
+      const newSession = await createAndActivateSession(agents, resolveDefaultSessionAgentId(agents), providerId);
       setSession(newSession);
       await loadContextData(newSession.id);
     } catch (err) {
@@ -318,6 +367,7 @@ export function useChatSessionData({ onDebugOpen, setDebugOpen }: Options) {
     models,
     modelInfoMap,
     modelSettingsMap,
+    providers,
     mcps,
     toolMcps,
     skills,
@@ -328,12 +378,14 @@ export function useChatSessionData({ onDebugOpen, setDebugOpen }: Options) {
     currentAgentName,
     loadContextData,
     loadDebugData,
+    handleProviderSwitch,
     handleModelSwitch,
     handleMcpToggle,
     handleToolToggle,
     handleSkillToggle,
     handleReasoningEffort,
     handleTemperature,
+    handleLlmRequestConfig,
     handleAgentSwitch,
     handleModeSwitch,
     handleNewSession,

@@ -1,7 +1,6 @@
-import Modal from "@/components/Modal";
-import Button from "@/components/Button";
+import FormModal from "@/components/FormModal";
 import Input from "@/components/Input";
-import { ActionsRow, FieldLabel, FormField } from "@/components/PageForm";
+import { FieldLabel, FormField } from "@/components/PageForm";
 
 type Props = {
   open: boolean;
@@ -15,7 +14,12 @@ export default function CreateAgentModal({ open, name, onNameChange, onCreate, o
   if (!open) return null;
 
   return (
-    <Modal title="Neuer Agent" onClose={onClose}>
+    <FormModal
+      title="Neuer Agent"
+      onClose={onClose}
+      onSubmit={onCreate}
+      submitDisabled={!name.trim()}
+    >
       <FormField>
         <FieldLabel>Name</FieldLabel>
         <Input
@@ -25,11 +29,6 @@ export default function CreateAgentModal({ open, name, onNameChange, onCreate, o
           autoFocus
         />
       </FormField>
-      <ActionsRow>
-        <Button onClick={onCreate} disabled={!name.trim()}>
-          Erstellen
-        </Button>
-      </ActionsRow>
-    </Modal>
+    </FormModal>
   );
 }

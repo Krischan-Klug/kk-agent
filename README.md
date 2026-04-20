@@ -1,131 +1,97 @@
-# 🖥️ kk-agent-frontend
+# kk-agent-frontend
 
-Next.js 16 frontend for [kk-agent-backend](../kk-agent-backend/). React 19, styled-components, TypeScript.
+Next.js frontend for `kk-agent-backend`.
 
----
+The frontend is the control surface for chats, agents, providers, tools, MCPs, skills, and defaults. It stays intentionally thin around provider complexity: the provider page edits only wrapper-owned request defaults, while heavy model/runtime configuration stays in LM Studio, Ollama, or the serving backend.
 
-## 🚀 Quickstart
+## Quickstart
 
 ```bash
 npm install
-npm run dev     # Start dev server with hot-reload on port 3000
+npm run dev
 ```
+
+Other common commands:
 
 ```bash
-npm run build   # Production build
+npm run lint
+npm run build
 ```
 
-### Environment Variables
+## Main Routes
 
-Create a `.env.local` file in the frontend root (or copy `.env.example`):
+- `/chat`: main chat UI with streaming, debug, tasks, and memory
+- `/agent`: agent editor
+- `/mcp`: external MCP management
+- `/skills`: skill bundle management
+- `/settings/appearance`: theme settings
+- `/settings/defaults`: global prompt/runtime defaults
+- `/settings/provider`: providers and per-model request defaults
+- `/settings/tools`: internal tool configuration
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `NEXT_PUBLIC_API_URL` | `http://127.0.0.1:3001` | Backend API base URL |
+## Frontend Architecture
 
-> The frontend expects the backend to be running at the configured URL.
-
----
-
-## 📄 Pages
-
-| Route | Purpose |
-|-------|---------|
-| `/chat` | Main chat interface — streaming, tool cards, debug panel, tasks, memory |
-| `/agent` | Agent editor — prompt sections, mode configs, tools, MCPs, skills, variables |
-| `/mcp` | External MCP server management (add, edit, start/stop) |
-| `/skills` | Skills catalog — create, edit, and manage skill bundles |
-| `/settings/appearance` | Theme and visual customization |
-| `/settings/defaults` | Global prompt sections, mode instructions, and runtime defaults |
-| `/settings/provider` | LLM provider and model configuration |
-| `/settings/tools` | Internal tool configuration and access scopes |
-
----
-
-## 🏗️ Architecture
-
-```
+```text
 src/
-├── pages/              Next.js pages (one per route above)
-├── components/         UI components organized by feature
-│   ├── agent/            Agent editor components
-│   ├── chat/             Chat messages, composer, debug panel
-│   ├── mcp/              MCP configuration components
-│   ├── provider/         Provider settings components
-│   └── settings/         Settings page components
-├── hooks/              React hooks
-│   ├── useChatStreaming      SSE stream handling and event dispatch
-│   ├── useChatSessionData    Session state, debug data, bootstrap
-│   ├── useChatAutoScroll     Auto-scroll on new messages
-│   └── useAttachments        File upload and attachment management
-├── lib/                Utilities
-│   ├── api                 API client (typed wrappers for all backend endpoints)
-│   ├── appEvents           Cross-component event bus
-│   ├── sessionState        Persistent session state (localStorage + useSyncExternalStore)
-│   ├── modelCapabilities   Model capability resolution for UI controls
-│   └── uiLogger            Centralized UI error logging
-├── types/
-│   └── api.ts              All TypeScript types matching backend API responses
-└── styles/             Global CSS and theme variables
+|-- pages/
+|-- components/
+|-- hooks/
+|-- lib/
+|-- types/
+`-- styles/
 ```
 
----
+Important areas:
 
-## 🔗 API Client
+- `components/chat`: composer, transcript, debug panel, tool cards
+- `components/agent`: agent editing UI
+- `components/provider`: provider and model settings UI
+- `hooks/useChatStreaming`: SSE handling
+- `hooks/useChatSessionData`: session bootstrap and refresh
+- `lib/api.ts`: typed backend client
+- `lib/modelCapabilities.ts`: UI-side capability resolution
 
-The API client in `lib/api.ts` provides typed access to all backend endpoints:
+## Provider UI Model
 
-| Namespace | Covers |
-|-----------|--------|
-| `agent` | CRUD for agent definitions, system variables, loop state |
-| `session` | Session lifecycle, chat (sync + SSE stream), attachments, prompt |
-| `tools` | Internal tools, tasks, memory (session + user) |
-| `mcp` | External MCP servers, tools, start/stop |
-| `skills` | Skill CRUD |
-| `provider` | Providers, models, model settings |
-| `settings` | Global defaults |
+The provider page edits only wrapper-owned model defaults:
 
----
+- endpoint
+- reasoning effort
+- temperature
+- max output tokens
+- `Additional Request JSON` for rare request fields
 
-## ⚡ SSE Event Handling
+The same request-config editor is also reused in the chat debug panel for session-scoped overrides. That editor is not a full model-runtime configuration UI.
 
-Chat streaming is handled by `useChatStreaming`. It connects to `/session/:id/chat/stream` and processes events:
+Context size, KV cache, backend launch parameters, and similar runtime details are expected to be managed in the actual serving backend.
 
-| Event | Behavior |
-|-------|----------|
-| `content` / `reasoning` | Appended to current assistant message |
-| `content_reset` | Clears accumulated content (on retry) |
-| `tool_call` / `tool_result` | Rendered as collapsible tool cards |
-| `loop_state` | Updates the loop status indicator |
-| `stats` | Token usage display |
-| `done` | Finalizes the message and refreshes session state |
-| `error` | Displays error in chat |
+## Streaming
 
----
+Chat streaming is handled through `useChatStreaming` against `/session/:id/chat/stream`.
 
-## 🗂️ State Management
+Main UI event handling:
 
-| State | Where | How |
-|-------|-------|-----|
-| Session state (active ID, sidebar) | `localStorage` | `sessionState.ts` + `useSyncExternalStore` |
-| Chat data (session, messages, debug) | React hook state | `useChatSessionData` |
-| Streaming state (current message, tool status) | React hook state | `useChatStreaming` |
+- `content` and `reasoning`: append to the active assistant message
+- `tool_call` and `tool_result`: update collapsible tool cards
+- `loop_state`: update loop status UI
+- `stats`: show token usage
+- `done`: finalize the turn and refresh session data
+- `error`: show the error in chat
 
-No external state library (Redux, Zustand) — pure React hooks and component state.
+## State
 
----
+- session selection and sidebar state: `localStorage`
+- chat/session data: React hook state
+- streaming turn state: React hook state
 
-## 🎨 Styling
+No external state library is used.
 
-- **styled-components** for all component styling
-- CSS custom properties for theming: `--bg-*`, `--text-*`, `--accent-*`, `--border-*`, `--radius-*`, `--space-*`, `--font-*`
-- Appearance page allows runtime theme customization
-- Monospace font throughout for code-focused UI
+## Styling
 
----
+- styled-components
+- CSS custom properties for theme tokens
+- code-focused UI with monospace-heavy presentation
 
-## 🧩 Key UI Patterns
+## Backend Contract
 
-- **Chat debug panel** — Expandable panel showing system prompt, meta messages, active tools/MCPs/skills, session info, raw messages, tasks editor, and memory editor. Inline model and capability switching.
-- **Agent editor** — Two-column layout with agent list + full editor. Per-mode tabs for prompt sections, tool selections, and instructions.
-- **Tool cards** — Collapsible cards showing tool name, arguments, execution status, and result preview.
+The frontend consumes the backend through the shared contract package and typed API wrappers. Provider-related UI follows the backend capability model rather than maintaining a separate frontend-only model description.

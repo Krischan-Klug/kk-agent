@@ -1,9 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import styled from "styled-components";
 import {
-  DEFAULT_REASONING_LEVELS,
   buildTemperatureOptions,
-  getDefaultLevelConfig,
   getEndpointCapabilities,
   getReasoningLevels,
   getResolvedEndpoint,
@@ -13,6 +11,7 @@ import Button from "@/components/Button";
 import Spinner from "@/components/Spinner";
 import ChatDebugPanel, { type ChatDebugTab } from "@/components/ChatDebugPanel";
 import ChatComposer from "@/components/chat/ChatComposer";
+import CreateSessionModal from "@/components/chat/CreateSessionModal";
 import ChatMessages from "@/components/chat/ChatMessages";
 import { EmptyState } from "@/components/chat/ChatMessages.styled";
 import { emitAppEvent, CHAT_DEBUG_TOGGLE_EVENT } from "@/lib/appEvents";
@@ -21,6 +20,7 @@ import { useAttachments } from "@/hooks/useAttachments";
 import { useChatSessionData } from "@/hooks/useChatSessionData";
 import { useChatStreaming } from "@/hooks/useChatStreaming";
 import { session as sessionApi } from "@/lib/api";
+import { resolveDefaultSessionAgentId, resolveSessionCreationContext, type SessionCreationContext } from "@/lib/sessionFactory";
 import type { SessionRuntimeMcpDebug, SessionRuntimeSkillDebug, SessionRuntimeToolDebug } from "@/types/api";
 
 const ChatWrapper = styled.div`
@@ -64,6 +64,8 @@ export default function ChatPage() {
   const [debugRuntimeTools, setDebugRuntimeTools] = useState<SessionRuntimeToolDebug[] | null>(null);
   const [debugRuntimeMcps, setDebugRuntimeMcps] = useState<SessionRuntimeMcpDebug[] | null>(null);
   const [debugRuntimeSkills, setDebugRuntimeSkills] = useState<SessionRuntimeSkillDebug[] | null>(null);
+  const [sessionCreateContext, setSessionCreateContext] = useState<SessionCreationContext | null>(null);
+  const [creatingSession, setCreatingSession] = useState(false);
   const debugPromptRequestRef = useRef(0);
   const attachments = useAttachments();
 
@@ -135,17 +137,16 @@ export default function ChatPage() {
   const modelSettings = sessionData.session ? sessionData.modelSettingsMap[sessionData.session.model] : undefined;
   const resolvedEndpoint = getResolvedEndpoint(modelInfo, modelSettings);
   const endpointCapabilities = getEndpointCapabilities(modelInfo, resolvedEndpoint);
-  const reasoningLevels = modelInfo?.capabilities.supportsReasoning
-    ? getReasoningLevels(modelInfo)
-    : [...DEFAULT_REASONING_LEVELS];
+  const reasoningLevels = getReasoningLevels(modelInfo);
   const reasoningOptions = reasoningLevels.map((level) => ({ value: level, label: level }));
-  const resolvedEffort = getResolvedReasoningEffort(modelInfo, modelSettings, sessionData.session?.reasoningEffort);
-  const resolvedLevelConfig = getDefaultLevelConfig(resolvedEffort);
+  const resolvedEffort = getResolvedReasoningEffort(
+    modelInfo,
+    modelSettings,
+    sessionData.session?.llmRequestConfig?.common?.reasoningEffort,
+  );
   const resolvedTemp = sessionData.session
     ? (
-      sessionData.session.temperature ??
-      modelSettings?.levels?.[resolvedEffort]?.temperature ??
-      resolvedLevelConfig?.temperature ??
+      sessionData.session.llmRequestConfig?.common?.temperature ??
       endpointCapabilities.temperatureRange?.min ??
       1.0
     )
@@ -155,6 +156,38 @@ export default function ChatPage() {
   const showTemperatureControl = endpointCapabilities.temperatureSupported && temperatureOptions.length > 0;
   const maxCtx = modelInfo?.contextLength ?? modelInfo?.maxContextLength ?? 0;
 
+  async function beginNewSession() {
+    try {
+      const context = await resolveSessionCreationContext(
+        sessionData.agents,
+        resolveDefaultSessionAgentId(sessionData.agents),
+      );
+      if (context.requiresProviderSelection) {
+        setSessionCreateContext(context);
+        return;
+      }
+
+      setCreatingSession(true);
+      await sessionData.handleNewSession(context.selectedProviderId);
+    } catch (err) {
+      console.error("[chat-new-session]", err);
+    } finally {
+      setCreatingSession(false);
+    }
+  }
+
+  async function handleCreateSessionWithProvider(providerId: string) {
+    try {
+      setCreatingSession(true);
+      await sessionData.handleNewSession(providerId);
+      setSessionCreateContext(null);
+    } catch (err) {
+      console.error("[chat-new-session-provider]", err);
+    } finally {
+      setCreatingSession(false);
+    }
+  }
+
   if (sessionData.loading) return <Spinner />;
 
   if (!sessionData.session) {
@@ -162,8 +195,15 @@ export default function ChatPage() {
       <ChatWrapper>
         <EmptyState>
           <p>Keine aktive Session.</p>
-          <Button onClick={() => void sessionData.handleNewSession()}>Neue Session starten</Button>
+          <Button onClick={() => void beginNewSession()} disabled={creatingSession}>Neue Session starten</Button>
         </EmptyState>
+        <CreateSessionModal
+          open={sessionCreateContext !== null}
+          context={sessionCreateContext}
+          creating={creatingSession}
+          onCreate={(providerId) => { void handleCreateSessionWithProvider(providerId); }}
+          onClose={() => setSessionCreateContext(null)}
+        />
       </ChatWrapper>
     );
   }
@@ -189,7 +229,10 @@ export default function ChatPage() {
         debugTasks={sessionData.tasks}
         debugSessionFacts={sessionData.sessionFacts}
         debugUserFacts={sessionData.userFacts}
+        providers={sessionData.providers}
         models={sessionData.models}
+        selectedEndpoint={activeSession.llmRequestConfig?.common?.endpoint ?? resolvedEndpoint}
+        onProviderSwitch={sessionData.handleProviderSwitch}
         onModelSwitch={sessionData.handleModelSwitch}
         onToolToggle={sessionData.handleToolToggle}
         onMcpToggle={sessionData.handleMcpToggle}
@@ -199,12 +242,13 @@ export default function ChatPage() {
         onSaveUserFacts={sessionData.handleSaveUserFacts}
         showReasoningControl={showReasoningControl}
         showTemperatureControl={showTemperatureControl}
-        resolvedEffort={resolvedEffort}
+        resolvedEffort={resolvedEffort ?? "default"}
         resolvedTemp={resolvedTemp}
         reasoningOptions={reasoningOptions}
         temperatureOptions={temperatureOptions}
         onReasoningSelect={sessionData.handleReasoningEffort}
         onTemperatureSelect={sessionData.handleTemperature}
+        onLlmRequestConfigChange={sessionData.handleLlmRequestConfig}
       />
       <ChatMessages
         session={sessionData.session}
@@ -249,6 +293,13 @@ export default function ChatPage() {
       >
         Debug
       </FloatingDebugButton>
+      <CreateSessionModal
+        open={sessionCreateContext !== null}
+        context={sessionCreateContext}
+        creating={creatingSession}
+        onCreate={(providerId) => { void handleCreateSessionWithProvider(providerId); }}
+        onClose={() => setSessionCreateContext(null)}
+      />
     </ChatWrapper>
   );
 }

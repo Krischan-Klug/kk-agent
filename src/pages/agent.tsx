@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import styled from "styled-components";
 import { agent as agentApi, mcp as mcpApi, provider as providerApi, settings as settingsApi, skills as skillsApi, tools as toolsApi } from "@/lib/api";
-import type { AgentDefinition, AppDefaults, CreateAgentBody, McpListItem, ModelInfo, ModelSettings, SkillDefinition } from "@/types/api";
+import type { AgentDefinition, AppDefaults, CreateAgentBody, McpListItem, ModelInfo, ModelSettings, ProviderConfig, SkillDefinition } from "@/types/api";
 import { PageTitle } from "@/components/Layout.styled";
 import Spinner from "@/components/Spinner";
 import AgentList from "@/components/agent/AgentList";
@@ -16,6 +16,7 @@ const PageLayout = styled.div`
 
 export default function AgentPage() {
   const [agents, setAgents] = useState<AgentDefinition[]>([]);
+  const [providers, setProviders] = useState<ProviderConfig[]>([]);
   const [mcps, setMcps] = useState<McpListItem[]>([]);
   const [internalTools, setInternalTools] = useState<McpListItem[]>([]);
   const [skills, setSkills] = useState<SkillDefinition[]>([]);
@@ -31,30 +32,57 @@ export default function AgentPage() {
   const [newName, setNewName] = useState("");
   const [saving, setSaving] = useState(false);
 
+  async function loadProviderModels(providerId?: string) {
+    if (!providerId) {
+      setModels([]);
+      setModelSettings({});
+      return;
+    }
+
+    try {
+      const providerModels = await providerApi.getModels(providerId);
+      setModels(providerModels.models);
+      setModelSettings(providerModels.modelSettings ?? {});
+    } catch (err) {
+      console.error("[agent-models]", err);
+      setModels([]);
+      setModelSettings({});
+    }
+  }
+
   useEffect(() => {
-    Promise.all([agentApi.list(), mcpApi.list(), toolsApi.list(), skillsApi.list(), agentApi.systemVariables(), providerApi.getModels(), settingsApi.getDefaults()])
-      .then(([agentList, mcpList, toolList, skillList, vars, providerModels, appDefaults]) => {
+    Promise.all([agentApi.list(), mcpApi.list(), toolsApi.list(), skillsApi.list(), agentApi.systemVariables(), providerApi.listProviders(), settingsApi.getDefaults()])
+      .then(async ([agentList, mcpList, toolList, skillList, vars, providerList, appDefaults]) => {
         setAgents(agentList);
+        setProviders(providerList);
         setMcps(mcpList);
         setInternalTools(toolList);
         setSkills(skillList);
         setSystemVariables(vars.variables);
-        setModels(providerModels.models);
-        setModelSettings(providerModels.modelSettings ?? {});
         setDefaults(appDefaults);
         if (agentList.length > 0) {
-          setSelectedId(agentList[0].id);
-          setEditAgent(structuredClone(agentList[0]));
+          const firstAgent = agentList[0];
+          setSelectedId(firstAgent.id);
+          setEditAgent(structuredClone(firstAgent));
+          await loadProviderModels(firstAgent.defaultProviderId);
+        } else {
+          setModels([]);
+          setModelSettings({});
         }
       })
       .finally(() => setLoading(false));
   }, []);
+
+  useEffect(() => {
+    void loadProviderModels(editAgent?.defaultProviderId);
+  }, [editAgent?.defaultProviderId]);
 
   function selectAgent(id: string) {
     const agent = agents.find((entry) => entry.id === id);
     if (!agent) return;
     setSelectedId(id);
     setEditAgent(structuredClone(agent));
+    void loadProviderModels(agent.defaultProviderId);
   }
 
   async function handleCreate() {
@@ -81,12 +109,13 @@ export default function AgentPage() {
         defaultChatMode: editAgent.defaultChatMode,
         modeConfigs: editAgent.modeConfigs,
         variables: editAgent.variables,
+        defaultProviderId: editAgent.defaultProviderId,
         defaultModel: editAgent.defaultModel,
-        reasoningEffort: editAgent.reasoningEffort,
-        temperature: editAgent.temperature,
+        llmRequestConfig: editAgent.llmRequestConfig,
       });
       setAgents((prev) => prev.map((agent) => (agent.id === selectedId ? updated : agent)));
       setEditAgent(structuredClone(updated));
+      await loadProviderModels(updated.defaultProviderId);
     } catch (err) {
       console.error("[agent-save]", err);
     } finally {
@@ -126,6 +155,7 @@ export default function AgentPage() {
         />
         <AgentEditor
           agent={editAgent}
+          providers={providers}
           mcps={mcps}
           internalTools={internalTools}
           skills={skills}

@@ -8,15 +8,19 @@ import type {
   McpListItem,
   ModelInfo,
   ModelSettings,
+  ProviderConfig,
   SkillDefinition,
   ToolAccessScope,
 } from "@/types/api";
 import {
+  buildMaxOutputOptions,
   buildTemperatureOptions,
   getEndpointCapabilities,
   getReasoningLevels,
   getResolvedEndpoint,
+  normalizeCanonicalReasoningEffort,
 } from "@/lib/modelCapabilities";
+import { compactLlmRequestConfig, mergeLlmRequestConfigs } from "@/lib/llmRequestConfig";
 import Button from "@/components/Button";
 import Input from "@/components/Input";
 import TextArea from "@/components/TextArea";
@@ -202,6 +206,24 @@ const ScopeRow = styled.div`
   margin-top: var(--space-xs);
 `;
 
+const SummaryCard = styled.div`
+  padding: var(--space-sm);
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  font-size: var(--font-size-sm);
+  color: var(--text-secondary);
+`;
+
+const SummaryLink = styled.a`
+  color: var(--accent);
+  text-decoration: none;
+
+  &:hover {
+    text-decoration: underline;
+  }
+`;
+
 const MODE_ORDER: ChatMode[] = ["plan", "edit", "autonomous"];
 const PROMPT_SECTION_META: Array<{ key: keyof AgentModeConfig["promptSections"]; label: string }> = [
   { key: "identity", label: "\u{1FAAA} Identity" },
@@ -218,6 +240,7 @@ const SKILL_EMOJI = "\u{1F4DA}";
 
 type Props = {
   agent: AgentDefinition | null;
+  providers: ProviderConfig[];
   mcps: McpListItem[];
   internalTools: McpListItem[];
   skills: SkillDefinition[];
@@ -308,6 +331,7 @@ function isScopeCapableTool(toolId: string): boolean {
 
 export default function AgentEditor({
   agent,
+  providers,
   mcps,
   internalTools,
   skills,
@@ -339,17 +363,33 @@ export default function AgentEditor({
 
   const currentAgent = agent;
   const effectiveSelectedMode = MODE_ORDER.includes(selectedMode) ? selectedMode : currentAgent.defaultChatMode;
-  const selectedModelInfo = models.find((model) => model.id === currentAgent.defaultModel) ?? models[0];
+  const selectedModelInfo = currentAgent.defaultModel
+    ? models.find((model) => model.id === currentAgent.defaultModel)
+    : undefined;
   const selectedModelSettings = selectedModelInfo ? modelSettings[selectedModelInfo.id] : undefined;
-  const selectedEndpoint = getResolvedEndpoint(selectedModelInfo, selectedModelSettings);
+  const selectedEndpoint = currentAgent.llmRequestConfig?.common?.endpoint
+    ?? getResolvedEndpoint(selectedModelInfo, selectedModelSettings);
   const endpointCapabilities = getEndpointCapabilities(selectedModelInfo, selectedEndpoint);
   const reasoningLevels = getReasoningLevels(selectedModelInfo);
   const showReasoning = reasoningLevels.length > 0;
   const showTemperature = endpointCapabilities.temperatureSupported;
   const temperatureOptions = buildTemperatureOptions(endpointCapabilities.temperatureRange);
+  const showMaxOutputTokens = endpointCapabilities.maxOutputTokensSupported;
+  const maxOutputOptions = buildMaxOutputOptions(
+    endpointCapabilities.maxOutputTokensRange,
+    endpointCapabilities.maxOutputTokensRange?.max,
+  );
   const selectedModeConfig = currentAgent.modeConfigs[effectiveSelectedMode];
   const defaultModeInstruction = defaults?.agent.modeInstructions[effectiveSelectedMode] ?? "";
   const isCustomizedModeInstruction = selectedModeConfig.modeInstruction.trim() !== defaultModeInstruction.trim();
+  const providerSettingsHref = currentAgent.defaultProviderId
+    ? `/settings/provider?providerId=${encodeURIComponent(currentAgent.defaultProviderId)}${selectedModelInfo ? `#model-${encodeURIComponent(selectedModelInfo.id)}` : ""}`
+    : "/settings/provider";
+  const summaryParts = [
+    `Endpoint: ${selectedEndpoint}`,
+    `Reasoning: ${currentAgent.llmRequestConfig?.common?.reasoningEffort ?? selectedModelSettings?.llmRequestConfig?.common?.reasoningEffort ?? "provider default"}`,
+    `Tools: ${selectedModelInfo?.capabilities.supportsTools ? "on" : "off"}`,
+  ];
 
   function getPromptSectionDefault(section: keyof AgentModeConfig["promptSections"]): string {
     return defaults?.agent.promptSections[section] ?? "";
@@ -386,6 +426,17 @@ export default function AgentEditor({
     });
   }
 
+  function updateLlmRequestConfig(patch: NonNullable<AgentDefinition["llmRequestConfig"]>) {
+    onChange({
+      ...currentAgent,
+      llmRequestConfig: compactLlmRequestConfig(mergeLlmRequestConfigs(currentAgent.llmRequestConfig, patch)),
+    });
+  }
+
+  function updateCommonRequestConfig(patch: NonNullable<AgentDefinition["llmRequestConfig"]>["common"]) {
+    updateLlmRequestConfig({ common: patch });
+  }
+
   return (
     <EditorArea>
       <Section>
@@ -411,6 +462,20 @@ export default function AgentEditor({
         </FormRow>
         <FormRow>
           <FormField>
+            <FieldLabel>Default Provider</FieldLabel>
+            <Select
+              value={currentAgent.defaultProviderId ?? ""}
+              onChange={(e) => onChange({
+                ...currentAgent,
+                defaultProviderId: e.target.value || undefined,
+                defaultModel: undefined,
+              })}
+            >
+              <option value="">-- Kein Default --</option>
+              {providers.map((provider) => <option key={provider.id} value={provider.id}>{provider.name}</option>)}
+            </Select>
+          </FormField>
+          <FormField>
             <FieldLabel>Mode Config</FieldLabel>
             <ModeTabs>
               {MODE_ORDER.map((mode) => (
@@ -426,6 +491,7 @@ export default function AgentEditor({
             <Select
               value={currentAgent.defaultModel ?? ""}
               onChange={(e) => onChange({ ...currentAgent, defaultModel: e.target.value || undefined })}
+              disabled={!currentAgent.defaultProviderId}
             >
               <option value="">-- Kein Default --</option>
               {models.map((model) => <option key={model.id} value={model.id}>{model.id}</option>)}
@@ -433,11 +499,13 @@ export default function AgentEditor({
           </FormField>
           {showReasoning && (
             <FormField>
-              <FieldLabel>Default Reasoning</FieldLabel>
-              <Select
-                value={currentAgent.reasoningEffort ?? ""}
-                onChange={(e) => onChange({ ...currentAgent, reasoningEffort: e.target.value || undefined })}
-              >
+                <FieldLabel>Default Reasoning</FieldLabel>
+                <Select
+                  value={currentAgent.llmRequestConfig?.common?.reasoningEffort ?? ""}
+                  onChange={(e) => updateCommonRequestConfig({
+                    reasoningEffort: normalizeCanonicalReasoningEffort(e.target.value),
+                  })}
+                >
                 <option value="">-- Default --</option>
                 {reasoningLevels.map((level) => <option key={level} value={level}>{level}</option>)}
               </Select>
@@ -445,11 +513,12 @@ export default function AgentEditor({
           )}
           {showTemperature && (
             <FormField>
-              <FieldLabel>Temperature</FieldLabel>
+              <FieldLabel>Temperature Override</FieldLabel>
               <Select
-                value={currentAgent.temperature !== undefined ? currentAgent.temperature.toFixed(1) : ""}
-                onChange={(e) => onChange({
-                  ...currentAgent,
+                value={currentAgent.llmRequestConfig?.common?.temperature !== undefined
+                  ? currentAgent.llmRequestConfig.common.temperature.toFixed(1)
+                  : ""}
+                onChange={(e) => updateCommonRequestConfig({
                   temperature: e.target.value === "" ? undefined : Number(e.target.value),
                 })}
               >
@@ -460,7 +529,30 @@ export default function AgentEditor({
               </Select>
             </FormField>
           )}
+          {showMaxOutputTokens && (
+            <FormField>
+              <FieldLabel>Max Output Tokens Override</FieldLabel>
+              <Select
+                value={currentAgent.llmRequestConfig?.common?.maxOutputTokens !== undefined
+                  ? String(currentAgent.llmRequestConfig.common.maxOutputTokens)
+                  : ""}
+                onChange={(e) => updateCommonRequestConfig({
+                  maxOutputTokens: e.target.value === "" ? undefined : Number(e.target.value),
+                })}
+              >
+                <option value="">-- Default --</option>
+                {maxOutputOptions.map((option) => (
+                  <option key={option.value} value={option.value}>{option.label}</option>
+                ))}
+              </Select>
+            </FormField>
+          )}
         </FormRow>
+        {selectedModelInfo && (
+          <SummaryCard>
+            {summaryParts.join(" · ")}. <SummaryLink href={providerSettingsHref}>Provider settings</SummaryLink>
+          </SummaryCard>
+        )}
       </Section>
 
       <Section>

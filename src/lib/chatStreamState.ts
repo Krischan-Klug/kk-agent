@@ -32,7 +32,7 @@ function notifySession(sessionId: string): void {
   globalListeners.forEach((listener) => listener());
 }
 
-export function getEmptyChatStreamSnapshot(): ChatStreamSnapshot {
+function getEmptyChatStreamSnapshot(): ChatStreamSnapshot {
   return {
     ...EMPTY_STREAM_SNAPSHOT,
     streamSystemNotices: [],

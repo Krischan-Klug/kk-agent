@@ -1,7 +1,9 @@
 import { useEffect, useState } from "react";
 import styled from "styled-components";
 import type {
+  LlmRequestConfig,
   McpListItem,
+  ProviderConfig,
   SessionState,
   TaskItem,
   MemoryFact,
@@ -11,11 +13,13 @@ import type {
   SessionRuntimeSkillDebug,
   SessionRuntimeToolDebug,
 } from "@/types/api";
+import { compactLlmRequestConfig, mergeLlmRequestConfigs } from "@/lib/llmRequestConfig";
 import Badge from "@/components/Badge";
 import Button from "@/components/Button";
 import Input from "@/components/Input";
 import TextArea from "@/components/TextArea";
 import CapabilitySelect from "@/components/CapabilitySelect";
+import LlmRequestConfigEditor from "@/components/LlmRequestConfigEditor";
 import SelectMenu, { type SelectMenuOption } from "@/components/SelectMenu";
 
 export type ChatDebugTab = "prompt" | "meta" | "tools" | "mcps" | "skills" | "session" | "messages" | "tasks" | "memory";
@@ -135,7 +139,10 @@ type Props = {
   debugTasks: TaskItem[];
   debugSessionFacts: MemoryFact[];
   debugUserFacts: MemoryFact[];
+  providers: ProviderConfig[];
   models: string[];
+  selectedEndpoint: "chat-completions" | "responses";
+  onProviderSwitch: (providerId: string) => void;
   onModelSwitch: (model: string) => void;
   onToolToggle: (toolId: string, enabled: boolean) => void;
   onMcpToggle: (mcpId: string, enabled: boolean) => void;
@@ -151,6 +158,7 @@ type Props = {
   temperatureOptions: SelectMenuOption[];
   onReasoningSelect: (value: string) => void;
   onTemperatureSelect: (value: string) => void;
+  onLlmRequestConfigChange: (value: LlmRequestConfig | undefined) => void;
 };
 
 function parseFactsDraft(value: string): MemoryFact[] {
@@ -181,7 +189,10 @@ export default function ChatDebugPanel({
   debugTasks,
   debugSessionFacts,
   debugUserFacts,
+  providers,
   models,
+  selectedEndpoint,
+  onProviderSwitch,
   onModelSwitch,
   onToolToggle,
   onMcpToggle,
@@ -197,6 +208,7 @@ export default function ChatDebugPanel({
   temperatureOptions,
   onReasoningSelect,
   onTemperatureSelect,
+  onLlmRequestConfigChange,
 }: Props) {
   const [taskDraft, setTaskDraft] = useState<TaskItem[]>(debugTasks);
   const [sessionMemoryDraft, setSessionMemoryDraft] = useState(toFactDraft(debugSessionFacts));
@@ -246,6 +258,12 @@ export default function ChatDebugPanel({
     } finally {
       setSaving(null);
     }
+  }
+
+  function updateLlmRequestConfig(patch: LlmRequestConfig) {
+    if (!session) return;
+    const next = compactLlmRequestConfig(mergeLlmRequestConfigs(session.llmRequestConfig, patch));
+    onLlmRequestConfigChange(next);
   }
 
   let content = "";
@@ -328,8 +346,9 @@ export default function ChatDebugPanel({
         activeMcpIds: session.activeMcpIds,
         activeSkillIds: session.activeSkillIds,
         activeMode: session.activeMode,
-        reasoningEffort: session.reasoningEffort ?? "default",
-        temperature: session.temperature ?? "default",
+        reasoningEffort: session.llmRequestConfig?.common?.reasoningEffort ?? "default",
+        temperature: session.llmRequestConfig?.common?.temperature ?? "default",
+        llmRequestConfig: session.llmRequestConfig ?? null,
         providerDebug: session.providerDebug ?? null,
         messageCount: session.messages.length,
         loopMode: loopState?.mode ?? null,
@@ -378,6 +397,13 @@ export default function ChatDebugPanel({
         <DebugTab $active={debugTab === "memory"} onClick={() => toggleTab("memory")}>Memory</DebugTab>
         <DebugControls>
           {loopState && <Badge variant="info">{loopState.mode}</Badge>}
+          {providers.length > 0 ? (
+            <SelectMenu
+              value={session.providerId}
+              options={providers.map((provider) => ({ value: provider.id, label: provider.name }))}
+              onSelect={onProviderSwitch}
+            />
+          ) : null}
           {models.length > 0 ? (
             <SelectMenu
               value={session.model}
@@ -431,8 +457,19 @@ export default function ChatDebugPanel({
         </DebugControls>
       </DebugTabs>
 
-      {(debugTab === "prompt" || debugTab === "meta" || debugTab === "tools" || debugTab === "mcps" || debugTab === "skills" || debugTab === "session" || debugTab === "messages") && (
+      {(debugTab === "prompt" || debugTab === "meta" || debugTab === "tools" || debugTab === "mcps" || debugTab === "skills" || debugTab === "messages") && (
         <DebugContent>{content}</DebugContent>
+      )}
+
+      {debugTab === "session" && (
+        <EditorWrap>
+          <LlmRequestConfigEditor
+            value={session.llmRequestConfig}
+            selectedEndpoint={session.llmRequestConfig?.common?.endpoint ?? selectedEndpoint}
+            onChange={updateLlmRequestConfig}
+          />
+          <DebugContent>{content}</DebugContent>
+        </EditorWrap>
       )}
 
       {debugTab === "tasks" && (

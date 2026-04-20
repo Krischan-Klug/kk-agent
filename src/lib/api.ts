@@ -48,7 +48,11 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 export const provider = {
   /* Model endpoints */
   getModels: (providerId?: string) =>
-    request<{ models: ModelInfo[]; activeProviderId: string; modelSettings: Record<string, ModelSettings> }>(
+    request<{
+      models: ModelInfo[];
+      providerId: string;
+      modelSettings: Record<string, ModelSettings>;
+    }>(
       `/provider/models${providerId ? `?providerId=${encodeURIComponent(providerId)}` : ""}`,
     ),
 
@@ -76,9 +80,6 @@ export const provider = {
 
   removeProvider: (id: string) =>
     request<{ deleted: boolean }>(`/provider/providers/${id}`, { method: "DELETE" }),
-
-  activateProvider: (id: string) =>
-    request<{ activeProviderId: string }>(`/provider/providers/${id}/activate`, { method: "POST" }),
 
   testProvider: (id: string) =>
     request<{ ok: boolean; error?: string }>(`/provider/providers/${id}/test`, { method: "POST" }),

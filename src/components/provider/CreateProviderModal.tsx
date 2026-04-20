@@ -1,5 +1,4 @@
-import Modal from "@/components/Modal";
-import Button from "@/components/Button";
+import FormModal from "@/components/FormModal";
 import Input from "@/components/Input";
 import { FieldLabel, FormField } from "@/components/PageForm";
 
@@ -19,7 +18,12 @@ export default function CreateProviderModal(props: Props) {
   if (!props.open) return null;
 
   return (
-    <Modal title="Neuer Provider" onClose={props.onClose}>
+    <FormModal
+      title="Neuer Provider"
+      onClose={props.onClose}
+      onSubmit={props.onCreate}
+      submitDisabled={!props.name.trim() || !props.baseUrl.trim()}
+    >
       <FormField>
         <FieldLabel>Name</FieldLabel>
         <Input value={props.name} onChange={(e) => props.onNameChange(e.target.value)} placeholder="z.B. Lokaler LLM Server" autoFocus />
@@ -32,9 +36,6 @@ export default function CreateProviderModal(props: Props) {
         <FieldLabel>API Key</FieldLabel>
         <Input type="password" value={props.apiKey} onChange={(e) => props.onApiKeyChange(e.target.value)} placeholder="optional" />
       </FormField>
-      <Button onClick={props.onCreate} disabled={!props.name.trim() || !props.baseUrl.trim()}>
-        Erstellen
-      </Button>
-    </Modal>
+    </FormModal>
   );
 }

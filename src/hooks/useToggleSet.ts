@@ -1,19 +1,19 @@
 import { useCallback, useState } from "react";
 
-export function toggleSetValue(current: Set<string>, value: string): Set<string> {
+function toggleSetValue(current: Set<string>, value: string): Set<string> {
   const next = new Set(current);
   if (next.has(value)) next.delete(value);
   else next.add(value);
   return next;
 }
 
-export function addSetValue(current: Set<string>, value: string): Set<string> {
+function addSetValue(current: Set<string>, value: string): Set<string> {
   const next = new Set(current);
   next.add(value);
   return next;
 }
 
-export function removeSetValue(current: Set<string>, value: string): Set<string> {
+function removeSetValue(current: Set<string>, value: string): Set<string> {
   const next = new Set(current);
   next.delete(value);
   return next;

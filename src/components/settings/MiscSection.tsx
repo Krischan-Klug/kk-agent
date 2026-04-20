@@ -11,17 +11,6 @@ export default function MiscSection({ draft, setDraft }: Props) {
   return (
     <>
       <FormField>
-        <FieldLabel>No Open Tasks Instruction</FieldLabel>
-        <TextArea
-          rows={3}
-          value={draft.misc.noTasksInstruction}
-          onChange={(e) => setDraft({
-            ...draft,
-            misc: { ...draft.misc, noTasksInstruction: e.target.value },
-          })}
-        />
-      </FormField>
-      <FormField>
         <FieldLabel>Empty Response Retry</FieldLabel>
         <TextArea
           rows={3}

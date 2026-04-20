@@ -1,15 +1,17 @@
-import React from "react";
 import styled from "styled-components";
-import type { EndpointType, ModelInfo, ModelSettings, ReasoningLevelConfig } from "@/types/api";
+import type { LlmRequestConfig, ModelInfo, ModelSettings } from "@/types/api";
 import {
-  DEFAULT_REASONING_LEVELS,
-  buildMaxOutputOptions,
-  getDefaultLevelConfig,
   getEndpointCapabilities,
   getReasoningLevels,
   getResolvedEndpoint,
+  normalizeCanonicalReasoningEffort,
 } from "@/lib/modelCapabilities";
+import {
+  compactLlmRequestConfig,
+  mergeLlmRequestConfigs,
+} from "@/lib/llmRequestConfig";
 import { useToggleSet } from "@/hooks/useToggleSet";
+import LlmRequestConfigEditor from "@/components/LlmRequestConfigEditor";
 import { ENDPOINT_OPTIONS } from "./constants";
 
 const SectionDivider = styled.div`
@@ -17,25 +19,6 @@ const SectionDivider = styled.div`
   font-weight: 600;
   color: var(--text-secondary);
   margin-top: var(--space-sm);
-`;
-
-const Label = styled.label`
-  font-size: var(--font-size-sm);
-  color: var(--text-muted);
-`;
-
-const Select = styled.select`
-  background: var(--bg-elevated);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  color: var(--text-primary);
-  font-size: var(--font-size-sm);
-  padding: var(--space-xs) var(--space-sm);
-
-  &:focus {
-    border-color: var(--border-focus);
-    outline: none;
-  }
 `;
 
 const SettingsRow = styled.div`
@@ -67,10 +50,16 @@ const ModelCard = styled.div`
 
 const ModelHeader = styled.div`
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
   gap: var(--space-md);
   flex-wrap: wrap;
+`;
+
+const ModelMeta = styled.div`
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
 `;
 
 const ModelName = styled.div`
@@ -89,6 +78,13 @@ const ContextInfo = styled.span`
   font-family: var(--font-mono);
 `;
 
+const BadgeRow = styled.div`
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+  flex-wrap: wrap;
+`;
+
 const CapabilityBadge = styled.span`
   display: inline-flex;
   align-items: center;
@@ -101,75 +97,63 @@ const CapabilityBadge = styled.span`
   border: 1px solid var(--border);
 `;
 
-const LevelGrid = styled.div`
-  display: grid;
-  grid-template-columns: 90px 1fr 1fr;
-  margin-top: var(--space-sm);
-  border-radius: var(--radius-md);
+const SegmentWrap = styled.div`
+  display: inline-flex;
   border: 1px solid var(--border);
-  overflow: hidden;
-  font-size: var(--font-size-sm);
-`;
-
-const LevelHeaderCell = styled.div`
-  padding: var(--space-xs) var(--space-sm);
-  font-weight: 600;
-  color: var(--text-muted);
-  font-size: var(--font-size-sm);
+  border-radius: 999px;
   background: var(--bg-elevated);
-  border-bottom: 1px solid var(--border);
+  padding: 2px;
 `;
 
-const LevelCell = styled.div<{ $isDefault?: boolean; $isLast?: boolean }>`
-  padding: var(--space-xs) var(--space-sm);
+const SegmentButton = styled.button<{ $active: boolean }>`
+  border: none;
+  border-radius: 999px;
+  padding: 6px 10px;
+  background: ${(p) => (p.$active ? "var(--accent)" : "transparent")};
+  color: ${(p) => (p.$active ? "var(--bg-base)" : "var(--text-secondary)")};
+  font-size: var(--font-size-xs);
+  cursor: pointer;
+`;
+
+const StaticEndpointBadge = styled(CapabilityBadge)`
+  color: var(--text-secondary);
+  background: var(--bg-elevated);
+`;
+
+const QuickSettings = styled.div`
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: var(--space-sm);
+  margin-top: var(--space-sm);
+`;
+
+const FieldCard = styled.div`
   display: flex;
-  align-items: center;
-  background: ${(p) => (p.$isDefault ? "var(--accent-muted)" : "var(--bg-base)")};
-  border-bottom: ${(p) => (p.$isLast ? "none" : "1px solid var(--border)")};
-`;
-
-const LevelLabelCell = styled(LevelCell)`
-  font-weight: 600;
-  color: ${(p) => (p.$isDefault ? "var(--accent)" : "var(--text-secondary)")};
+  flex-direction: column;
   gap: var(--space-xs);
-  font-family: var(--font-mono);
+  padding: var(--space-sm);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-base);
 `;
 
-const DefaultDot = styled.span`
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--accent);
-  flex-shrink: 0;
+const Label = styled.label`
+  font-size: var(--font-size-sm);
+  color: var(--text-muted);
 `;
 
-const SmallInput = styled.input<{ $isDefault?: boolean }>`
-  background: ${(p) => (p.$isDefault ? "rgba(193, 95, 60, 0.08)" : "var(--bg-elevated)")};
+const Select = styled.select`
+  background: var(--bg-elevated);
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   color: var(--text-primary);
   font-size: var(--font-size-sm);
-  padding: 2px 6px;
-  width: 100%;
-  font-family: var(--font-mono);
-
-  &::placeholder {
-    color: var(--text-muted);
-    font-style: italic;
-  }
+  padding: var(--space-xs) var(--space-sm);
 
   &:focus {
     border-color: var(--border-focus);
     outline: none;
   }
-`;
-
-const UnitHint = styled.span`
-  color: var(--text-muted);
-  font-weight: 400;
-  font-size: 0.7rem;
-  margin-left: var(--space-xs);
-  opacity: 0.7;
 `;
 
 type Props = {
@@ -181,20 +165,23 @@ type Props = {
 export default function ModelSettingsSection({ models, modelSettings, onSave }: Props) {
   const expandedModels = useToggleSet();
 
-  function handleDefaultChange(modelId: string, value: string) {
+  function saveModelSettings(modelId: string, patch: Partial<ModelSettings>) {
     const settings = modelSettings[modelId] ?? {};
-    onSave(modelId, { ...settings, reasoningEffort: value || undefined });
+    onSave(modelId, {
+      ...settings,
+      ...patch,
+    });
   }
 
-  function handleLevelChange(modelId: string, level: string, field: keyof ReasoningLevelConfig, value: string) {
+  function saveRequestConfig(modelId: string, nextConfig: LlmRequestConfig | undefined) {
+    saveModelSettings(modelId, {
+      llmRequestConfig: compactLlmRequestConfig(nextConfig),
+    });
+  }
+
+  function handleLlmConfigChange(modelId: string, patch: NonNullable<ModelSettings["llmRequestConfig"]>) {
     const settings = modelSettings[modelId] ?? {};
-    const levels = { ...settings.levels };
-    const levelConfig = { ...levels[level] };
-    const numVal = value === "" ? undefined : Number(value);
-    levelConfig[field] = numVal;
-    if (levelConfig.temperature === undefined && levelConfig.maxOutputTokens === undefined) delete levels[level];
-    else levels[level] = levelConfig;
-    onSave(modelId, { ...settings, levels: Object.keys(levels).length > 0 ? levels : undefined });
+    saveRequestConfig(modelId, mergeLlmRequestConfigs(settings.llmRequestConfig, patch));
   }
 
   return (
@@ -208,131 +195,97 @@ export default function ModelSettingsSection({ models, modelSettings, onSave }: 
         models.map((model) => {
           const settings = modelSettings[model.id] ?? {};
           const isOpen = expandedModels.has(model.id);
-          const endpoints = model.capabilities.supportedEndpoints;
-          const showReasoning = model.capabilities.supportsReasoning;
-          const reasoningLevels = showReasoning ? getReasoningLevels(model) : [...DEFAULT_REASONING_LEVELS];
           const selectedEndpoint = getResolvedEndpoint(model, settings);
+          const supportedEndpoints = model.capabilities.supportedEndpoints;
+          const reasoningLevels = getReasoningLevels(model);
           const endpointCapabilities = getEndpointCapabilities(model, selectedEndpoint);
-          const maxOutputOptions = buildMaxOutputOptions(
-            endpointCapabilities.maxOutputTokensRange,
-            endpointCapabilities.maxOutputTokensRange?.max,
-          );
-          const showSettings = showReasoning || endpointCapabilities.temperatureSupported || endpointCapabilities.maxOutputTokensSupported;
+          const showReasoning = reasoningLevels.length > 0;
 
           return (
-            <ModelCard key={model.id}>
+            <ModelCard key={model.id} id={`model-${encodeURIComponent(model.id)}`}>
               <ModelHeader>
-                <ModelName>
-                  {model.id}
-                  {model.maxContextLength && (
-                    <ContextInfo>
-                      ctx: {model.contextLength ? `${model.contextLength.toLocaleString()} / ` : ""}
-                      {model.maxContextLength.toLocaleString()}
-                    </ContextInfo>
-                  )}
-                  {model.capabilities.supportsTools && <CapabilityBadge>🛠️ Tools</CapabilityBadge>}
-                  {showReasoning && (
-                    <CapabilityBadge>
-                      🧠 {model.capabilities.reasoningSource === "observed" ? "observed" : model.capabilities.reasoningControl}
-                    </CapabilityBadge>
-                  )}
-                  {endpointCapabilities.temperatureSupported && endpointCapabilities.temperatureRange && (
-                    <CapabilityBadge>
-                      🔥 {endpointCapabilities.temperatureRange.min}-{endpointCapabilities.temperatureRange.max}
-                    </CapabilityBadge>
-                  )}
-                  {endpointCapabilities.maxOutputTokensSupported && endpointCapabilities.maxOutputTokensRange && (
-                    <CapabilityBadge>
-                      📦 {endpointCapabilities.maxOutputTokensRange.max.toLocaleString()}
-                    </CapabilityBadge>
-                  )}
-                  {model.capabilities.supportsStreaming && <CapabilityBadge>🌊 Streaming</CapabilityBadge>}
-                </ModelName>
+                <ModelMeta>
+                  <ModelName>
+                    {model.id}
+                    {model.maxContextLength && (
+                      <ContextInfo>
+                        ctx: {model.contextLength ? `${model.contextLength.toLocaleString()} / ` : ""}
+                        {model.maxContextLength.toLocaleString()}
+                      </ContextInfo>
+                    )}
+                  </ModelName>
+                  <BadgeRow>
+                    {model.capabilities.supportsTools && <CapabilityBadge>Tools</CapabilityBadge>}
+                    {showReasoning && <CapabilityBadge>Reasoning {reasoningLevels.join(", ")}</CapabilityBadge>}
+                    {endpointCapabilities.temperatureSupported && endpointCapabilities.temperatureRange && (
+                      <CapabilityBadge>
+                        Temperature {endpointCapabilities.temperatureRange.min}-{endpointCapabilities.temperatureRange.max}
+                      </CapabilityBadge>
+                    )}
+                    {endpointCapabilities.maxOutputTokensSupported && endpointCapabilities.maxOutputTokensRange && (
+                      <CapabilityBadge>
+                        Max output {endpointCapabilities.maxOutputTokensRange.max.toLocaleString()}
+                      </CapabilityBadge>
+                    )}
+                    {model.capabilities.supportsStreaming && <CapabilityBadge>Streaming</CapabilityBadge>}
+                  </BadgeRow>
+                </ModelMeta>
                 <SettingsRow>
-                  {endpoints.length > 1 && (
-                    <>
-                      <Label>Endpoint:</Label>
-                      <Select
-                        value={selectedEndpoint}
-                        onChange={(e) => onSave(model.id, { ...settings, endpoint: e.target.value as EndpointType })}
-                      >
-                        {ENDPOINT_OPTIONS.filter((endpoint) => endpoints.includes(endpoint.value)).map((endpoint) => (
-                          <option key={endpoint.value} value={endpoint.value}>{endpoint.label}</option>
-                        ))}
-                      </Select>
-                    </>
+                  {supportedEndpoints.length > 1 ? (
+                    <SegmentWrap>
+                      {ENDPOINT_OPTIONS.filter((option) => supportedEndpoints.includes(option.value)).map((option) => (
+                        <SegmentButton
+                          key={option.value}
+                          type="button"
+                          $active={selectedEndpoint === option.value}
+                          onClick={() => handleLlmConfigChange(model.id, {
+                            common: {
+                              endpoint: option.value,
+                            },
+                          })}
+                        >
+                          {option.value}
+                        </SegmentButton>
+                      ))}
+                    </SegmentWrap>
+                  ) : (
+                    <StaticEndpointBadge>{selectedEndpoint}</StaticEndpointBadge>
                   )}
-                  {showSettings && (
-                    <>
-                      <Label>{showReasoning ? "Default" : "Profil"}</Label>
-                      <Select value={settings.reasoningEffort ?? ""} onChange={(e) => handleDefaultChange(model.id, e.target.value)}>
-                        <option value="">--</option>
-                        {reasoningLevels.map((level) => <option key={level} value={level}>{level}</option>)}
-                      </Select>
-                    </>
-                  )}
-                  {showSettings && (
-                    <SettingsToggle onClick={() => expandedModels.toggle(model.id)}>
-                      {isOpen ? "▲ Settings" : "▼ Settings"}
-                    </SettingsToggle>
-                  )}
+                  <SettingsToggle type="button" onClick={() => expandedModels.toggle(model.id)}>
+                    {isOpen ? "Hide settings" : "Show settings"}
+                  </SettingsToggle>
                 </SettingsRow>
               </ModelHeader>
-              {showSettings && isOpen && (
-                <LevelGrid>
-                  <LevelHeaderCell>Level</LevelHeaderCell>
-                  <LevelHeaderCell>
-                    Temperature
-                    {endpointCapabilities.temperatureRange && (
-                      <UnitHint>
-                        {endpointCapabilities.temperatureRange.min}-{endpointCapabilities.temperatureRange.max}
-                      </UnitHint>
-                    )}
-                  </LevelHeaderCell>
-                  <LevelHeaderCell>Max Output<UnitHint>tokens</UnitHint></LevelHeaderCell>
-                  {reasoningLevels.map((level, index) => {
-                    const levelConfig = settings.levels?.[level] ?? {};
-                    const isDefault = level === settings.reasoningEffort;
-                    const isLast = index === reasoningLevels.length - 1;
-                    const defaults = getDefaultLevelConfig(level);
-                    return (
-                      <React.Fragment key={level}>
-                        <LevelLabelCell $isDefault={isDefault} $isLast={isLast}>
-                          {isDefault && <DefaultDot />}
-                          {level}
-                        </LevelLabelCell>
-                        <LevelCell $isDefault={isDefault} $isLast={isLast}>
-                          <SmallInput
-                            type="number"
-                            min={endpointCapabilities.temperatureRange?.min ?? 0}
-                            max={endpointCapabilities.temperatureRange?.max ?? 2}
-                            step={endpointCapabilities.temperatureRange?.step ?? 0.1}
-                            $isDefault={isDefault}
-                            placeholder={defaults?.temperature?.toString() ?? "auto"}
-                            value={levelConfig.temperature ?? ""}
-                            onChange={(e) => handleLevelChange(model.id, level, "temperature", e.target.value)}
-                          />
-                        </LevelCell>
-                        <LevelCell $isDefault={isDefault} $isLast={isLast}>
-                          <SmallInput
-                            type="number"
-                            min={endpointCapabilities.maxOutputTokensRange?.min ?? 1}
-                            max={endpointCapabilities.maxOutputTokensRange?.max}
-                            step={endpointCapabilities.maxOutputTokensRange?.step ?? 1}
-                            $isDefault={isDefault}
-                            placeholder={
-                              defaults?.maxOutputTokens != null
-                                ? defaults.maxOutputTokens.toString()
-                                : maxOutputOptions[0]?.label ?? "auto"
-                            }
-                            value={levelConfig.maxOutputTokens ?? ""}
-                            onChange={(e) => handleLevelChange(model.id, level, "maxOutputTokens", e.target.value)}
-                          />
-                        </LevelCell>
-                      </React.Fragment>
-                    );
-                  })}
-                </LevelGrid>
+              {isOpen && (
+                <>
+                  {showReasoning && (
+                    <QuickSettings>
+                      <FieldCard>
+                        <Label>Default reasoning</Label>
+                        <Select
+                          value={settings.llmRequestConfig?.common?.reasoningEffort ?? ""}
+                          onChange={(event) => handleLlmConfigChange(model.id, {
+                            common: {
+                              reasoningEffort: normalizeCanonicalReasoningEffort(event.target.value),
+                            },
+                          })}
+                        >
+                          <option value="">default</option>
+                          {reasoningLevels.map((level) => (
+                            <option key={level} value={level}>{level}</option>
+                          ))}
+                        </Select>
+                      </FieldCard>
+                    </QuickSettings>
+                  )}
+
+                  <LlmRequestConfigEditor
+                    value={settings.llmRequestConfig}
+                    selectedEndpoint={selectedEndpoint}
+                    endpointCapabilities={endpointCapabilities}
+                    onChange={(patch) => handleLlmConfigChange(model.id, patch)}
+                  />
+                </>
               )}
             </ModelCard>
           );

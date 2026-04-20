@@ -1,7 +1,11 @@
 import { useCallback, useEffect, useState } from "react";
 import styled from "styled-components";
 import { provider as providerApi } from "@/lib/api";
-import type { ModelInfo, ModelSettings, ProviderConfig } from "@/types/api";
+import type {
+  ModelInfo,
+  ModelSettings,
+  ProviderConfig,
+} from "@/types/api";
 import { useToggleSet } from "@/hooks/useToggleSet";
 import Card from "@/components/Card";
 import Button from "@/components/Button";
@@ -25,7 +29,7 @@ export default function SettingsProviderPage() {
   const [providers, setProviders] = useState<ProviderConfig[]>([]);
   const [models, setModels] = useState<ModelInfo[]>([]);
   const [modelSettings, setModelSettings] = useState<Record<string, ModelSettings>>({});
-  const [activeProviderId, setActiveProviderId] = useState("");
+  const [selectedProviderId, setSelectedProviderId] = useState("");
   const [loading, setLoading] = useState(true);
   const expanded = useToggleSet();
   const testing = useToggleSet();
@@ -40,19 +44,30 @@ export default function SettingsProviderPage() {
       const providerList = await providerApi.listProviders();
       setProviders(providerList);
 
-      const activeId = providerList[0]?.id
-        ? providerList.find((provider) => provider.id === activeProviderId)?.id ?? providerList[0].id
+      const preferredProviderId = typeof window !== "undefined"
+        ? new URLSearchParams(window.location.search).get("providerId") ?? ""
         : "";
-      const modelsData = await providerApi.getModels(activeId || undefined);
-      setModels(modelsData.models);
-      setModelSettings(modelsData.modelSettings ?? {});
-      setActiveProviderId(modelsData.activeProviderId ?? activeId);
+
+      const nextSelectedId = providerList[0]?.id
+        ? providerList.find((provider) => provider.id === selectedProviderId)?.id
+          ?? providerList.find((provider) => provider.id === preferredProviderId)?.id
+          ?? providerList[0].id
+        : "";
+      if (nextSelectedId) {
+        const modelsData = await providerApi.getModels(nextSelectedId);
+        setModels(modelsData.models);
+        setModelSettings(modelsData.modelSettings ?? {});
+      } else {
+        setModels([]);
+        setModelSettings({});
+      }
+      setSelectedProviderId(nextSelectedId);
     } catch (err) {
       console.error("[provider-load]", err);
     } finally {
       setLoading(false);
     }
-  }, [activeProviderId]);
+  }, [selectedProviderId]);
 
   useEffect(() => {
     void loadData();
@@ -84,16 +99,7 @@ export default function SettingsProviderPage() {
     const modelsData = await providerApi.getModels(providerId);
     setModels(modelsData.models);
     setModelSettings(modelsData.modelSettings ?? {});
-    setActiveProviderId(modelsData.activeProviderId ?? providerId);
-  }
-
-  async function handleActivate(id: string) {
-    try {
-      const result = await providerApi.activateProvider(id);
-      await loadProviderModels(result.activeProviderId);
-    } catch (err) {
-      console.error("[provider-activate]", err);
-    }
+    setSelectedProviderId(modelsData.providerId ?? providerId);
   }
 
   async function handleDelete(id: string) {
@@ -101,10 +107,10 @@ export default function SettingsProviderPage() {
       await providerApi.removeProvider(id);
       const nextProviders = providers.filter((provider) => provider.id !== id);
       setProviders(nextProviders);
-      if (activeProviderId === id && nextProviders[0]) {
+      if (selectedProviderId === id && nextProviders[0]) {
         await loadProviderModels(nextProviders[0].id);
       } else if (nextProviders.length === 0) {
-        setActiveProviderId("");
+        setSelectedProviderId("");
         setModels([]);
         setModelSettings({});
       }
@@ -137,10 +143,10 @@ export default function SettingsProviderPage() {
   }
 
   async function handleModelSettingsSave(modelId: string, settings: ModelSettings) {
-    if (!activeProviderId) return;
+    if (!selectedProviderId) return;
     setModelSettings((prev) => ({ ...prev, [modelId]: settings }));
     try {
-      await providerApi.setModelSettings(activeProviderId, modelId, settings);
+      await providerApi.setModelSettings(selectedProviderId, modelId, settings);
     } catch (err) {
       console.error("[provider-model-settings]", err);
     }
@@ -167,14 +173,14 @@ export default function SettingsProviderPage() {
                 <ProviderCard
                   key={provider.id}
                   provider={provider}
-                  isActive={provider.id === activeProviderId}
+                  isSelected={provider.id === selectedProviderId}
                   isExpanded={expanded.has(provider.id)}
                   isTesting={testing.has(provider.id)}
                   testResult={testResults[provider.id]}
-                  models={provider.id === activeProviderId ? models : []}
-                  modelSettings={provider.id === activeProviderId ? modelSettings : {}}
+                  models={provider.id === selectedProviderId ? models : []}
+                  modelSettings={provider.id === selectedProviderId ? modelSettings : {}}
                   onToggleExpand={() => expanded.toggle(provider.id)}
-                  onActivate={() => void handleActivate(provider.id)}
+                  onSelect={() => void loadProviderModels(provider.id)}
                   onTest={() => void handleTest(provider.id)}
                   onDelete={() => void handleDelete(provider.id)}
                   onFieldChange={(field, value) => void handleProviderFieldChange(provider.id, field, value)}

@@ -1,7 +1,7 @@
 export const SESSION_CHANGED_EVENT = "session-changed";
 export const CHAT_DEBUG_TOGGLE_EVENT = "chat-debug-toggle";
 
-export type AppEventName =
+type AppEventName =
   | typeof SESSION_CHANGED_EVENT
   | typeof CHAT_DEBUG_TOGGLE_EVENT;
 

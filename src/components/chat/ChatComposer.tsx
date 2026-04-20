@@ -1,8 +1,13 @@
 import { useRef, useState, useCallback, useLayoutEffect } from "react";
 import styled from "styled-components";
-import type { AgentDefinition, AgentLoopState, ChatMode, TaskItem } from "@/types/api";
+import type {
+  AgentDefinition,
+  AgentLoopState,
+  ChatMode,
+  TaskItem,
+} from "@/types/api";
 import type { PendingAttachment } from "@/hooks/useAttachments";
-import SelectMenu, { type SelectMenuOption } from "@/components/SelectMenu";
+import SelectMenu from "@/components/SelectMenu";
 import Spinner from "@/components/Spinner";
 import AttachmentPreview from "./AttachmentPreview";
 import type { TokenDisplayStats } from "./types";
@@ -50,8 +55,6 @@ const ComposerStack = styled.div`
   align-items: flex-end;
 `;
 
-
-
 const TasksDrawer = styled.div<{ $open: boolean }>`
   position: absolute;
   left: 0;
@@ -69,7 +72,9 @@ const TasksDrawer = styled.div<{ $open: boolean }>`
   transform: translateY(${(p) => (p.$open ? "0" : "18px")});
   opacity: ${(p) => (p.$open ? 1 : 0)};
   pointer-events: ${(p) => (p.$open ? "auto" : "none")};
-  transition: transform 0.2s ease, opacity 0.2s ease;
+  transition:
+    transform 0.2s ease,
+    opacity 0.2s ease;
 `;
 
 const TasksHeader = styled.div`
@@ -98,7 +103,8 @@ const TasksToggleButton = styled.button<{ $active: boolean }>`
   padding: 4px 8px;
   border-radius: 999px;
   border: 1px solid ${(p) => (p.$active ? "var(--accent)" : "var(--border)")};
-  background: ${(p) => (p.$active ? "var(--accent-muted)" : "var(--bg-elevated)")};
+  background: ${(p) =>
+    p.$active ? "var(--accent-muted)" : "var(--bg-elevated)"};
   color: ${(p) => (p.$active ? "var(--accent)" : "var(--text-secondary)")};
   font-size: 12px;
   font-weight: 600;
@@ -122,9 +128,8 @@ const TaskRow = styled.div<{ $status: TaskItem["status"] }>`
   align-items: start;
   gap: 8px;
   padding: 4px 0;
-  color: ${({ $status }) => (
-    $status === "completed" ? "var(--text-muted)" : "var(--text-primary)"
-  )};
+  color: ${({ $status }) =>
+    $status === "completed" ? "var(--text-muted)" : "var(--text-primary)"};
 `;
 
 const TaskStatusDot = styled.span<{ $status: TaskItem["status"] }>`
@@ -132,11 +137,12 @@ const TaskStatusDot = styled.span<{ $status: TaskItem["status"] }>`
   height: 7px;
   border-radius: 50%;
   flex-shrink: 0;
-  background: ${({ $status }) => (
-    $status === "in_progress" ? "var(--success)"
-      : $status === "pending" ? "var(--warning)"
-        : "var(--text-muted)"
-  )};
+  background: ${({ $status }) =>
+    $status === "in_progress"
+      ? "var(--success)"
+      : $status === "pending"
+        ? "var(--warning)"
+        : "var(--text-muted)"};
   margin-top: 6px;
 `;
 
@@ -145,7 +151,8 @@ const TaskText = styled.span<{ $status: TaskItem["status"] }>`
   font-size: 12px;
   font-weight: 600;
   line-height: 1.35;
-  text-decoration: ${(p) => (p.$status === "completed" ? "line-through" : "none")};
+  text-decoration: ${(p) =>
+    p.$status === "completed" ? "line-through" : "none"};
 `;
 
 const TaskNotes = styled.span`
@@ -200,11 +207,6 @@ const ControlGroup = styled.div`
   gap: 6px;
 `;
 
-const ControlEmoji = styled.span`
-  font-size: 14px;
-  line-height: 1;
-`;
-
 const ContextIndicator = styled.div`
   display: flex;
   align-items: center;
@@ -231,7 +233,6 @@ const ChatInput = styled.textarea`
   border: none;
   resize: none;
   overflow-y: auto;
-  field-sizing: content;
 
   &::placeholder {
     color: var(--text-muted);
@@ -285,22 +286,65 @@ const HiddenFileInput = styled.input`
 `;
 
 const ACCEPTED_FILES = [
-  "image/png", "image/jpeg", "image/gif", "image/webp",
-  "application/pdf", "application/json",
-  "text/plain", "text/markdown", "text/csv", "text/xml", "text/html",
-  ".txt", ".md", ".json", ".csv", ".xml", ".yaml", ".yml", ".html", ".css",
-  ".js", ".ts", ".tsx", ".jsx", ".py", ".rs", ".go", ".java", ".c", ".cpp", ".h",
-  ".sh", ".sql", ".toml", ".ini", ".log", ".pdf",
+  "image/png",
+  "image/jpeg",
+  "image/gif",
+  "image/webp",
+  "application/pdf",
+  "application/json",
+  "text/plain",
+  "text/markdown",
+  "text/csv",
+  "text/xml",
+  "text/html",
+  ".txt",
+  ".md",
+  ".json",
+  ".csv",
+  ".xml",
+  ".yaml",
+  ".yml",
+  ".html",
+  ".css",
+  ".js",
+  ".ts",
+  ".tsx",
+  ".jsx",
+  ".py",
+  ".rs",
+  ".go",
+  ".java",
+  ".c",
+  ".cpp",
+  ".h",
+  ".sh",
+  ".sql",
+  ".toml",
+  ".ini",
+  ".log",
+  ".pdf",
 ].join(",");
 
 function ContextRing({ used, max }: { used: number; max: number }) {
   const pct = max > 0 ? Math.min(used / max, 1) : 0;
   const r = 8;
   const circ = 2 * Math.PI * r;
-  const color = pct > 0.95 ? "var(--danger)" : pct > 0.8 ? "var(--warning)" : "var(--accent)";
+  const color =
+    pct > 0.95
+      ? "var(--danger)"
+      : pct > 0.8
+        ? "var(--warning)"
+        : "var(--accent)";
   return (
     <svg width="20" height="20" style={{ flexShrink: 0 }}>
-      <circle cx="10" cy="10" r={r} fill="none" stroke="var(--border)" strokeWidth="2" />
+      <circle
+        cx="10"
+        cy="10"
+        r={r}
+        fill="none"
+        stroke="var(--border)"
+        strokeWidth="2"
+      />
       <circle
         cx="10"
         cy="10"
@@ -321,8 +365,6 @@ function formatTokens(n: number): string {
   if (n >= 1000) return `${(n / 1000).toFixed(1)}k`;
   return String(n);
 }
-
-
 
 type Props = {
   input: string;
@@ -369,7 +411,8 @@ export default function ChatComposer({
   const [dragOver, setDragOver] = useState(false);
   const [tasksOpen, setTasksOpen] = useState(false);
 
-  const canSend = !sending && (input.trim().length > 0 || pendingAttachments.length > 0);
+  const canSend =
+    !sending && (input.trim().length > 0 || pendingAttachments.length > 0);
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -426,7 +469,6 @@ export default function ChatComposer({
   return (
     <InputArea>
       <ComposerLayout>
-
         <ComposerStack>
           {tasks.length > 0 && (
             <TasksDrawer $open={tasksOpen}>
@@ -436,7 +478,15 @@ export default function ChatComposer({
               {tasks.length > 0 && (
                 <TasksList>
                   {tasks.map((task) => (
-                    <TaskRow key={task.id} $status={task.status} title={task.notes ? `${task.title} - ${task.notes}` : task.title}>
+                    <TaskRow
+                      key={task.id}
+                      $status={task.status}
+                      title={
+                        task.notes
+                          ? `${task.title} - ${task.notes}`
+                          : task.title
+                      }
+                    >
                       <TaskStatusDot $status={task.status} />
                       <div>
                         <TaskText $status={task.status}>{task.title}</TaskText>
@@ -468,17 +518,19 @@ export default function ChatComposer({
                 aria-label="Chat-Nachricht"
               />
             </ComposerInputWrap>
-            <AttachmentPreview attachments={pendingAttachments} onRemove={onRemoveAttachment} />
+            <AttachmentPreview
+              attachments={pendingAttachments}
+              onRemove={onRemoveAttachment}
+            />
             <ComposerFooter>
               <ComposerMeta>
                 <ControlGroup>
-                  <ControlEmoji>🎯</ControlEmoji>
                   <SelectMenu
                     value={activeMode}
                     options={[
                       { value: "plan", label: "Plan" },
                       { value: "edit", label: "Edit" },
-                      { value: "autonomous", label: "Autonomous" }
+                      { value: "autonomous", label: "Autonomous" },
                     ]}
                     onSelect={(val) => onModeSwitch(val as ChatMode)}
                     direction="up"
@@ -509,7 +561,11 @@ export default function ChatComposer({
                     aria-label={`Tasks (${tasks.length})`}
                   >
                     <TasksButtonEmoji>📝</TasksButtonEmoji>
-                    {sending ? <Spinner size={12} /> : <TasksButtonCount>{tasks.length}</TasksButtonCount>}
+                    {sending ? (
+                      <Spinner size={12} />
+                    ) : (
+                      <TasksButtonCount>{tasks.length}</TasksButtonCount>
+                    )}
                   </TasksToggleButton>
                 )}
                 {maxCtx > 0 && tokenStats && (
@@ -517,7 +573,9 @@ export default function ChatComposer({
                     title={`Input: ${tokenStats.input.toLocaleString()} | Output: ${tokenStats.output.toLocaleString()} | Reasoning: ${tokenStats.reasoning.toLocaleString()}`}
                   >
                     <ContextRing used={tokenStats.input} max={maxCtx} />
-                    <span>{formatTokens(tokenStats.input)} / {formatTokens(maxCtx)}</span>
+                    <span>
+                      {formatTokens(tokenStats.input)} / {formatTokens(maxCtx)}
+                    </span>
                   </ContextIndicator>
                 )}
                 <HiddenFileInput
@@ -541,11 +599,19 @@ export default function ChatComposer({
                   +
                 </AttachIconButton>
                 {sending && onAbort ? (
-                  <SendIconButton onClick={onAbort} aria-label="Abbrechen" title="Abbrechen">
+                  <SendIconButton
+                    onClick={onAbort}
+                    aria-label="Abbrechen"
+                    title="Abbrechen"
+                  >
                     x
                   </SendIconButton>
                 ) : (
-                  <SendIconButton onClick={onSend} disabled={!canSend} aria-label="Nachricht senden">
+                  <SendIconButton
+                    onClick={onSend}
+                    disabled={!canSend}
+                    aria-label="Nachricht senden"
+                  >
                     ^
                   </SendIconButton>
                 )}

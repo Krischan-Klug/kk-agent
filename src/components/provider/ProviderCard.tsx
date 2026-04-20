@@ -1,5 +1,9 @@
 import styled from "styled-components";
-import type { ModelInfo, ModelSettings, ProviderConfig } from "@/types/api";
+import type {
+  ModelInfo,
+  ModelSettings,
+  ProviderConfig,
+} from "@/types/api";
 import Badge from "@/components/Badge";
 import Button from "@/components/Button";
 import Input from "@/components/Input";
@@ -77,14 +81,14 @@ const TestResult = styled.span<{ $ok: boolean }>`
 
 type Props = {
   provider: ProviderConfig;
-  isActive: boolean;
+  isSelected: boolean;
   isExpanded: boolean;
   isTesting: boolean;
   testResult?: { ok: boolean; error?: string };
   models: ModelInfo[];
   modelSettings: Record<string, ModelSettings>;
   onToggleExpand: () => void;
-  onActivate: () => void;
+  onSelect: () => void;
   onTest: () => void;
   onDelete: () => void;
   onFieldChange: (field: keyof ProviderConfig, value: string) => void;
@@ -93,31 +97,31 @@ type Props = {
 
 export default function ProviderCard({
   provider,
-  isActive,
+  isSelected,
   isExpanded,
   isTesting,
   testResult,
   models,
   modelSettings,
   onToggleExpand,
-  onActivate,
+  onSelect,
   onTest,
   onDelete,
   onFieldChange,
   onModelSettingsSave,
 }: Props) {
   return (
-    <Wrapper $active={isActive}>
+    <Wrapper $active={isSelected}>
       <Header onClick={onToggleExpand}>
         <Name>
-          {isActive && <Badge variant="info">aktiv</Badge>}
+          {isSelected && <Badge variant="info">ausgewaehlt</Badge>}
           {provider.name}
           <Meta>{provider.baseUrl}</Meta>
         </Name>
         <HeaderActions>
-          {!isActive && (
-            <Button size="sm" variant="secondary" onClick={(e) => { e.stopPropagation(); onActivate(); }}>
-              Aktivieren
+          {!isSelected && (
+            <Button size="sm" variant="secondary" onClick={(e) => { e.stopPropagation(); onSelect(); }}>
+              Auswaehlen
             </Button>
           )}
           <Button size="sm" variant="secondary" onClick={(e) => { e.stopPropagation(); onTest(); }} disabled={isTesting}>
@@ -153,8 +157,12 @@ export default function ProviderCard({
             </FormField>
           </FormRow>
 
-          {isActive && (
-            <ModelSettingsSection models={models} modelSettings={modelSettings} onSave={onModelSettingsSave} />
+          {isSelected && (
+            <ModelSettingsSection
+              models={models}
+              modelSettings={modelSettings}
+              onSave={onModelSettingsSave}
+            />
           )}
 
           <div style={{ display: "flex", justifyContent: "flex-end" }}>

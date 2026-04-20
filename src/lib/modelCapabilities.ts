@@ -1,55 +1,40 @@
-import type { EndpointType, ModelInfo, ModelSettings, ReasoningLevelConfig } from "@/types/api";
+import {
+  getEndpointCapabilities as getSharedEndpointCapabilities,
+  getPreferredEndpoint,
+  getReasoningLevels as getSharedReasoningLevels,
+  normalizeCanonicalReasoningLevel,
+} from "kk-agent-contract";
+import type { EndpointType, ModelInfo, ModelSettings, ReasoningEffort } from "@/types/api";
 
-export const DEFAULT_REASONING_LEVELS = ["none", "minimal", "low", "medium", "high", "xhigh"] as const;
-
-export const DEFAULT_REASONING_LEVEL_DEFAULTS: Record<string, ReasoningLevelConfig> = {
-  none: { temperature: 1.0 },
-  minimal: { temperature: 1.0, maxOutputTokens: 2048 },
-  low: { temperature: 1.0, maxOutputTokens: 4096 },
-  medium: { temperature: 1.0, maxOutputTokens: 8192 },
-  high: { temperature: 1.0, maxOutputTokens: 16384 },
-  xhigh: { temperature: 1.0 },
-};
-
-export function getReasoningLevels(modelInfo?: ModelInfo): string[] {
-  if (!modelInfo?.capabilities.supportsReasoning) return [];
-  return [...DEFAULT_REASONING_LEVELS];
+export function getReasoningLevels(modelInfo?: ModelInfo): ReasoningEffort[] {
+  return getSharedReasoningLevels(modelInfo?.capabilities);
 }
 
-export function normalizeCanonicalReasoningEffort(value?: string): string | undefined {
-  if (!value) return undefined;
-  if (value === "off") return "none";
-  if (value === "on") return "high";
-  return value;
+export function normalizeCanonicalReasoningEffort(value?: string): ReasoningEffort | undefined {
+  return normalizeCanonicalReasoningLevel(value);
 }
 
 export function getResolvedEndpoint(modelInfo: ModelInfo | undefined, settings?: ModelSettings): EndpointType {
-  const supported = (modelInfo?.capabilities.supportedEndpoints ?? ["chat-completions"])
-    .filter((endpoint) => modelInfo?.capabilities.transportProfiles?.[endpoint]?.supported !== false);
-  if (settings?.endpoint && supported.includes(settings.endpoint)) return settings.endpoint;
-  return supported[0] ?? "chat-completions";
+  const configuredEndpoint = settings?.llmRequestConfig?.common?.endpoint;
+  return getPreferredEndpoint(modelInfo?.capabilities, configuredEndpoint);
 }
 
 export function getEndpointCapabilities(modelInfo: ModelInfo | undefined, endpoint: EndpointType) {
-  return modelInfo?.capabilities.endpointCapabilities[endpoint] ?? {
-    temperatureSupported: false,
-    maxOutputTokensSupported: false,
-  };
+  return getSharedEndpointCapabilities(modelInfo?.capabilities, endpoint);
 }
 
-export function getResolvedReasoningEffort(modelInfo: ModelInfo | undefined, settings: ModelSettings | undefined, value?: string): string {
+export function getResolvedReasoningEffort(
+  modelInfo: ModelInfo | undefined,
+  settings: ModelSettings | undefined,
+  value?: string,
+): ReasoningEffort | undefined {
   const levels = getReasoningLevels(modelInfo);
   const normalizedValue = normalizeCanonicalReasoningEffort(value);
-  const normalizedSetting = normalizeCanonicalReasoningEffort(settings?.reasoningEffort);
-  if (levels.length === 0) return normalizedValue ?? normalizedSetting ?? "medium";
+  const normalizedSetting = normalizeCanonicalReasoningEffort(settings?.llmRequestConfig?.common?.reasoningEffort);
   if (normalizedValue && levels.includes(normalizedValue)) return normalizedValue;
   if (normalizedSetting && levels.includes(normalizedSetting)) return normalizedSetting;
   if (levels.includes("medium")) return "medium";
   return levels[0];
-}
-
-export function getDefaultLevelConfig(level: string): ReasoningLevelConfig | undefined {
-  return DEFAULT_REASONING_LEVEL_DEFAULTS[level];
 }
 
 export function buildTemperatureOptions(range?: { min: number; max: number; step?: number }) {

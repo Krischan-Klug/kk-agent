@@ -27,7 +27,19 @@ import type {
   UpdateSkillBody,
 } from "@/types/api";
 
-const BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://127.0.0.1:3001";
+function resolveApiBaseUrl(): string {
+  if (typeof window !== "undefined") {
+    const desktopBase = window.kkAgentDesktop?.apiBaseUrl?.trim();
+    if (desktopBase) return desktopBase;
+  }
+
+  const envBase = process.env.NEXT_PUBLIC_API_URL?.trim();
+  if (envBase) return envBase;
+
+  return "http://127.0.0.1:3001";
+}
+
+const BASE = resolveApiBaseUrl();
 
 export function getSessionAttachmentUrl(sessionId: string, attachmentId: string): string {
   return `${BASE}/session/${encodeURIComponent(sessionId)}/attachments/${encodeURIComponent(attachmentId)}`;

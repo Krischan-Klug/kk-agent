@@ -16,6 +16,7 @@ Other common commands:
 ```bash
 npm run lint
 npm run build
+npm run build:desktop
 ```
 
 ## Main Routes
@@ -95,3 +96,7 @@ No external state library is used.
 ## Backend Contract
 
 The frontend consumes the backend through the shared contract package and typed API wrappers. Provider-related UI follows the backend capability model rather than maintaining a separate frontend-only model description.
+
+Package dependency:
+
+- `@krischan-klug/kk-agent-contract` from GitHub Packages

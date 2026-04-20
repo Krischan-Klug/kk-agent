@@ -3,7 +3,7 @@ import {
   getPreferredEndpoint,
   getReasoningLevels as getSharedReasoningLevels,
   normalizeCanonicalReasoningLevel,
-} from "kk-agent-contract";
+} from "@krischan-klug/kk-agent-contract";
 import type { EndpointType, ModelInfo, ModelSettings, ReasoningEffort } from "@/types/api";
 
 export function getReasoningLevels(modelInfo?: ModelInfo): ReasoningEffort[] {

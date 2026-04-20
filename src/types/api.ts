@@ -10,7 +10,7 @@ import type {
   ToolExecutionStatus,
   TranscriptBlock,
   TranscriptMessage,
-} from "kk-agent-contract";
+} from "@krischan-klug/kk-agent-contract";
 
 export type {
   AgentDefinition,
@@ -65,7 +65,7 @@ export type {
   UpdateSessionBody,
   UpdateSkillBody,
   VisionSupport,
-} from "kk-agent-contract";
+} from "@krischan-klug/kk-agent-contract";
 
 export type SessionMessage = TranscriptMessage;
 

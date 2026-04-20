@@ -7,7 +7,7 @@ export {
   collectText,
   collectToolResults,
   collectToolUses,
-} from "kk-agent-contract";
+} from "@krischan-klug/kk-agent-contract";
 
 export function buildToolCards(
   toolUses: TranscriptToolUseBlock[],

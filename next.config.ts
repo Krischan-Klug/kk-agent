@@ -7,7 +7,8 @@ const repoRoot = path.join(configDir, "..");
 
 const nextConfig: NextConfig = {
   reactStrictMode: true,
-  transpilePackages: ["kk-agent-contract"],
+  output: process.env.KK_AGENT_STATIC_EXPORT === "1" ? "export" : undefined,
+  transpilePackages: ["@krischan-klug/kk-agent-contract"],
   experimental: {
     externalDir: true,
   },
@@ -16,6 +17,9 @@ const nextConfig: NextConfig = {
   },
   compiler: {
     styledComponents: true,
+  },
+  images: {
+    unoptimized: true,
   },
 };
 

@@ -1,0 +1,19 @@
+{
+  "name": "kk-agent-workspace",
+  "private": true,
+  "workspaces": [
+    "kk-agent-backend",
+    "kk-agent-frontend",
+    "kk-agent-contract",
+    "kk-agent-desktop"
+  ],
+  "scripts": {
+    "dev:backend": "npm --workspace kk-agent-backend run dev",
+    "dev:frontend": "npm --workspace kk-agent-frontend run dev",
+    "dev:desktop": "npm --workspace kk-agent-desktop run start:dev",
+    "dev": "node scripts/dev.mjs",
+    "build": "npm --workspace kk-agent-contract run build && npm --workspace kk-agent-backend run build && npm --workspace kk-agent-frontend run build",
+    "desktop:build": "npm --workspace kk-agent-contract run build && npm --workspace kk-agent-backend run build:desktop && npm --workspace kk-agent-frontend run build:desktop && npm --workspace kk-agent-desktop run build",
+    "desktop:dist": "npm run desktop:build && npm --workspace kk-agent-desktop run dist"
+  }
+}

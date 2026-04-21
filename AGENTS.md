@@ -5,6 +5,8 @@ Quick reference for AI agents working in this repo.
 ## Project Overview
 - `kk-agent-backend`: Plugin-based backend for local / self-hosted LLM agents
 - `kk-agent-frontend`: Next.js frontend for chat, agents, tools, MCPs, providers, and defaults
+- `kk-agent-desktop`: Electron shell that bundles the static frontend and the backend runtime
+- `kk-agent-contract`: Shared TypeScript types and request/capability helpers
 
 ## Backend at a Glance
 - `core`: Technical bootstrap minimum — no feature logic
@@ -16,6 +18,13 @@ Quick reference for AI agents working in this repo.
 - `skills`: Local developer-curated skills from `state/skills`, separate from tools and MCPs
 - `session`: Sessions, chat, streaming
 - `provider`: Models and providers
+
+## Desktop at a Glance
+- Electron main forks the backend bundle as a Node process (`ELECTRON_RUN_AS_NODE`)
+- Backend binds to a dynamic port; readiness is signaled via a `KK_AGENT_BACKEND_READY` stdout line
+- Static frontend is served through a custom `app://` protocol, not `file://`
+- Runtime state lives under `app.getPath("userData")/kk-agent/state`
+- Renderer has `contextIsolation`, `sandbox`, and no `nodeIntegration`; the preload only exposes `apiBaseUrl`, `appVersion`, and `platform`
 
 ## Frontend at a Glance
 - `/chat`: Chat and debug

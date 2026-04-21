@@ -8,13 +8,11 @@
   "scripts": {
     "build": "tsup --config tsup.config.ts",
     "start:dev": "node scripts/start-dev.mjs",
-    "dev": "npm run build && npm run start:dev",
     "dist": "npm run build && electron-builder --win nsis"
   },
   "build": {
     "appId": "com.krikra.kk-agent",
     "productName": "KK-Agent",
-    "electronVersion": "41.2.1",
     "directories": {
       "output": "release"
     },

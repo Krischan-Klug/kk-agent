@@ -5,7 +5,10 @@ function getArgument(prefix: string): string | undefined {
   return arg ? arg.slice(prefix.length) : undefined;
 }
 
-const apiBaseUrl = getArgument("--kk-agent-api-base-url=") ?? "http://127.0.0.1:3001";
+const apiBaseUrl = getArgument("--kk-agent-api-base-url=");
+if (!apiBaseUrl) {
+  throw new Error("kk-agent-desktop: apiBaseUrl argument missing");
+}
 const appVersion = getArgument("--kk-agent-app-version=");
 
 contextBridge.exposeInMainWorld("kkAgentDesktop", {

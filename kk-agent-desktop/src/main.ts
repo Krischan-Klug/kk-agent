@@ -6,6 +6,7 @@ import { mkdir } from "node:fs/promises";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 
+// Eigenes app:// statt file://: liefert Standard-Origin mit fetch/stream/CORS im packaged Build.
 protocol.registerSchemesAsPrivileged([
   {
     scheme: "app",
@@ -31,6 +32,7 @@ function getDesktopRoot(): string {
   return path.resolve(__dirname, "..");
 }
 
+// Packaged: assets liegen unter process.resourcesPath (siehe extraResources in package.json).
 function getFrontendRoot(): string {
   return app.isPackaged
     ? path.join(process.resourcesPath, "frontend")
@@ -69,6 +71,7 @@ function resolveFrontendPath(frontendRoot: string, requestPath: string): string 
 
   for (const candidate of candidates) {
     const absoluteCandidate = path.resolve(frontendRoot, `.${candidate}`);
+    // Traversal-Schutz: nie Dateien außerhalb von frontendRoot ausliefern.
     if (absoluteCandidate.startsWith(frontendRoot) && existsSync(absoluteCandidate)) {
       return absoluteCandidate;
     }
@@ -86,6 +89,7 @@ async function registerFrontendProtocol(): Promise<void> {
   });
 }
 
+// Handshake über stdout statt IPC: Backend läuft auch außerhalb von Electron (CLI), das macht ihn entkoppelt.
 async function waitForBackendFromLogs(child: ChildProcess): Promise<string> {
   return await new Promise<string>((resolve, reject) => {
     const stdout = child.stdout;
@@ -141,6 +145,8 @@ async function startBackend(): Promise<string> {
 
   await mkdir(stateDir, { recursive: true });
 
+  // ELECTRON_RUN_AS_NODE lässt die Electron-Binary als reiner Node-Prozess laufen — kein zweites Node nötig.
+  // PORT=0: OS vergibt freien Port, vermeidet Kollisionen auf User-Maschinen.
   backendProcess = fork(backendEntry, {
     cwd: userDataRoot,
     env: {
@@ -183,9 +189,14 @@ async function createMainWindow(apiBaseUrl: string): Promise<void> {
     mainWindow?.show();
   });
 
+  // Hardening: kein window.open, keine Navigation auf fremde Origins.
+  mainWindow.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
+  const allowedOrigin = isDev ? DEV_FRONTEND_URL : "app://";
+  mainWindow.webContents.on("will-navigate", (event, url) => {
+    if (!url.startsWith(allowedOrigin)) event.preventDefault();
+  });
+
   if (isDev) {
-    await waitForHttp(`${DEV_API_BASE_URL}/healthz`);
-    await waitForHttp(DEV_FRONTEND_URL);
     await mainWindow.loadURL(DEV_FRONTEND_URL);
     return;
   }

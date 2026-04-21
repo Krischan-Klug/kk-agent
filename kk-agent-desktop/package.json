@@ -1,0 +1,55 @@
+{
+  "name": "kk-agent-desktop",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Electron desktop shell for KK-Agent.",
+  "author": "KK-Agent",
+  "main": "dist/main.js",
+  "scripts": {
+    "build": "tsup --config tsup.config.ts",
+    "start:dev": "node scripts/start-dev.mjs",
+    "dev": "npm run build && npm run start:dev",
+    "dist": "npm run build && electron-builder --win nsis"
+  },
+  "build": {
+    "appId": "com.krikra.kk-agent",
+    "productName": "KK-Agent",
+    "electronVersion": "41.2.1",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**/*",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "../kk-agent-backend/desktop-dist",
+        "to": "backend"
+      },
+      {
+        "from": "../kk-agent-frontend/out",
+        "to": "frontend"
+      }
+    ],
+    "asar": true,
+    "win": {
+      "signAndEditExecutable": false,
+      "target": [
+        "nsis"
+      ]
+    },
+    "nsis": {
+      "packElevateHelper": false,
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true
+    }
+  },
+  "devDependencies": {
+    "@types/node": "^20",
+    "electron": "41.2.1",
+    "electron-builder": "^26.8.1",
+    "tsup": "^8.5.1",
+    "typescript": "^5"
+  }
+}

@@ -1,0 +1,69 @@
+export type ProviderErrorKind =
+  | "prompt_too_long"
+  | "max_output_tokens"
+  | "rate_limit"
+  | "transient"
+  | "fatal";
+
+export interface ClassifiedProviderError {
+  kind: ProviderErrorKind;
+  status?: number;
+  message: string;
+  cause: unknown;
+}
+
+const STATUS_RE = /\b(\d{3})\b/;
+
+function extractStatus(message: string): number | undefined {
+  const match = STATUS_RE.exec(message);
+  if (!match) return undefined;
+  const status = Number(match[1]);
+  if (status >= 100 && status <= 599) return status;
+  return undefined;
+}
+
+export function classifyProviderError(error: unknown): ClassifiedProviderError {
+  const message = error instanceof Error ? error.message : String(error);
+  const lower = message.toLowerCase();
+  const status = extractStatus(message);
+
+  if (
+    status === 413 ||
+    lower.includes("context_length_exceeded") ||
+    lower.includes("prompt is too long") ||
+    lower.includes("context length") ||
+    lower.includes("maximum context") ||
+    lower.includes("too many tokens")
+  ) {
+    return { kind: "prompt_too_long", status, message, cause: error };
+  }
+
+  if (lower.includes("max_tokens") && lower.includes("exceed")) {
+    return { kind: "max_output_tokens", status, message, cause: error };
+  }
+
+  if (status === 429 || lower.includes("rate limit") || lower.includes("rate_limit")) {
+    return { kind: "rate_limit", status, message, cause: error };
+  }
+
+  if (
+    (status !== undefined && status >= 500 && status <= 599) ||
+    lower.includes("econnreset") ||
+    lower.includes("etimedout") ||
+    lower.includes("fetch failed") ||
+    lower.includes("socket hang up") ||
+    lower.includes("network") ||
+    lower.includes("timeout")
+  ) {
+    return { kind: "transient", status, message, cause: error };
+  }
+
+  return { kind: "fatal", status, message, cause: error };
+}
+
+export function computeBackoffMs(attempt: number): number {
+  // attempt: 1, 2, 3 → ~1s, ~3s, ~9s with jitter
+  const base = 1000 * 3 ** (attempt - 1);
+  const jitter = Math.floor(Math.random() * 400);
+  return base + jitter;
+}

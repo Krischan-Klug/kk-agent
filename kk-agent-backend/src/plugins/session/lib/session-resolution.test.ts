@@ -1,5 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import type { ResolvedSystemToolRuntime } from "../../tools/service.js";
+import { buildRuntimeToolCollection } from "./runtime-tools.js";
 import { resolveSessionLlmRequestConfig } from "./session-resolution.js";
 import type { SessionState } from "../types.js";
 
@@ -47,4 +49,43 @@ test("resolveSessionLlmRequestConfig keeps session-scoped overrides in the provi
       preserve_thinking: true,
     },
   });
+});
+
+test("buildRuntimeToolCollection keeps CreateSkill out of plan runtimes when only Skill is allowed", () => {
+  const systemRuntime: ResolvedSystemToolRuntime = {
+    instructionsById: {},
+    runtimeVariables: {},
+    runtimeToolsByName: {
+      Skill: {
+        name: "Skill",
+        description: "Load a skill.",
+        parameters: {},
+        inputSchema: {},
+        source: "system",
+        capabilityId: "skill",
+        isConcurrencySafe: () => true,
+        interruptBehavior: "block",
+        resultPolicy: {},
+        permissionPolicy: { kind: "allow" },
+      },
+      CreateSkill: {
+        name: "CreateSkill",
+        description: "Create a skill.",
+        parameters: {},
+        inputSchema: {},
+        source: "system",
+        capabilityId: "skill",
+        isConcurrencySafe: () => false,
+        interruptBehavior: "block",
+        resultPolicy: {},
+        permissionPolicy: { kind: "allow" },
+      },
+    },
+  };
+
+  const planRuntime = buildRuntimeToolCollection(systemRuntime, [], ["Skill"]);
+  const editRuntime = buildRuntimeToolCollection(systemRuntime, [], ["Skill", "CreateSkill"]);
+
+  assert.deepEqual(Object.keys(planRuntime.runtimeToolsByName), ["Skill"]);
+  assert.deepEqual(Object.keys(editRuntime.runtimeToolsByName).sort(), ["CreateSkill", "Skill"]);
 });

@@ -36,6 +36,7 @@ export const EDIT_TOOL_NAMES = [
   "WebSearch",
   "WebFetch",
   "Skill",
+  "CreateSkill",
   "list_attachments",
   "read_attachment",
   "provide_attachment",

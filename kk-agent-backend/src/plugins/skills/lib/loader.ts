@@ -24,7 +24,9 @@ interface StoredSkillMetadata {
 }
 
 function normalizeModes(modes?: ChatMode[]): ChatMode[] {
-  const normalized = [...new Set((modes ?? DEFAULT_ALLOWED_MODES).filter((mode): mode is ChatMode => mode === "plan" || mode === "edit"))];
+  const normalized = [...new Set((modes ?? DEFAULT_ALLOWED_MODES).filter((mode): mode is ChatMode =>
+    mode === "plan" || mode === "edit" || mode === "autonomous"
+  ))];
   return normalized.length > 0 ? normalized : [...DEFAULT_ALLOWED_MODES];
 }
 

@@ -1,9 +1,10 @@
 import { getStateDirPath } from "../../../lib/state.js";
 import type { ToolExecutionResult, ToolRuntimeContext } from "../../../loop/types.js";
 import type { McpServerConfig } from "../../../mcp/types.js";
+import { createSkill } from "../../../skills/service.js";
 import { loadSkillFromPath } from "../../../skills/lib/loader.js";
 import { createSkillContextMessage } from "../../../skills/lib/xml.js";
-import type { SkillDefinition } from "../../../skills/types.js";
+import type { CreateSkillBody, SkillDefinition } from "../../../skills/types.js";
 
 function readStringArray(value: unknown): string[] {
   return Array.isArray(value) ? value.filter((entry): entry is string => typeof entry === "string" && entry.trim().length > 0) : [];
@@ -15,6 +16,15 @@ function readInstructionOverrides(value: unknown): Record<string, string> {
     Object.entries(value as Record<string, unknown>)
       .filter((entry): entry is [string, string] => typeof entry[1] === "string" && entry[1].trim().length > 0),
   );
+}
+
+function readBoolean(value: unknown): boolean | undefined {
+  return typeof value === "boolean" ? value : undefined;
+}
+
+function readOptionalStringArray(value: unknown): string[] | undefined {
+  if (value === undefined) return undefined;
+  return readStringArray(value);
 }
 
 function buildLoadedSkillSummary(skill: SkillDefinition): string {
@@ -39,12 +49,42 @@ function addLoadedSkillId(context: ToolRuntimeContext, skillId: string): ToolRun
   };
 }
 
+function buildCreatedSkillSummary(skill: SkillDefinition): string {
+  const lines = [`Created skill "${skill.id}" (${skill.name}).`, `Path: ${skill.path}`];
+  if (skill.allowedModes.length > 0) {
+    lines.push(`Allowed modes: ${skill.allowedModes.join(", ")}`);
+  }
+  return lines.join("\n");
+}
+
 export async function executeSkillTool(
   _config: McpServerConfig,
   toolName: string,
   args: Record<string, unknown>,
   context: ToolRuntimeContext = { values: {} },
 ): Promise<ToolExecutionResult | null> {
+  if (toolName === "CreateSkill") {
+    try {
+      const created = await createSkill({
+        name: String(args.name ?? ""),
+        description: String(args.description ?? ""),
+        instruction: String(args.instruction ?? ""),
+        active: readBoolean(args.active),
+        allowedModes: readOptionalStringArray(args.allowedModes) as CreateSkillBody["allowedModes"],
+        recommendedToolIds: readOptionalStringArray(args.recommendedToolIds),
+        recommendedMcpIds: readOptionalStringArray(args.recommendedMcpIds),
+      });
+      return {
+        content: buildCreatedSkillSummary(created),
+      };
+    } catch (error) {
+      return {
+        content: (error as Error).message,
+        isError: true,
+      };
+    }
+  }
+
   if (toolName !== "Skill") return null;
 
   const skillId = String(args.skill ?? "").trim();

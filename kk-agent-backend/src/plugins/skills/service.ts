@@ -1,3 +1,4 @@
+import { existsSync } from "node:fs";
 import { mkdir, readdir, rm } from "node:fs/promises";
 import { basename, join, resolve } from "node:path";
 import { createSlugId, filterToKnownIds } from "../lib/ids.js";
@@ -10,12 +11,35 @@ import { loadSkillFromPath, writeSkillBundle } from "./lib/loader.js";
 import { buildSkillsCatalogSection } from "./lib/xml.js";
 
 const DEFAULT_ALLOWED_MODES: ChatMode[] = ["plan", "edit"];
+const DEFAULT_CREATE_SKILL_ID = "create-skill";
+
+const DEFAULT_CREATE_SKILL_BODY: CreateSkillBody = {
+  name: "Create Skill",
+  description: "Create or refine a reusable KK-Agent skill together with the user, then write the finished skill bundle to state/skills. Use when the user wants to create, draft, refine, or generate a skill or SKILL.md-based workflow.",
+  instruction: [
+    "Clarify the skill goal, trigger cases, and a few concrete usage examples before writing the bundle.",
+    "Clarify required modes. Default to plan and edit. Add autonomous only when the skill is explicitly meant for autonomous execution.",
+    "Clarify recommended internal tools and MCPs. Include only ids that materially help the workflow.",
+    "Compress the frontmatter description so it states what the skill does and when it should trigger.",
+    "Write the body as short imperative instructions. Omit filler, obvious AI advice, and dedicated usage-section headings.",
+    "Keep the bundle lean. Create only SKILL.md and kk-agent.skill.json unless the user explicitly asks for more files.",
+    "If key details are missing, ask a few focused follow-up questions with ask_user.",
+    "Once the spec is stable, call CreateSkill to write the bundle.",
+    "If the user wants to use the new skill immediately, call Skill with the created id after creation.",
+  ].join("\n"),
+  active: true,
+  allowedModes: ["edit", "autonomous"],
+  recommendedToolIds: ["skill", "user-interaction"],
+  recommendedMcpIds: [],
+};
 
 let skillsRootDir = getStateDirPath("skills");
 let cachedSkills: SkillDefinition[] = [];
 
 function normalizeModes(modes?: ChatMode[]): ChatMode[] {
-  const normalized = [...new Set((modes ?? DEFAULT_ALLOWED_MODES).filter((mode): mode is ChatMode => mode === "plan" || mode === "edit"))];
+  const normalized = [...new Set((modes ?? DEFAULT_ALLOWED_MODES).filter((mode): mode is ChatMode =>
+    mode === "plan" || mode === "edit" || mode === "autonomous"
+  ))];
   return normalized.length > 0 ? normalized : [...DEFAULT_ALLOWED_MODES];
 }
 
@@ -96,8 +120,34 @@ function buildSkillMetadataFromBody(body: {
   });
 }
 
+async function writeSkillBundleForId(
+  id: string,
+  body: {
+    name: string;
+    description: string;
+    instruction: string;
+    metadata: SkillMetadata;
+  },
+): Promise<void> {
+  await writeSkillBundle(join(skillsRootDir, id), body);
+}
+
+async function ensureDefaultSkills(): Promise<void> {
+  const skillDir = join(skillsRootDir, DEFAULT_CREATE_SKILL_ID);
+  if (existsSync(skillDir)) return;
+
+  await writeSkillBundleForId(DEFAULT_CREATE_SKILL_ID, {
+    name: DEFAULT_CREATE_SKILL_BODY.name,
+    description: DEFAULT_CREATE_SKILL_BODY.description,
+    instruction: DEFAULT_CREATE_SKILL_BODY.instruction,
+    metadata: buildSkillMetadataFromBody(DEFAULT_CREATE_SKILL_BODY),
+  });
+}
+
 export async function initSkillService(nextRootDir?: string): Promise<void> {
   skillsRootDir = resolve(nextRootDir ?? getStateDirPath("skills"));
+  await ensureSkillsRoot();
+  await ensureDefaultSkills();
   await reloadSkills();
 }
 
@@ -153,8 +203,7 @@ export async function createSkill(body: CreateSkillBody): Promise<SkillDefinitio
   if (!instruction) throw new Error("instruction is required");
 
   const id = buildUniqueId(name);
-  const skillDir = join(skillsRootDir, id);
-  await writeSkillBundle(skillDir, {
+  await writeSkillBundleForId(id, {
     name,
     description,
     instruction,
@@ -166,8 +215,7 @@ export async function createSkill(body: CreateSkillBody): Promise<SkillDefinitio
 
 export async function updateSkill(id: string, body: UpdateSkillBody): Promise<SkillDefinition> {
   const current = getSkillOrThrow(id);
-  const skillDir = join(skillsRootDir, id);
-  await writeSkillBundle(skillDir, {
+  await writeSkillBundleForId(id, {
     name: body.name?.trim() || current.name,
     description: body.description?.trim() || current.description,
     instruction: body.instruction?.trim() || current.instruction,

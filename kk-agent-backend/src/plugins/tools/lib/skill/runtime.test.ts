@@ -1,8 +1,10 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
+import { initSkillService } from "../../../skills/service.js";
+import { initToolsService } from "../../service.js";
 import { writeSkillBundle } from "../../../skills/lib/loader.js";
 import { executeSkillTool } from "./runtime.js";
 
@@ -82,4 +84,56 @@ test("Skill does not inject the same skill twice in one conversation context", a
   assert.equal(result?.isError, undefined);
   assert.ok(result?.content.includes("already loaded"));
   assert.equal(result?.additionalMessages, undefined);
+});
+
+test("CreateSkill writes a new skill bundle without auto-loading it", async () => {
+  const root = await mkdtemp(join(tmpdir(), "kk-agent-skill-runtime-"));
+
+  try {
+    await initToolsService();
+    await initSkillService(root);
+
+    const result = await executeSkillTool(
+      {} as never,
+      "CreateSkill",
+      {
+        name: "Review Skill",
+        description: "Review code for bugs and regressions.",
+        instruction: "Read diffs before suggesting changes.",
+        allowedModes: ["edit", "autonomous"],
+        recommendedToolIds: ["skill", "missing-tool"],
+      },
+      {
+        values: {
+          skillsRootDir: root,
+        },
+      },
+    );
+
+    assert.equal(result?.isError, undefined);
+    assert.ok(result?.content.includes('Created skill "review-skill"'));
+    assert.equal(result?.additionalMessages, undefined);
+
+    const markdown = await readFile(join(root, "review-skill", "SKILL.md"), "utf-8");
+    assert.ok(markdown.includes("name: Review Skill"));
+    assert.ok(markdown.includes("Read diffs before suggesting changes."));
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("CreateSkill rejects missing required fields", async () => {
+  const result = await executeSkillTool(
+    {} as never,
+    "CreateSkill",
+    {
+      name: "",
+      description: "Missing name should fail.",
+      instruction: "Do the thing.",
+    },
+    { values: {} },
+  );
+
+  assert.equal(result?.isError, true);
+  assert.ok(result?.content.includes("name is required"));
 });

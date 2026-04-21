@@ -39,6 +39,7 @@ Quick reference for AI agents working in this repo.
 ## Key Project Rules
 - Internal tools are not the same as user MCPs.
 - Skills are not the same as internal tools or user MCPs.
+- The internal `skill` MCP loads existing skills and can create new local skill bundles in `state/skills`.
 - Agents separate `toolIds`, `mcpIds`, and `skillIds`.
 - Sessions separate `activeToolIds`, `activeMcpIds`, and `activeSkillIds`.
 - Skill bundles live in `state/skills/<skill-id>/` with `SKILL.md` and app-specific metadata alongside.

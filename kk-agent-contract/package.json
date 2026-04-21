@@ -6,12 +6,13 @@
   "author": "Krischan Klug",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/Krischan-Klug/kk-agent-contract.git"
+    "url": "git+https://github.com/Krischan-Klug/kk-agent.git",
+    "directory": "kk-agent-contract"
   },
   "bugs": {
-    "url": "https://github.com/Krischan-Klug/kk-agent-contract/issues"
+    "url": "https://github.com/Krischan-Klug/kk-agent/issues"
   },
-  "homepage": "https://github.com/Krischan-Klug/kk-agent-contract#readme",
+  "homepage": "https://github.com/Krischan-Klug/kk-agent/tree/main/kk-agent-contract#readme",
   "publishConfig": {
     "registry": "https://npm.pkg.github.com"
   },

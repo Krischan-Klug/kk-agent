@@ -1,8 +1,10 @@
 # kk-agent
 
-Local, self-hosted agent platform for developer workflows.
+Monorepo for the KK-Agent desktop and web stack.
 
-kk-agent connects a Next.js frontend to a plugin-based backend and routes model calls to local or self-hosted OpenAI-compatible providers such as LM Studio, Ollama, llama.cpp, or vLLM. The system is built around a small wrapper model: providers own connectivity, the backend owns orchestration, and the frontend exposes the parts that matter for agents and chats.
+`kk-agent` is the canonical repository for the project. It keeps the desktop shell, frontend, backend, and shared contract package in one workspace so changes across the app can be versioned and released together.
+
+The platform connects a Next.js frontend to a plugin-based backend and routes model calls to local or self-hosted OpenAI-compatible providers such as LM Studio, Ollama, llama.cpp, or vLLM. Electron packages the frontend and backend into a local desktop app.
 
 ## What It Does
 
@@ -29,20 +31,60 @@ Per model, kk-agent keeps only request-level defaults:
 
 Runtime topics such as context window, KV cache, quantization, and backend load settings stay in LM Studio, Ollama, or the serving backend itself.
 
-## Project Layout
+## Workspace Layout
 
 ```text
 kk-agent/
 |-- kk-agent-backend/   Plugin-based Node.js backend
 |-- kk-agent-desktop/   Electron desktop shell and packaging
 |-- kk-agent-frontend/  Next.js frontend
-|-- kk-agent-contract/  Shared types and request/capability helpers published via GitHub Packages
+|-- kk-agent-contract/  Shared types and request/capability helpers
+|-- scripts/            Root workspace scripts
 |-- AGENTS.md
 `-- CRITICAL_RULES.md
 ```
 
 - [Backend README](kk-agent-backend/README.md)
 - [Frontend README](kk-agent-frontend/README.md)
+
+## Monorepo Commands
+
+Install all workspace dependencies once from the root:
+
+```bash
+npm install
+```
+
+Start the backend and frontend together:
+
+```bash
+npm run dev
+```
+
+Build the contract, backend, and frontend:
+
+```bash
+npm run build
+```
+
+Build the desktop app and bundled assets:
+
+```bash
+npm run desktop:build
+```
+
+Create the Windows desktop installer:
+
+```bash
+npm run desktop:dist
+```
+
+Run a workspace-specific command from the root:
+
+```bash
+npm --workspace kk-agent-backend run test
+npm --workspace kk-agent-frontend run build
+```
 
 ## Quickstart
 
@@ -51,7 +93,7 @@ Requirements:
 - Node.js 18+
 - A local or self-hosted OpenAI-compatible provider
 
-Backend:
+Backend only:
 
 ```bash
 cd kk-agent-backend
@@ -59,7 +101,7 @@ npm install
 npm run dev
 ```
 
-Frontend:
+Frontend only:
 
 ```bash
 cd kk-agent-frontend
@@ -68,19 +110,6 @@ npm run dev
 ```
 
 Open `http://localhost:3000`.
-
-Workspace:
-
-```bash
-npm install
-npm run dev
-```
-
-Desktop build:
-
-```bash
-npm run desktop:dist
-```
 
 ## First Setup
 
@@ -100,19 +129,12 @@ npm run desktop:dist
 
 ## Testing
 
-Backend:
+Run checks from the root workspace:
 
 ```bash
-cd kk-agent-backend
-npm test
-```
-
-Frontend:
-
-```bash
-cd kk-agent-frontend
-npm run lint
-npm run build
+npm --workspace kk-agent-contract run lint
+npm --workspace kk-agent-backend run test
+npm --workspace kk-agent-frontend run build
 ```
 
 ## License

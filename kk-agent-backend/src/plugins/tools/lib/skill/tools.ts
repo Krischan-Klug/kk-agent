@@ -18,21 +18,21 @@ export const skillTools: McpToolDefinition[] = [
   },
   {
     name: "CreateSkill",
-    description: "Create a new local skill bundle in state/skills. Use for reusable skills, not one-off task notes.",
+    description: "Create a new local skill bundle in state/skills. Provide the content fields and metadata only; the tool writes a valid KK-Agent SKILL.md bundle with YAML frontmatter and optional kk-agent.skill.json metadata.",
     inputSchema: {
       type: "object",
       properties: {
         name: {
           type: "string",
-          description: "Human-readable skill name. The skill id is generated automatically from this name.",
+          description: "Human-readable skill name only. Do not include YAML keys or file formatting. The skill id is generated automatically from this name.",
         },
         description: {
           type: "string",
-          description: "Trigger-oriented frontmatter description that states what the skill does and when it should be used.",
+          description: "Trigger-oriented skill description only. Do not include `description:` prefixes, YAML quoting, or trigger mini-syntax; the tool serializes frontmatter safely.",
         },
         instruction: {
           type: "string",
-          description: "Lean SKILL.md body with short imperative instructions.",
+          description: "Lean instruction body only. Do not include frontmatter, opening `---`, or file scaffolding; the tool writes the final SKILL.md format.",
         },
         active: {
           type: "boolean",

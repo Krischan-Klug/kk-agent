@@ -1,44 +1,13 @@
-import styled from "styled-components";
 import type { AgentDefinition, McpListItem } from "@/types/api";
 import Badge from "@/components/Badge";
 import Button from "@/components/Button";
-
-const List = styled.div`
-  width: 260px;
-  flex-shrink: 0;
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-sm);
-  overflow-y: auto;
-`;
-
-const Item = styled.div<{ $active: boolean }>`
-  padding: var(--space-md);
-  background: ${(p) => (p.$active ? "var(--accent-muted)" : "var(--bg-elevated)")};
-  border: 1px solid ${(p) => (p.$active ? "var(--accent)" : "var(--border)")};
-  border-radius: var(--radius-md);
-  cursor: pointer;
-
-  &:hover {
-    border-color: var(--accent);
-  }
-`;
-
-const Name = styled.div`
-  font-weight: 600;
-  margin-bottom: 2px;
-`;
-
-const Description = styled.div`
-  font-size: var(--font-size-sm);
-  color: var(--text-muted);
-`;
-
-const Meta = styled.div`
-  display: flex;
-  gap: var(--space-sm);
-  margin-top: var(--space-xs);
-`;
+import {
+  SidebarItem,
+  SidebarItemDescription,
+  SidebarItemTitle,
+  SidebarList,
+  SidebarMeta,
+} from "@/components/MasterDetail.styled";
 
 type Props = {
   agents: AgentDefinition[];
@@ -50,7 +19,7 @@ type Props = {
 
 export default function AgentList({ agents, mcps, selectedId, onSelect, onCreate }: Props) {
   return (
-    <List>
+    <SidebarList>
       <Button size="sm" onClick={onCreate}>
         Neuer Agent
       </Button>
@@ -62,19 +31,19 @@ export default function AgentList({ agents, mcps, selectedId, onSelect, onCreate
           ),
         ];
         return (
-          <Item key={agent.id} $active={agent.id === selectedId} onClick={() => onSelect(agent.id)}>
-            <Name>{agent.name}</Name>
-            {agent.description && <Description>{agent.description}</Description>}
-            <Meta>
+          <SidebarItem key={agent.id} type="button" $active={agent.id === selectedId} onClick={() => onSelect(agent.id)}>
+            <SidebarItemTitle>{agent.name}</SidebarItemTitle>
+            {agent.description && <SidebarItemDescription>{agent.description}</SidebarItemDescription>}
+            <SidebarMeta>
               {capabilityIds.length > 0 && (
                 <Badge variant="success">
-                  {capabilityIds.map((id) => mcps.find((mcp) => mcp.id === id)?.emoji || "🛠️").join("")}
+                  {capabilityIds.map((id) => mcps.find((mcp) => mcp.id === id)?.emoji || "ðŸ› ï¸").join("")}
                 </Badge>
               )}
-            </Meta>
-          </Item>
+            </SidebarMeta>
+          </SidebarItem>
         );
       })}
-    </List>
+    </SidebarList>
   );
 }

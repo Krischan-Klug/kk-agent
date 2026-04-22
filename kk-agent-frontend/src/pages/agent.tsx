@@ -1,18 +1,12 @@
 import { useEffect, useState } from "react";
-import styled from "styled-components";
 import { agent as agentApi, mcp as mcpApi, provider as providerApi, settings as settingsApi, skills as skillsApi, tools as toolsApi } from "@/lib/api";
 import type { AgentDefinition, AppDefaults, CreateAgentBody, McpListItem, ModelInfo, ModelSettings, ProviderConfig, SkillDefinition } from "@/types/api";
 import { PageBody } from "@/components/Layout.styled";
+import { MasterDetailLayout } from "@/components/MasterDetail.styled";
 import Spinner from "@/components/Spinner";
 import AgentList from "@/components/agent/AgentList";
 import AgentEditor from "@/components/agent/AgentEditor";
 import CreateAgentModal from "@/components/agent/CreateAgentModal";
-
-const PageLayout = styled.div`
-  display: flex;
-  gap: var(--space-lg);
-  height: calc(100vh - 120px);
-`;
 
 export default function AgentPage() {
   const [agents, setAgents] = useState<AgentDefinition[]>([]);
@@ -144,7 +138,7 @@ export default function AgentPage() {
 
   return (
     <PageBody>
-      <PageLayout>
+      <MasterDetailLayout>
         <AgentList
           agents={agents}
           mcps={[...internalTools, ...mcps]}
@@ -169,7 +163,7 @@ export default function AgentPage() {
           onSave={handleSave}
           onDelete={handleDelete}
         />
-      </PageLayout>
+      </MasterDetailLayout>
       <CreateAgentModal
         open={showCreate}
         name={newName}

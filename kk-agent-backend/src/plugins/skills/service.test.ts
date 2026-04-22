@@ -100,12 +100,20 @@ test("initSkillService seeds create-skill once and does not overwrite it", async
 
   const seeded = listSkills().find((skill) => skill.id === "create-skill");
   assert.ok(seeded);
-  assert.deepEqual(seeded?.allowedModes, ["edit", "autonomous"]);
+  assert.deepEqual(seeded?.allowedModes, ["plan", "edit"]);
   assert.equal(seeded?.recommendedToolIds.join(","), "skill,user-interaction");
-  assert.match(seeded?.description ?? "", /create|draft|refine/i);
-  assert.match(seeded?.instruction ?? "", /CreateSkill/);
+  assert.match(seeded?.description ?? "", /KK-Agent skill bundle|state\/skills/i);
+  assert.match(seeded?.instruction ?? "", /load `create-skill` with Skill before you ask follow-up questions, draft content, or call CreateSkill/i);
+  assert.match(seeded?.instruction ?? "", /always use CreateSkill/i);
+  assert.match(seeded?.instruction ?? "", /Do not manually write SKILL\.md or kk-agent\.skill\.json/i);
+  assert.match(seeded?.instruction ?? "", /YAML frontmatter/i);
+  assert.match(seeded?.instruction ?? "", /name: Repo Analysis/);
+  assert.match(seeded?.instruction ?? "", /Do not encode trigger lists as `Trigger:` mini-syntax/i);
+  assert.match(seeded?.instruction ?? "", /"allowedModes": \["plan", "edit"\]/);
+  assert.match(seeded?.instruction ?? "", /allowedModes to plan and edit/i);
   assert.match(seeded?.instruction ?? "", /ask_user/);
-  assert.doesNotMatch(seeded?.instruction ?? "", /When to use/i);
+  assert.match(seeded?.instruction ?? "", /multiple choice/i);
+  assert.match(seeded?.instruction ?? "", /Do not model timers, schedules, background jobs/i);
 
   const seedPath = join(root, "create-skill", "SKILL.md");
   await writeFile(seedPath, "---\nname: Create Skill\ndescription: Custom seeded description.\n---\n\nKeep this custom body.\n", "utf-8");

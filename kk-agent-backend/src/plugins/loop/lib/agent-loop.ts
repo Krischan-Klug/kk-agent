@@ -102,7 +102,7 @@ async function runModelPass(
     {
       sessionId: opts.sessionId,
       modeId: modeConfig.modeId,
-      modeBehavior: modeConfig.modeBehavior,
+      modeName: modeConfig.modePromptName,
     },
   );
 
@@ -221,7 +221,7 @@ export async function runAgentLoop(opts: LoopOptions): Promise<LoopResult> {
       sessionId: opts.sessionId,
       agentId: opts.agentId,
       modeId: modeConfig.modeId,
-      modeBehavior: modeConfig.modeBehavior,
+      modeName: modeConfig.modePromptName,
       model: opts.model,
       iteration,
     }) ?? [];

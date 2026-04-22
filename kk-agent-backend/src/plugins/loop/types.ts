@@ -60,6 +60,7 @@ export interface ToolExecutionResult {
 export interface ModeRuntimeConfig {
   modeId: string;
   modeLabel: string;
+  modePromptName: string;
   modeBehavior: ModeBehavior;
   promptSections: AgentPromptSections;
   modeInstruction: string;
@@ -83,7 +84,7 @@ export interface LoopOptions {
     sessionId: string;
     agentId: string;
     modeId: string;
-    modeBehavior: ModeBehavior;
+    modeName?: string;
     model: string;
     iteration: number;
   }) => TranscriptMessage[];

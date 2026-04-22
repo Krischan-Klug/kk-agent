@@ -1,6 +1,6 @@
 import { getActiveInstructions as getCustomActiveInstructions } from "../../mcp/service.js";
 import { getActiveToolInstructions, getInternalToolState, getMemoryPromptContext, getTaskSummary } from "../../tools/service.js";
-import type { AgentPromptSections, ModeBehavior } from "../../agent/types.js";
+import type { AgentPromptSections } from "../../agent/types.js";
 
 interface SystemVariableDefinition {
   name: string;
@@ -10,7 +10,7 @@ interface SystemVariableDefinition {
 export interface PromptBuildContext {
   sessionId?: string;
   modeId?: string;
-  modeBehavior?: ModeBehavior;
+  modeName?: string;
 }
 
 interface ResolvedVariableContext extends PromptBuildContext {
@@ -178,13 +178,12 @@ function buildToolUsageSection(toolUsage: string, variables: Record<string, stri
 function buildModeSection(
   modeInstruction: string,
   modeId?: string,
-  modeBehavior?: ModeBehavior,
+  modeName?: string,
   variables: Record<string, string> = {},
 ): string {
-  const effectiveModeId = modeId ?? "edit";
-  const effectiveModeBehavior = modeBehavior ?? "edit";
+  const effectiveModeName = modeName ?? modeId ?? "edit";
   return [
-    `<mode_context mode="${effectiveModeId}" behavior="${effectiveModeBehavior}">`,
+    `<mode_context mode="${effectiveModeName}">`,
     resolveVariables(modeInstruction, variables),
     "</mode_context>",
   ].join("\n");
@@ -251,7 +250,7 @@ export function buildPrompt(
 
   const volatileParts = [
     "<!-- DYNAMIC_CONTEXT_BOUNDARY -->",
-    buildModeSection(modeInstruction, context.modeId, context.modeBehavior, resolvedVariables),
+    buildModeSection(modeInstruction, context.modeId, context.modeName, resolvedVariables),
     "</agent_runtime_prompt>",
   ];
 

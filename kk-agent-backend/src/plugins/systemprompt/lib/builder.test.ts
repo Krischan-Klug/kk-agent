@@ -20,7 +20,7 @@ test("buildPrompt inserts runtime before mode context and keeps tool guidance be
     "<tool_instruction id=\"filesystem\" name=\"Filesystem\">Read first</tool_instruction>",
     "<skills_catalog>\n  <skill id=\"repo-analysis\" name=\"Repo Analysis\" path=\"C:\\skills\\repo-analysis\" source=\"custom\" mode_behaviors=\"plan,edit\">\n    <description>Analyze repo state.</description>\n  </skill>\n</skills_catalog>",
     {},
-    { modeId: "plan", modeBehavior: "plan" },
+    { modeId: "plan", modeName: "plan" },
   );
 
   const runtimeIndex = prompt.indexOf("<runtime>");
@@ -69,12 +69,13 @@ test("buildPrompt wraps output in agent_runtime_prompt tags", () => {
   assert.ok(prompt.endsWith("</agent_runtime_prompt>"));
 });
 
-test("buildPrompt includes mode context with mode and behavior info", () => {
-  const prompt = buildPrompt(PROMPT_SECTIONS, "Plan step.", "", "", {}, { modeId: "plan", modeBehavior: "plan" });
+test("buildPrompt includes mode context with mode info", () => {
+  const prompt = buildPrompt(PROMPT_SECTIONS, "Plan step.", "", "", {}, { modeId: "plan", modeName: "plan" });
 
   assert.ok(prompt.includes("<mode_context"));
   assert.ok(prompt.includes("Plan step."));
-  assert.ok(prompt.includes('behavior="plan"'));
+  assert.ok(prompt.includes('mode="plan"'));
+  assert.ok(!prompt.includes("behavior="));
 });
 
 test("buildPrompt places only mode_context after the dynamic context boundary", () => {
@@ -84,7 +85,7 @@ test("buildPrompt places only mode_context after the dynamic context boundary", 
     "<tool_instruction id=\"filesystem\" name=\"Filesystem\">Read first</tool_instruction>",
     "<skills_catalog></skills_catalog>",
     {},
-    { modeId: "plan", modeBehavior: "plan" },
+    { modeId: "plan", modeName: "plan" },
   );
 
   const boundaryIndex = prompt.indexOf("DYNAMIC_CONTEXT_BOUNDARY");
@@ -104,12 +105,21 @@ test("buildPrompt places only mode_context after the dynamic context boundary", 
 
 test("buildPrompt stable prefix is identical across calls", () => {
   const sections = { ...PROMPT_SECTIONS };
-  const a = buildPrompt(sections, "Mode.", "", "", {}, { modeId: "edit", modeBehavior: "edit" });
-  const b = buildPrompt(sections, "Mode.", "", "", {}, { modeId: "edit", modeBehavior: "edit" });
+  const a = buildPrompt(sections, "Mode.", "", "", {}, { modeId: "edit", modeName: "edit" });
+  const b = buildPrompt(sections, "Mode.", "", "", {}, { modeId: "edit", modeName: "edit" });
 
   const prefixA = a.split("DYNAMIC_CONTEXT_BOUNDARY")[0];
   const prefixB = b.split("DYNAMIC_CONTEXT_BOUNDARY")[0];
   assert.equal(prefixA, prefixB);
+});
+
+test("buildPrompt uses the custom mode label in mode_context when provided", () => {
+  const prompt = buildPrompt(PROMPT_SECTIONS, "Plan step.", "", "", {}, {
+    modeId: "custom-mode",
+    modeName: "Chat mode",
+  });
+
+  assert.ok(prompt.includes('<mode_context mode="Chat mode">'));
 });
 
 test("buildPrompt omits empty sections", () => {

@@ -122,6 +122,7 @@ function buildModeRuntimeConfig(
   return {
     modeId: mode.id,
     modeLabel: mode.label,
+    modePromptName: mode.source === "custom" ? mode.label : mode.id,
     modeBehavior: mode.behavior,
     promptSections: config.promptSections,
     modeInstruction: config.modeInstruction,
@@ -165,7 +166,7 @@ function buildCurrentSystemPrompt(
     {
       sessionId,
       modeId: modeRuntimeConfig.modeId,
-      modeBehavior: modeRuntimeConfig.modeBehavior,
+      modeName: modeRuntimeConfig.modePromptName,
     },
   );
 }
@@ -208,19 +209,28 @@ function getRuntimeShellHint(): string {
   return basename(shellCandidate);
 }
 
+function buildAccessSection(title: string, lines: string[]): string[] {
+  if (lines.length === 0) return [];
+  return ["", title, ...lines];
+}
+
 function buildRuntimeMetaMessages(input: {
   sessionId: string;
   modeId: string;
-  modeBehavior: SessionModeRuntimeConfig["modeBehavior"];
+  modeName: string;
   model: string;
   runtimeVariables?: Record<string, string>;
 }): TranscriptMessage[] {
   const variables = getSystemVariables({
     CURRENT_MODEL: input.model,
-    mode: input.modeId,
+    mode: input.modeName,
     ...(input.runtimeVariables ?? {}),
   });
   const memory = getMemoryPromptContext(input.sessionId);
+  const filesystemScope = input.runtimeVariables?.FILESYSTEM_ACCESS_SCOPE;
+  const terminalScope = input.runtimeVariables?.TERMINAL_ACCESS_SCOPE;
+  const filesystemActive = typeof filesystemScope === "string" && filesystemScope !== "nicht aktiv";
+  const terminalActive = typeof terminalScope === "string" && terminalScope !== "nicht aktiv";
   const body = [
     "Treat this reminder as authoritative for the current turn.",
     "",
@@ -233,8 +243,7 @@ function buildRuntimeMetaMessages(input: {
     `shell=${getRuntimeShellHint()}`,
     "",
     `Current model: ${variables.CURRENT_MODEL ?? input.model}`,
-    `Current mode: ${input.modeId}`,
-    `Mode behavior: ${input.modeBehavior}`,
+    `Current mode: ${input.modeName}`,
     "",
     "Current tasks:",
     getTaskSummary(input.sessionId),
@@ -244,17 +253,17 @@ function buildRuntimeMetaMessages(input: {
     "",
     "User memory:",
     memory.userMemory,
-    "",
-    "Filesystem access:",
-    `scope=${input.runtimeVariables?.FILESYSTEM_ACCESS_SCOPE ?? "nicht aktiv"}`,
-    `basePath=${input.runtimeVariables?.FILESYSTEM_BASE_PATH ?? "nicht verfuegbar"}`,
-    `allowedRoot=${input.runtimeVariables?.FILESYSTEM_ALLOWED_ROOT ?? "nicht verfuegbar"}`,
-    "",
-    "Terminal access:",
-    `scope=${input.runtimeVariables?.TERMINAL_ACCESS_SCOPE ?? "nicht aktiv"}`,
-    `workingDirectory=${input.runtimeVariables?.TERMINAL_WORKING_DIRECTORY ?? "nicht verfuegbar"}`,
-    `allowedRoot=${input.runtimeVariables?.TERMINAL_ALLOWED_ROOT ?? "nicht verfuegbar"}`,
-    `elevation=${input.runtimeVariables?.TERMINAL_ELEVATION ?? "nicht aktiv"}`,
+    ...buildAccessSection("Filesystem access:", filesystemActive ? [
+      `scope=${filesystemScope}`,
+      `basePath=${input.runtimeVariables?.FILESYSTEM_BASE_PATH ?? "nicht verfuegbar"}`,
+      `allowedRoot=${input.runtimeVariables?.FILESYSTEM_ALLOWED_ROOT ?? "nicht verfuegbar"}`,
+    ] : []),
+    ...buildAccessSection("Terminal access:", terminalActive ? [
+      `scope=${terminalScope}`,
+      `workingDirectory=${input.runtimeVariables?.TERMINAL_WORKING_DIRECTORY ?? "nicht verfuegbar"}`,
+      `allowedRoot=${input.runtimeVariables?.TERMINAL_ALLOWED_ROOT ?? "nicht verfuegbar"}`,
+      `elevation=${input.runtimeVariables?.TERMINAL_ELEVATION ?? "nicht aktiv"}`,
+    ] : []),
   ].join("\n");
 
   return [createMetaReminder("runtime_snapshot", body)];
@@ -376,7 +385,7 @@ export function getCurrentPromptDebug(sessionId: string): SessionPromptDebug {
   const runtimeMetaMessages = buildRuntimeMetaMessages({
     sessionId,
     modeId: modeRuntimeConfig.modeId,
-    modeBehavior: modeRuntimeConfig.modeBehavior,
+    modeName: modeRuntimeConfig.modePromptName,
     model: session.model,
     runtimeVariables: modeRuntimeConfig.runtimeVariables,
   });
@@ -539,20 +548,20 @@ function buildLoopRequest(
     buildEphemeralMetaMessages: ({
       iteration,
       modeId,
-      modeBehavior,
+      modeName,
       model,
     }: {
       sessionId: string;
       agentId: string;
       modeId: string;
-      modeBehavior: SessionModeRuntimeConfig["modeBehavior"];
+      modeName?: string;
       model: string;
       iteration: number;
     }) => {
       const runtimeMessages = buildRuntimeMetaMessages({
         sessionId,
         modeId,
-        modeBehavior,
+        modeName: modeName ?? activeModeConfig.modePromptName,
         model,
         runtimeVariables: activeModeConfig.runtimeVariables,
       });

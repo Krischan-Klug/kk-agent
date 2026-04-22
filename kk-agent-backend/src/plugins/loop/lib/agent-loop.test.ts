@@ -25,6 +25,7 @@ function buildOptions(overrides: Partial<LoopOptions> = {}): LoopOptions {
       edit: {
         modeId: "edit",
         modeLabel: "Edit",
+        modePromptName: "edit",
         modeBehavior: "edit",
         promptSections: PROMPT_SECTIONS,
         modeInstruction: "Do the work.",
@@ -117,6 +118,7 @@ test("runAgentLoop autonomous mode still stops on TASK_COMPLETE", async () => {
       autonomous: {
         modeId: "autonomous",
         modeLabel: "Autonomous",
+        modePromptName: "autonomous",
         modeBehavior: "autonomous",
         promptSections: PROMPT_SECTIONS,
         modeInstruction: "Keep working.",

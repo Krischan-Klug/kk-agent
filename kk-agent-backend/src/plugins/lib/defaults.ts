@@ -1,18 +1,23 @@
 import { loadState, saveState } from "./state.js";
-import type { ChatMode, AgentPromptSections, AutonomousBudget } from "../agent/types.js";
-import { getDefaultAllowedToolNames, getDefaultToolIds } from "../agent/lib/modes.js";
+import type { ModeBehavior, AgentPromptSections, AutonomousBudget } from "../agent/types.js";
+import { getBuiltInModeMeta, getDefaultAllowedToolNames, getDefaultToolIds } from "../agent/lib/modes.js";
 
 const STATE_FILE = "defaults.json";
 
+export interface BuiltInModeTemplateDefaults {
+  label: string;
+  modeInstruction: string;
+  autonomousBudget?: AutonomousBudget;
+  toolIds: string[];
+  allowedToolNames: string[];
+  toolInstructions: Record<string, string>;
+}
+
 export interface AppDefaults {
   agent: {
-    defaultChatMode: ChatMode;
+    defaultModeBehavior: ModeBehavior;
     promptSections: AgentPromptSections;
-    modeInstructions: Record<ChatMode, string>;
-    modeAutonomousBudgets: Record<ChatMode, AutonomousBudget>;
-    modeToolIds: Record<ChatMode, string[]>;
-    modeAllowedToolNames: Record<ChatMode, string[]>;
-    modeToolInstructions: Record<ChatMode, Record<string, string>>;
+    modeTemplates: Record<ModeBehavior, BuiltInModeTemplateDefaults>;
   };
   retry: {
     emptyResponseInstruction: string;
@@ -28,7 +33,7 @@ export interface AppDefaults {
 
 const CODE_DEFAULTS: AppDefaults = {
   agent: {
-    defaultChatMode: "edit",
+    defaultModeBehavior: "edit",
     promptSections: {
       identity: [
         "You are Swagos, a general-purpose local agent developed by Krischan.",
@@ -92,135 +97,136 @@ const CODE_DEFAULTS: AppDefaults = {
         "When referencing code, include a file path and line number when that helps the user navigate.",
       ].join("\n"),
     },
-    modeInstructions: {
-      plan: [
-        "In plan mode, use only the analysis, research, planning, attachment, skill, and task-management tools available in this mode.",
-        "Do not edit files, write files, run mutating shell commands, or otherwise implement the change here.",
-        "If the user is asking for implementation, say clearly that you are currently in plan mode and provide a concrete implementation plan instead.",
-        "Make the plan specific. Name the files, components, risks, and intended sequence of changes.",
-        "Use create_tasks or update_tasks when task tracking would make the plan clearer.",
-        "Do not mark tasks completed in plan mode.",
-      ].join("\n"),
-      edit: [
-        "In edit mode, execute the task directly.",
-        "Make the smallest correct change that satisfies the request.",
-        "Do not gold-plate, refactor unrelated code, or add speculative improvements.",
-        "Use the available tools proactively and keep the working state consistent.",
-        "When the work benefits from explicit tracking, maintain tasks as you go and close them with solve_tasks when completed.",
-        "After non-trivial implementation, run an appropriate verification step if possible and report the result honestly.",
-      ].join("\n"),
-      autonomous: [
-        "You are running in autonomous mode. Keep working on the user's goal across multiple turns without waiting for further instructions.",
-        "Plan, execute, verify, and iterate on your own until the goal is demonstrably met.",
-        "Do not stop mid-task, do not ask the user to confirm routine steps, and do not hand work back prematurely.",
-        "When the goal is fully complete, respond with exactly TASK_COMPLETE on its own line and nothing else.",
-        "If you hit a hard blocker you cannot resolve (missing credentials, out-of-scope permission), summarize the blocker and ask the user.",
-      ].join("\n"),
-    },
-    modeAutonomousBudgets: {
-      plan: {},
-      edit: {},
-      autonomous: {},
-    },
-    modeToolIds: {
-      plan: getDefaultToolIds("plan"),
-      edit: getDefaultToolIds("edit"),
-      autonomous: getDefaultToolIds("edit"),
-    },
-    modeAllowedToolNames: {
-      plan: getDefaultAllowedToolNames("plan"),
-      edit: getDefaultAllowedToolNames("edit"),
-      autonomous: getDefaultAllowedToolNames("edit"),
-    },
-    modeToolInstructions: {
+    modeTemplates: {
       plan: {
-        filesystem: [
-          "Use Read, Glob, and Grep to inspect the codebase.",
-          "Read the relevant files before planning changes.",
-          "Do not attempt file mutations in plan mode.",
-          "Stay inside the allowed root and prefer absolute paths.",
-        ].join(" "),
-        terminal: [
-          "Use Bash only for read-only inspection, diagnostics, listing, git status, and similar non-mutating commands.",
-          "Prefer dedicated tools over shell commands when they fit the task.",
-          "Use terminal output to inform the plan, not to implement it.",
-        ].join(" "),
-        task: [
-          "Use create_tasks and update_tasks to structure the work into small, concrete steps.",
-          "Use the exact visible task ids when updating tasks.",
-          "Do not mark tasks completed in plan mode.",
-          "Do not use the task tool for long notes or final reports.",
-        ].join(" "),
-        "web-search": [
-          "Use WebSearch for current facts and discovery when local context is insufficient.",
-          "Use WebFetch when you need a specific page and can state clearly what to extract from it.",
-          "Prefer targeted queries and summarize only the relevant findings.",
-        ].join(" "),
-        "user-interaction": [
-          "Use ask_user only when you genuinely need a user decision, approval, or missing information that you cannot infer safely.",
-          "Do not use it for routine commentary or status updates.",
-          "When you do use it, offer concrete options that unblock the next step quickly.",
-        ].join(" "),
-        attachment: [
-          "Use list_attachments, read_attachment, and provide_attachment for session attachments in the chat.",
-          "Treat session attachments as KK-Agent managed files, not as normal project files.",
-          "Use attachmentId when available because filenames may be ambiguous.",
-        ].join(" "),
-        skill: [
-          "If a listed skill clearly matches the task, invoke Skill before following that workflow.",
-          "Use the exact skill id from <skills_catalog>.",
-          "Do not reload a skill already present in the conversation unless context was lost.",
-        ].join(" "),
+        label: getBuiltInModeMeta("plan").label,
+        modeInstruction: [
+          "In plan behavior, use only the analysis, research, planning, attachment, skill, and task-management tools available in this mode.",
+          "Do not edit files, write files, run mutating shell commands, or otherwise implement the change here.",
+          "If the user is asking for implementation, say clearly that you are currently in a planning mode and provide a concrete implementation plan instead.",
+          "Make the plan specific. Name the files, components, risks, and intended sequence of changes.",
+          "Use create_tasks or update_tasks when task tracking would make the plan clearer.",
+          "Do not mark tasks completed in planning behavior.",
+        ].join("\n"),
+        autonomousBudget: {},
+        toolIds: getDefaultToolIds("plan"),
+        allowedToolNames: getDefaultAllowedToolNames("plan"),
+        toolInstructions: {
+          filesystem: [
+            "Use Read, Glob, and Grep to inspect the codebase.",
+            "Read the relevant files before planning changes.",
+            "Do not attempt file mutations in planning behavior.",
+            "Stay inside the allowed root and prefer absolute paths.",
+          ].join(" "),
+          terminal: [
+            "Use Bash only for read-only inspection, diagnostics, listing, git status, and similar non-mutating commands.",
+            "Prefer dedicated tools over shell commands when they fit the task.",
+            "Use terminal output to inform the plan, not to implement it.",
+          ].join(" "),
+          task: [
+            "Use create_tasks and update_tasks to structure the work into small, concrete steps.",
+            "Use the exact visible task ids when updating tasks.",
+            "Do not mark tasks completed in planning behavior.",
+            "Do not use the task tool for long notes or final reports.",
+          ].join(" "),
+          "web-search": [
+            "Use WebSearch for current facts and discovery when local context is insufficient.",
+            "Use WebFetch when you need a specific page and can state clearly what to extract from it.",
+            "Prefer targeted queries and summarize only the relevant findings.",
+          ].join(" "),
+          "user-interaction": [
+            "Use ask_user only when you genuinely need a user decision, approval, or missing information that you cannot infer safely.",
+            "Do not use it for routine commentary or status updates.",
+            "When you do use it, offer concrete options that unblock the next step quickly.",
+          ].join(" "),
+          attachment: [
+            "Use list_attachments, read_attachment, and provide_attachment for session attachments in the chat.",
+            "Treat session attachments as KK-Agent managed files, not as normal project files.",
+            "Use attachmentId when available because filenames may be ambiguous.",
+          ].join(" "),
+          skill: [
+            "If a listed skill clearly matches the task, invoke Skill before following that workflow.",
+            "Use the exact skill id from <skills_catalog>.",
+            "Do not reload a skill already present in the conversation unless context was lost.",
+          ].join(" "),
+        },
       },
       edit: {
-        filesystem: [
-          "Use Read, Glob, and Grep for inspection and analysis.",
-          "Read existing files before editing them.",
-          "Use Edit for targeted changes to existing files.",
-          "Use Write only for new files or deliberate full rewrites.",
-          "Stay inside the allowed root and prefer absolute paths.",
-        ].join(" "),
-        terminal: [
-          "Use Bash for tests, builds, git, package manager work, scripts, and other terminal operations.",
-          "Prefer dedicated file tools over shell commands when possible.",
-          "Keep commands short and targeted.",
-          "Start with safe diagnostics before riskier actions.",
-          "Ask before destructive, irreversible, or externally visible commands.",
-        ].join(" "),
-        task: [
-          "Use create_tasks when explicit task tracking will materially help.",
-          "Keep tasks small, concrete, and tied to the current user request.",
-          "Use update_tasks only to change titles or notes.",
-          "Use solve_tasks as the only way to mark tasks completed.",
-          "Use the exact visible task ids when updating or solving tasks.",
-          "Do not use the task tool for long notes or final reports.",
-        ].join(" "),
-        memory: [
-          "Use remember_facts sparingly for durable user preferences or facts likely to matter again later.",
-          "Do not store long summaries, transient tool output, or task scratch notes.",
-        ].join(" "),
-        "web-search": [
-          "Use WebSearch when the task needs current information or the user explicitly asks for online research.",
-          "Use WebFetch for a specific page with a clear extraction prompt.",
-          "Keep queries focused and summarize only what matters to the task.",
-        ].join(" "),
-        "user-interaction": [
-          "Use ask_user only for genuine blockers such as missing input, approval, or a user decision.",
-          "Do not use it as a substitute for reading the codebase, checking tool output, or making reasonable progress on your own.",
-          "When you use it, give concrete options that make it easy for the user to unblock the work.",
-        ].join(" "),
-        attachment: [
-          "Use list_attachments, read_attachment, and provide_attachment for session attachments in the chat.",
-          "Treat session attachments as KK-Agent managed files, not as normal project files.",
-          "Use attachmentId when available because filenames may be ambiguous.",
-        ].join(" "),
-        skill: [
-          "If a listed skill clearly matches the task, invoke Skill before following that workflow.",
-          "Use the exact skill id from <skills_catalog> and do not guess.",
-          "Do not mention a skill as if it were loaded when it is not.",
-        ].join(" "),
+        label: getBuiltInModeMeta("edit").label,
+        modeInstruction: [
+          "In edit behavior, execute the task directly.",
+          "Make the smallest correct change that satisfies the request.",
+          "Do not gold-plate, refactor unrelated code, or add speculative improvements.",
+          "Use the available tools proactively and keep the working state consistent.",
+          "When the work benefits from explicit tracking, maintain tasks as you go and close them with solve_tasks when completed.",
+          "After non-trivial implementation, run an appropriate verification step if possible and report the result honestly.",
+        ].join("\n"),
+        autonomousBudget: {},
+        toolIds: getDefaultToolIds("edit"),
+        allowedToolNames: getDefaultAllowedToolNames("edit"),
+        toolInstructions: {
+          filesystem: [
+            "Use Read, Glob, and Grep for inspection and analysis.",
+            "Read existing files before editing them.",
+            "Use Edit for targeted changes to existing files.",
+            "Use Write only for new files or deliberate full rewrites.",
+            "Stay inside the allowed root and prefer absolute paths.",
+          ].join(" "),
+          terminal: [
+            "Use Bash for tests, builds, git, package manager work, scripts, and other terminal operations.",
+            "Prefer dedicated file tools over shell commands when possible.",
+            "Keep commands short and targeted.",
+            "Start with safe diagnostics before riskier actions.",
+            "Ask before destructive, irreversible, or externally visible commands.",
+          ].join(" "),
+          task: [
+            "Use create_tasks when explicit task tracking will materially help.",
+            "Keep tasks small, concrete, and tied to the current user request.",
+            "Use update_tasks only to change titles or notes.",
+            "Use solve_tasks as the only way to mark tasks completed.",
+            "Use the exact visible task ids when updating or solving tasks.",
+            "Do not use the task tool for long notes or final reports.",
+          ].join(" "),
+          memory: [
+            "Use remember_facts sparingly for durable user preferences or facts likely to matter again later.",
+            "Do not store long summaries, transient tool output, or task scratch notes.",
+          ].join(" "),
+          "web-search": [
+            "Use WebSearch when the task needs current information or the user explicitly asks for online research.",
+            "Use WebFetch for a specific page with a clear extraction prompt.",
+            "Keep queries focused and summarize only what matters to the task.",
+          ].join(" "),
+          "user-interaction": [
+            "Use ask_user only for genuine blockers such as missing input, approval, or a user decision.",
+            "Do not use it as a substitute for reading the codebase, checking tool output, or making reasonable progress on your own.",
+            "When you use it, give concrete options that make it easy for the user to unblock the work.",
+          ].join(" "),
+          attachment: [
+            "Use list_attachments, read_attachment, and provide_attachment for session attachments in the chat.",
+            "Treat session attachments as KK-Agent managed files, not as normal project files.",
+            "Use attachmentId when available because filenames may be ambiguous.",
+          ].join(" "),
+          skill: [
+            "If a listed skill clearly matches the task, invoke Skill before following that workflow.",
+            "Use the exact skill id from <skills_catalog> and do not guess.",
+            "Do not mention a skill as if it were loaded when it is not.",
+          ].join(" "),
+        },
       },
-      autonomous: {},
+      autonomous: {
+        label: getBuiltInModeMeta("autonomous").label,
+        modeInstruction: [
+          "You are running in autonomous behavior. Keep working on the user's goal across multiple turns without waiting for further instructions.",
+          "Plan, execute, verify, and iterate on your own until the goal is demonstrably met.",
+          "Do not stop mid-task, do not ask the user to confirm routine steps, and do not hand work back prematurely.",
+          "When the goal is fully complete, respond with exactly TASK_COMPLETE on its own line and nothing else.",
+          "If you hit a hard blocker you cannot resolve (missing credentials, out-of-scope permission), summarize the blocker and ask the user.",
+        ].join("\n"),
+        autonomousBudget: {},
+        toolIds: getDefaultToolIds("edit"),
+        allowedToolNames: getDefaultAllowedToolNames("edit"),
+        toolInstructions: {},
+      },
     },
   },
   retry: {

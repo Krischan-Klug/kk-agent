@@ -1,11 +1,11 @@
-import type { AppDefaults, ChatMode } from "@/types/api";
+import type { AppDefaults, ModeBehavior } from "@/types/api";
 import { FieldLabel, FormField, FormRow } from "@/components/PageForm";
 import { Select } from "@/components/settings/defaults.styled";
 
 interface Props {
   draft: AppDefaults;
   setDraft: (draft: AppDefaults) => void;
-  chatModes: ChatMode[];
+  chatModes: ModeBehavior[];
 }
 
 export default function AgentCoreSection({ draft, setDraft, chatModes }: Props) {
@@ -14,10 +14,10 @@ export default function AgentCoreSection({ draft, setDraft, chatModes }: Props) 
       <FormField>
         <FieldLabel>Default Chat Mode</FieldLabel>
         <Select
-          value={draft.agent.defaultChatMode}
+          value={draft.agent.defaultModeBehavior}
           onChange={(e) => setDraft({
             ...draft,
-            agent: { ...draft.agent, defaultChatMode: e.target.value as ChatMode },
+            agent: { ...draft.agent, defaultModeBehavior: e.target.value as ModeBehavior },
           })}
         >
           {chatModes.map((mode) => <option key={mode} value={mode}>{mode}</option>)}

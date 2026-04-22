@@ -38,9 +38,9 @@ export const skillTools: McpToolDefinition[] = [
           type: "boolean",
           description: "Whether the new skill should be active immediately. Defaults to true.",
         },
-        allowedModes: {
+        allowedModeBehaviors: {
           type: "array",
-          description: "Modes where the skill may be used. Defaults to plan and edit when omitted.",
+          description: "Mode behaviors where the skill may be used. Defaults to plan and edit when omitted.",
           items: {
             type: "string",
             enum: ["plan", "edit", "autonomous"],

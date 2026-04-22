@@ -3,9 +3,8 @@ import { getAllMcpsCached, getKnownMcpIds, getRunnableMcpIds } from "../../mcp/s
 import { getInternalToolById, getKnownSystemMcpIds, getRunnableSystemMcpIds } from "../../tools/service.js";
 import { listSkills } from "../../skills/service.js";
 import { filterToKnownIds } from "../../lib/ids.js";
-import type { AgentDefinition } from "../../agent/types.js";
-import { getChatModes } from "../../agent/lib/modes.js";
-import { getModeConfig } from "../../agent/lib/mode-config.js";
+import type { AgentDefinition, AgentModeDefinition } from "../../agent/types.js";
+import { getEnabledAgentModes } from "../../agent/lib/mode-config.js";
 
 const REQUIRED_SESSION_TOOL_IDS = ["attachment"];
 
@@ -36,43 +35,37 @@ export function buildRunnableMcpInstructions(
 }
 
 function resolveSessionIds(
-  agent: Pick<AgentDefinition, "modeConfigs">,
+  agent: Pick<AgentDefinition, "modes">,
   activeIds: string[] | undefined,
-  accessor: (config: ReturnType<typeof getModeConfig>) => string[],
+  accessor: (mode: AgentModeDefinition) => string[],
   sanitize: (ids: string[]) => string[],
 ): string[] {
   if (activeIds !== undefined) return sanitize(activeIds);
-  const modeIds = getChatModes().flatMap((mode) => accessor(getModeConfig(agent, mode)));
+  const modeIds = getEnabledAgentModes(agent).flatMap((mode) => accessor(mode));
   return sanitize(modeIds);
 }
 
 export function resolveSessionToolIds(
-  agent: Pick<AgentDefinition, "modeConfigs">,
+  agent: Pick<AgentDefinition, "modes">,
   activeToolIds?: string[],
 ): string[] {
-  return resolveSessionIds(agent, activeToolIds, (c) => c.toolIds, sanitizeToolIds);
+  return resolveSessionIds(agent, activeToolIds, (mode) => mode.config.toolIds, sanitizeToolIds);
 }
 
 export function resolveSessionMcpIds(
-  agent: Pick<AgentDefinition, "modeConfigs">,
+  agent: Pick<AgentDefinition, "modes">,
   activeMcpIds?: string[],
 ): string[] {
-  return resolveSessionIds(agent, activeMcpIds, (c) => c.mcpIds, sanitizeMcpIds);
+  return resolveSessionIds(agent, activeMcpIds, (mode) => mode.config.mcpIds, sanitizeMcpIds);
 }
 
 export function resolveSessionSkillIds(
-  agent: Pick<AgentDefinition, "modeConfigs">,
+  agent: Pick<AgentDefinition, "modes">,
   activeSkillIds?: string[],
 ): string[] {
-  return resolveSessionIds(agent, activeSkillIds, (c) => c.skillIds, sanitizeSkillIds);
+  return resolveSessionIds(agent, activeSkillIds, (mode) => mode.config.skillIds, sanitizeSkillIds);
 }
 
-/**
- * Returns the skill ids that are linked to the given internal tools and MCPs.
- * Used to extend a session's effective skill catalog with skills declared on the
- * tool/MCP itself, so admins can attach reusable workflow skills once per
- * tool/MCP instead of per agent.
- */
 export function collectLinkedSkillIds(
   activeToolIds: string[],
   activeMcpIds: string[],
@@ -88,4 +81,3 @@ export function collectLinkedSkillIds(
   }
   return sanitizeSkillIds([...collected]);
 }
-

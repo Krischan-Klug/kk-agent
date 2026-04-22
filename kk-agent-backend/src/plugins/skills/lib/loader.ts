@@ -1,11 +1,12 @@
 import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import { basename, resolve, relative, sep, join } from "node:path";
 import YAML from "yaml";
-import type { ChatMode } from "../../agent/types.js";
+import type { ModeBehavior } from "../../agent/types.js";
 import type { SkillMetadata } from "../types.js";
+import { isModeBehavior } from "../../agent/lib/modes.js";
 
 const METADATA_FILE = "kk-agent.skill.json";
-const DEFAULT_ALLOWED_MODES: ChatMode[] = ["plan", "edit"];
+const DEFAULT_ALLOWED_MODE_BEHAVIORS: ModeBehavior[] = ["plan", "edit"];
 
 export interface LoadedSkillMetadata {
   name: string;
@@ -20,14 +21,14 @@ interface StoredSkillMetadata {
   active?: boolean;
   recommendedToolIds?: string[];
   recommendedMcpIds?: string[];
-  allowedModes?: ChatMode[];
+  allowedModeBehaviors?: ModeBehavior[];
 }
 
-function normalizeModes(modes?: ChatMode[]): ChatMode[] {
-  const normalized = [...new Set((modes ?? DEFAULT_ALLOWED_MODES).filter((mode): mode is ChatMode =>
-    mode === "plan" || mode === "edit" || mode === "autonomous"
+function normalizeModeBehaviors(modeBehaviors?: ModeBehavior[]): ModeBehavior[] {
+  const normalized = [...new Set((modeBehaviors ?? DEFAULT_ALLOWED_MODE_BEHAVIORS).filter((mode): mode is ModeBehavior =>
+    typeof mode === "string" && isModeBehavior(mode)
   ))];
-  return normalized.length > 0 ? normalized : [...DEFAULT_ALLOWED_MODES];
+  return normalized.length > 0 ? normalized : [...DEFAULT_ALLOWED_MODE_BEHAVIORS];
 }
 
 function isWithinRoot(rootDir: string, targetPath: string): boolean {
@@ -75,7 +76,7 @@ function normalizeMetadata(metadata?: StoredSkillMetadata): SkillMetadata {
     source: "custom",
     recommendedToolIds: [...new Set(metadata?.recommendedToolIds ?? [])],
     recommendedMcpIds: [...new Set(metadata?.recommendedMcpIds ?? [])],
-    allowedModes: normalizeModes(metadata?.allowedModes),
+    allowedModeBehaviors: normalizeModeBehaviors(metadata?.allowedModeBehaviors),
   };
 }
 
@@ -106,7 +107,7 @@ export async function writeSkillBundle(
       active: body.metadata.active,
       recommendedToolIds: body.metadata.recommendedToolIds,
       recommendedMcpIds: body.metadata.recommendedMcpIds,
-      allowedModes: body.metadata.allowedModes,
+      allowedModeBehaviors: body.metadata.allowedModeBehaviors,
     }, null, 2),
     "utf-8",
   );

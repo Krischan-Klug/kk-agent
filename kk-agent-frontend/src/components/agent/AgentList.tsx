@@ -26,8 +26,8 @@ export default function AgentList({ agents, mcps, selectedId, onSelect, onCreate
       {agents.map((agent) => {
         const capabilityIds = [
           ...new Set(
-            Object.values(agent.modeConfigs ?? {})
-              .flatMap((mode) => [...(mode?.toolIds ?? []), ...(mode?.mcpIds ?? [])]),
+            (agent.modes ?? [])
+              .flatMap((mode) => [...(mode.config.toolIds ?? []), ...(mode.config.mcpIds ?? [])]),
           ),
         ];
         return (

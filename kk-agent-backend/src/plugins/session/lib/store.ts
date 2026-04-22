@@ -63,7 +63,7 @@ export function createSession(data: {
   agentId: string;
   providerId: string;
   model: string;
-  activeMode: SessionState["activeMode"];
+  activeModeId: SessionState["activeModeId"];
   activeToolIds: string[];
   activeMcpIds: string[];
   activeSkillIds: string[];
@@ -76,7 +76,7 @@ export function createSession(data: {
     providerId: data.providerId,
     model: data.model,
     agentId: data.agentId,
-    activeMode: data.activeMode,
+    activeModeId: data.activeModeId,
     activeToolIds: data.activeToolIds,
     activeMcpIds: data.activeMcpIds,
     activeSkillIds: data.activeSkillIds,

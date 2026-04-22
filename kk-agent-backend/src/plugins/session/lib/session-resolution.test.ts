@@ -12,7 +12,7 @@ test("resolveSessionLlmRequestConfig keeps session-scoped overrides in the provi
     providerId: "provider-1",
     model: "model-1",
     agentId: "agent-1",
-    activeMode: "edit",
+    activeModeId: "edit",
     activeToolIds: [],
     activeMcpIds: [],
     activeSkillIds: [],

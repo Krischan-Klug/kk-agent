@@ -1,10 +1,10 @@
-import type { ChatMode } from "@/types/api";
+import type { ModeBehavior } from "@/types/api";
 import { ModeTab, ModeTabs } from "@/components/settings/defaults.styled";
 
 interface Props {
-  modes: ChatMode[];
-  selected: ChatMode;
-  onSelect: (mode: ChatMode) => void;
+  modes: ModeBehavior[];
+  selected: ModeBehavior;
+  onSelect: (mode: ModeBehavior) => void;
   keyPrefix?: string;
 }
 

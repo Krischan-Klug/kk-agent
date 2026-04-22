@@ -1,7 +1,8 @@
 import type { LlmRequestConfig } from "./provider.js";
 
 export type ReasoningEffort = "minimal" | "low" | "medium" | "high";
-export type ChatMode = "plan" | "edit" | "autonomous";
+export type ModeBehavior = "plan" | "edit" | "autonomous";
+export type AgentModeSource = "builtin" | "custom";
 export type ToolAccessScope = "user" | "system";
 
 export interface AgentPromptSections {
@@ -32,31 +33,24 @@ export interface AgentModeConfig {
   mcpInstructions: Record<string, string>;
   skillInstructions: Record<string, string>;
   allowedToolNames: string[];
-  autonomous?: boolean;
   autonomousBudget?: AutonomousBudget;
 }
 
-export interface AgentModeConfigPatch {
-  promptSections?: Partial<AgentPromptSections>;
-  modeInstruction?: string;
-  toolIds?: string[];
-  mcpIds?: string[];
-  skillIds?: string[];
-  toolAccessScopes?: Record<string, ToolAccessScope>;
-  toolInstructions?: Record<string, string>;
-  mcpInstructions?: Record<string, string>;
-  skillInstructions?: Record<string, string>;
-  allowedToolNames?: string[];
-  autonomous?: boolean;
-  autonomousBudget?: AutonomousBudget;
+export interface AgentModeDefinition {
+  id: string;
+  label: string;
+  behavior: ModeBehavior;
+  source: AgentModeSource;
+  enabled: boolean;
+  config: AgentModeConfig;
 }
 
 export interface AgentDefinition {
   id: string;
   name: string;
   description: string;
-  defaultChatMode: ChatMode;
-  modeConfigs: Record<ChatMode, AgentModeConfig>;
+  defaultModeId: string;
+  modes: AgentModeDefinition[];
   variables: Record<string, string>;
   defaultProviderId?: string;
   defaultModel?: string;
@@ -69,7 +63,8 @@ export interface AgentLoopState {
   sessionId: string;
   agentId: string;
   status: "idle" | "running" | "completed" | "error" | "aborted";
-  mode: ChatMode;
+  modeId: string;
+  modeBehavior: ModeBehavior;
   iteration: number;
   startedAt: string;
   updatedAt: string;
@@ -78,8 +73,8 @@ export interface AgentLoopState {
 export interface CreateAgentBody {
   name: string;
   description?: string;
-  defaultChatMode?: ChatMode;
-  modeConfigs?: Partial<Record<ChatMode, AgentModeConfigPatch>>;
+  defaultModeId?: string;
+  modes?: AgentModeDefinition[];
   variables?: Record<string, string>;
   defaultProviderId?: string;
   defaultModel?: string;
@@ -89,8 +84,8 @@ export interface CreateAgentBody {
 export interface UpdateAgentBody {
   name?: string;
   description?: string;
-  defaultChatMode?: ChatMode;
-  modeConfigs?: Partial<Record<ChatMode, AgentModeConfigPatch>>;
+  defaultModeId?: string;
+  modes?: AgentModeDefinition[];
   variables?: Record<string, string>;
   defaultProviderId?: string;
   defaultModel?: string;

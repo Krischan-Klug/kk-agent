@@ -33,11 +33,16 @@ function throwIfAborted(signal?: AbortSignal): void {
 
 function buildLoopState(opts: LoopOptions): AgentLoopState {
   const now = new Date().toISOString();
+  const modeConfig = opts.modeConfigs[opts.activeModeId];
+  if (!modeConfig) {
+    throw new Error(`Missing mode config for mode "${opts.activeModeId}"`);
+  }
   return {
     sessionId: opts.sessionId,
     agentId: opts.agentId,
     status: "running",
-    mode: opts.activeMode,
+    modeId: opts.activeModeId,
+    modeBehavior: modeConfig.modeBehavior,
     iteration: 0,
     startedAt: now,
     updatedAt: now,
@@ -75,15 +80,15 @@ async function runModelPass(
   retryInstruction?: string,
   metaMessages: TranscriptMessage[] = [],
 ) {
-  const modeConfig = opts.modeConfigs[opts.activeMode];
+  const modeConfig = opts.modeConfigs[opts.activeModeId];
   if (!modeConfig) {
-    throw new Error(`Missing mode config for mode "${opts.activeMode}"`);
+    throw new Error(`Missing mode config for mode "${opts.activeModeId}"`);
   }
 
   const variables: Record<string, string> = {
     ...getSystemVariables({ CURRENT_MODEL: opts.model }),
     ...(modeConfig.runtimeVariables ?? {}),
-    mode: opts.activeMode,
+    mode: modeConfig.modeId,
     TASK_SUMMARY: getTaskSummary(opts.sessionId),
     ...opts.agentVariables,
   };
@@ -96,7 +101,8 @@ async function runModelPass(
     variables,
     {
       sessionId: opts.sessionId,
-      mode: opts.activeMode,
+      modeId: modeConfig.modeId,
+      modeBehavior: modeConfig.modeBehavior,
     },
   );
 
@@ -183,16 +189,16 @@ export async function runAgentLoop(opts: LoopOptions): Promise<LoopResult> {
   while (true) {
     throwIfAborted(opts.abortSignal);
     iteration++;
-    emitLoopState(loopState, opts, { iteration, status: "running", mode: opts.activeMode });
+    emitLoopState(loopState, opts, { iteration, status: "running" });
 
-    const modeConfig = opts.modeConfigs[opts.activeMode];
+    const modeConfig = opts.modeConfigs[opts.activeModeId];
     if (!modeConfig) {
-      throw new Error(`Missing mode config for mode "${opts.activeMode}"`);
+      throw new Error(`Missing mode config for mode "${opts.activeModeId}"`);
     }
 
     const executor = new StreamingToolExecutor(
       opts.executeTool,
-      opts.activeMode,
+      { id: modeConfig.modeId, behavior: modeConfig.modeBehavior },
       modeConfig.runtimeToolsByName,
       async (runtimeTool, toolName, args, mode) => {
         return (await opts.resolveToolPermission?.(runtimeTool, toolName, args, mode)) ?? { allowed: true };
@@ -214,7 +220,8 @@ export async function runAgentLoop(opts: LoopOptions): Promise<LoopResult> {
     const metaMessages = opts.buildEphemeralMetaMessages?.({
       sessionId: opts.sessionId,
       agentId: opts.agentId,
-      mode: opts.activeMode,
+      modeId: modeConfig.modeId,
+      modeBehavior: modeConfig.modeBehavior,
       model: opts.model,
       iteration,
     }) ?? [];
@@ -417,7 +424,6 @@ export async function runAgentLoop(opts: LoopOptions): Promise<LoopResult> {
   emitLoopState(loopState, opts, {
     status: finalStatus,
     iteration,
-    mode: opts.activeMode,
   });
 
   return {

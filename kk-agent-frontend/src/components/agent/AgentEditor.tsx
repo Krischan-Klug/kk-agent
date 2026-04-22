@@ -2,9 +2,10 @@
 import styled from "styled-components";
 import type {
   AgentDefinition,
+  AgentModeDefinition,
   AgentModeConfig,
   AppDefaults,
-  ChatMode,
+  ModeBehavior,
   McpListItem,
   ModelInfo,
   ModelSettings,
@@ -73,6 +74,26 @@ const ModeTab = styled.button<{ $active: boolean }>`
   border-radius: var(--radius-sm);
   font-size: var(--font-size-sm);
   cursor: pointer;
+`;
+
+const ModeTabContent = styled.span`
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+`;
+
+const ModeStatusDot = styled.span<{ $enabled: boolean; $active: boolean }>`
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  background: ${({ $enabled, $active }) => {
+    if ($enabled) {
+      return $active ? "var(--bg-base)" : "var(--success)";
+    }
+    return "var(--text-muted)";
+  }};
+  opacity: ${({ $enabled }) => ($enabled ? 1 : 0.85)};
 `;
 
 const CapabilityRow = styled.div<{ $active: boolean }>`
@@ -206,25 +227,7 @@ const ScopeRow = styled.div`
   margin-top: var(--space-xs);
 `;
 
-const SummaryCard = styled.div`
-  padding: var(--space-sm);
-  background: var(--bg-surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  font-size: var(--font-size-sm);
-  color: var(--text-secondary);
-`;
-
-const SummaryLink = styled.a`
-  color: var(--accent);
-  text-decoration: none;
-
-  &:hover {
-    text-decoration: underline;
-  }
-`;
-
-const MODE_ORDER: ChatMode[] = ["plan", "edit", "autonomous"];
+const MODE_BEHAVIORS: ModeBehavior[] = ["plan", "edit", "autonomous"];
 const PROMPT_SECTION_META: Array<{ key: keyof AgentModeConfig["promptSections"]; label: string }> = [
   { key: "identity", label: "\u{1FAAA} Identity" },
   { key: "system", label: "\u{1F9E0} System" },
@@ -237,6 +240,60 @@ const PROMPT_SECTION_META: Array<{ key: keyof AgentModeConfig["promptSections"];
 const OVERRIDE_EMOJI = "\u270F\uFE0F";
 const RESET_EMOJI = "\u21BA";
 const SKILL_EMOJI = "\u{1F4DA}";
+
+function slugifyModeId(value: string): string {
+  const normalized = value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+  return normalized || "mode";
+}
+
+function buildUniqueModeId(seed: string, existingIds: string[]): string {
+  const base = slugifyModeId(seed);
+  if (!existingIds.includes(base)) return base;
+  let index = 2;
+  while (existingIds.includes(`${base}-${index}`)) index += 1;
+  return `${base}-${index}`;
+}
+
+function buildModeConfigFromDefaults(behavior: ModeBehavior, defaults: AppDefaults | null): AgentModeConfig {
+  const template = defaults?.agent.modeTemplates[behavior];
+  return {
+    promptSections: { ...(defaults?.agent.promptSections ?? {
+      identity: "",
+      system: "",
+      runtime: "",
+      tasks: "",
+      security: "",
+      toolUsage: "",
+      communication: "",
+    }) },
+    modeInstruction: template?.modeInstruction ?? "",
+    toolIds: [...(template?.toolIds ?? [])],
+    mcpIds: [],
+    skillIds: [],
+    toolAccessScopes: {},
+    toolInstructions: { ...(template?.toolInstructions ?? {}) },
+    mcpInstructions: {},
+    skillInstructions: {},
+    allowedToolNames: [...(template?.allowedToolNames ?? [])],
+    autonomousBudget: template?.autonomousBudget ? { ...template.autonomousBudget } : {},
+  };
+}
+
+function createCustomMode(agent: AgentDefinition, defaults: AppDefaults | null, behavior: ModeBehavior = "edit"): AgentModeDefinition {
+  const existingIds = agent.modes.map((mode) => mode.id);
+  return {
+    id: buildUniqueModeId("custom-mode", existingIds),
+    label: "Custom Mode",
+    behavior,
+    source: "custom",
+    enabled: true,
+    config: buildModeConfigFromDefaults(behavior, defaults),
+  };
+}
 
 type Props = {
   agent: AgentDefinition | null;
@@ -346,7 +403,7 @@ export default function AgentEditor({
   onSave,
   onDelete,
 }: Props) {
-  const [selectedMode, setSelectedMode] = useState<ChatMode>("edit");
+  const [selectedModeId, setSelectedModeId] = useState<string>("edit");
   const [expandedInternalTools, setExpandedInternalTools] = useState<Record<string, boolean>>({});
   const [expandedMcps, setExpandedMcps] = useState<Record<string, boolean>>({});
   const [visibleToolInstructions, setVisibleToolInstructions] = useState<Record<string, boolean>>({});
@@ -362,7 +419,12 @@ export default function AgentEditor({
   }
 
   const currentAgent = agent;
-  const effectiveSelectedMode = MODE_ORDER.includes(selectedMode) ? selectedMode : currentAgent.defaultChatMode;
+  const enabledModes = currentAgent.modes.filter((mode) => mode.enabled);
+  const fallbackMode = currentAgent.modes.find((mode) => mode.id === currentAgent.defaultModeId)
+    ?? enabledModes[0]
+    ?? currentAgent.modes[0];
+  const selectedModeDefinition = currentAgent.modes.find((mode) => mode.id === selectedModeId) ?? fallbackMode;
+  const effectiveSelectedModeId = selectedModeDefinition?.id ?? currentAgent.defaultModeId;
   const selectedModelInfo = currentAgent.defaultModel
     ? models.find((model) => model.id === currentAgent.defaultModel)
     : undefined;
@@ -379,24 +441,20 @@ export default function AgentEditor({
     endpointCapabilities.maxOutputTokensRange,
     endpointCapabilities.maxOutputTokensRange?.max,
   );
-  const selectedModeConfig = currentAgent.modeConfigs[effectiveSelectedMode];
-  const defaultModeInstruction = defaults?.agent.modeInstructions[effectiveSelectedMode] ?? "";
+  const selectedModeConfig = selectedModeDefinition.config;
+  const modeTemplate = defaults?.agent.modeTemplates[selectedModeDefinition.behavior];
+  const defaultModeInstruction = modeTemplate?.modeInstruction ?? "";
   const isCustomizedModeInstruction = selectedModeConfig.modeInstruction.trim() !== defaultModeInstruction.trim();
-  const providerSettingsHref = currentAgent.defaultProviderId
-    ? `/settings/provider?providerId=${encodeURIComponent(currentAgent.defaultProviderId)}${selectedModelInfo ? `#model-${encodeURIComponent(selectedModelInfo.id)}` : ""}`
-    : "/settings/provider";
-  const summaryParts = [
-    `Endpoint: ${selectedEndpoint}`,
-    `Reasoning: ${currentAgent.llmRequestConfig?.common?.reasoningEffort ?? selectedModelSettings?.llmRequestConfig?.common?.reasoningEffort ?? "provider default"}`,
-    `Tools: ${selectedModelInfo?.capabilities.supportsTools ? "on" : "off"}`,
-  ];
+  const isSelectedModeDefault = currentAgent.defaultModeId === selectedModeDefinition.id;
+  const canDisableSelectedMode = !selectedModeDefinition.enabled || enabledModes.length > 1;
+  const canDeleteSelectedMode = selectedModeDefinition.source === "custom" && currentAgent.modes.length > 1;
 
   function getPromptSectionDefault(section: keyof AgentModeConfig["promptSections"]): string {
     return defaults?.agent.promptSections[section] ?? "";
   }
 
   function getToolInstructionFallback(toolId: string, fallback?: string): string {
-    return defaults?.agent.modeToolInstructions[effectiveSelectedMode]?.[toolId] ?? fallback ?? "";
+    return modeTemplate?.toolInstructions?.[toolId] ?? fallback ?? "";
   }
 
   function getEffectiveToolInstruction(toolId: string, fallback?: string): string {
@@ -419,10 +477,9 @@ export default function AgentEditor({
   function updateModeConfig(nextConfig: AgentModeConfig) {
     onChange({
       ...currentAgent,
-      modeConfigs: {
-        ...currentAgent.modeConfigs,
-        [effectiveSelectedMode]: nextConfig,
-      },
+      modes: currentAgent.modes.map((mode) => mode.id === effectiveSelectedModeId
+        ? { ...mode, config: nextConfig }
+        : mode),
     });
   }
 
@@ -435,6 +492,58 @@ export default function AgentEditor({
 
   function updateCommonRequestConfig(patch: NonNullable<AgentDefinition["llmRequestConfig"]>["common"]) {
     updateLlmRequestConfig({ common: patch });
+  }
+
+  function updateModeDefinition(modeId: string, transform: (mode: AgentModeDefinition) => AgentModeDefinition) {
+    const nextModes = currentAgent.modes.map((mode) => mode.id === modeId ? transform(mode) : mode);
+    const nextEnabledModes = nextModes.filter((mode) => mode.enabled);
+    if (nextEnabledModes.length === 0) return;
+    const nextDefaultModeId = nextEnabledModes.some((mode) => mode.id === currentAgent.defaultModeId)
+      ? currentAgent.defaultModeId
+      : nextEnabledModes[0]!.id;
+    onChange({
+      ...currentAgent,
+      defaultModeId: nextDefaultModeId,
+      modes: nextModes,
+    });
+  }
+
+  function addCustomMode() {
+    const nextMode = createCustomMode(currentAgent, defaults, selectedModeDefinition.behavior);
+    onChange({
+      ...currentAgent,
+      modes: [...currentAgent.modes, nextMode],
+    });
+    setSelectedModeId(nextMode.id);
+  }
+
+  function deleteCustomMode(modeId: string) {
+    const nextModes = currentAgent.modes.filter((mode) => mode.id !== modeId);
+    const nextEnabledModes = nextModes.filter((mode) => mode.enabled);
+    if (nextEnabledModes.length === 0) return;
+    const nextDefaultModeId = currentAgent.defaultModeId === modeId
+      ? nextEnabledModes[0]!.id
+      : currentAgent.defaultModeId;
+    onChange({
+      ...currentAgent,
+      defaultModeId: nextDefaultModeId,
+      modes: nextModes,
+    });
+    setSelectedModeId(nextDefaultModeId);
+  }
+
+  function updateSelectedModeBehavior(behavior: ModeBehavior) {
+    updateModeDefinition(selectedModeDefinition.id, (mode) => ({
+      ...mode,
+      behavior,
+      config: {
+        ...mode.config,
+        skillIds: mode.config.skillIds.filter((skillId) => {
+          const skill = skills.find((entry) => entry.id === skillId);
+          return !skill || skill.allowedModeBehaviors.includes(behavior);
+        }),
+      },
+    }));
   }
 
   return (
@@ -451,12 +560,16 @@ export default function AgentEditor({
             <Input value={currentAgent.description} onChange={(e) => onChange({ ...currentAgent, description: e.target.value })} />
           </FormField>
           <FormField>
-            <FieldLabel>Default Chat Mode</FieldLabel>
+            <FieldLabel>Default Mode</FieldLabel>
             <Select
-              value={currentAgent.defaultChatMode}
-              onChange={(e) => onChange({ ...currentAgent, defaultChatMode: e.target.value as ChatMode })}
+              value={currentAgent.defaultModeId}
+              onChange={(e) => onChange({ ...currentAgent, defaultModeId: e.target.value })}
             >
-              {MODE_ORDER.map((mode) => <option key={mode} value={mode}>{mode}</option>)}
+              {enabledModes.map((mode) => (
+                <option key={mode.id} value={mode.id}>
+                  {mode.label}
+                </option>
+              ))}
             </Select>
           </FormField>
         </FormRow>
@@ -476,15 +589,22 @@ export default function AgentEditor({
             </Select>
           </FormField>
           <FormField>
-            <FieldLabel>Mode Config</FieldLabel>
+            <FieldLabel>Modes</FieldLabel>
             <ModeTabs>
-              {MODE_ORDER.map((mode) => (
-                <ModeTab key={mode} type="button" $active={mode === effectiveSelectedMode} onClick={() => setSelectedMode(mode)}>
-                  {mode}
+              {currentAgent.modes.map((mode) => (
+                <ModeTab key={mode.id} type="button" $active={mode.id === effectiveSelectedModeId} onClick={() => setSelectedModeId(mode.id)}>
+                  <ModeTabContent>
+                    <ModeStatusDot $enabled={mode.enabled} $active={mode.id === effectiveSelectedModeId} />
+                    <span>{mode.label}</span>
+                  </ModeTabContent>
                 </ModeTab>
               ))}
             </ModeTabs>
-            <MutedText>Die Konfiguration darunter gilt nur fuer den aktuell ausgewaehlten Mode.</MutedText>
+            <ActionsRow>
+              <Button type="button" size="sm" variant="secondary" onClick={addCustomMode}>
+                Custom Mode hinzufuegen
+              </Button>
+            </ActionsRow>
           </FormField>
           <FormField>
             <FieldLabel>Default Model</FieldLabel>
@@ -548,11 +668,71 @@ export default function AgentEditor({
             </FormField>
           )}
         </FormRow>
-        {selectedModelInfo && (
-          <SummaryCard>
-            {summaryParts.join(" · ")}. <SummaryLink href={providerSettingsHref}>Provider settings</SummaryLink>
-          </SummaryCard>
-        )}
+        <FormRow>
+          <FormField $flex={1} $minWidth="220px">
+            <FieldLabel>Mode Label</FieldLabel>
+            <Input
+              value={selectedModeDefinition.label}
+              disabled={selectedModeDefinition.source === "builtin"}
+              onChange={(e) => updateModeDefinition(selectedModeDefinition.id, (mode) => ({
+                ...mode,
+                label: e.target.value,
+              }))}
+            />
+          </FormField>
+          <FormField $minWidth="180px">
+            <FieldLabel>Mode Behavior</FieldLabel>
+            <Select
+              value={selectedModeDefinition.behavior}
+              disabled={selectedModeDefinition.source === "builtin"}
+              onChange={(e) => updateSelectedModeBehavior(e.target.value as ModeBehavior)}
+            >
+              {MODE_BEHAVIORS.map((behavior) => (
+                <option key={behavior} value={behavior}>{behavior}</option>
+              ))}
+            </Select>
+          </FormField>
+          <FormField $minWidth="220px">
+            <FieldLabel>Mode Status</FieldLabel>
+            <ActionsRow>
+              <CheckboxRow>
+                <input
+                  type="checkbox"
+                  checked={selectedModeDefinition.enabled}
+                  disabled={!canDisableSelectedMode}
+                  onChange={(e) => updateModeDefinition(selectedModeDefinition.id, (mode) => ({
+                    ...mode,
+                    enabled: e.target.checked,
+                  }))}
+                />
+                <span>Aktiviert</span>
+              </CheckboxRow>
+              {!isSelectedModeDefault && selectedModeDefinition.enabled && (
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="secondary"
+                  onClick={() => onChange({ ...currentAgent, defaultModeId: selectedModeDefinition.id })}
+                >
+                  Als Default setzen
+                </Button>
+              )}
+              {canDeleteSelectedMode && (
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="danger"
+                  onClick={() => deleteCustomMode(selectedModeDefinition.id)}
+                >
+                  Loeschen
+                </Button>
+              )}
+            </ActionsRow>
+            <MutedText>
+              Source: {selectedModeDefinition.source} | Id: {selectedModeDefinition.id}
+            </MutedText>
+          </FormField>
+        </FormRow>
       </Section>
 
       <Section>
@@ -631,7 +811,7 @@ export default function AgentEditor({
         />
       </Section>
 
-      {effectiveSelectedMode === "autonomous" && (
+      {selectedModeDefinition.behavior === "autonomous" && (
         <Section>
           <SectionTitle>Autonomous Budget</SectionTitle>
           <FormRow style={{ gap: "0.5rem", flexWrap: "wrap" }}>
@@ -1000,7 +1180,7 @@ export default function AgentEditor({
         {skills.map((skill) => {
           const isActive = selectedModeConfig.skillIds.includes(skill.id);
           const showInstruction = visibleSkillInstructions[skill.id] ?? false;
-          const isAvailableInMode = skill.allowedModes.includes(effectiveSelectedMode);
+          const isAvailableInMode = skill.allowedModeBehaviors.includes(selectedModeDefinition.behavior);
           const effectiveInstruction = getEffectiveSkillInstruction(skill.id, skill.instruction);
           const isCustomized = effectiveInstruction.trim() !== skill.instruction.trim();
 
@@ -1011,7 +1191,7 @@ export default function AgentEditor({
                   <input
                     type="checkbox"
                     checked={isActive}
-                    disabled={!skill.active || !isAvailableInMode}
+                    disabled={!skill.active || (!isAvailableInMode && !isActive)}
                     onChange={() => {
                       const nextSkillIds = isActive
                         ? selectedModeConfig.skillIds.filter((id) => id !== skill.id)
@@ -1062,7 +1242,7 @@ export default function AgentEditor({
               </CapabilityHeader>
               <MutedText>{skill.description}</MutedText>
               <MutedText>
-                Mode: {skill.allowedModes.join(", ")}
+                Behavior: {skill.allowedModeBehaviors.join(", ")}
                 {skill.recommendedToolIds.length > 0 ? ` | Tools: ${skill.recommendedToolIds.join(", ")}` : ""}
                 {skill.recommendedMcpIds.length > 0 ? ` | MCPs: ${skill.recommendedMcpIds.join(", ")}` : ""}
               </MutedText>

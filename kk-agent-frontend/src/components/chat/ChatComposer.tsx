@@ -3,7 +3,6 @@ import styled from "styled-components";
 import type {
   AgentDefinition,
   AgentLoopState,
-  ChatMode,
   TaskItem,
 } from "@/types/api";
 import type { PendingAttachment } from "@/hooks/useAttachments";
@@ -371,7 +370,7 @@ type Props = {
   sending: boolean;
   agents: AgentDefinition[];
   currentAgentId: string;
-  activeMode: ChatMode;
+  activeModeId: string;
   maxCtx: number;
   tokenStats: TokenDisplayStats | null;
   tasks: TaskItem[];
@@ -380,7 +379,7 @@ type Props = {
   onInputChange: (value: string) => void;
   onKeyDown: (e: React.KeyboardEvent<HTMLTextAreaElement>) => void;
   onAgentSwitch: (agentId: string) => void;
-  onModeSwitch: (mode: ChatMode) => void;
+  onModeSwitch: (modeId: string) => void;
   onSend: () => void;
   onAbort?: () => void;
   onFilesSelected: (files: FileList) => void;
@@ -392,7 +391,7 @@ export default function ChatComposer({
   sending,
   agents,
   currentAgentId,
-  activeMode,
+  activeModeId,
   maxCtx,
   tokenStats,
   tasks,
@@ -410,6 +409,13 @@ export default function ChatComposer({
   const textAreaRef = useRef<HTMLTextAreaElement>(null);
   const [dragOver, setDragOver] = useState(false);
   const [tasksOpen, setTasksOpen] = useState(false);
+  const currentAgent = agents.find((agent) => agent.id === currentAgentId);
+  const modeOptions = (currentAgent?.modes ?? [])
+    .filter((mode) => mode.enabled)
+    .map((mode) => ({
+      value: mode.id,
+      label: mode.label,
+    }));
 
   const canSend =
     !sending && (input.trim().length > 0 || pendingAttachments.length > 0);
@@ -526,13 +532,9 @@ export default function ChatComposer({
               <ComposerMeta>
                 <ControlGroup>
                   <SelectMenu
-                    value={activeMode}
-                    options={[
-                      { value: "plan", label: "Plan" },
-                      { value: "edit", label: "Edit" },
-                      { value: "autonomous", label: "Autonomous" },
-                    ]}
-                    onSelect={(val) => onModeSwitch(val as ChatMode)}
+                    value={activeModeId}
+                    options={modeOptions}
+                    onSelect={onModeSwitch}
                     direction="up"
                     variant="neutral"
                   />

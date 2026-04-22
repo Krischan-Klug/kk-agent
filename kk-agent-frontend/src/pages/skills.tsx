@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { mcp as mcpApi, skills as skillsApi, tools as toolsApi } from "@/lib/api";
 import type { McpListItem, SkillDefinition } from "@/types/api";
 import { PageBody } from "@/components/Layout.styled";
@@ -29,6 +29,8 @@ export default function SkillsPage() {
   const [mcpCapabilities, setMcpCapabilities] = useState<McpListItem[]>([]);
   const [editDrafts, setEditDrafts] = useState<Record<string, SkillDraft>>({});
   const [createDraft, setCreateDraft] = useState<SkillDraft | null>(null);
+  const selectedIdRef = useRef<string | null>(null);
+  const createDraftRef = useRef<SkillDraft | null>(null);
 
   const sortedSkills = useMemo(
     () => [...skills].sort((left, right) => left.name.localeCompare(right.name)),
@@ -60,10 +62,14 @@ export default function SkillsPage() {
   const activeDraft = createDraft ?? (selectedSkill ? editDrafts[selectedSkill.id] ?? skillToDraft(selectedSkill) : null);
 
   useEffect(() => {
-    void loadAll();
-  }, []);
+    selectedIdRef.current = selectedId;
+  }, [selectedId]);
 
-  async function loadAll(nextSelectedId?: string | null) {
+  useEffect(() => {
+    createDraftRef.current = createDraft;
+  }, [createDraft]);
+
+  const loadAll = useCallback(async (nextSelectedId?: string | null) => {
     try {
       const [skillList, toolList, mcpList] = await Promise.all([
         skillsApi.list(),
@@ -77,13 +83,13 @@ export default function SkillsPage() {
       setMcpCapabilities(mcpList);
       setEditDrafts(buildDraftMap(sorted));
 
-      if (createDraft) return;
+      if (createDraftRef.current) return;
       if (sorted.length === 0) {
         setSelectedId(null);
         return;
       }
 
-      const desiredId = nextSelectedId === undefined ? selectedId : nextSelectedId;
+      const desiredId = nextSelectedId === undefined ? selectedIdRef.current : nextSelectedId;
       if (desiredId && sorted.some((skill) => skill.id === desiredId)) {
         setSelectedId(desiredId);
         return;
@@ -95,7 +101,11 @@ export default function SkillsPage() {
     } finally {
       setLoading(false);
     }
-  }
+  }, []);
+
+  useEffect(() => {
+    void loadAll();
+  }, [loadAll]);
 
   function selectSkill(id: string) {
     setCreateDraft(null);

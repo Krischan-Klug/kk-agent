@@ -270,7 +270,7 @@ export default function ChatPage() {
         sending={streaming.sending || attachments.uploading}
         agents={sessionData.agents}
         currentAgentId={activeSession.agentId}
-        activeMode={activeSession.activeMode}
+        activeModeId={activeSession.activeModeId}
         maxCtx={maxCtx}
         tokenStats={streaming.tokenStats}
         tasks={sessionData.tasks}

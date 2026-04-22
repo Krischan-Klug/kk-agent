@@ -2,7 +2,7 @@ import type {
   AgentLoopState,
   AgentPromptSections,
   AutonomousBudget,
-  ChatMode,
+  ModeBehavior,
   McpServerConfig,
   McpToolDefinition,
   SessionState,
@@ -15,13 +15,14 @@ import type {
 export type {
   AgentDefinition,
   AgentLoopState,
+  AgentModeDefinition,
   AgentModeConfig,
-  AgentModeConfigPatch,
+  AgentModeSource,
   AgentPromptSections,
   AttachmentDisplayMeta,
   AttachmentMeta,
   AutonomousBudget,
-  ChatMode,
+  ModeBehavior,
   ContinuationMode,
   CreateAgentBody,
   CreateProviderBody,
@@ -101,7 +102,7 @@ export interface SessionRuntimeSkillDebug {
   source?: "system" | "custom";
   recommendedToolIds: string[];
   recommendedMcpIds: string[];
-  allowedModes: ChatMode[];
+  allowedModeBehaviors: ModeBehavior[];
 }
 
 export interface SessionPromptDebug {
@@ -135,13 +136,16 @@ export interface SystemVariablesResponse {
 
 export interface AppDefaults {
   agent: {
-    defaultChatMode: ChatMode;
+    defaultModeBehavior: ModeBehavior;
     promptSections: AgentPromptSections;
-    modeInstructions: Record<ChatMode, string>;
-    modeAutonomousBudgets: Record<ChatMode, AutonomousBudget>;
-    modeToolIds: Record<ChatMode, string[]>;
-    modeAllowedToolNames: Record<ChatMode, string[]>;
-    modeToolInstructions: Record<ChatMode, Record<string, string>>;
+    modeTemplates: Record<ModeBehavior, {
+      label: string;
+      modeInstruction: string;
+      autonomousBudget?: AutonomousBudget;
+      toolIds: string[];
+      allowedToolNames: string[];
+      toolInstructions: Record<string, string>;
+    }>;
   };
   retry: {
     emptyResponseInstruction: string;

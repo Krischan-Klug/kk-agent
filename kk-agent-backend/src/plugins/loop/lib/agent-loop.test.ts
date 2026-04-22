@@ -23,6 +23,9 @@ function buildOptions(overrides: Partial<LoopOptions> = {}): LoopOptions {
     messages: [],
     modeConfigs: {
       edit: {
+        modeId: "edit",
+        modeLabel: "Edit",
+        modeBehavior: "edit",
         promptSections: PROMPT_SECTIONS,
         modeInstruction: "Do the work.",
         mcpInstructions: "",
@@ -46,7 +49,7 @@ function buildOptions(overrides: Partial<LoopOptions> = {}): LoopOptions {
         },
       },
     },
-    activeMode: "edit",
+    activeModeId: "edit",
     agentVariables: {},
     executeTool: async () => ({ content: "tool-finished" }),
     ...overrides,
@@ -109,9 +112,12 @@ test("runAgentLoop autonomous mode still stops on TASK_COMPLETE", async () => {
   });
 
   const result = await runAgentLoop(buildOptions({
-    activeMode: "autonomous",
+    activeModeId: "autonomous",
     modeConfigs: {
       autonomous: {
+        modeId: "autonomous",
+        modeLabel: "Autonomous",
+        modeBehavior: "autonomous",
         promptSections: PROMPT_SECTIONS,
         modeInstruction: "Keep working.",
         mcpInstructions: "",

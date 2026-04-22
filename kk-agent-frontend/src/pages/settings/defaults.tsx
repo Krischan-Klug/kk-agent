@@ -1,5 +1,5 @@
 import { useState } from "react";
-import type { ChatMode } from "@/types/api";
+import type { ModeBehavior } from "@/types/api";
 import SettingsLayout from "@/components/SettingsLayout";
 import Button from "@/components/Button";
 import Spinner from "@/components/Spinner";
@@ -20,7 +20,7 @@ import {
   SaveMsg,
 } from "@/components/settings/defaults.styled";
 
-const CHAT_MODES: ChatMode[] = ["plan", "edit", "autonomous"];
+const CHAT_MODES: ModeBehavior[] = ["plan", "edit", "autonomous"];
 
 type SectionKey =
   | "agentCore"
@@ -32,7 +32,7 @@ type SectionKey =
 
 export default function DefaultsPage() {
   const { draft, setDraft, internalTools, saving, saved, error, dirty, save } = useDefaultsForm();
-  const [selectedMode, setSelectedMode] = useState<ChatMode>("edit");
+  const [selectedMode, setSelectedMode] = useState<ModeBehavior>("edit");
   const [expanded, setExpanded] = useState<Record<SectionKey, boolean>>({
     agentCore: true,
     promptSections: true,

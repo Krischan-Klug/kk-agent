@@ -3,44 +3,55 @@ import type {
   CreateAgentBody,
   UpdateAgentBody,
   AgentLoopState,
-  ChatMode,
+  AgentModeConfig,
+  AgentModeDefinition,
 } from "./types.js";
 import * as store from "./lib/store.js";
 import { getDefaults } from "../lib/defaults.js";
 import { createSlugId } from "../lib/ids.js";
 import { compactLlmRequestConfig } from "../provider/lib/request-config.js";
 import { getSystemVariableNames } from "../systemprompt/index.js";
-import { getChatModes } from "./lib/modes.js";
-import { applyModeConfigPatch, compactModeConfigs, normalizeModeConfigs } from "./lib/mode-config.js";
-
-function compactAgentForStore(agent: AgentDefinition): AgentDefinition {
-  return {
-    ...agent,
-    modeConfigs: compactModeConfigs(agent.modeConfigs) as AgentDefinition["modeConfigs"],
-  };
-}
+import { buildDefaultModes, normalizeModeDefinitions, resolveDefaultModeId } from "./lib/mode-config.js";
 
 function normalizeAgent(agent: AgentDefinition): AgentDefinition {
   const defaults = getDefaults();
-  const defaultChatMode = agent.defaultChatMode ?? defaults.agent.defaultChatMode;
+  const modes = normalizeModeDefinitions(agent.modes);
   return {
-    ...agent,
-    defaultChatMode,
+    id: agent.id,
+    name: agent.name,
+    description: agent.description,
+    defaultModeId: resolveDefaultModeId(agent.defaultModeId ?? defaults.agent.defaultModeBehavior, modes),
+    modes,
+    variables: agent.variables ?? {},
+    defaultProviderId: agent.defaultProviderId,
+    defaultModel: agent.defaultModel,
     llmRequestConfig: compactLlmRequestConfig(agent.llmRequestConfig),
-    modeConfigs: normalizeModeConfigs(agent.modeConfigs),
+    createdAt: agent.createdAt,
+    updatedAt: agent.updatedAt,
   };
 }
 
-function normalizeModePatches(
-  existing: AgentDefinition["modeConfigs"],
-  patch?: UpdateAgentBody["modeConfigs"] | CreateAgentBody["modeConfigs"],
-): AgentDefinition["modeConfigs"] {
-  const result = normalizeModeConfigs(existing);
-  if (!patch) return result;
-  for (const mode of getChatModes()) {
-    result[mode] = applyModeConfigPatch(mode, result[mode], patch[mode]);
-  }
-  return result;
+function buildPersistedAgent(input: AgentDefinition): AgentDefinition {
+  const normalized = normalizeAgent(input);
+  return {
+    ...normalized,
+    modes: normalized.modes.map((mode) => ({
+      ...mode,
+      config: {
+        ...mode.config,
+        promptSections: { ...mode.config.promptSections },
+        toolIds: [...mode.config.toolIds],
+        mcpIds: [...mode.config.mcpIds],
+        skillIds: [...mode.config.skillIds],
+        toolAccessScopes: { ...mode.config.toolAccessScopes },
+        toolInstructions: { ...mode.config.toolInstructions },
+        mcpInstructions: { ...mode.config.mcpInstructions },
+        skillInstructions: { ...mode.config.skillInstructions },
+        allowedToolNames: [...mode.config.allowedToolNames],
+        autonomousBudget: mode.config.autonomousBudget ? { ...mode.config.autonomousBudget } : undefined,
+      },
+    })),
+  };
 }
 
 export async function initAgentService(): Promise<void> {
@@ -65,14 +76,14 @@ export async function createAgent(body: CreateAgentBody): Promise<AgentDefinitio
   const defaults = getDefaults();
   const id = createSlugId(body.name);
   const now = new Date().toISOString();
-  const defaultChatMode = body.defaultChatMode ?? defaults.agent.defaultChatMode;
+  const modes = normalizeModeDefinitions(body.modes ?? buildDefaultModes());
 
   const agent: AgentDefinition = {
     id,
     name: body.name,
     description: body.description ?? "",
-    defaultChatMode,
-    modeConfigs: normalizeModePatches({} as AgentDefinition["modeConfigs"], body.modeConfigs),
+    defaultModeId: resolveDefaultModeId(body.defaultModeId ?? defaults.agent.defaultModeBehavior, modes),
+    modes,
     variables: body.variables ?? {},
     defaultProviderId: body.defaultProviderId,
     defaultModel: body.defaultModel,
@@ -81,25 +92,29 @@ export async function createAgent(body: CreateAgentBody): Promise<AgentDefinitio
     updatedAt: now,
   };
 
-  return normalizeAgent(await store.createAgent(compactAgentForStore(agent)));
+  return normalizeAgent(await store.createAgent(buildPersistedAgent(agent)));
 }
 
 export async function updateAgent(id: string, body: UpdateAgentBody): Promise<AgentDefinition> {
   const existing = getAgent(id);
-  const patch: Partial<AgentDefinition> = {};
-  if (body.name !== undefined) patch.name = body.name;
-  if (body.description !== undefined) patch.description = body.description;
-  if (body.defaultChatMode !== undefined) patch.defaultChatMode = body.defaultChatMode;
-  if (body.modeConfigs !== undefined) {
-    patch.modeConfigs = compactModeConfigs(
-      normalizeModePatches(existing.modeConfigs, body.modeConfigs),
-    ) as AgentDefinition["modeConfigs"];
-  }
-  if (body.variables !== undefined) patch.variables = body.variables;
-  if (body.defaultProviderId !== undefined) patch.defaultProviderId = body.defaultProviderId;
-  if (body.defaultModel !== undefined) patch.defaultModel = body.defaultModel;
-  if (body.llmRequestConfig !== undefined) patch.llmRequestConfig = compactLlmRequestConfig(body.llmRequestConfig);
-  return normalizeAgent(await store.updateAgent(id, patch));
+  const nextModes = body.modes !== undefined ? normalizeModeDefinitions(body.modes) : existing.modes;
+  const patch: Partial<AgentDefinition> = {
+    name: body.name ?? existing.name,
+    description: body.description ?? existing.description,
+    defaultModeId: resolveDefaultModeId(body.defaultModeId ?? existing.defaultModeId, nextModes),
+    modes: nextModes,
+    variables: body.variables ?? existing.variables,
+    defaultProviderId: body.defaultProviderId ?? existing.defaultProviderId,
+    defaultModel: body.defaultModel ?? existing.defaultModel,
+    llmRequestConfig: body.llmRequestConfig !== undefined
+      ? compactLlmRequestConfig(body.llmRequestConfig)
+      : existing.llmRequestConfig,
+  };
+
+  return normalizeAgent(await store.updateAgent(id, buildPersistedAgent({
+    ...existing,
+    ...patch,
+  })));
 }
 
 export async function deleteAgent(id: string): Promise<void> {
@@ -108,39 +123,61 @@ export async function deleteAgent(id: string): Promise<void> {
 }
 
 type ModeConfigTransform = (
-  modeConfig: AgentDefinition["modeConfigs"][ChatMode],
+  modeConfig: AgentModeConfig,
   id: string,
-) => AgentDefinition["modeConfigs"][ChatMode];
+) => AgentModeConfig;
 
 const REMOVE_TRANSFORMS: Record<"tool" | "mcp" | "skill", ModeConfigTransform> = {
   tool(modeConfig, id) {
-    const toolAccessScopes = { ...modeConfig.toolAccessScopes };
-    const toolInstructions = { ...modeConfig.toolInstructions };
-    delete toolAccessScopes[id];
-    delete toolInstructions[id];
+    const nextToolIds = modeConfig.toolIds.filter((entry) => entry !== id);
+    const nextToolAccessScopes = { ...modeConfig.toolAccessScopes };
+    const nextToolInstructions = { ...modeConfig.toolInstructions };
+    delete nextToolAccessScopes[id];
+    delete nextToolInstructions[id];
+    if (
+      nextToolIds.length === modeConfig.toolIds.length &&
+      Object.keys(nextToolAccessScopes).length === Object.keys(modeConfig.toolAccessScopes).length &&
+      Object.keys(nextToolInstructions).length === Object.keys(modeConfig.toolInstructions).length
+    ) {
+      return modeConfig;
+    }
     return {
       ...modeConfig,
-      toolIds: modeConfig.toolIds.filter((entry) => entry !== id),
-      toolAccessScopes,
-      toolInstructions,
+      toolIds: nextToolIds,
+      toolAccessScopes: nextToolAccessScopes,
+      toolInstructions: nextToolInstructions,
     };
   },
   mcp(modeConfig, id) {
-    const mcpInstructions = { ...modeConfig.mcpInstructions };
-    delete mcpInstructions[id];
+    const nextMcpIds = modeConfig.mcpIds.filter((entry) => entry !== id);
+    const nextMcpInstructions = { ...modeConfig.mcpInstructions };
+    delete nextMcpInstructions[id];
+    if (
+      nextMcpIds.length === modeConfig.mcpIds.length &&
+      Object.keys(nextMcpInstructions).length === Object.keys(modeConfig.mcpInstructions).length
+    ) {
+      return modeConfig;
+    }
     return {
       ...modeConfig,
-      mcpIds: modeConfig.mcpIds.filter((entry) => entry !== id),
-      mcpInstructions,
+      mcpIds: nextMcpIds,
+      mcpInstructions: nextMcpInstructions,
     };
   },
   skill(modeConfig, id) {
-    const skillInstructions = { ...modeConfig.skillInstructions };
-    delete skillInstructions[id];
+    const nextSkillIds = modeConfig.skillIds.filter((entry) => entry !== id);
+    const nextSkillInstructions = { ...modeConfig.skillInstructions };
+    delete nextSkillInstructions[id];
+    if (
+      nextSkillIds.length === modeConfig.skillIds.length &&
+      Object.keys(nextSkillInstructions).length === Object.keys(modeConfig.skillInstructions).length
+    ) {
+      return modeConfig;
+    }
     return {
       ...modeConfig,
-      skillIds: modeConfig.skillIds.filter((entry) => entry !== id),
-      skillInstructions,
+      skillIds: nextSkillIds,
+      skillInstructions: nextSkillInstructions,
     };
   },
 };
@@ -148,19 +185,26 @@ const REMOVE_TRANSFORMS: Record<"tool" | "mcp" | "skill", ModeConfigTransform> =
 async function removeFromAllAgents(id: string, kind: "tool" | "mcp" | "skill"): Promise<void> {
   const transform = REMOVE_TRANSFORMS[kind];
   const updates = listAgents().map(async (agent) => {
-    const nextModeConfigs = { ...agent.modeConfigs };
     let changed = false;
-    for (const mode of getChatModes()) {
-      const current = nextModeConfigs[mode];
-      if (!current) continue;
-      const next = transform(current, id);
-      if (next !== current) {
-        nextModeConfigs[mode] = next;
+    const nextModes: AgentModeDefinition[] = agent.modes.map((mode) => {
+      const nextConfig = transform(mode.config, id);
+      if (nextConfig !== mode.config) {
         changed = true;
+        return {
+          ...mode,
+          config: nextConfig,
+        };
       }
-    }
+      return mode;
+    });
+
     if (changed) {
-      await store.updateAgent(agent.id, { modeConfigs: nextModeConfigs });
+      await store.updateAgent(agent.id, {
+        modes: buildPersistedAgent({
+          ...agent,
+          modes: nextModes,
+        }).modes,
+      });
     }
   });
   await Promise.all(updates);

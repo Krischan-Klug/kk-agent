@@ -1,4 +1,4 @@
-import type { ChatMode } from "./agent.js";
+import type { ModeBehavior } from "./agent.js";
 import type { SkillSource } from "./transcript.js";
 
 export interface SkillMetadata {
@@ -6,7 +6,7 @@ export interface SkillMetadata {
   source?: SkillSource;
   recommendedToolIds: string[];
   recommendedMcpIds: string[];
-  allowedModes: ChatMode[];
+  allowedModeBehaviors: ModeBehavior[];
 }
 
 export interface SkillDefinition extends SkillMetadata {
@@ -24,7 +24,7 @@ export interface CreateSkillBody {
   active?: boolean;
   recommendedToolIds?: string[];
   recommendedMcpIds?: string[];
-  allowedModes?: ChatMode[];
+  allowedModeBehaviors?: ModeBehavior[];
 }
 
 export interface UpdateSkillBody {
@@ -34,5 +34,5 @@ export interface UpdateSkillBody {
   active?: boolean;
   recommendedToolIds?: string[];
   recommendedMcpIds?: string[];
-  allowedModes?: ChatMode[];
+  allowedModeBehaviors?: ModeBehavior[];
 }

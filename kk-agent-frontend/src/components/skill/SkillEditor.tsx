@@ -1,5 +1,5 @@
 import styled from "styled-components";
-import type { ChatMode, CreateSkillBody, McpListItem, SkillDefinition, UpdateSkillBody } from "@/types/api";
+import type { ModeBehavior, CreateSkillBody, McpListItem, SkillDefinition, UpdateSkillBody } from "@/types/api";
 import Button from "@/components/Button";
 import Input from "@/components/Input";
 import Select from "@/components/Select";
@@ -66,7 +66,7 @@ export const EMPTY_SKILL_DRAFT: SkillDraft = {
   active: true,
   recommendedToolIds: [],
   recommendedMcpIds: [],
-  allowedModes: ["plan", "edit", "autonomous"],
+  allowedModeBehaviors: ["plan", "edit", "autonomous"],
 };
 
 export function skillToDraft(skill: SkillDefinition): SkillDraft {
@@ -77,7 +77,7 @@ export function skillToDraft(skill: SkillDefinition): SkillDraft {
     active: skill.active,
     recommendedToolIds: [...skill.recommendedToolIds],
     recommendedMcpIds: [...skill.recommendedMcpIds],
-    allowedModes: [...skill.allowedModes],
+    allowedModeBehaviors: [...skill.allowedModeBehaviors],
   };
 }
 
@@ -89,7 +89,7 @@ export function toCreateBody(draft: SkillDraft): CreateSkillBody {
     active: draft.active,
     recommendedToolIds: draft.recommendedToolIds,
     recommendedMcpIds: draft.recommendedMcpIds,
-    allowedModes: draft.allowedModes,
+    allowedModeBehaviors: draft.allowedModeBehaviors,
   };
 }
 
@@ -101,7 +101,7 @@ function toggleEntry(list: string[], value: string, enabled: boolean): string[] 
   return enabled ? [...new Set([...list, value])] : list.filter((entry) => entry !== value);
 }
 
-function toggleMode(list: ChatMode[], value: ChatMode, enabled: boolean): ChatMode[] {
+function toggleMode(list: ModeBehavior[], value: ModeBehavior, enabled: boolean): ModeBehavior[] {
   const next = enabled ? [...new Set([...list, value])] : list.filter((entry) => entry !== value);
   return next.length > 0 ? next : ["plan", "edit", "autonomous"];
 }
@@ -206,16 +206,20 @@ export default function SkillEditor({
           </FormField>
         </FormRow>
         <FormField>
-          <FieldLabel>Modes</FieldLabel>
+          <FieldLabel>Mode Behaviors</FieldLabel>
           <ToggleGrid>
-            {(["plan", "edit", "autonomous"] as ChatMode[]).map((mode) => (
+            {(["plan", "edit", "autonomous"] as ModeBehavior[]).map((mode) => (
               <ToggleCard key={mode}>
                 <input
                   type="checkbox"
-                  checked={draft.allowedModes?.includes(mode) ?? false}
+                  checked={draft.allowedModeBehaviors?.includes(mode) ?? false}
                   onChange={(e) => onChange({
                     ...draft,
-                    allowedModes: toggleMode(draft.allowedModes ?? EMPTY_SKILL_DRAFT.allowedModes!, mode, e.target.checked),
+                    allowedModeBehaviors: toggleMode(
+                      draft.allowedModeBehaviors ?? EMPTY_SKILL_DRAFT.allowedModeBehaviors!,
+                      mode,
+                      e.target.checked,
+                    ),
                   })}
                 />
                 <span>{mode}</span>

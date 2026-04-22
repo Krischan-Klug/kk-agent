@@ -51,8 +51,8 @@ function addLoadedSkillId(context: ToolRuntimeContext, skillId: string): ToolRun
 
 function buildCreatedSkillSummary(skill: SkillDefinition): string {
   const lines = [`Created skill "${skill.id}" (${skill.name}).`, `Path: ${skill.path}`];
-  if (skill.allowedModes.length > 0) {
-    lines.push(`Allowed modes: ${skill.allowedModes.join(", ")}`);
+  if (skill.allowedModeBehaviors.length > 0) {
+    lines.push(`Allowed mode behaviors: ${skill.allowedModeBehaviors.join(", ")}`);
   }
   return lines.join("\n");
 }
@@ -70,7 +70,7 @@ export async function executeSkillTool(
         description: String(args.description ?? ""),
         instruction: String(args.instruction ?? ""),
         active: readBoolean(args.active),
-        allowedModes: readOptionalStringArray(args.allowedModes) as CreateSkillBody["allowedModes"],
+        allowedModeBehaviors: readOptionalStringArray(args.allowedModeBehaviors) as CreateSkillBody["allowedModeBehaviors"],
         recommendedToolIds: readOptionalStringArray(args.recommendedToolIds),
         recommendedMcpIds: readOptionalStringArray(args.recommendedMcpIds),
       });

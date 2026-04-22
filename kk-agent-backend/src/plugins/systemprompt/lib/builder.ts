@@ -1,6 +1,6 @@
 import { getActiveInstructions as getCustomActiveInstructions } from "../../mcp/service.js";
 import { getActiveToolInstructions, getInternalToolState, getMemoryPromptContext, getTaskSummary } from "../../tools/service.js";
-import type { AgentPromptSections, ChatMode } from "../../agent/types.js";
+import type { AgentPromptSections, ModeBehavior } from "../../agent/types.js";
 
 interface SystemVariableDefinition {
   name: string;
@@ -9,7 +9,8 @@ interface SystemVariableDefinition {
 
 export interface PromptBuildContext {
   sessionId?: string;
-  mode?: ChatMode;
+  modeId?: string;
+  modeBehavior?: ModeBehavior;
 }
 
 interface ResolvedVariableContext extends PromptBuildContext {
@@ -38,7 +39,7 @@ const SYSTEM_VARIABLE_DEFINITIONS: SystemVariableDefinition[] = [
   },
   {
     name: "mode",
-    resolve: (context) => context.mode ?? context.rawVariables.mode ?? "edit",
+    resolve: (context) => context.modeId ?? context.rawVariables.mode ?? "edit",
   },
   {
     name: "TASK_SUMMARY",
@@ -174,10 +175,16 @@ function buildToolUsageSection(toolUsage: string, variables: Record<string, stri
   ].join("\n");
 }
 
-function buildModeSection(modeInstruction: string, mode?: ChatMode, variables: Record<string, string> = {}): string {
-  const effectiveMode = mode ?? "edit";
+function buildModeSection(
+  modeInstruction: string,
+  modeId?: string,
+  modeBehavior?: ModeBehavior,
+  variables: Record<string, string> = {},
+): string {
+  const effectiveModeId = modeId ?? "edit";
+  const effectiveModeBehavior = modeBehavior ?? "edit";
   return [
-    `<mode_context mode="${effectiveMode}">`,
+    `<mode_context mode="${effectiveModeId}" behavior="${effectiveModeBehavior}">`,
     resolveVariables(modeInstruction, variables),
     "</mode_context>",
   ].join("\n");
@@ -244,7 +251,7 @@ export function buildPrompt(
 
   const volatileParts = [
     "<!-- DYNAMIC_CONTEXT_BOUNDARY -->",
-    buildModeSection(modeInstruction, context.mode, resolvedVariables),
+    buildModeSection(modeInstruction, context.modeId, context.modeBehavior, resolvedVariables),
     "</agent_runtime_prompt>",
   ];
 

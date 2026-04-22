@@ -308,10 +308,10 @@ export function useChatSessionData({ onDebugOpen, setDebugOpen }: Options) {
     }
   }, [session, updateSessionAndSet]);
 
-  const handleModeSwitch = useCallback(async (activeMode: SessionState["activeMode"]) => {
-    if (!session || activeMode === session.activeMode) return;
+  const handleModeSwitch = useCallback(async (activeModeId: SessionState["activeModeId"]) => {
+    if (!session || activeModeId === session.activeModeId) return;
     try {
-      await updateSessionAndSet({ activeMode });
+      await updateSessionAndSet({ activeModeId });
     } catch (err) {
       console.error("[chat-mode-switch]", err);
     }

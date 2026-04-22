@@ -14,7 +14,7 @@ const BASE_SKILL: SkillDefinition = {
   source: "custom",
   recommendedToolIds: ["filesystem"],
   recommendedMcpIds: ["git-inspector"],
-  allowedModes: ["plan", "edit"],
+  allowedModeBehaviors: ["plan", "edit"],
   name: "Repo Analysis",
   description: "Analyze a repository before making changes.",
   instruction: "Use Read, Glob and Grep before proposing edits.",
@@ -42,7 +42,7 @@ test("createSkill writes a bundle into the skills state directory and updateSkil
     description: "Analyze before editing.",
     instruction: "Read first, edit later.",
     active: true,
-    allowedModes: ["plan"],
+    allowedModeBehaviors: ["plan"],
   });
 
   assert.equal(created.id, "repo-analysis");
@@ -56,11 +56,11 @@ test("createSkill writes a bundle into the skills state directory and updateSkil
   const updated = await updateSkill(created.id, {
     description: "Updated description.",
     instruction: "Use Glob and Grep too.",
-    allowedModes: ["plan", "edit"],
+    allowedModeBehaviors: ["plan", "edit"],
   });
 
   assert.equal(updated.description, "Updated description.");
-  assert.equal(updated.allowedModes.join(","), "plan,edit");
+  assert.equal(updated.allowedModeBehaviors.join(","), "plan,edit");
 
   const updatedMarkdown = await readFile(join(root, created.id, "SKILL.md"), "utf-8");
   assert.ok(updatedMarkdown.includes("description: Updated description."));
@@ -76,7 +76,7 @@ test("createSkill sanitizes ids, preserves autonomous mode, and generates unique
     name: "Skill Builder",
     description: "Create skills.",
     instruction: "Ask only focused follow-up questions.",
-    allowedModes: ["autonomous"],
+    allowedModeBehaviors: ["autonomous"],
     recommendedToolIds: ["skill", "missing-tool"],
     recommendedMcpIds: ["missing-mcp"],
   });
@@ -88,7 +88,7 @@ test("createSkill sanitizes ids, preserves autonomous mode, and generates unique
 
   assert.equal(first.id, "skill-builder");
   assert.equal(second.id, "skill-builder-2");
-  assert.deepEqual(first.allowedModes, ["autonomous"]);
+  assert.deepEqual(first.allowedModeBehaviors, ["autonomous"]);
   assert.deepEqual(first.recommendedToolIds, ["skill"]);
   assert.deepEqual(first.recommendedMcpIds, []);
 });
@@ -100,7 +100,7 @@ test("initSkillService seeds create-skill once and does not overwrite it", async
 
   const seeded = listSkills().find((skill) => skill.id === "create-skill");
   assert.ok(seeded);
-  assert.deepEqual(seeded?.allowedModes, ["plan", "edit"]);
+  assert.deepEqual(seeded?.allowedModeBehaviors, ["plan", "edit"]);
   assert.equal(seeded?.recommendedToolIds.join(","), "skill,user-interaction");
   assert.match(seeded?.description ?? "", /KK-Agent skill bundle|state\/skills/i);
   assert.match(seeded?.instruction ?? "", /load `create-skill` with Skill before you ask follow-up questions, draft content, or call CreateSkill/i);
@@ -109,8 +109,8 @@ test("initSkillService seeds create-skill once and does not overwrite it", async
   assert.match(seeded?.instruction ?? "", /YAML frontmatter/i);
   assert.match(seeded?.instruction ?? "", /name: Repo Analysis/);
   assert.match(seeded?.instruction ?? "", /Do not encode trigger lists as `Trigger:` mini-syntax/i);
-  assert.match(seeded?.instruction ?? "", /"allowedModes": \["plan", "edit"\]/);
-  assert.match(seeded?.instruction ?? "", /allowedModes to plan and edit/i);
+  assert.match(seeded?.instruction ?? "", /"allowedModeBehaviors": \["plan", "edit"\]/);
+  assert.match(seeded?.instruction ?? "", /allowedModeBehaviors to plan and edit/i);
   assert.match(seeded?.instruction ?? "", /ask_user/);
   assert.match(seeded?.instruction ?? "", /multiple choice/i);
   assert.match(seeded?.instruction ?? "", /Do not model timers, schedules, background jobs/i);

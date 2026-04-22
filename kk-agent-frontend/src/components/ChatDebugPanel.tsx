@@ -315,8 +315,8 @@ export default function ChatDebugPanel({
         const mcpRefs = skill.recommendedMcpIds.length > 0
           ? `MCPs: ${skill.recommendedMcpIds.join(", ")}`
           : "MCPs: -";
-        const modes = `Modes: ${skill.allowedModes.join(", ")}`;
-        return `-- ${skill.name} (${skill.id}) --\nsource=${skill.source ?? "custom"} active=${skill.active}\n${skill.description}\n${toolRefs}\n${mcpRefs}\n${modes}\n\n${skill.instruction}`;
+        const modeBehaviors = `Mode behaviors: ${skill.allowedModeBehaviors.join(", ")}`;
+        return `-- ${skill.name} (${skill.id}) --\nsource=${skill.source ?? "custom"} active=${skill.active}\n${skill.description}\n${toolRefs}\n${mcpRefs}\n${modeBehaviors}\n\n${skill.instruction}`;
       })
       .join("\n\n");
   }
@@ -345,13 +345,14 @@ export default function ChatDebugPanel({
         activeToolIds: session.activeToolIds,
         activeMcpIds: session.activeMcpIds,
         activeSkillIds: session.activeSkillIds,
-        activeMode: session.activeMode,
+        activeModeId: session.activeModeId,
         reasoningEffort: session.llmRequestConfig?.common?.reasoningEffort ?? "default",
         temperature: session.llmRequestConfig?.common?.temperature ?? "default",
         llmRequestConfig: session.llmRequestConfig ?? null,
         providerDebug: session.providerDebug ?? null,
         messageCount: session.messages.length,
-        loopMode: loopState?.mode ?? null,
+        loopModeId: loopState?.modeId ?? null,
+        loopModeBehavior: loopState?.modeBehavior ?? null,
         loopStatus: loopState?.status ?? null,
         createdAt: session.createdAt,
       },
@@ -396,7 +397,7 @@ export default function ChatDebugPanel({
         <DebugTab $active={debugTab === "tasks"} onClick={() => toggleTab("tasks")}>Tasks</DebugTab>
         <DebugTab $active={debugTab === "memory"} onClick={() => toggleTab("memory")}>Memory</DebugTab>
         <DebugControls>
-          {loopState && <Badge variant="info">{loopState.mode}</Badge>}
+          {loopState && <Badge variant="info">{`${loopState.modeId} (${loopState.modeBehavior})`}</Badge>}
           {providers.length > 0 ? (
             <SelectMenu
               value={session.providerId}

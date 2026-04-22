@@ -100,8 +100,8 @@ export default function AgentPage() {
       const updated = await agentApi.update(selectedId, {
         name: editAgent.name,
         description: editAgent.description,
-        defaultChatMode: editAgent.defaultChatMode,
-        modeConfigs: editAgent.modeConfigs,
+        defaultModeId: editAgent.defaultModeId,
+        modes: editAgent.modes,
         variables: editAgent.variables,
         defaultProviderId: editAgent.defaultProviderId,
         defaultModel: editAgent.defaultModel,

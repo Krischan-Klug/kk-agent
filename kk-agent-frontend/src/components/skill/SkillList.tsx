@@ -65,7 +65,7 @@ export default function SkillList({
                 {skill.active ? "Aktiv" : "Deaktiviert"}
               </Badge>
               <Badge variant="default">
-                {skill.allowedModes.length} Mode{skill.allowedModes.length === 1 ? "" : "s"}
+                {skill.allowedModeBehaviors.length} Verhalten{skill.allowedModeBehaviors.length === 1 ? "" : "s"}
               </Badge>
               {usageCount > 0 && <Badge variant="info">{usageCount} Verknuepfung{usageCount === 1 ? "" : "en"}</Badge>}
             </SidebarMeta>

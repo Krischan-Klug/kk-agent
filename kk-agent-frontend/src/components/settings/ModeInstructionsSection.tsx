@@ -1,15 +1,15 @@
 import Input from "@/components/Input";
 import TextArea from "@/components/TextArea";
-import type { AppDefaults, ChatMode } from "@/types/api";
+import type { AppDefaults, ModeBehavior } from "@/types/api";
 import { FieldLabel, FormField, FormRow } from "@/components/PageForm";
 import ModeTabsSelector from "./ModeTabsSelector";
 
 interface Props {
   draft: AppDefaults;
   setDraft: (draft: AppDefaults) => void;
-  chatModes: ChatMode[];
-  selectedMode: ChatMode;
-  setSelectedMode: (mode: ChatMode) => void;
+  chatModes: ModeBehavior[];
+  selectedMode: ModeBehavior;
+  setSelectedMode: (mode: ModeBehavior) => void;
 }
 
 export default function ModeInstructionsSection({
@@ -19,16 +19,20 @@ export default function ModeInstructionsSection({
   selectedMode,
   setSelectedMode,
 }: Props) {
-  const budget = draft.agent.modeAutonomousBudgets?.[selectedMode] ?? {};
+  const template = draft.agent.modeTemplates[selectedMode];
+  const budget = template?.autonomousBudget ?? {};
 
   function updateBudget(partial: Partial<typeof budget>) {
     setDraft({
       ...draft,
       agent: {
         ...draft.agent,
-        modeAutonomousBudgets: {
-          ...draft.agent.modeAutonomousBudgets,
-          [selectedMode]: { ...budget, ...partial },
+        modeTemplates: {
+          ...draft.agent.modeTemplates,
+          [selectedMode]: {
+            ...template,
+            autonomousBudget: { ...budget, ...partial },
+          },
         },
       },
     });
@@ -41,12 +45,18 @@ export default function ModeInstructionsSection({
         <FieldLabel>{selectedMode}</FieldLabel>
         <TextArea
           rows={4}
-          value={draft.agent.modeInstructions[selectedMode]}
+          value={template.modeInstruction}
           onChange={(e) => setDraft({
             ...draft,
             agent: {
               ...draft.agent,
-              modeInstructions: { ...draft.agent.modeInstructions, [selectedMode]: e.target.value },
+              modeTemplates: {
+                ...draft.agent.modeTemplates,
+                [selectedMode]: {
+                  ...template,
+                  modeInstruction: e.target.value,
+                },
+              },
             },
           })}
         />

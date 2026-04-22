@@ -81,13 +81,13 @@ function buildSystemToolPermissionResolver(toolName: string): RuntimeToolDefinit
     if (!command) {
       return { kind: "deny", reason: "Bash requires a command." };
     }
-    if (mode === "plan" && !isReadOnlyShellCommand(command)) {
+    if (mode.behavior === "plan" && !isReadOnlyShellCommand(command)) {
       return {
         kind: "deny",
         reason: "Im Plan-Mode ist Bash nur fuer read-only Diagnose, Suche und Inspektion erlaubt.",
       };
     }
-    if (mode === "edit" && isDestructiveShellCommand(command)) {
+    if (mode.behavior === "edit" && isDestructiveShellCommand(command)) {
       const prompt = getShellPermissionPrompt(command);
       return {
         kind: "prompt",

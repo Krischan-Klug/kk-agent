@@ -18,9 +18,9 @@ test("buildPrompt inserts runtime before mode context and keeps tool guidance be
     PROMPT_SECTIONS,
     "Plan carefully.",
     "<tool_instruction id=\"filesystem\" name=\"Filesystem\">Read first</tool_instruction>",
-    "<skills_catalog>\n  <skill id=\"repo-analysis\" name=\"Repo Analysis\" path=\"C:\\skills\\repo-analysis\" source=\"custom\" modes=\"plan,edit\">\n    <description>Analyze repo state.</description>\n  </skill>\n</skills_catalog>",
+    "<skills_catalog>\n  <skill id=\"repo-analysis\" name=\"Repo Analysis\" path=\"C:\\skills\\repo-analysis\" source=\"custom\" mode_behaviors=\"plan,edit\">\n    <description>Analyze repo state.</description>\n  </skill>\n</skills_catalog>",
     {},
-    { mode: "plan" },
+    { modeId: "plan", modeBehavior: "plan" },
   );
 
   const runtimeIndex = prompt.indexOf("<runtime>");
@@ -69,11 +69,12 @@ test("buildPrompt wraps output in agent_runtime_prompt tags", () => {
   assert.ok(prompt.endsWith("</agent_runtime_prompt>"));
 });
 
-test("buildPrompt includes mode context with mode and iteration info", () => {
-  const prompt = buildPrompt(PROMPT_SECTIONS, "Plan step.", "", "", {}, { mode: "plan" });
+test("buildPrompt includes mode context with mode and behavior info", () => {
+  const prompt = buildPrompt(PROMPT_SECTIONS, "Plan step.", "", "", {}, { modeId: "plan", modeBehavior: "plan" });
 
   assert.ok(prompt.includes("<mode_context"));
   assert.ok(prompt.includes("Plan step."));
+  assert.ok(prompt.includes('behavior="plan"'));
 });
 
 test("buildPrompt places only mode_context after the dynamic context boundary", () => {
@@ -83,7 +84,7 @@ test("buildPrompt places only mode_context after the dynamic context boundary", 
     "<tool_instruction id=\"filesystem\" name=\"Filesystem\">Read first</tool_instruction>",
     "<skills_catalog></skills_catalog>",
     {},
-    { mode: "plan" },
+    { modeId: "plan", modeBehavior: "plan" },
   );
 
   const boundaryIndex = prompt.indexOf("DYNAMIC_CONTEXT_BOUNDARY");
@@ -103,8 +104,8 @@ test("buildPrompt places only mode_context after the dynamic context boundary", 
 
 test("buildPrompt stable prefix is identical across calls", () => {
   const sections = { ...PROMPT_SECTIONS };
-  const a = buildPrompt(sections, "Mode.", "", "", {}, { mode: "edit" });
-  const b = buildPrompt(sections, "Mode.", "", "", {}, { mode: "edit" });
+  const a = buildPrompt(sections, "Mode.", "", "", {}, { modeId: "edit", modeBehavior: "edit" });
+  const b = buildPrompt(sections, "Mode.", "", "", {}, { modeId: "edit", modeBehavior: "edit" });
 
   const prefixA = a.split("DYNAMIC_CONTEXT_BOUNDARY")[0];
   const prefixB = b.split("DYNAMIC_CONTEXT_BOUNDARY")[0];

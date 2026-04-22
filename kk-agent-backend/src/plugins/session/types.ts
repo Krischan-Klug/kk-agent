@@ -1,4 +1,4 @@
-import type { ChatMode, AgentLoopState } from "../agent/types.js";
+import type { ModeBehavior, AgentLoopState } from "../agent/types.js";
 import type { TranscriptBlock, TranscriptMessage } from "../lib/transcript.js";
 import type { ToolExecutionStatus } from "@krischan-klug/kk-agent-contract";
 import type { ProviderTransportState, ProviderTurnDebug } from "../provider/lib/types.js";
@@ -53,7 +53,7 @@ export interface SessionRuntimeSkillDebug {
   source?: "system" | "custom";
   recommendedToolIds: string[];
   recommendedMcpIds: string[];
-  allowedModes: ChatMode[];
+  allowedModeBehaviors: ModeBehavior[];
 }
 
 export interface SessionPromptDebug {

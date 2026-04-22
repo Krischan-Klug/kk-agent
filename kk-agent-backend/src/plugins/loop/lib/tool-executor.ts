@@ -6,11 +6,9 @@ import {
   type TranscriptMessage,
   type TranscriptToolUseBlock,
 } from "../../lib/transcript.js";
-import type {
-  ChatMode,
-} from "../../agent/types.js";
 import type { ToolExecutionStatus } from "@krischan-klug/kk-agent-contract";
 import type {
+  ModeRuntimeRef,
   RuntimeToolDefinition,
   ToolExecutionResult,
   ToolRuntimeContext,
@@ -65,16 +63,16 @@ export class StreamingToolExecutor {
     private readonly executeTool: (
       toolName: string,
       args: Record<string, unknown>,
-      mode: ChatMode,
+      mode: ModeRuntimeRef,
       context: ToolRuntimeContext,
     ) => Promise<ToolExecutionResult>,
-    private readonly mode: ChatMode,
+    private readonly mode: ModeRuntimeRef,
     private readonly runtimeToolsByName: Record<string, RuntimeToolDefinition>,
     private readonly resolveToolPermission: (
       runtimeTool: RuntimeToolDefinition,
       toolName: string,
       args: Record<string, unknown>,
-      mode: ChatMode,
+      mode: ModeRuntimeRef,
     ) => Promise<{ allowed: boolean; reason?: string }>,
     private readonly onUpdate?: (update: ToolExecutionUpdate) => void,
     initialContext: ToolRuntimeContext = { values: {} },

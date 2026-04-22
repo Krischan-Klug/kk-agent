@@ -33,7 +33,7 @@ function buildMcpRefs(mcpIds: string[]): string {
 
 function buildSkillEntry(skill: SkillDefinition): string {
   return [
-    `  <skill id="${escapeXml(skill.id)}" name="${escapeXml(skill.name)}" path="${escapeXml(skill.path)}" source="${escapeXml(skill.source ?? "custom")}" modes="${escapeXml(skill.allowedModes.join(","))}">`,
+    `  <skill id="${escapeXml(skill.id)}" name="${escapeXml(skill.name)}" path="${escapeXml(skill.path)}" source="${escapeXml(skill.source ?? "custom")}" mode_behaviors="${escapeXml(skill.allowedModeBehaviors.join(","))}">`,
     `    <description>${escapeXml(skill.description)}</description>`,
     buildToolRefs(skill.recommendedToolIds),
     buildMcpRefs(skill.recommendedMcpIds),
@@ -48,7 +48,7 @@ export function buildSkillsCatalogSection(skills: SkillDefinition[]): string {
 
 export function buildSkillContextXml(skill: SkillDefinition, instruction: string): string {
   return [
-    `  <skill_context id="${escapeXml(skill.id)}" name="${escapeXml(skill.name)}" path="${escapeXml(skill.path)}" source="${escapeXml(skill.source ?? "custom")}" modes="${escapeXml(skill.allowedModes.join(","))}">`,
+    `  <skill_context id="${escapeXml(skill.id)}" name="${escapeXml(skill.name)}" path="${escapeXml(skill.path)}" source="${escapeXml(skill.source ?? "custom")}" mode_behaviors="${escapeXml(skill.allowedModeBehaviors.join(","))}">`,
     `    <description>${escapeXml(skill.description)}</description>`,
     buildToolRefs(skill.recommendedToolIds),
     buildMcpRefs(skill.recommendedMcpIds),

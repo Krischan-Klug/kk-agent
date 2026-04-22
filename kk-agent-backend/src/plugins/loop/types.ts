@@ -1,6 +1,6 @@
 import type { RuntimeToolSource, ToolExecutionStatus, TranscriptMessage } from "@krischan-klug/kk-agent-contract";
 import type { ProviderTransportState, ProviderTurnDebug, TokenStats, UnifiedToolDefinition } from "../provider/lib/types.js";
-import type { ChatMode, AgentPromptSections } from "../agent/types.js";
+import type { ModeBehavior, AgentPromptSections } from "../agent/types.js";
 import type { LlmRequestConfig } from "../provider/types.js";
 
 export type ToolInterruptBehavior = "cancel" | "block";
@@ -28,6 +28,11 @@ export interface ToolRuntimeContext {
   values: Record<string, unknown>;
 }
 
+export interface ModeRuntimeRef {
+  id: string;
+  behavior: ModeBehavior;
+}
+
 export interface RuntimeToolDefinition extends UnifiedToolDefinition {
   source: RuntimeToolSource;
   capabilityId: string;
@@ -40,7 +45,7 @@ export interface RuntimeToolDefinition extends UnifiedToolDefinition {
   resolvePermission?: (
     toolName: string,
     args: Record<string, unknown>,
-    mode: ChatMode,
+    mode: ModeRuntimeRef,
   ) => Promise<RuntimeToolPermissionPolicy> | RuntimeToolPermissionPolicy;
 }
 
@@ -53,6 +58,9 @@ export interface ToolExecutionResult {
 }
 
 export interface ModeRuntimeConfig {
+  modeId: string;
+  modeLabel: string;
+  modeBehavior: ModeBehavior;
   promptSections: AgentPromptSections;
   modeInstruction: string;
   mcpInstructions: string;
@@ -74,17 +82,18 @@ export interface LoopOptions {
   buildEphemeralMetaMessages?: (input: {
     sessionId: string;
     agentId: string;
-    mode: ChatMode;
+    modeId: string;
+    modeBehavior: ModeBehavior;
     model: string;
     iteration: number;
   }) => TranscriptMessage[];
-  modeConfigs: Partial<Record<ChatMode, ModeRuntimeConfig>>;
-  activeMode: ChatMode;
+  modeConfigs: Record<string, ModeRuntimeConfig>;
+  activeModeId: string;
   agentVariables: Record<string, string>;
   executeTool: (
     toolName: string,
     args: Record<string, unknown>,
-    mode: ChatMode,
+    mode: ModeRuntimeRef,
     context: ToolRuntimeContext,
   ) => Promise<ToolExecutionResult>;
   toolContext?: ToolRuntimeContext;
@@ -121,13 +130,14 @@ export interface LoopOptions {
     runtimeTool: RuntimeToolDefinition,
     toolName: string,
     args: Record<string, unknown>,
-    mode: ChatMode,
+    mode: ModeRuntimeRef,
   ) => Promise<{ allowed: boolean; reason?: string }>;
   onLoopState?: (state: {
     sessionId: string;
     agentId: string;
     status: "idle" | "running" | "completed" | "error" | "aborted";
-    mode: ChatMode;
+    modeId: string;
+    modeBehavior: ModeBehavior;
     iteration: number;
     startedAt: string;
     updatedAt: string;

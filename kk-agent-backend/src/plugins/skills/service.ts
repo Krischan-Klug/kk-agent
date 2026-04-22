@@ -5,12 +5,13 @@ import { createSlugId, filterToKnownIds } from "../lib/ids.js";
 import { getStateDirPath } from "../lib/state.js";
 import { getKnownMcpIds } from "../mcp/service.js";
 import { getKnownSystemMcpIds } from "../tools/service.js";
-import type { ChatMode } from "../agent/types.js";
+import type { ModeBehavior } from "../agent/types.js";
 import type { CreateSkillBody, SkillDefinition, SkillMetadata, UpdateSkillBody } from "./types.js";
 import { loadSkillFromPath, writeSkillBundle } from "./lib/loader.js";
 import { buildSkillsCatalogSection } from "./lib/xml.js";
+import { isModeBehavior } from "../agent/lib/modes.js";
 
-const DEFAULT_ALLOWED_MODES: ChatMode[] = ["plan", "edit"];
+const DEFAULT_ALLOWED_MODE_BEHAVIORS: ModeBehavior[] = ["plan", "edit"];
 const DEFAULT_CREATE_SKILL_ID = "create-skill";
 
 const DEFAULT_CREATE_SKILL_BODY: CreateSkillBody = {
@@ -30,9 +31,9 @@ const DEFAULT_CREATE_SKILL_BODY: CreateSkillBody = {
     "A valid compact body can look like this:",
     "```md\nRead the relevant files before proposing changes.\nList the main modules involved and the likely edit points.\nCall out risks, missing context, and required verification.\nKeep the final summary short and file-oriented.\n```",
     "Omit filler, generic AI advice, and duplicate explanation. Keep only information that is specific and reusable for this workflow.",
-    "Create kk-agent.skill.json only for KK-Agent metadata. Default active to true and allowedModes to plan and edit. Add autonomous only when the user explicitly wants autonomous usage.",
+    "Create kk-agent.skill.json only for KK-Agent metadata. Default active to true and allowedModeBehaviors to plan and edit. Add autonomous only when the user explicitly wants autonomous usage.",
     "Use this kk-agent.skill.json pattern when metadata is needed:",
-    "```json\n{\n  \"active\": true,\n  \"recommendedToolIds\": [\"skill\", \"user-interaction\"],\n  \"recommendedMcpIds\": [],\n  \"allowedModes\": [\"plan\", \"edit\"]\n}\n```",
+    "```json\n{\n  \"active\": true,\n  \"recommendedToolIds\": [\"skill\", \"user-interaction\"],\n  \"recommendedMcpIds\": [],\n  \"allowedModeBehaviors\": [\"plan\", \"edit\"]\n}\n```",
     "Add recommendedToolIds and recommendedMcpIds only when they materially help the workflow and you know the correct ids.",
     "Keep the bundle minimal. Do not add extra files unless the workflow genuinely needs bundled references or assets.",
     "Use ask_user for targeted follow-up questions when examples, policy choices, or missing constraints are needed to make the skill correct. When helpful, ask as multiple choice so the user can answer quickly.",
@@ -40,7 +41,7 @@ const DEFAULT_CREATE_SKILL_BODY: CreateSkillBody = {
     "If the user wants to use the skill immediately after creation, call Skill with the created id.",
   ].join("\n"),
   active: true,
-  allowedModes: ["plan", "edit"],
+  allowedModeBehaviors: ["plan", "edit"],
   recommendedToolIds: ["skill", "user-interaction"],
   recommendedMcpIds: [],
 };
@@ -48,11 +49,11 @@ const DEFAULT_CREATE_SKILL_BODY: CreateSkillBody = {
 let skillsRootDir = getStateDirPath("skills");
 let cachedSkills: SkillDefinition[] = [];
 
-function normalizeModes(modes?: ChatMode[]): ChatMode[] {
-  const normalized = [...new Set((modes ?? DEFAULT_ALLOWED_MODES).filter((mode): mode is ChatMode =>
-    mode === "plan" || mode === "edit" || mode === "autonomous"
+function normalizeModeBehaviors(modeBehaviors?: ModeBehavior[]): ModeBehavior[] {
+  const normalized = [...new Set((modeBehaviors ?? DEFAULT_ALLOWED_MODE_BEHAVIORS).filter((mode): mode is ModeBehavior =>
+    typeof mode === "string" && isModeBehavior(mode)
   ))];
-  return normalized.length > 0 ? normalized : [...DEFAULT_ALLOWED_MODES];
+  return normalized.length > 0 ? normalized : [...DEFAULT_ALLOWED_MODE_BEHAVIORS];
 }
 
 function sanitizeToolIds(toolIds: string[] = []): string[] {
@@ -69,7 +70,7 @@ function normalizeSkillMetadata(metadata: Partial<SkillMetadata>): SkillMetadata
     source: "custom",
     recommendedToolIds: sanitizeToolIds(metadata.recommendedToolIds),
     recommendedMcpIds: sanitizeMcpIds(metadata.recommendedMcpIds),
-    allowedModes: normalizeModes(metadata.allowedModes),
+    allowedModeBehaviors: normalizeModeBehaviors(metadata.allowedModeBehaviors),
   };
 }
 
@@ -122,13 +123,13 @@ function buildSkillMetadataFromBody(body: {
   active?: boolean;
   recommendedToolIds?: string[];
   recommendedMcpIds?: string[];
-  allowedModes?: ChatMode[];
+  allowedModeBehaviors?: ModeBehavior[];
 }): SkillMetadata {
   return normalizeSkillMetadata({
     active: body.active,
     recommendedToolIds: body.recommendedToolIds,
     recommendedMcpIds: body.recommendedMcpIds,
-    allowedModes: body.allowedModes,
+    allowedModeBehaviors: body.allowedModeBehaviors,
   });
 }
 
@@ -179,11 +180,11 @@ export function getSkillById(id: string): SkillDefinition | undefined {
   return cachedSkills.find((skill) => skill.id === id);
 }
 
-export function getKnownSkillIds(options: { activeOnly?: boolean; mode?: ChatMode } = {}): string[] {
+export function getKnownSkillIds(options: { activeOnly?: boolean; behavior?: ModeBehavior } = {}): string[] {
   return cachedSkills
     .filter((skill) => {
       if (options.activeOnly && !skill.active) return false;
-      if (options.mode && !skill.allowedModes.includes(options.mode)) return false;
+      if (options.behavior && !skill.allowedModeBehaviors.includes(options.behavior)) return false;
       return true;
     })
     .map((skill) => skill.id);
@@ -195,13 +196,13 @@ export function buildSkillCatalogSection(skills: SkillDefinition[]): string {
 
 export function buildActiveSkillCatalogSection(
   activeSkillIds: string[],
-  mode?: ChatMode,
+  behavior?: ModeBehavior,
 ): string {
   const activeSkills = activeSkillIds
     .map((id) => cachedSkills.find((skill) => skill.id === id))
     .filter((skill): skill is SkillDefinition => Boolean(skill))
     .filter((skill) => skill.active)
-    .filter((skill) => !mode || skill.allowedModes.includes(mode));
+    .filter((skill) => !behavior || skill.allowedModeBehaviors.includes(behavior));
 
   return buildSkillCatalogSection(activeSkills);
 }
@@ -235,7 +236,7 @@ export async function updateSkill(id: string, body: UpdateSkillBody): Promise<Sk
       active: body.active ?? current.active,
       recommendedToolIds: body.recommendedToolIds ?? current.recommendedToolIds,
       recommendedMcpIds: body.recommendedMcpIds ?? current.recommendedMcpIds,
-      allowedModes: body.allowedModes ?? current.allowedModes,
+      allowedModeBehaviors: body.allowedModeBehaviors ?? current.allowedModeBehaviors,
     }),
   });
   await reloadSkills();

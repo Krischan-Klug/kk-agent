@@ -3,6 +3,9 @@ import assert from "node:assert/strict";
 import { StreamingToolExecutor } from "./tool-executor.js";
 import { createTranscriptMessage, textBlock } from "../../lib/transcript.js";
 import type { TranscriptToolUseBlock } from "../../lib/transcript.js";
+import type { ModeRuntimeRef } from "../types.js";
+
+const EDIT_MODE: ModeRuntimeRef = { id: "edit", behavior: "edit" };
 
 function toolUse(id: string, name: string, input: Record<string, unknown>): TranscriptToolUseBlock {
   return { type: "tool_use", id, name, input };
@@ -34,7 +37,7 @@ test("StreamingToolExecutor runs concurrency-safe tools in parallel and preserve
       await new Promise((resolve) => setTimeout(resolve, toolName === "Read" ? 40 : 20));
       return { content: `${toolName} ok` };
     },
-    "edit",
+    EDIT_MODE,
     {
       ...runtimeTool("Read", true),
       ...runtimeTool("Grep", true),
@@ -67,7 +70,7 @@ test("StreamingToolExecutor serializes mutating tools after concurrent batches",
       order.push(`end:${toolName}`);
       return { content: `${toolName} ok` };
     },
-    "edit",
+    EDIT_MODE,
     {
       ...runtimeTool("Read", true),
       ...runtimeTool("Bash", false),
@@ -87,7 +90,7 @@ test("StreamingToolExecutor serializes mutating tools after concurrent batches",
 test("StreamingToolExecutor blocks denied tools before execution", async () => {
   const executor = new StreamingToolExecutor(
     async () => ({ content: "should not run" }),
-    "edit",
+    EDIT_MODE,
     {
       ...runtimeTool("Read", true),
     },
@@ -117,7 +120,7 @@ test("StreamingToolExecutor applies context modifiers in yielded order", async (
         }),
       };
     },
-    "edit",
+    EDIT_MODE,
     {
       ...runtimeTool("Read", false),
       ...runtimeTool("Grep", false),
@@ -144,7 +147,7 @@ test("StreamingToolExecutor discards queued tools cleanly", async () => {
       await new Promise((resolve) => setTimeout(resolve, 20));
       return { content: `${toolName} ok` };
     },
-    "edit",
+    EDIT_MODE,
     {
       ...runtimeTool("Read", false),
       ...runtimeTool("Grep", false),
@@ -175,7 +178,7 @@ test("StreamingToolExecutor appends hidden tool-generated messages after the too
         }),
       ],
     }),
-    "edit",
+    EDIT_MODE,
     {
       ...runtimeTool("Skill", false),
     },
@@ -205,7 +208,7 @@ test("StreamingToolExecutor exposes assistant blocks produced by tools in tool o
         size: 12,
       }],
     }),
-    "edit",
+    EDIT_MODE,
     {
       ...runtimeTool("First", false),
       ...runtimeTool("Second", false),

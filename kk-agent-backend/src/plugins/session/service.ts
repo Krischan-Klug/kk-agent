@@ -48,10 +48,9 @@ import {
   listSessionDenials,
   recordSessionDenial,
 } from "./lib/denial-log.js";
-import { getChatModes } from "../agent/lib/modes.js";
-import { getModeConfig } from "../agent/lib/mode-config.js";
-import type { AgentDefinition, ChatMode } from "../agent/types.js";
-import type { RuntimeToolDefinition, ToolRuntimeContext } from "../loop/types.js";
+import { getAgentMode, getEnabledAgentModes } from "../agent/lib/mode-config.js";
+import type { AgentDefinition } from "../agent/types.js";
+import type { ModeRuntimeRef, RuntimeToolDefinition, ToolRuntimeContext } from "../loop/types.js";
 import { attachmentRefBlock, createTranscriptMessage, getMessageText, textBlock, type TranscriptAttachmentRefBlock, type TranscriptBlock, type TranscriptMessage } from "../lib/transcript.js";
 import { compactLlmRequestConfig } from "../provider/lib/request-config.js";
 import { allowsVisionInputs } from "../provider/lib/capabilities.js";
@@ -91,9 +90,10 @@ interface SessionModeRuntimeConfig extends ModeRuntimeConfig {
 function buildModeRuntimeConfig(
   session: Pick<SessionState, "activeToolIds" | "activeMcpIds" | "activeSkillIds" | "model">,
   agent: AgentDefinition,
-  mode: ChatMode,
+  modeId: string,
 ): SessionModeRuntimeConfig {
-  const config = getModeConfig(agent, mode);
+  const mode = getAgentMode(agent, modeId);
+  const config = mode.config;
   const activeToolIds = intersectIds(session.activeToolIds, config.toolIds);
   const activeMcpIds = intersectIds(session.activeMcpIds, config.mcpIds);
   const baseActiveSkillIds = intersectIds(session.activeSkillIds, config.skillIds);
@@ -120,6 +120,9 @@ function buildModeRuntimeConfig(
   );
 
   return {
+    modeId: mode.id,
+    modeLabel: mode.label,
+    modeBehavior: mode.behavior,
     promptSections: config.promptSections,
     modeInstruction: config.modeInstruction,
     mcpInstructions: buildRunnableMcpInstructions(
@@ -128,7 +131,7 @@ function buildModeRuntimeConfig(
       effectiveInstructions,
     ),
     skillsCatalog: activeToolIds.includes("skill")
-      ? buildActiveSkillCatalogSection(activeSkillIds, mode)
+      ? buildActiveSkillCatalogSection(activeSkillIds, mode.behavior)
       : "",
     activeSkillIds,
     skillInstructionsById,
@@ -143,11 +146,10 @@ function buildModeRuntimeConfig(
 
 function buildCurrentSystemPrompt(
   sessionId: string,
-  session: Pick<SessionState, "activeToolIds" | "activeMcpIds" | "activeSkillIds" | "activeMode" | "model">,
+  session: Pick<SessionState, "activeToolIds" | "activeMcpIds" | "activeSkillIds" | "activeModeId" | "model">,
   agent: AgentDefinition,
 ): string {
-  const modeRuntimeConfig = buildModeRuntimeConfig(session, agent, session.activeMode);
-  const loopState = getLoopState(sessionId);
+  const modeRuntimeConfig = buildModeRuntimeConfig(session, agent, session.activeModeId);
   const variables: Record<string, string> = {
     ...getSystemVariables({ CURRENT_MODEL: session.model }),
     ...modeRuntimeConfig.runtimeVariables,
@@ -162,7 +164,8 @@ function buildCurrentSystemPrompt(
     variables,
     {
       sessionId,
-      mode: session.activeMode,
+      modeId: modeRuntimeConfig.modeId,
+      modeBehavior: modeRuntimeConfig.modeBehavior,
     },
   );
 }
@@ -207,13 +210,14 @@ function getRuntimeShellHint(): string {
 
 function buildRuntimeMetaMessages(input: {
   sessionId: string;
-  mode: ChatMode;
+  modeId: string;
+  modeBehavior: SessionModeRuntimeConfig["modeBehavior"];
   model: string;
   runtimeVariables?: Record<string, string>;
 }): TranscriptMessage[] {
   const variables = getSystemVariables({
     CURRENT_MODEL: input.model,
-    mode: input.mode,
+    mode: input.modeId,
     ...(input.runtimeVariables ?? {}),
   });
   const memory = getMemoryPromptContext(input.sessionId);
@@ -229,7 +233,8 @@ function buildRuntimeMetaMessages(input: {
     `shell=${getRuntimeShellHint()}`,
     "",
     `Current model: ${variables.CURRENT_MODEL ?? input.model}`,
-    `Current mode: ${input.mode}`,
+    `Current mode: ${input.modeId}`,
+    `Mode behavior: ${input.modeBehavior}`,
     "",
     "Current tasks:",
     getTaskSummary(input.sessionId),
@@ -329,7 +334,7 @@ export async function createSession(body: CreateSessionBody): Promise<SessionSta
     agentId: body.agentId,
     providerId: defaults.providerId,
     model: defaults.model,
-    activeMode: defaults.activeMode,
+    activeModeId: defaults.activeModeId,
     activeToolIds: defaults.activeToolIds,
     activeMcpIds: defaults.activeMcpIds,
     activeSkillIds: defaults.activeSkillIds,
@@ -365,12 +370,13 @@ export function getCurrentSystemPrompt(sessionId: string): string {
 export function getCurrentPromptDebug(sessionId: string): SessionPromptDebug {
   const session = getSessionRecordOrThrow(sessionId);
   const agent = getAgent(session.agentId);
-  const modeRuntimeConfig = buildModeRuntimeConfig(session, agent, session.activeMode);
+  const modeRuntimeConfig = buildModeRuntimeConfig(session, agent, session.activeModeId);
   const loopState = getLoopState(sessionId);
   const systemPrompt = buildCurrentSystemPrompt(sessionId, session, agent);
   const runtimeMetaMessages = buildRuntimeMetaMessages({
     sessionId,
-    mode: session.activeMode,
+    modeId: modeRuntimeConfig.modeId,
+    modeBehavior: modeRuntimeConfig.modeBehavior,
     model: session.model,
     runtimeVariables: modeRuntimeConfig.runtimeVariables,
   });
@@ -425,7 +431,7 @@ export function getCurrentPromptDebug(sessionId: string): SessionPromptDebug {
         source: skill.source,
         recommendedToolIds: [...skill.recommendedToolIds],
         recommendedMcpIds: [...skill.recommendedMcpIds],
-        allowedModes: [...skill.allowedModes],
+        allowedModeBehaviors: [...skill.allowedModeBehaviors],
       })),
   };
 }
@@ -480,8 +486,8 @@ async function prepareLoopRun(sessionId: string, message: string, attachmentIds?
   store.updateSession(sessionId, { messages });
 
   const modeRuntimeConfigs = Object.fromEntries(
-    getChatModes().map((mode) => [mode, buildModeRuntimeConfig(session, agent, mode)]),
-  ) as Partial<Record<ChatMode, SessionModeRuntimeConfig>>;
+    getEnabledAgentModes(agent).map((mode) => [mode.id, buildModeRuntimeConfig(session, agent, mode.id)]),
+  ) as Record<string, SessionModeRuntimeConfig>;
 
   return {
     session,
@@ -520,8 +526,8 @@ function buildLoopRequest(
   handlers: Partial<Pick<LoopOptions, "onAssistantBlockDelta" | "onAssistantMessage" | "onSystemNotice" | "onToolExecutionUpdate" | "onLoopState" | "onStats">> = {},
 ) {
   const loopMessages = cloneMessages(prepared.messages);
-  const activeModeConfig = prepared.modeRuntimeConfigs[prepared.session.activeMode] as SessionModeRuntimeConfig;
-  const activeAgentModeConfig = prepared.agent.modeConfigs[prepared.session.activeMode];
+  const activeModeConfig = prepared.modeRuntimeConfigs[prepared.session.activeModeId] as SessionModeRuntimeConfig;
+  const activeAgentModeConfig = getAgentMode(prepared.agent, prepared.session.activeModeId);
   const loadedSkillIds = getLoadedSkillIds(loopMessages);
 
   return {
@@ -532,18 +538,21 @@ function buildLoopRequest(
     model: prepared.session.model,
     buildEphemeralMetaMessages: ({
       iteration,
-      mode,
+      modeId,
+      modeBehavior,
       model,
     }: {
       sessionId: string;
       agentId: string;
-      mode: ChatMode;
+      modeId: string;
+      modeBehavior: SessionModeRuntimeConfig["modeBehavior"];
       model: string;
       iteration: number;
     }) => {
       const runtimeMessages = buildRuntimeMetaMessages({
         sessionId,
-        mode,
+        modeId,
+        modeBehavior,
         model,
         runtimeVariables: activeModeConfig.runtimeVariables,
       });
@@ -570,19 +579,19 @@ function buildLoopRequest(
       },
     },
     modeConfigs: prepared.modeRuntimeConfigs,
-    activeMode: prepared.session.activeMode,
+    activeModeId: prepared.session.activeModeId,
     agentVariables: prepared.agent.variables ?? {},
     executeTool: (
       toolName: string,
       args: Record<string, unknown>,
-      mode: ChatMode,
+      mode: ModeRuntimeRef,
       _context: ToolRuntimeContext,
     ) => {
-      const modeRuntimeConfig = prepared.modeRuntimeConfigs[mode] as SessionModeRuntimeConfig;
+      const modeRuntimeConfig = prepared.modeRuntimeConfigs[mode.id] as SessionModeRuntimeConfig;
       const runtimeTool = modeRuntimeConfig.runtimeToolsByName[toolName];
       if (!runtimeTool) {
         return Promise.resolve({
-          content: `Tool "${toolName}" ist im Mode "${mode}" nicht erlaubt oder nicht verfuegbar.`,
+          content: `Tool "${toolName}" ist im Mode "${mode.id}" nicht erlaubt oder nicht verfuegbar.`,
           isError: true,
         });
       }
@@ -592,7 +601,7 @@ function buildLoopRequest(
       runtimeTool: RuntimeToolDefinition,
       toolName: string,
       args: Record<string, unknown>,
-      mode: ChatMode,
+      mode: ModeRuntimeRef,
     ) => {
       const policy = runtimeTool.resolvePermission
         ? await runtimeTool.resolvePermission(toolName, args, mode)
@@ -631,8 +640,8 @@ function buildLoopRequest(
       }
       return { allowed: true };
     },
-    autonomous: prepared.session.activeMode === "autonomous" || activeAgentModeConfig?.autonomous === true,
-    autonomousBudget: activeAgentModeConfig?.autonomousBudget,
+    autonomous: activeModeConfig.modeBehavior === "autonomous",
+    autonomousBudget: activeAgentModeConfig.config.autonomousBudget,
     ...handlers,
   };
 }
@@ -672,7 +681,7 @@ export async function chatStream(
   attachmentIds?: string[],
 ): Promise<void> {
   const prepared = await prepareLoopRun(sessionId, message, attachmentIds);
-  for (const notice of prepared.modeRuntimeConfigs[prepared.session.activeMode]?.runtimeNotices ?? []) {
+  for (const notice of prepared.modeRuntimeConfigs[prepared.session.activeModeId]?.runtimeNotices ?? []) {
     emit({ type: "system_notice", level: "warning", message: notice });
   }
 
@@ -739,7 +748,7 @@ export async function updateSession(id: string, body: Partial<CreateSessionBody>
         activeToolIds: body.activeToolIds,
         activeMcpIds: body.activeMcpIds,
         activeSkillIds: body.activeSkillIds,
-        activeMode: body.activeMode,
+        activeModeId: body.activeModeId,
         model: body.model,
         llmRequestConfig: body.llmRequestConfig,
       }
@@ -748,7 +757,7 @@ export async function updateSession(id: string, body: Partial<CreateSessionBody>
         activeToolIds: body.activeToolIds,
         activeMcpIds: body.activeMcpIds,
         activeSkillIds: body.activeSkillIds,
-        activeMode: body.activeMode ?? session.activeMode,
+        activeModeId: body.activeModeId ?? session.activeModeId,
         model: body.model ?? session.model,
         llmRequestConfig: body.llmRequestConfig ?? session.llmRequestConfig,
       };
@@ -762,7 +771,7 @@ export async function updateSession(id: string, body: Partial<CreateSessionBody>
     agentId: nextAgentId,
     providerId: defaults.providerId,
     model: defaults.model,
-    activeMode: defaults.activeMode,
+    activeModeId: defaults.activeModeId,
     activeToolIds: defaults.activeToolIds,
     activeMcpIds: defaults.activeMcpIds,
     activeSkillIds: defaults.activeSkillIds,
@@ -776,10 +785,10 @@ export async function updateSession(id: string, body: Partial<CreateSessionBody>
   if (switchingAgent) {
     clearLoopState(id);
   }
-  if (defaults.activeMode !== session.activeMode) {
+  if (defaults.activeModeId !== session.activeModeId) {
     enqueueSystemReminder(id, {
       type: "mode_changed",
-      body: `The user switched the chat mode from "${session.activeMode}" to "${defaults.activeMode}". Re-evaluate which tools are now allowed and proceed in the new mode.`,
+      body: `The user switched the chat mode from "${session.activeModeId}" to "${defaults.activeModeId}". Re-evaluate which tools are now allowed and proceed in the new mode.`,
     });
   }
   return toPublicSession(updated);

@@ -1,14 +1,14 @@
 import TextArea from "@/components/TextArea";
-import type { AppDefaults, ChatMode, McpListItem } from "@/types/api";
+import type { AppDefaults, ModeBehavior, McpListItem } from "@/types/api";
 import { FieldLabel, FormField, FormRow } from "@/components/PageForm";
 import ModeTabsSelector from "./ModeTabsSelector";
 
 interface Props {
   draft: AppDefaults;
   setDraft: (draft: AppDefaults) => void;
-  chatModes: ChatMode[];
-  selectedMode: ChatMode;
-  setSelectedMode: (mode: ChatMode) => void;
+  chatModes: ModeBehavior[];
+  selectedMode: ModeBehavior;
+  setSelectedMode: (mode: ModeBehavior) => void;
   internalTools: McpListItem[];
 }
 
@@ -20,6 +20,7 @@ export default function ModeToolInstructionsSection({
   setSelectedMode,
   internalTools,
 }: Props) {
+  const template = draft.agent.modeTemplates[selectedMode];
   return (
     <>
       <ModeTabsSelector modes={chatModes} selected={selectedMode} onSelect={setSelectedMode} keyPrefix="tool-mode" />
@@ -29,16 +30,19 @@ export default function ModeToolInstructionsSection({
             <FieldLabel>{tool.emoji ? `${tool.emoji} ` : ""}{tool.name}</FieldLabel>
             <TextArea
               rows={4}
-              value={draft.agent.modeToolInstructions[selectedMode]?.[tool.id] ?? ""}
+              value={template.toolInstructions?.[tool.id] ?? ""}
               onChange={(e) => setDraft({
                 ...draft,
                 agent: {
                   ...draft.agent,
-                  modeToolInstructions: {
-                    ...draft.agent.modeToolInstructions,
+                  modeTemplates: {
+                    ...draft.agent.modeTemplates,
                     [selectedMode]: {
-                      ...draft.agent.modeToolInstructions[selectedMode],
-                      [tool.id]: e.target.value,
+                      ...template,
+                      toolInstructions: {
+                        ...template.toolInstructions,
+                        [tool.id]: e.target.value,
+                      },
                     },
                   },
                 },

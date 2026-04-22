@@ -133,7 +133,7 @@ export async function doPatch(req: Request, res: Response): Promise<Response> {
     const {
       agentId,
       providerId,
-      activeMode,
+      activeModeId,
       model,
       activeToolIds,
       activeMcpIds,
@@ -141,13 +141,13 @@ export async function doPatch(req: Request, res: Response): Promise<Response> {
       llmRequestConfig,
     } = req.body as UpdateSessionBody;
     const session = await patchSession(req.params.id, {
-      agentId,
-      providerId,
-      activeMode,
-      model,
-      activeToolIds,
-      activeMcpIds,
-      activeSkillIds,
+        agentId,
+        providerId,
+        activeModeId,
+        model,
+        activeToolIds,
+        activeMcpIds,
+        activeSkillIds,
       llmRequestConfig,
     });
     return res.json(session);

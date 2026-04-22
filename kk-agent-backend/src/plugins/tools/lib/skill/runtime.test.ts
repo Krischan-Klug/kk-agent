@@ -21,7 +21,7 @@ test("Skill loads a skill bundle as a hidden meta user message", async () => {
         source: "custom",
         recommendedToolIds: ["filesystem"],
         recommendedMcpIds: ["git-inspector"],
-        allowedModes: ["plan", "edit"],
+        allowedModeBehaviors: ["plan", "edit"],
       },
     });
 
@@ -100,7 +100,7 @@ test("CreateSkill writes a new skill bundle without auto-loading it", async () =
         name: "Review Skill",
         description: "Review code for bugs and regressions.",
         instruction: "Read diffs before suggesting changes.",
-        allowedModes: ["edit", "autonomous"],
+        allowedModeBehaviors: ["edit", "autonomous"],
         recommendedToolIds: ["skill", "missing-tool"],
       },
       {

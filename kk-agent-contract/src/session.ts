@@ -1,4 +1,3 @@
-import type { ChatMode } from "./agent.js";
 import type { ProviderTurnDebug, LlmRequestConfig } from "./provider.js";
 import type { TranscriptMessage } from "./transcript.js";
 
@@ -27,7 +26,7 @@ export interface SessionState {
   providerId: string;
   model: string;
   agentId: string;
-  activeMode: ChatMode;
+  activeModeId: string;
   activeToolIds: string[];
   activeMcpIds: string[];
   activeSkillIds: string[];
@@ -41,7 +40,7 @@ export interface SessionState {
 export interface CreateSessionBody {
   agentId: string;
   providerId?: string;
-  activeMode?: ChatMode;
+  activeModeId?: string;
   model?: string;
   activeToolIds?: string[];
   activeMcpIds?: string[];
@@ -52,7 +51,7 @@ export interface CreateSessionBody {
 export interface UpdateSessionBody {
   agentId?: string;
   providerId?: string;
-  activeMode?: ChatMode;
+  activeModeId?: string;
   model?: string;
   activeToolIds?: string[];
   activeMcpIds?: string[];

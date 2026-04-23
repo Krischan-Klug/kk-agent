@@ -1,5 +1,6 @@
 {
   "name": "kk-agent-desktop",
+  "productName": "KK-Agent",
   "version": "0.1.0",
   "private": true,
   "description": "Electron desktop shell for KK-Agent.",
@@ -12,7 +13,6 @@
   },
   "build": {
     "appId": "com.krikra.kk-agent",
-    "productName": "KK-Agent",
     "directories": {
       "output": "release"
     },

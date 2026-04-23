@@ -1,12 +1,12 @@
 import { app, BrowserWindow, net, protocol } from "electron";
-import { fork, type ChildProcess } from "node:child_process";
+import { spawn, type ChildProcess } from "node:child_process";
 import { createInterface } from "node:readline";
 import { existsSync } from "node:fs";
 import { mkdir } from "node:fs/promises";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 
-// Eigenes app:// statt file://: liefert Standard-Origin mit fetch/stream/CORS im packaged Build.
+// Use app:// instead of file:// so packaged builds keep a standard origin for fetch/stream/CORS.
 protocol.registerSchemesAsPrivileged([
   {
     scheme: "app",
@@ -32,7 +32,7 @@ function getDesktopRoot(): string {
   return path.resolve(__dirname, "..");
 }
 
-// Packaged: assets liegen unter process.resourcesPath (siehe extraResources in package.json).
+// Packaged assets live under process.resourcesPath per extraResources in package.json.
 function getFrontendRoot(): string {
   return app.isPackaged
     ? path.join(process.resourcesPath, "frontend")
@@ -53,7 +53,7 @@ async function waitForHttp(url: string, timeoutMs = 30000): Promise<void> {
       const response = await fetch(url);
       if (response.ok) return;
     } catch {
-      // keep polling
+      // Keep polling until the backend is reachable or the timeout expires.
     }
     await new Promise((resolve) => setTimeout(resolve, 500));
   }
@@ -71,7 +71,7 @@ function resolveFrontendPath(frontendRoot: string, requestPath: string): string 
 
   for (const candidate of candidates) {
     const absoluteCandidate = path.resolve(frontendRoot, `.${candidate}`);
-    // Traversal-Schutz: nie Dateien außerhalb von frontendRoot ausliefern.
+    // Traversal protection: never serve files outside frontendRoot.
     if (absoluteCandidate.startsWith(frontendRoot) && existsSync(absoluteCandidate)) {
       return absoluteCandidate;
     }
@@ -89,7 +89,7 @@ async function registerFrontendProtocol(): Promise<void> {
   });
 }
 
-// Handshake über stdout statt IPC: Backend läuft auch außerhalb von Electron (CLI), das macht ihn entkoppelt.
+// Use stdout instead of IPC so the backend stays decoupled from Electron.
 async function waitForBackendFromLogs(child: ChildProcess): Promise<string> {
   return await new Promise<string>((resolve, reject) => {
     const stdout = child.stdout;
@@ -145,9 +145,9 @@ async function startBackend(): Promise<string> {
 
   await mkdir(stateDir, { recursive: true });
 
-  // ELECTRON_RUN_AS_NODE lässt die Electron-Binary als reiner Node-Prozess laufen — kein zweites Node nötig.
-  // PORT=0: OS vergibt freien Port, vermeidet Kollisionen auf User-Maschinen.
-  backendProcess = fork(backendEntry, {
+  // Run the current Electron executable as a plain Node process for the backend bundle.
+  // PORT=0 lets the OS choose a free port and avoids collisions on user machines.
+  backendProcess = spawn(process.execPath, [backendEntry], {
     cwd: userDataRoot,
     env: {
       ...process.env,
@@ -156,7 +156,7 @@ async function startBackend(): Promise<string> {
       KK_AGENT_STATE_DIR: stateDir,
       KK_AGENT_PLUGIN_CONFIG_FILE: pluginConfigFile,
     },
-    stdio: ["ignore", "pipe", "pipe", "ipc"],
+    stdio: ["ignore", "pipe", "pipe"],
     windowsHide: true,
   });
 
@@ -167,7 +167,9 @@ async function startBackend(): Promise<string> {
 
 async function createMainWindow(apiBaseUrl: string): Promise<void> {
   const preloadPath = path.join(__dirname, "preload.js");
+  const appTitle = app.getName();
   mainWindow = new BrowserWindow({
+    title: appTitle,
     show: false,
     width: 1440,
     height: 960,
@@ -189,7 +191,13 @@ async function createMainWindow(apiBaseUrl: string): Promise<void> {
     mainWindow?.show();
   });
 
-  // Hardening: kein window.open, keine Navigation auf fremde Origins.
+  // Keep the native window title sourced from Electron metadata instead of page HTML.
+  mainWindow.on("page-title-updated", (event) => {
+    event.preventDefault();
+    mainWindow?.setTitle(appTitle);
+  });
+
+  // Hardening: deny window.open and block navigation to foreign origins.
   mainWindow.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
   const allowedOrigin = isDev ? DEV_FRONTEND_URL : "app://";
   mainWindow.webContents.on("will-navigate", (event, url) => {

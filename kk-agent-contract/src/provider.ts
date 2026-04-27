@@ -1,4 +1,4 @@
-import type { ReasoningEffort } from "./agent.js";
+import type { ReasoningEffort } from "./common.js";
 
 export type EndpointType = "chat-completions" | "responses";
 export type ReasoningControl = "none" | "effort" | "on-off";

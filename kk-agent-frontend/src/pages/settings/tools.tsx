@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import styled from "styled-components";
 import { skills as skillsApi, tools as toolsApi } from "@/lib/api";
+import { createLogger } from "@/lib/logger";
 import type { McpListItem, SkillDefinition } from "@/types/api";
 import { useToggleSet } from "@/hooks/useToggleSet";
 import Spinner from "@/components/Spinner";
@@ -8,6 +9,8 @@ import SettingsLayout from "@/components/SettingsLayout";
 import McpCard from "@/components/mcp/McpCard";
 import { EmptyHint } from "@/components/PageForm";
 import { buildEditForm, type EditForm } from "@/components/mcp/types";
+
+const logger = createLogger("settings/tools");
 
 const Grid = styled.div`
   display: grid;
@@ -48,7 +51,7 @@ export default function SettingsToolsPage() {
       setToolMcps(data);
       setInstructions(Object.fromEntries(data.map((tool) => [tool.id, tool.instruction])));
     } catch (err) {
-      console.error("[tools-load]", err);
+      logger.error("Failed to load tools:", err);
     } finally {
       setLoading(false);
     }
@@ -58,7 +61,7 @@ export default function SettingsToolsPage() {
     try {
       setSkillList(await skillsApi.list());
     } catch (err) {
-      console.error("[tools-skills-load]", err);
+      logger.error("Failed to load skills:", err);
     }
   }
 
@@ -71,7 +74,7 @@ export default function SettingsToolsPage() {
       await toolsApi.update(tool.id, { skillIds: next });
       await loadTools();
     } catch (err) {
-      console.error("[tools-skill-toggle]", err);
+      logger.error("Failed to toggle skill:", err);
     }
   }
 
@@ -85,7 +88,7 @@ export default function SettingsToolsPage() {
       await toolsApi.toggle(tool.id, !tool.active);
       await loadTools();
     } catch (err) {
-      console.error("[tools-toggle]", err);
+      logger.error("Failed to toggle tool:", err);
     }
   }
 
@@ -94,7 +97,7 @@ export default function SettingsToolsPage() {
       await toolsApi.setInstruction(id, instructions[id] ?? "");
       await loadTools();
     } catch (err) {
-      console.error("[tools-save-instruction]", err);
+      logger.error("Failed to save instruction:", err);
     }
   }
 
@@ -125,7 +128,7 @@ export default function SettingsToolsPage() {
       expandedEdit.remove(tool.id);
       await loadTools();
     } catch (err) {
-      console.error("[tools-save-edit]", err);
+      logger.error("Failed to save tool edit:", err);
     }
   }
 

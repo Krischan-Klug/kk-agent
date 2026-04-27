@@ -20,8 +20,11 @@ import { useAttachments } from "@/hooks/useAttachments";
 import { useChatSessionData } from "@/hooks/useChatSessionData";
 import { useChatStreaming } from "@/hooks/useChatStreaming";
 import { session as sessionApi } from "@/lib/api";
+import { createLogger } from "@/lib/logger";
 import { resolveDefaultSessionAgentId, resolveSessionCreationContext, type SessionCreationContext } from "@/lib/sessionFactory";
 import type { SessionRuntimeMcpDebug, SessionRuntimeSkillDebug, SessionRuntimeToolDebug } from "@/types/api";
+
+const logger = createLogger("chat");
 
 const ChatWrapper = styled.div`
   display: flex;
@@ -170,7 +173,7 @@ export default function ChatPage() {
       setCreatingSession(true);
       await sessionData.handleNewSession(context.selectedProviderId);
     } catch (err) {
-      console.error("[chat-new-session]", err);
+      logger.error("Failed to create session:", err);
     } finally {
       setCreatingSession(false);
     }
@@ -182,7 +185,7 @@ export default function ChatPage() {
       await sessionData.handleNewSession(providerId);
       setSessionCreateContext(null);
     } catch (err) {
-      console.error("[chat-new-session-provider]", err);
+      logger.error("Failed to create session with provider:", err);
     } finally {
       setCreatingSession(false);
     }

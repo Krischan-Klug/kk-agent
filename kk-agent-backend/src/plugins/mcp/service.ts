@@ -1,6 +1,7 @@
-import type { McpServerConfig, McpStdioConfig, McpToolDefinition, CreateMcpBody, UpdateMcpBody } from "./types.js";
+import type { McpServerConfig, McpStdioConfig, McpSseConfig, McpToolDefinition, CreateMcpBody, UpdateMcpBody } from "./types.js";
 import { getSystemMcpById } from "../tools/service.js";
 import { createSlugId } from "../lib/ids.js";
+import { NotFoundError, ConflictError } from "../../lib/errors.js";
 import { getRegistry, updateRegistry, getMcpById, addMcp, removeMcp } from "./lib/registry.js";
 import {
   startMcp,
@@ -76,9 +77,9 @@ export async function stopMcpServer(id: string): Promise<void> {
 export async function createMcp(body: CreateMcpBody): Promise<McpServerConfig> {
   const id = createSlugId(body.name);
 
-  if (getSystemMcpById(id)) throw new Error(`MCP "${id}" is reserved as a system MCP`);
+  if (getSystemMcpById(id)) throw new ConflictError(`MCP "${id}" is reserved as a system MCP`);
   const existing = await getRegistry();
-  if (getMcpById(existing, id)) throw new Error(`MCP "${id}" already exists`);
+  if (getMcpById(existing, id)) throw new ConflictError(`MCP "${id}" already exists`);
 
   const config: McpServerConfig = {
     id,
@@ -107,7 +108,7 @@ export async function deleteMcp(id: string): Promise<void> {
     // not running — fine
   }
   const removed = await removeMcp(id);
-  if (!removed) throw new Error(`MCP "${id}" not found`);
+  if (!removed) throw new NotFoundError("MCP", id);
   cachedCustomMcps = await getRegistry();
 }
 
@@ -128,15 +129,15 @@ export async function updateMcpConfig(id: string, body: UpdateMcpBody): Promise<
     }
 
     if (mcp.transport === "stdio") {
-      const server = mcp.server as McpStdioConfig;
-      if (body.command !== undefined) server.command = body.command;
-      if (body.args !== undefined) server.args = body.args;
-      if (body.env !== undefined) server.env = Object.keys(body.env).length > 0 ? body.env : undefined;
+      const server = mcp.server;
+      if (body.command !== undefined) (server as McpStdioConfig).command = body.command;
+      if (body.args !== undefined) (server as McpStdioConfig).args = body.args;
+      if (body.env !== undefined) (server as McpStdioConfig).env = Object.keys(body.env).length > 0 ? body.env : undefined;
       return;
     }
 
-    const server = mcp.server as { url: string };
-    if (body.url !== undefined) server.url = body.url;
+    const server = mcp.server;
+    if (body.url !== undefined) (server as McpSseConfig).url = body.url;
   });
 }
 
@@ -154,7 +155,7 @@ async function withRegistryUpdate(
 ): Promise<McpServerConfig> {
   const mcps = await getRegistry();
   const mcp = getMcpById(mcps, id);
-  if (!mcp) throw new Error(`MCP "${id}" not found`);
+  if (!mcp) throw new NotFoundError("MCP", id);
   await updater(mcp, mcps);
   await updateRegistry(mcps);
   cachedCustomMcps = mcps;

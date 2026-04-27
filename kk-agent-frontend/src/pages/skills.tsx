@@ -1,5 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { mcp as mcpApi, skills as skillsApi, tools as toolsApi } from "@/lib/api";
+import { createLogger } from "@/lib/logger";
+
+const logger = createLogger("skills");
 import type { McpListItem, SkillDefinition } from "@/types/api";
 import { PageBody } from "@/components/Layout.styled";
 import { MasterDetailLayout } from "@/components/MasterDetail.styled";
@@ -97,7 +100,7 @@ export default function SkillsPage() {
 
       setSelectedId(sorted[0].id);
     } catch (err) {
-      console.error("[skills-load]", err);
+      logger.error("Failed to load skills:", err);
     } finally {
       setLoading(false);
     }
@@ -152,7 +155,7 @@ export default function SkillsPage() {
       await skillsApi.update(selectedSkill.id, toUpdateBody(activeDraft));
       await loadAll(selectedSkill.id);
     } catch (err) {
-      console.error(createDraft ? "[skills-create]" : "[skills-save]", err);
+      logger.error(createDraft ? "Failed to create skill:" : "Failed to save skill:", err);
     } finally {
       setSaving(false);
     }
@@ -166,7 +169,7 @@ export default function SkillsPage() {
       await skillsApi.delete(selectedSkill.id);
       await loadAll(null);
     } catch (err) {
-      console.error("[skills-delete]", err);
+      logger.error("Failed to delete skill:", err);
     } finally {
       setSaving(false);
     }

@@ -1,10 +1,14 @@
 import { app, BrowserWindow, net, protocol } from "electron";
+import { createLogger } from "./logger";
 import { spawn, type ChildProcess } from "node:child_process";
+import { randomBytes } from "node:crypto";
 import { createInterface } from "node:readline";
 import { existsSync } from "node:fs";
 import { mkdir } from "node:fs/promises";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
+
+const logger = createLogger("desktop");
 
 // Use app:// instead of file:// so packaged builds keep a standard origin for fetch/stream/CORS.
 protocol.registerSchemesAsPrivileged([
@@ -27,6 +31,13 @@ const isDev = !app.isPackaged || process.env.KK_AGENT_ELECTRON_DEV === "1";
 
 let mainWindow: BrowserWindow | null = null;
 let backendProcess: ChildProcess | null = null;
+
+function createApiToken(): string {
+  const configured = process.env.KK_AGENT_API_TOKEN?.trim();
+  return configured && configured.length > 0
+    ? configured
+    : randomBytes(32).toString("hex");
+}
 
 function getDesktopRoot(): string {
   return path.resolve(__dirname, "..");
@@ -62,6 +73,7 @@ async function waitForHttp(url: string, timeoutMs = 30000): Promise<void> {
 }
 
 function resolveFrontendPath(frontendRoot: string, requestPath: string): string {
+  const resolvedFrontendRoot = path.resolve(frontendRoot);
   const normalized = decodeURIComponent(requestPath || "/");
   const candidates = normalized === "/"
     ? ["/chat.html", "/chat/index.html"]
@@ -70,14 +82,15 @@ function resolveFrontendPath(frontendRoot: string, requestPath: string): string 
       : [`${normalized}.html`, path.join(normalized, "index.html")];
 
   for (const candidate of candidates) {
-    const absoluteCandidate = path.resolve(frontendRoot, `.${candidate}`);
-    // Traversal protection: never serve files outside frontendRoot.
-    if (absoluteCandidate.startsWith(frontendRoot) && existsSync(absoluteCandidate)) {
+    const absoluteCandidate = path.resolve(resolvedFrontendRoot, `.${candidate}`);
+    const relative = path.relative(resolvedFrontendRoot, absoluteCandidate);
+    const insideRoot = relative === "" || (!relative.startsWith("..") && !path.isAbsolute(relative));
+    if (insideRoot && existsSync(absoluteCandidate)) {
       return absoluteCandidate;
     }
   }
 
-  return path.resolve(frontendRoot, "./chat.html");
+  return path.resolve(resolvedFrontendRoot, "./chat.html");
 }
 
 async function registerFrontendProtocol(): Promise<void> {
@@ -109,7 +122,7 @@ async function waitForBackendFromLogs(child: ChildProcess): Promise<string> {
     };
 
     const handleLine = (line: string) => {
-      console.log(`[backend] ${line}`);
+      logger.info(`[backend] ${line}`);
       if (!line.startsWith(BACKEND_READY_PREFIX)) return;
 
       try {
@@ -123,7 +136,7 @@ async function waitForBackendFromLogs(child: ChildProcess): Promise<string> {
     };
 
     const handleErrorLine = (line: string) => {
-      console.error(`[backend] ${line}`);
+      logger.error(`[backend] ${line}`);
     };
 
     const handleExit = (code: number | null, signal: NodeJS.Signals | null) => {
@@ -137,7 +150,7 @@ async function waitForBackendFromLogs(child: ChildProcess): Promise<string> {
   });
 }
 
-async function startBackend(): Promise<string> {
+async function startBackend(apiToken: string): Promise<string> {
   const backendEntry = getBackendEntry();
   const userDataRoot = path.join(app.getPath("userData"), "kk-agent");
   const stateDir = path.join(userDataRoot, "state");
@@ -153,6 +166,7 @@ async function startBackend(): Promise<string> {
       ...process.env,
       ELECTRON_RUN_AS_NODE: "1",
       PORT: "0",
+      KK_AGENT_API_TOKEN: apiToken,
       KK_AGENT_STATE_DIR: stateDir,
       KK_AGENT_PLUGIN_CONFIG_FILE: pluginConfigFile,
     },
@@ -165,7 +179,7 @@ async function startBackend(): Promise<string> {
   return apiBaseUrl;
 }
 
-async function createMainWindow(apiBaseUrl: string): Promise<void> {
+async function createMainWindow(apiBaseUrl: string, apiToken?: string): Promise<void> {
   const preloadPath = path.join(__dirname, "preload.js");
   const appTitle = app.getName();
   mainWindow = new BrowserWindow({
@@ -182,6 +196,7 @@ async function createMainWindow(apiBaseUrl: string): Promise<void> {
       preload: preloadPath,
       additionalArguments: [
         `--kk-agent-api-base-url=${apiBaseUrl}`,
+        ...(apiToken ? [`--kk-agent-api-token=${apiToken}`] : []),
         `--kk-agent-app-version=${app.getVersion()}`,
       ],
     },
@@ -246,10 +261,11 @@ app.whenReady().then(async () => {
       await registerFrontendProtocol();
     }
 
-    const apiBaseUrl = isDev ? DEV_API_BASE_URL : await startBackend();
-    await createMainWindow(apiBaseUrl);
+    const apiToken = createApiToken();
+    const apiBaseUrl = isDev ? DEV_API_BASE_URL : await startBackend(apiToken);
+    await createMainWindow(apiBaseUrl, apiToken);
   } catch (error) {
-    console.error("[desktop] Failed to start application", error);
+    logger.error("Failed to start application", error);
     await shutdownBackend();
     app.exit(1);
   }

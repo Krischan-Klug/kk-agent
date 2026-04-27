@@ -1,11 +1,4 @@
-import type { TaskStatus } from "@krischan-klug/kk-agent-contract";
-
-export interface TaskItem {
-  id: string;
-  title: string;
-  status: TaskStatus;
-  notes?: string;
-}
+export type { MemoryFact, TaskItem } from "@krischan-klug/kk-agent-contract";
 
 export interface TaskDraft {
   title: string;
@@ -16,9 +9,4 @@ export interface TaskUpdateInput {
   id: string;
   title?: string;
   notes?: string;
-}
-
-export interface MemoryFact {
-  id: string;
-  text: string;
 }

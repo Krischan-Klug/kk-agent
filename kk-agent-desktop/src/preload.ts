@@ -10,10 +10,12 @@ if (!apiBaseUrl) {
   throw new Error("kk-agent-desktop: apiBaseUrl argument missing");
 }
 const appVersion = getArgument("--kk-agent-app-version=");
+const apiToken = getArgument("--kk-agent-api-token=");
 
 contextBridge.exposeInMainWorld("kkAgentDesktop", {
   isDesktop: true,
   apiBaseUrl,
+  apiToken,
   appVersion,
   platform: process.platform,
 });

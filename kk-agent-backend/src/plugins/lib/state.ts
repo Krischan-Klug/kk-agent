@@ -1,7 +1,11 @@
-import { readFile, writeFile, mkdir, readdir, rm } from "node:fs/promises";
+import { readFile, writeFile, mkdir, readdir, rm, rename } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { dirname, resolve, join } from "node:path";
 import { resolveStateDir } from "../../runtime-config.js";
+import { createLogger } from "../../lib/logger.js";
+import { getErrnoCode } from "../../lib/error.js";
+
+const logger = createLogger("state");
 
 const STATE_DIR = resolve(resolveStateDir());
 const SESSIONS_ROOT = join(STATE_DIR, "sessions");
@@ -18,8 +22,15 @@ export async function readJsonFile<T>(absolutePath: string): Promise<T | null> {
     const raw = await readFile(absolutePath, "utf-8");
     return JSON.parse(raw) as T;
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
-      console.warn(`Failed to read JSON file '${absolutePath}':`, error);
+    if (getErrnoCode(error) !== "ENOENT") {
+      logger.warn(`Failed to read JSON file '${absolutePath}':`, error);
+      const corruptPath = `${absolutePath}.corrupt-${Date.now()}`;
+      try {
+        await rename(absolutePath, corruptPath);
+        logger.warn(`Moved unreadable JSON file to '${corruptPath}'.`);
+      } catch (moveError) {
+        logger.warn(`Failed to move unreadable JSON file '${absolutePath}':`, moveError);
+      }
     }
     return null;
   }
@@ -54,7 +65,7 @@ export function getStateDirPath(...segments: string[]): string {
   return join(STATE_DIR, ...segments);
 }
 
-/* ── Per-session persistence (state/sessions/{id}/*.json) ── */
+/* Per-session persistence (state/sessions/{id}/*.json) */
 
 function sessionDir(sessionId: string): string {
   return join(SESSIONS_ROOT, sessionId);

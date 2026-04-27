@@ -16,6 +16,10 @@ type ChatCompletionUsage = {
   completion_tokens_details?: { reasoning_tokens?: number };
 };
 
+function isChatCompletionUsage(value: unknown): value is ChatCompletionUsage {
+  return value !== null && typeof value === "object" && ("prompt_tokens" in value || "completion_tokens" in value);
+}
+
 function normalizeUsage(usage?: ChatCompletionUsage): TokenStats | undefined {
   if (!usage) return undefined;
   return {
@@ -145,14 +149,12 @@ export async function chatStream(
       | undefined;
     const choice = choices?.[0];
     if (!choice) {
-      const chunkUsage = parsed.usage as ChatCompletionUsage | undefined;
-      if (chunkUsage) usage = chunkUsage;
+      if (isChatCompletionUsage(parsed.usage)) usage = parsed.usage;
       return false;
     }
 
     const delta = choice.delta;
-    const chunkUsage = parsed.usage as ChatCompletionUsage | undefined;
-    if (chunkUsage) usage = chunkUsage;
+    if (isChatCompletionUsage(parsed.usage)) usage = parsed.usage;
     finishReason = mapFinishReason(choice.finish_reason);
 
     if (typeof delta?.reasoning_content === "string" && delta.reasoning_content.length > 0) {

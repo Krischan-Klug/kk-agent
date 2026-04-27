@@ -21,7 +21,7 @@ function buildAgent(
     defaultModel,
     llmRequestConfig: {
       common: {
-        reasoningEffort: getDefaults().reasoning.defaultEffort as ReasoningEffort,
+        reasoningEffort: getDefaults().reasoning.defaultEffort as ReasoningEffort /* validated at runtime by caller */,
       },
     },
     createdAt: now,

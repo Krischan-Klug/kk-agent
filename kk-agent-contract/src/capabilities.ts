@@ -7,7 +7,7 @@ import type {
   NumericRange,
   VisionSupport,
 } from "./provider.js";
-import type { ReasoningEffort } from "./agent.js";
+import type { ReasoningEffort } from "./common.js";
 
 export const DEFAULT_REASONING_LEVELS = ["minimal", "low", "medium", "high"] as const;
 

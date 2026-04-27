@@ -7,6 +7,12 @@
     "kk-agent-contract",
     "kk-agent-desktop"
   ],
+  "devDependencies": {
+    "typescript": "^5.8.0",
+    "@types/node": "^20.17.0",
+    "tsup": "^8.5.1",
+    "tsx": "^4.20.5"
+  },
   "scripts": {
     "dev:backend": "npm --workspace kk-agent-backend run dev",
     "dev:frontend": "npm --workspace kk-agent-frontend run dev",
@@ -15,5 +21,8 @@
     "build": "npm --workspace kk-agent-contract run build && npm --workspace kk-agent-backend run build && npm --workspace kk-agent-frontend run build",
     "desktop:build": "npm --workspace kk-agent-contract run build && npm --workspace kk-agent-backend run build:desktop && npm --workspace kk-agent-frontend run build:desktop && npm --workspace kk-agent-desktop run build",
     "desktop:dist": "npm run desktop:build && npm --workspace kk-agent-desktop run dist"
+  },
+  "overrides": {
+    "postcss": "8.5.12"
   }
 }

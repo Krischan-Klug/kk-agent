@@ -39,6 +39,9 @@
   "files": [
     "dist"
   ],
+  "devDependencies": {
+    "typescript": "^5.8.0"
+  },
   "scripts": {
     "build": "tsc",
     "lint": "tsc --noEmit",

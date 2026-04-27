@@ -13,6 +13,7 @@ import type {
 import * as chatCompletions from "../endpoints/chat-completions.js";
 import * as responses from "../endpoints/responses.js";
 import { DEFAULT_REASONING_LEVELS } from "../capabilities.js";
+import { getErrorMessage } from "../../../../lib/error.js";
 
 type DetectionResult = {
   models: ModelInfo[];
@@ -241,7 +242,7 @@ export function createLocalProviderAdapter(config: ProviderConfig): ProviderAdap
         await this.listModels();
         return { ok: true };
       } catch (err) {
-        return { ok: false, error: (err as Error).message };
+        return { ok: false, error: getErrorMessage(err) };
       }
     },
   };

@@ -5,8 +5,8 @@ const TASKS_FILE = "tasks.json";
 const sessionTasks = new Map<string, TaskItem[]>();
 const loadedSessions = new Set<string>();
 
-function persistTasks(sessionId: string): void {
-  void saveSessionData(sessionId, TASKS_FILE, sessionTasks.get(sessionId) ?? []);
+async function persistTasks(sessionId: string): Promise<void> {
+  await saveSessionData(sessionId, TASKS_FILE, sessionTasks.get(sessionId) ?? []);
 }
 
 export async function ensureTasksLoaded(sessionId: string): Promise<void> {
@@ -52,7 +52,7 @@ export function listTasks(sessionId: string): TaskItem[] {
   return [...(sessionTasks.get(sessionId) ?? [])];
 }
 
-export function replaceTasks(sessionId: string, tasks: TaskItem[]): TaskItem[] {
+export async function replaceTasks(sessionId: string, tasks: TaskItem[]): Promise<TaskItem[]> {
   const normalized = tasks.map((task, index) => normalizeTask(task, index));
 
   for (const task of normalized) {
@@ -63,11 +63,11 @@ export function replaceTasks(sessionId: string, tasks: TaskItem[]): TaskItem[] {
   }
 
   sessionTasks.set(sessionId, reconcileTaskStatuses(normalized));
-  persistTasks(sessionId);
+  await persistTasks(sessionId);
   return listTasks(sessionId);
 }
 
-export function createTasks(sessionId: string, drafts: TaskDraft[]): TaskItem[] {
+export async function createTasks(sessionId: string, drafts: TaskDraft[]): Promise<TaskItem[]> {
   const created = drafts.map((draft, index) => {
     const title = String(draft.title ?? "").trim();
     const notes = draft.notes?.trim() || undefined;
@@ -81,7 +81,7 @@ export function createTasks(sessionId: string, drafts: TaskDraft[]): TaskItem[] 
   });
 
   sessionTasks.set(sessionId, reconcileTaskStatuses(created));
-  persistTasks(sessionId);
+  await persistTasks(sessionId);
   return listTasks(sessionId);
 }
 
@@ -99,7 +99,7 @@ function resolveTaskReference(current: TaskItem[], rawId: string): TaskItem | un
   return undefined;
 }
 
-export function updateTasks(sessionId: string, updates: TaskUpdateInput[]): TaskItem[] {
+export async function updateTasks(sessionId: string, updates: TaskUpdateInput[]): Promise<TaskItem[]> {
   const current = listTasks(sessionId);
 
   for (const update of updates) {
@@ -120,11 +120,11 @@ export function updateTasks(sessionId: string, updates: TaskUpdateInput[]): Task
   }
 
   sessionTasks.set(sessionId, reconcileTaskStatuses(current));
-  persistTasks(sessionId);
+  await persistTasks(sessionId);
   return listTasks(sessionId);
 }
 
-export function solveTasks(sessionId: string, taskIds: string[]): TaskItem[] {
+export async function solveTasks(sessionId: string, taskIds: string[]): Promise<TaskItem[]> {
   const current = listTasks(sessionId);
   const ids = taskIds.map((id) => String(id ?? "").trim()).filter(Boolean);
   if (ids.length === 0) throw new Error("At least one task id is required");
@@ -143,7 +143,7 @@ export function solveTasks(sessionId: string, taskIds: string[]): TaskItem[] {
   ));
 
   sessionTasks.set(sessionId, reconcileTaskStatuses(next));
-  persistTasks(sessionId);
+  await persistTasks(sessionId);
   return listTasks(sessionId);
 }
 

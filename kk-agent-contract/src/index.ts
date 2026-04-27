@@ -8,10 +8,11 @@ export type {
   AutonomousBudget,
   ModeBehavior,
   CreateAgentBody,
-  ReasoningEffort,
   ToolAccessScope,
   UpdateAgentBody,
 } from "./agent.js";
+
+export type { ReasoningEffort } from "./common.js";
 
 export type {
   CommonLlmRequestConfig,
@@ -44,8 +45,16 @@ export type {
 export type {
   AttachmentDisplayMeta,
   AttachmentMeta,
+  AppDefaults,
   CreateSessionBody,
+  MemoryFact,
+  SessionPromptDebug,
+  SessionRuntimeMcpDebug,
+  SessionRuntimeSkillDebug,
+  SessionRuntimeToolDebug,
   SessionState,
+  StreamEvent,
+  TaskItem,
   UpdateSessionBody,
 } from "./session.js";
 

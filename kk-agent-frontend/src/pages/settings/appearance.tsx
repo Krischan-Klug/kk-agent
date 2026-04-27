@@ -14,7 +14,7 @@ import {
   type Theme,
 } from "@/lib/themes";
 
-/* ── Styled ── */
+/* Styled */
 
 const SectionTitle = styled.h3`
   font-size: var(--font-size-base);
@@ -168,7 +168,7 @@ const PreviewStrip = styled.div`
   margin-top: var(--space-xs);
 `;
 
-/* ── Page ── */
+/* Page */
 
 export default function AppearancePage() {
   const defaultTheme = defaultThemes[0];

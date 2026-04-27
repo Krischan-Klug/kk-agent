@@ -12,7 +12,7 @@ export async function readSSEStream(
   options: { throwOnProviderError?: boolean } = {},
 ): Promise<void> {
   if (!res.body) throw new Error("No response body for streaming");
-  const reader = (res.body as ReadableStream<Uint8Array>).getReader();
+  const reader = res.body.getReader();
   const decoder = new TextDecoder();
   let buffer = "";
 

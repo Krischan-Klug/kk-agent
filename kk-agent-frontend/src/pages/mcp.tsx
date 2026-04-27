@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import styled from "styled-components";
 import { mcp as mcpApi, skills as skillsApi } from "@/lib/api";
+import { createLogger } from "@/lib/logger";
 import type { CreateMcpBody, McpListItem, SkillDefinition } from "@/types/api";
 import { useToggleSet } from "@/hooks/useToggleSet";
 import { PageBody } from "@/components/Layout.styled";
@@ -11,6 +12,8 @@ import McpCard from "@/components/mcp/McpCard";
 import CreateMcpModal from "@/components/mcp/CreateMcpModal";
 import { ActionsRow, EmptyHint, MutedText } from "@/components/PageForm";
 import { buildEditForm, EMPTY_MCP_FORM, type EditForm } from "@/components/mcp/types";
+
+const logger = createLogger("mcp");
 
 const Grid = styled.div`
   display: grid;
@@ -57,7 +60,7 @@ export default function McpPage() {
     try {
       setSkillList(await skillsApi.list());
     } catch (err) {
-      console.error("[mcp-skills-load]", err);
+      logger.error("Failed to load skills:", err);
     }
   }
 
@@ -70,7 +73,7 @@ export default function McpPage() {
       await mcpApi.update(mcp.id, { skillIds: next });
       await loadMcps();
     } catch (err) {
-      console.error("[mcp-skill-toggle]", err);
+      logger.error("Failed to toggle skill:", err);
     }
   }
 
@@ -80,7 +83,7 @@ export default function McpPage() {
       setMcps(data);
       setInstructions(Object.fromEntries(data.map((mcp) => [mcp.id, mcp.instruction])));
     } catch (err) {
-      console.error("[mcp-load]", err);
+      logger.error("Failed to load MCPs:", err);
     } finally {
       setLoading(false);
     }
@@ -93,7 +96,7 @@ export default function McpPage() {
       else await mcpApi.start(mcp.id);
       await loadMcps();
     } catch (err) {
-      console.error("[mcp-state-toggle]", err);
+      logger.error("Failed to toggle MCP state:", err);
     }
   }
 
@@ -102,7 +105,7 @@ export default function McpPage() {
       await mcpApi.setInstruction(id, instructions[id]);
       await loadMcps();
     } catch (err) {
-      console.error("[mcp-save-instruction]", err);
+      logger.error("Failed to save instruction:", err);
     }
   }
 
@@ -124,7 +127,7 @@ export default function McpPage() {
       setCreateForm(EMPTY_MCP_FORM);
       await loadMcps();
     } catch (err) {
-      console.error("[mcp-create]", err);
+      logger.error("Failed to create MCP:", err);
     } finally {
       setCreating(false);
     }
@@ -136,7 +139,7 @@ export default function McpPage() {
       setDeleteTarget(null);
       await loadMcps();
     } catch (err) {
-      console.error("[mcp-delete]", err);
+      logger.error("Failed to delete MCP:", err);
     }
   }
 
@@ -178,7 +181,7 @@ export default function McpPage() {
       expandedEdit.remove(mcp.id);
       await loadMcps();
     } catch (err) {
-      console.error("[mcp-save-edit]", err);
+      logger.error("Failed to save MCP edit:", err);
     }
   }
 

@@ -12,6 +12,7 @@ import { createSlugId } from "../lib/ids.js";
 import { compactLlmRequestConfig } from "../provider/lib/request-config.js";
 import { getSystemVariableNames } from "../systemprompt/index.js";
 import { buildDefaultModes, normalizeModeDefinitions, resolveDefaultModeId } from "./lib/mode-config.js";
+import { NotFoundError } from "../../lib/errors.js";
 
 function normalizeAgent(agent: AgentDefinition): AgentDefinition {
   const defaults = getDefaults();
@@ -64,7 +65,7 @@ export function listAgents(): AgentDefinition[] {
 
 export function getAgent(id: string): AgentDefinition {
   const agent = store.getAgent(id);
-  if (!agent) throw new Error(`Agent "${id}" not found`);
+  if (!agent) throw new NotFoundError("Agent", id);
   return normalizeAgent(agent);
 }
 
@@ -119,7 +120,7 @@ export async function updateAgent(id: string, body: UpdateAgentBody): Promise<Ag
 
 export async function deleteAgent(id: string): Promise<void> {
   const removed = await store.deleteAgent(id);
-  if (!removed) throw new Error(`Agent "${id}" not found`);
+  if (!removed) throw new NotFoundError("Agent", id);
 }
 
 type ModeConfigTransform = (

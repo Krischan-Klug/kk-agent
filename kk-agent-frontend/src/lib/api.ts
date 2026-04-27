@@ -41,13 +41,33 @@ function resolveApiBaseUrl(): string {
 
 const BASE = resolveApiBaseUrl();
 
+function resolveApiToken(): string | undefined {
+  if (typeof window !== "undefined") {
+    const desktopToken = window.kkAgentDesktop?.apiToken?.trim();
+    if (desktopToken) return desktopToken;
+  }
+
+  const envToken = process.env.NEXT_PUBLIC_KK_AGENT_API_TOKEN?.trim();
+  return envToken || undefined;
+}
+
+const API_TOKEN = resolveApiToken();
+
+function authHeaders(headers?: HeadersInit): HeadersInit {
+  return {
+    ...(API_TOKEN ? { "X-KK-Agent-Token": API_TOKEN } : {}),
+    ...headers,
+  };
+}
+
 export function getSessionAttachmentUrl(sessionId: string, attachmentId: string): string {
-  return `${BASE}/session/${encodeURIComponent(sessionId)}/attachments/${encodeURIComponent(attachmentId)}`;
+  const url = `${BASE}/session/${encodeURIComponent(sessionId)}/attachments/${encodeURIComponent(attachmentId)}`;
+  return API_TOKEN ? `${url}?apiToken=${encodeURIComponent(API_TOKEN)}` : url;
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`${BASE}${path}`, {
-    headers: { "Content-Type": "application/json", ...init?.headers },
+    headers: authHeaders({ "Content-Type": "application/json", ...init?.headers }),
     ...init,
   });
   if (!res.ok) {
@@ -214,6 +234,7 @@ export const agent = {
     (async () => {
       try {
         const res = await fetch(`${BASE}/agent/loop-state/${sessionId}/stream`, {
+          headers: authHeaders(),
           signal: controller.signal,
         });
         if (!res.ok || !res.body) return;
@@ -322,6 +343,7 @@ export const session = {
     form.append("file", file);
     const res = await fetch(`${BASE}/session/${sessionId}/attachments`, {
       method: "POST",
+      headers: authHeaders(),
       body: form,
     });
     if (!res.ok) {
@@ -339,7 +361,7 @@ export const session = {
   ): Promise<void> => {
     const res = await fetch(`${BASE}/session/${id}/chat/stream`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: authHeaders({ "Content-Type": "application/json" }),
       body: JSON.stringify({ message, attachmentIds }),
     });
 
@@ -376,7 +398,10 @@ export const session = {
   },
 
   abort: async (id: string): Promise<{ ok: boolean }> => {
-    const res = await fetch(`${BASE}/session/${id}/abort`, { method: "POST" });
+    const res = await fetch(`${BASE}/session/${id}/abort`, {
+      method: "POST",
+      headers: authHeaders(),
+    });
     if (!res.ok) {
       if (res.status === 404) return { ok: false };
       const text = await res.text();

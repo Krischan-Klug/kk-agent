@@ -13,6 +13,7 @@ import type {
   ToolExecutionResult,
   ToolRuntimeContext,
 } from "../types.js";
+import { getErrorMessage } from "../../../lib/error.js";
 import { fitToolResultsToBudget, persistLargeToolResult } from "./tool-result-storage.js";
 
 export interface ToolExecutionUpdate {
@@ -291,7 +292,7 @@ export class StreamingToolExecutor {
         });
         this.flushReadyResults();
       } catch (error) {
-        const message = (error as Error).message;
+        const message = getErrorMessage(error);
         tracked.status = "error";
         tracked.result = { content: message, isError: true };
         tracked.streamedResult = toSyntheticErrorMessage(tracked.toolUse, message);

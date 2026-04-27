@@ -282,7 +282,7 @@ export default function McpCard({
               <div style={{ marginTop: "var(--space-xs)", color: "var(--text-muted)", fontSize: "var(--font-size-sm)" }}>
                 env:{" "}
                 {Object.entries(customEnv)
-                  .map(([k, v]) => `${k}=${v}`)
+                  .map(([k]) => `${k}=*****`)
                   .join(", ")}
               </div>
             )}
@@ -379,7 +379,7 @@ export default function McpCard({
               </FormField>
               <FormField>
                 <FieldLabel>Umgebungsvariablen</FieldLabel>
-                <KeyValueEditor values={editForm.env} onChange={(env) => onEditFormChange({ ...editForm, env })} />
+                <KeyValueEditor values={editForm.env} onChange={(env) => onEditFormChange({ ...editForm, env })} sensitiveValues />
               </FormField>
             </>
           ) : (

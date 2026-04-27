@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import styled from "styled-components";
 import { provider as providerApi } from "@/lib/api";
+import { createLogger } from "@/lib/logger";
 import type {
   ModelInfo,
   ModelSettings,
@@ -14,6 +15,8 @@ import SettingsLayout from "@/components/SettingsLayout";
 import ProviderCard from "@/components/provider/ProviderCard";
 import CreateProviderModal from "@/components/provider/CreateProviderModal";
 import { DEFAULT_PROVIDER_BASE_URL } from "@/components/provider/constants";
+
+const logger = createLogger("settings/provider");
 
 const Grid = styled.div`
   display: flex;
@@ -63,7 +66,7 @@ export default function SettingsProviderPage() {
       }
       setSelectedProviderId(nextSelectedId);
     } catch (err) {
-      console.error("[provider-load]", err);
+      logger.error("Failed to load providers:", err);
     } finally {
       setLoading(false);
     }
@@ -91,7 +94,7 @@ export default function SettingsProviderPage() {
       setShowCreate(false);
       resetCreateForm();
     } catch (err) {
-      console.error("[provider-create]", err);
+      logger.error("Failed to create provider:", err);
     }
   }
 
@@ -115,7 +118,7 @@ export default function SettingsProviderPage() {
         setModelSettings({});
       }
     } catch (err) {
-      console.error("[provider-delete]", err);
+      logger.error("Failed to delete provider:", err);
     }
   }
 
@@ -125,7 +128,7 @@ export default function SettingsProviderPage() {
       const result = await providerApi.testProvider(id);
       setTestResults((prev) => ({ ...prev, [id]: result }));
     } catch (err) {
-      setTestResults((prev) => ({ ...prev, [id]: { ok: false, error: (err as Error).message } }));
+      setTestResults((prev) => ({ ...prev, [id]: { ok: false, error: err instanceof Error ? err.message : String(err) } }));
     } finally {
       testing.remove(id);
     }
@@ -138,7 +141,7 @@ export default function SettingsProviderPage() {
       });
       setProviders((prev) => prev.map((provider) => (provider.id === id ? updated : provider)));
     } catch (err) {
-      console.error("[provider-update]", err);
+      logger.error("Failed to update provider:", err);
     }
   }
 
@@ -148,7 +151,7 @@ export default function SettingsProviderPage() {
     try {
       await providerApi.setModelSettings(selectedProviderId, modelId, settings);
     } catch (err) {
-      console.error("[provider-model-settings]", err);
+      logger.error("Failed to save model settings:", err);
     }
   }
 

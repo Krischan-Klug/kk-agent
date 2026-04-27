@@ -1,4 +1,3 @@
-import { v4 as uuidv4 } from "uuid";
 import type { SessionRecord, SessionState } from "../types.js";
 import {
   ensureSessionsRoot,
@@ -7,13 +6,20 @@ import {
   deleteSessionData,
   listPersistedSessionIds,
 } from "../../lib/state.js";
+import { createLogger } from "../../../lib/logger.js";
+import { getErrorMessage } from "../../../lib/error.js";
+import { NotFoundError } from "../../../lib/errors.js";
+import { ensureTasksLoaded } from "../../tools/lib/task-state.js";
+import { ensureSessionFactsLoaded } from "../../tools/lib/memory-state.js";
+
+const logger = createLogger("session/store");
 
 const SESSION_FILE = "session.json";
 const MESSAGES_FILE = "messages.json";
 
 const sessions = new Map<string, SessionRecord>();
 
-/* ── Persistence helpers ── */
+/* Persistence helpers */
 
 type PersistedSessionMeta = Omit<SessionRecord, "messages">;
 
@@ -25,16 +31,11 @@ async function persistSession(session: SessionRecord): Promise<void> {
   ]);
 }
 
-/* ── Init (load from disk) ── */
+/* Init (load from disk) */
 
 export async function initStore(): Promise<void> {
   await ensureSessionsRoot();
   const ids = await listPersistedSessionIds();
-
-  // Dynamic import to avoid circular dependency at module level.
-  // session depends on tools (listed in deps), so tools plugin is already initialized.
-  const { ensureTasksLoaded } = await import("../../tools/lib/task-state.js");
-  const { ensureSessionFactsLoaded } = await import("../../tools/lib/memory-state.js");
 
   for (const id of ids) {
     try {
@@ -46,20 +47,20 @@ export async function initStore(): Promise<void> {
       const session: SessionRecord = { ...meta, messages };
       sessions.set(id, session);
 
-      // Hydrate per-session satellite state
+      // Hydrate per-session satellite state.
       await ensureTasksLoaded(id);
       await ensureSessionFactsLoaded(id);
     } catch (err) {
-      console.warn(`[session/store] Failed to load session "${id}":`, (err as Error).message);
+      logger.warn(`Failed to load session "${id}":`, getErrorMessage(err));
     }
   }
 
-  console.log(`[session/store] Loaded ${sessions.size} session(s) from disk.`);
+  logger.info(`Loaded ${sessions.size} session(s) from disk.`);
 }
 
-/* ── CRUD ── */
+/* CRUD */
 
-export function createSession(data: {
+export async function createSession(data: {
   agentId: string;
   providerId: string;
   model: string;
@@ -68,10 +69,10 @@ export function createSession(data: {
   activeMcpIds: string[];
   activeSkillIds: string[];
   llmRequestConfig?: SessionState["llmRequestConfig"];
-}): SessionRecord {
+}): Promise<SessionRecord> {
   const now = new Date().toISOString();
   const session: SessionRecord = {
-    id: uuidv4(),
+    id: crypto.randomUUID(),
     name: "",
     providerId: data.providerId,
     model: data.model,
@@ -86,7 +87,7 @@ export function createSession(data: {
     updatedAt: now,
   };
   sessions.set(session.id, session);
-  void persistSession(session);
+  await persistSession(session);
   return session;
 }
 
@@ -94,18 +95,18 @@ export function getSession(id: string): SessionRecord | undefined {
   return sessions.get(id);
 }
 
-export function updateSession(id: string, update: Partial<SessionRecord>): SessionRecord {
+export async function updateSession(id: string, update: Partial<SessionRecord>): Promise<SessionRecord> {
   const session = sessions.get(id);
-  if (!session) throw new Error(`Session "${id}" not found`);
+  if (!session) throw new NotFoundError("Session", id);
   Object.assign(session, update, { updatedAt: new Date().toISOString() });
-  void persistSession(session);
+  await persistSession(session);
   return session;
 }
 
-export function deleteSession(id: string): boolean {
+export async function deleteSession(id: string): Promise<boolean> {
   const deleted = sessions.delete(id);
   if (deleted) {
-    void deleteSessionData(id);
+    await deleteSessionData(id);
   }
   return deleted;
 }

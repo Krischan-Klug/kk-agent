@@ -5,6 +5,7 @@ import { getDefaultPathForScope, resolveAccessScope, resolveFilesystemSystemConf
 import { truncateSelfBoundedReadOutput } from "../read-output.js";
 import { getCurrentSessionId } from "../user-interaction/interaction-store.js";
 import { hasCurrentReadForSession, recordReadForSession } from "./read-state.js";
+import { getErrnoCode } from "../../../../lib/error.js";
 
 const GLOB_RESULT_LIMIT = 200;
 const GREP_RESULT_LIMIT = 200;
@@ -108,13 +109,10 @@ function buildRegex(pattern: string, caseSensitive = false, multiline = false): 
   }
 }
 
-async function walkForGlob(
+async function walkDirectory(
   root: string,
-  rootBase: string,
-  matcher: RegExp,
-  results: string[],
+  onEntry: (fullPath: string, entry: { isDirectory(): boolean; isFile(): boolean; name: string }) => Promise<boolean | void>,
 ): Promise<void> {
-  if (results.length >= GLOB_RESULT_LIMIT) return;
   let entries;
   try {
     entries = await readdir(root, { withFileTypes: true });
@@ -123,21 +121,33 @@ async function walkForGlob(
   }
 
   for (const entry of entries) {
-    if (results.length >= GLOB_RESULT_LIMIT) return;
     if (entry.isDirectory() && IGNORED_DIRS.has(entry.name)) continue;
 
     const fullPath = resolve(root, entry.name);
     if (entry.isFile()) {
-      const relPath = relative(rootBase, fullPath).split("\\").join("/");
-      if (matcher.test(relPath)) {
-        results.push(fullPath);
-      }
+      const shouldContinue = await onEntry(fullPath, entry);
+      if (shouldContinue === false) return;
     }
 
     if (entry.isDirectory()) {
-      await walkForGlob(fullPath, rootBase, matcher, results);
+      await walkDirectory(fullPath, onEntry);
     }
   }
+}
+
+async function walkForGlob(
+  root: string,
+  rootBase: string,
+  matcher: RegExp,
+  results: string[],
+): Promise<void> {
+  await walkDirectory(root, async (fullPath) => {
+    if (results.length >= GLOB_RESULT_LIMIT) return false;
+    const relPath = relative(rootBase, fullPath).split("\\").join("/");
+    if (matcher.test(relPath)) {
+      results.push(fullPath);
+    }
+  });
 }
 
 interface GrepMatch {
@@ -155,42 +165,24 @@ async function walkForGrep(
   multiline: boolean,
   results: GrepMatch[],
 ): Promise<void> {
-  if (results.length >= GREP_RESULT_LIMIT) return;
-  let entries;
-  try {
-    entries = await readdir(root, { withFileTypes: true });
-  } catch {
-    return;
-  }
-
   const globMatcher = glob ? globToRegex(glob) : null;
 
-  for (const entry of entries) {
-    if (results.length >= GREP_RESULT_LIMIT) return;
-    if (entry.isDirectory() && IGNORED_DIRS.has(entry.name)) continue;
-
-    const fullPath = resolve(root, entry.name);
-
-    if (entry.isDirectory()) {
-      await walkForGrep(fullPath, rootBase, regex, glob, type, multiline, results);
-      continue;
-    }
-
-    if (!entry.isFile()) continue;
+  await walkDirectory(root, async (fullPath, entry) => {
+    if (results.length >= GREP_RESULT_LIMIT) return false;
     const relPath = relative(rootBase, fullPath).split("\\").join("/");
-    if (globMatcher && !globMatcher.test(relPath)) continue;
-    if (type && extname(entry.name).replace(/^\./, "").toLowerCase() !== type.toLowerCase()) continue;
+    if (globMatcher && !globMatcher.test(relPath)) return;
+    if (type && extname(entry.name).replace(/^\./, "").toLowerCase() !== type.toLowerCase()) return;
 
     try {
       const buffer = await readFile(fullPath);
-      if (isBinary(buffer)) continue;
+      if (isBinary(buffer)) return;
 
       const text = buffer.toString("utf-8");
       if (multiline) {
         const flags = regex.flags.includes("g") ? regex.flags : `${regex.flags}g`;
         const iterator = text.matchAll(new RegExp(regex.source, flags));
         for (const match of iterator) {
-          if (results.length >= GREP_RESULT_LIMIT) return;
+          if (results.length >= GREP_RESULT_LIMIT) return false;
           const index = match.index ?? 0;
           const line = text.slice(0, index).split("\n").length;
           results.push({
@@ -199,12 +191,12 @@ async function walkForGrep(
             content: match[0].split("\n").join("\\n"),
           });
         }
-        continue;
+        return;
       }
 
       const lines = text.split("\n");
       for (let i = 0; i < lines.length; i++) {
-        if (results.length >= GREP_RESULT_LIMIT) return;
+        if (results.length >= GREP_RESULT_LIMIT) return false;
         regex.lastIndex = 0;
         if (regex.test(lines[i])) {
           results.push({ file: fullPath, line: i + 1, content: lines[i] });
@@ -213,7 +205,7 @@ async function walkForGrep(
     } catch {
       // ignore unreadable files
     }
-  }
+  });
 }
 
 function getSessionIdOrThrow(): string {
@@ -288,7 +280,7 @@ export async function executeFilesystemTool(
       const existingInfo = await stat(path);
       ensureReadBeforeMutating(path, existingInfo.mtimeMs);
     } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+      if (getErrnoCode(error) !== "ENOENT") throw error;
     }
 
     await mkdir(dirname(path), { recursive: true });

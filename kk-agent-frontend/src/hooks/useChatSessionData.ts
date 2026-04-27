@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { agent as agentApi, mcp as mcpApi, provider as providerApi, session as sessionApi, skills as skillsApi, tools as toolsApi } from "@/lib/api";
+import { createLogger } from "@/lib/logger";
 import type {
   AgentDefinition,
   LlmRequestConfig,
@@ -17,6 +18,8 @@ import { clearActiveSessionId, getActiveSessionId } from "@/lib/sessionState";
 import { createAndActivateSession, resolveDefaultSessionAgentId } from "@/lib/sessionFactory";
 import { compactLlmRequestConfig, mergeLlmRequestConfigs } from "@/lib/llmRequestConfig";
 import { normalizeCanonicalReasoningEffort } from "@/lib/modelCapabilities";
+
+const logger = createLogger("chat-context");
 
 type DebugToggleHandler = (updater: (previous: boolean) => boolean) => void;
 
@@ -71,7 +74,7 @@ export function useChatSessionData({ onDebugOpen, setDebugOpen }: Options) {
       setSessionFacts(sessionMemoryResult.facts);
       setUserFacts(userMemoryResult.facts);
     } catch (err) {
-      console.error("[chat-context-load]", err);
+      logger.error("Failed to load chat context:", err);
     }
   }, []);
 
@@ -94,7 +97,7 @@ export function useChatSessionData({ onDebugOpen, setDebugOpen }: Options) {
         setMcps(mcps);
         setSkills(availableSkills);
       })
-      .catch((err) => console.warn("[debug] Failed to load debug data:", err));
+      .catch((err) => logger.warn("Failed to load debug data:", err));
     void loadContextData(sessionId);
   }, [loadAvailableMcps, loadContextData, onDebugOpen]);
 
@@ -196,7 +199,7 @@ export function useChatSessionData({ onDebugOpen, setDebugOpen }: Options) {
     try {
       await updateSessionAndSet({ model });
     } catch (err) {
-      console.error("[chat-model-switch]", err);
+      logger.error("Failed to switch model:", err);
     }
   }, [session, updateSessionAndSet]);
 
@@ -217,7 +220,7 @@ export function useChatSessionData({ onDebugOpen, setDebugOpen }: Options) {
       setModelSettingsMap(result.modelSettings ?? {});
       await loadContextData(nextSession.id);
     } catch (err) {
-      console.error("[chat-provider-switch]", err);
+      logger.error("Failed to switch provider:", err);
     }
   }, [loadContextData, session]);
 
@@ -230,7 +233,7 @@ export function useChatSessionData({ onDebugOpen, setDebugOpen }: Options) {
           : session.activeMcpIds.filter((id) => id !== mcpId),
       });
     } catch (err) {
-      console.error("[chat-mcp-toggle]", err);
+      logger.error("Failed to toggle MCP:", err);
     }
   }, [session, updateSessionAndSet]);
 
@@ -243,7 +246,7 @@ export function useChatSessionData({ onDebugOpen, setDebugOpen }: Options) {
           : session.activeToolIds.filter((id) => id !== toolId),
       });
     } catch (err) {
-      console.error("[chat-tool-toggle]", err);
+      logger.error("Failed to toggle tool:", err);
     }
   }, [session, updateSessionAndSet]);
 
@@ -256,7 +259,7 @@ export function useChatSessionData({ onDebugOpen, setDebugOpen }: Options) {
           : session.activeSkillIds.filter((id) => id !== skillId),
       });
     } catch (err) {
-      console.error("[chat-skill-toggle]", err);
+      logger.error("Failed to toggle skill:", err);
     }
   }, [session, updateSessionAndSet]);
 
@@ -271,7 +274,7 @@ export function useChatSessionData({ onDebugOpen, setDebugOpen }: Options) {
         })),
       });
     } catch (err) {
-      console.error("[chat-reasoning]", err);
+      logger.error("Failed to set reasoning:", err);
     }
   }, [session, updateSessionAndSet]);
 
@@ -286,7 +289,7 @@ export function useChatSessionData({ onDebugOpen, setDebugOpen }: Options) {
         })),
       });
     } catch (err) {
-      console.error("[chat-temperature]", err);
+      logger.error("Failed to set temperature:", err);
     }
   }, [session, updateSessionAndSet]);
 
@@ -295,7 +298,7 @@ export function useChatSessionData({ onDebugOpen, setDebugOpen }: Options) {
     try {
       await updateSessionAndSet({ llmRequestConfig: value });
     } catch (err) {
-      console.error("[chat-llm-request-config]", err);
+      logger.error("Failed to update LLM request config:", err);
     }
   }, [session, updateSessionAndSet]);
 
@@ -304,7 +307,7 @@ export function useChatSessionData({ onDebugOpen, setDebugOpen }: Options) {
     try {
       await updateSessionAndSet({ agentId });
     } catch (err) {
-      console.error("[chat-agent-switch]", err);
+      logger.error("Failed to switch agent:", err);
     }
   }, [session, updateSessionAndSet]);
 
@@ -313,7 +316,7 @@ export function useChatSessionData({ onDebugOpen, setDebugOpen }: Options) {
     try {
       await updateSessionAndSet({ activeModeId });
     } catch (err) {
-      console.error("[chat-mode-switch]", err);
+      logger.error("Failed to switch mode:", err);
     }
   }, [session, updateSessionAndSet]);
 
@@ -323,7 +326,7 @@ export function useChatSessionData({ onDebugOpen, setDebugOpen }: Options) {
       setSession(newSession);
       await loadContextData(newSession.id);
     } catch (err) {
-      console.error("[chat-new-session]", err);
+      logger.error("Failed to create new session:", err);
     }
   }, [agents, loadContextData]);
 
@@ -333,7 +336,7 @@ export function useChatSessionData({ onDebugOpen, setDebugOpen }: Options) {
       const result = await toolsApi.replaceTasks(session.id, nextTasks);
       setTasks(result.tasks);
     } catch (err) {
-      console.error("[chat-save-tasks]", err);
+      logger.error("Failed to save tasks:", err);
     }
   }, [session]);
 
@@ -343,7 +346,7 @@ export function useChatSessionData({ onDebugOpen, setDebugOpen }: Options) {
       const result = await toolsApi.replaceSessionMemory(session.id, nextFacts);
       setSessionFacts(result.facts);
     } catch (err) {
-      console.error("[chat-save-session-memory]", err);
+      logger.error("Failed to save session memory:", err);
     }
   }, [session]);
 
@@ -352,7 +355,7 @@ export function useChatSessionData({ onDebugOpen, setDebugOpen }: Options) {
       const result = await toolsApi.replaceUserMemory(nextFacts);
       setUserFacts(result.facts);
     } catch (err) {
-      console.error("[chat-save-user-memory]", err);
+      logger.error("Failed to save user memory:", err);
     }
   }, []);
 

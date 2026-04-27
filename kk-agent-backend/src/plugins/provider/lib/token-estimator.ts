@@ -19,6 +19,10 @@ function toWsBaseUrl(baseUrl: string): string {
   return url.toString().replace(/\/$/, "");
 }
 
+function isValidParameters(value: unknown): value is LLMTool["function"]["parameters"] {
+  return value !== null && typeof value === "object" && "type" in value;
+}
+
 function toSdkTools(tools?: UnifiedToolDefinition[]): LLMTool[] | undefined {
   if (!tools?.length) return undefined;
   return tools.map((tool) => ({
@@ -26,7 +30,7 @@ function toSdkTools(tools?: UnifiedToolDefinition[]): LLMTool[] | undefined {
     function: {
       name: tool.name,
       description: tool.description,
-      parameters: tool.parameters as LLMTool["function"]["parameters"],
+      parameters: isValidParameters(tool.parameters) ? tool.parameters : { type: "object", properties: {} },
     },
   }));
 }

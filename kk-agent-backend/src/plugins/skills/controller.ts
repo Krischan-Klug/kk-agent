@@ -1,8 +1,12 @@
 import type { Request, Response } from "express";
+import { requireParam } from "../../lib/http.js";
+import {
+  CreateSkillBodySchema,
+  UpdateSkillBodySchema,
+} from "../../lib/schemas.js";
 import { removeSkillFromAgents } from "../agent/service.js";
-import { removeSkillFromSessions } from "../session/service.js";
+import { removeSkillFromSessions } from "../session/lib/cleanup.js";
 import { createSkill, deleteSkill, listSkills, refreshSkills, updateSkill } from "./service.js";
-import type { CreateSkillBody, UpdateSkillBody } from "./types.js";
 
 export async function doList(_req: Request, res: Response): Promise<Response> {
   await refreshSkills();
@@ -10,32 +14,18 @@ export async function doList(_req: Request, res: Response): Promise<Response> {
 }
 
 export async function doCreate(req: Request, res: Response): Promise<Response> {
-  try {
-    const body = req.body as CreateSkillBody;
-    if (!body.name || !body.description || !body.instruction) {
-      return res.status(400).json({ error: "name, description and instruction are required" });
-    }
-    return res.status(201).json(await createSkill(body));
-  } catch (error) {
-    return res.status(400).json({ error: (error as Error).message });
-  }
+  const body = CreateSkillBodySchema.parse(req.body);
+  return res.status(201).json(await createSkill(body));
 }
 
 export async function doUpdate(req: Request, res: Response): Promise<Response> {
-  try {
-    return res.json(await updateSkill(req.params.id, req.body as UpdateSkillBody));
-  } catch (error) {
-    return res.status(404).json({ error: (error as Error).message });
-  }
+  return res.json(await updateSkill(requireParam(req, "id"), UpdateSkillBodySchema.parse(req.body)));
 }
 
 export async function doDelete(req: Request, res: Response): Promise<Response> {
-  try {
-    await deleteSkill(req.params.id);
-    await removeSkillFromAgents(req.params.id);
-    removeSkillFromSessions(req.params.id);
-    return res.json({ deleted: true });
-  } catch (error) {
-    return res.status(404).json({ error: (error as Error).message });
-  }
+  const id = requireParam(req, "id");
+  await deleteSkill(id);
+  await removeSkillFromAgents(id);
+  await removeSkillFromSessions(id);
+  return res.json({ deleted: true });
 }

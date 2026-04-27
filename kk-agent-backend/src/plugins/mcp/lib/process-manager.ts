@@ -2,6 +2,7 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { SSEClientTransport } from "@modelcontextprotocol/sdk/client/sse.js";
 import type { McpServerConfig, McpStdioConfig, McpSseConfig, McpToolDefinition, ToolCallResult } from "../types.js";
+import { getErrorMessage } from "../../../lib/error.js";
 
 interface RunningMcp {
   client: Client;
@@ -27,15 +28,15 @@ export async function startMcp(config: McpServerConfig): Promise<void> {
 
   let transport;
   if (config.transport === "stdio") {
-    const srv = config.server as McpStdioConfig;
+    const srv = config.server;
     transport = new StdioClientTransport({
-      command: srv.command,
-      args: srv.args,
-      ...(srv.env && { env: mergeEnv(srv.env) }),
+      command: (srv as McpStdioConfig).command,
+      args: (srv as McpStdioConfig).args,
+      ...((srv as McpStdioConfig).env && { env: mergeEnv((srv as McpStdioConfig).env) }),
     });
   } else {
-    const srv = config.server as McpSseConfig;
-    transport = new SSEClientTransport(new URL(srv.url));
+    const srv = config.server;
+    transport = new SSEClientTransport(new URL((srv as McpSseConfig).url));
   }
 
   await client.connect(transport);
@@ -100,6 +101,6 @@ export async function executeToolForMcp(
       .join("\n");
     return { content, isError: !!result.isError };
   } catch (err) {
-    return { content: (err as Error).message, isError: true };
+    return { content: getErrorMessage(err), isError: true };
   }
 }

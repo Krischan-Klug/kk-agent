@@ -563,7 +563,7 @@ export default function AgentEditor({
             <FieldLabel>Default Mode</FieldLabel>
             <Select
               value={currentAgent.defaultModeId}
-              onChange={(e) => onChange({ ...currentAgent, defaultModeId: e.target.value })}
+              onChange={(e: React.ChangeEvent<HTMLSelectElement>) => onChange({ ...currentAgent, defaultModeId: e.target.value })}
             >
               {enabledModes.map((mode) => (
                 <option key={mode.id} value={mode.id}>

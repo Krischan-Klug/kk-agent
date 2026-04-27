@@ -138,7 +138,7 @@ export async function executeRuntimeTool(
         runtimeTool.capabilityId,
         toolName,
         args,
-        runtimeTool.accessScope as AccessScope | undefined,
+        runtimeTool.accessScope,
         context,
       )
     ) ?? { content: `Tool "${toolName}" is not available.`, isError: true };

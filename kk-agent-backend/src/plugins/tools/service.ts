@@ -3,6 +3,7 @@ import type {
   AccessScope,
   McpServerConfig,
   McpToolDefinition,
+  SystemMcpKey,
   UpdateMcpBody,
 } from "../mcp/types.js";
 import { buildSystemMcps, createOverrideState, loadSystemMcpOverrides, saveSystemMcpOverrides } from "./lib/system-registry.js";
@@ -17,6 +18,7 @@ import {
   resolveFilesystemSystemConfig,
   resolveTerminalSystemConfig,
 } from "./lib/access-paths.js";
+import { NotFoundError } from "../../lib/errors.js";
 import { getDefaultSystemMcpMap } from "./lib/index.js";
 import { normalizeSystemConfig } from "./lib/system-config.js";
 import {
@@ -103,7 +105,7 @@ function buildSystemToolPermissionResolver(toolName: string): RuntimeToolDefinit
 
 function normalizeSystemConfigForMcp(id: string, systemConfig?: McpServerConfig["systemConfig"]) {
   const defaults = getDefaultSystemMcpMap();
-  const base = defaults[id as keyof typeof defaults];
+  const base = id in defaults ? defaults[id as SystemMcpKey] : undefined;
   const baseSystemConfig = base?.systemConfig;
   const explicitResultPolicy = Object.prototype.hasOwnProperty.call(systemConfig ?? {}, "resultPolicy");
 
@@ -113,7 +115,7 @@ function normalizeSystemConfigForMcp(id: string, systemConfig?: McpServerConfig[
     ...(explicitResultPolicy ? { resultPolicy: { ...baseSystemConfig?.resultPolicy, ...systemConfig?.resultPolicy } } : {}),
   };
 
-  return normalizeSystemConfig(id as keyof typeof defaults, merged);
+  return normalizeSystemConfig(id as SystemMcpKey, merged);
 }
 
 function buildRuntimeVariablesForMcp(mcp: McpServerConfig): Record<string, string> {
@@ -207,17 +209,7 @@ export function getInternalToolState(sessionId: string): { tasks: TaskItem[]; se
   };
 }
 
-export function getSystemToolsForId(id: string): McpToolDefinition[] {
-  return getSystemToolsForMcp(id);
-}
 
-export function listInternalTools(): McpServerConfig[] {
-  return getAllSystemMcps();
-}
-
-export function getInternalToolById(id: string): McpServerConfig | undefined {
-  return getSystemMcpById(id);
-}
 
 export function buildResolvedSystemToolRuntime(
   activeToolIds: string[],
@@ -262,7 +254,7 @@ export function buildResolvedSystemToolRuntime(
 
 export async function toggleSystemMcp(id: string, active: boolean): Promise<McpServerConfig> {
   const systemMcp = getSystemMcpById(id);
-  if (!systemMcp) throw new Error(`System-MCP "${id}" not found`);
+  if (!systemMcp) throw new NotFoundError("System-MCP", id);
   const next = { ...systemMcp, active };
   setSystemMcp(next);
   await persistSystemOverrides();
@@ -271,7 +263,7 @@ export async function toggleSystemMcp(id: string, active: boolean): Promise<McpS
 
 export async function updateSystemMcpConfig(id: string, body: UpdateMcpBody): Promise<McpServerConfig> {
   const systemMcp = getSystemMcpById(id);
-  if (!systemMcp) throw new Error(`System-MCP "${id}" not found`);
+  if (!systemMcp) throw new NotFoundError("System-MCP", id);
 
   const next: McpServerConfig = {
     ...systemMcp,

@@ -3,6 +3,7 @@ import {
   textBlock,
   type TranscriptMessage,
 } from "../../lib/transcript.js";
+import { escapeXml as escapeXmlAttr, toCData as wrapCdata } from "../../lib/xml.js";
 
 export type SystemReminderType =
   | "mode_changed"
@@ -15,18 +16,6 @@ export interface SystemReminder {
 }
 
 const queues = new Map<string, SystemReminder[]>();
-
-function escapeXmlAttr(value: string): string {
-  return value
-    .replaceAll("&", "&amp;")
-    .replaceAll("\"", "&quot;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;");
-}
-
-function wrapCdata(text: string): string {
-  return `<![CDATA[${text.replaceAll("]]>", "]]]]><![CDATA[>")}]]>`;
-}
 
 export function enqueueSystemReminder(sessionId: string, reminder: SystemReminder): void {
   if (!sessionId) return;

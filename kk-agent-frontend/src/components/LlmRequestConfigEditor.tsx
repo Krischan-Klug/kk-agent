@@ -2,6 +2,9 @@ import { useState } from "react";
 import styled from "styled-components";
 import type { EndpointCapabilities, EndpointType, LlmRequestConfig } from "@/types/api";
 import { stringifyJsonValue, tryParseJsonObject } from "@/lib/llmRequestConfig";
+import { createLogger } from "@/lib/logger";
+
+const logger = createLogger("llm-request-config");
 
 const EditorWrap = styled.div`
   display: flex;
@@ -142,7 +145,7 @@ export default function LlmRequestConfigEditor({
         },
       });
     } catch (error) {
-      console.error("[llm-request-config.extra-body]", error);
+      logger.error("Failed to parse extra body:", error);
     }
   }
 

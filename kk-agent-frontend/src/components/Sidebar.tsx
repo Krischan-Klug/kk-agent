@@ -3,6 +3,9 @@ import Link from "next/link";
 import { useRouter } from "next/router";
 import Spinner from "@/components/Spinner";
 import { agent as agentApi, session as sessionApi } from "@/lib/api";
+import { createLogger } from "@/lib/logger";
+
+const logger = createLogger("sidebar");
 import CreateSessionModal from "@/components/chat/CreateSessionModal";
 import { getRunningChatStreamSessionIds, subscribeChatStreamStore } from "@/lib/chatStreamState";
 import type { SessionState } from "@/types/api";
@@ -134,7 +137,7 @@ export default function Sidebar() {
       await loadSessions();
       await router.push("/chat");
     } catch (err) {
-      console.error("[sidebar-create-session]", err);
+      logger.error("Failed to create session:", err);
     } finally {
       setCreatingSession(false);
     }
@@ -149,7 +152,7 @@ export default function Sidebar() {
       await loadSessions();
       await router.push("/chat");
     } catch (err) {
-      console.error("[sidebar-create-session-provider]", err);
+      logger.error("Failed to create session with provider:", err);
     } finally {
       setCreatingSession(false);
     }
@@ -165,7 +168,7 @@ export default function Sidebar() {
       await loadSessions();
       if (router.pathname === "/chat") await router.replace("/chat");
     } catch (err) {
-      console.error("[sidebar-delete-session]", err);
+      logger.error("Failed to delete session:", err);
     }
   }
 

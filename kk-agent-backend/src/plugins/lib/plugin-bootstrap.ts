@@ -1,6 +1,9 @@
 import type { Express } from "express";
 import type { PluginLifecycleContext, PluginSummary } from "../types.js";
-import type { PluginAnalysis, PluginAnalysisEntry } from "./plugin-loader.js";
+import type { PluginAnalysis, PluginAnalysisEntry } from "./plugin-types.js";
+import { createLogger } from "../../lib/logger.js";
+
+const logger = createLogger("plugins");
 
 export const CORE_PLUGIN_NAME = "core";
 
@@ -39,7 +42,7 @@ function getCoreEntry(analysis: PluginAnalysis): PluginAnalysisEntry {
 
 export async function initializePlannedPlugins(app: Express, analysis: PluginAnalysis): Promise<void> {
   if (!analysis.entries.length) {
-    console.warn("No plugins found in src/plugins.");
+    logger.warn("No plugins found in src/plugins.");
     return;
   }
 
@@ -50,7 +53,7 @@ export async function initializePlannedPlugins(app: Express, analysis: PluginAna
   const skipped: PluginAnalysisEntry[] = [];
 
   if (analysis.staleConfigEntries.length > 0) {
-    console.warn("Found configuration entries for unknown plugins:", analysis.staleConfigEntries.join(", "));
+    logger.warn("Found configuration entries for unknown plugins:", analysis.staleConfigEntries.join(", "));
   }
 
   for (const entry of analysis.entries) {
@@ -76,7 +79,7 @@ export async function initializePlannedPlugins(app: Express, analysis: PluginAna
   }
 
   const total = analysis.entries.length;
-  console.log(`Plugins loaded: ${enabled.length} / ${total}`);
+  logger.info(`Plugins loaded: ${enabled.length} / ${total}`);
 
   if (enabled.length > 0) {
     const formatted = enabled
@@ -85,11 +88,11 @@ export async function initializePlannedPlugins(app: Express, analysis: PluginAna
         return summary ? `${summary.name}@${summary.version}` : name;
       })
       .join(", ");
-    console.log("\x1b[32m%s\x1b[0m", "Plugins enabled:", formatted);
+    logger.info("Plugins enabled:", formatted);
   }
 
   if (disabled.length > 0) {
-    console.log("\x1b[33m%s\x1b[0m", "Plugins disabled:", disabled.join(", "));
+    logger.info("Plugins disabled:", disabled.join(", "));
   }
 
   if (skipped.length > 0) {
@@ -100,6 +103,6 @@ export async function initializePlannedPlugins(app: Express, analysis: PluginAna
         return `${entry.info.name}${versionInfo} -> ${entry.plan.issues.join("; ")}`;
       })
       .join("; ");
-    console.log("\x1b[31m%s\x1b[0m", "Plugins skipped (dependency issues):", messages);
+    logger.warn("Plugins skipped (dependency issues):", messages);
   }
 }

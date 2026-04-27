@@ -19,7 +19,7 @@ interface SessionEntry {
   pending: Map<string, PendingPrompt>;
 }
 
-/* ── Session-scoped store ── */
+/* Session-scoped store */
 
 const store = new Map<string, SessionEntry>();
 
@@ -78,7 +78,7 @@ export function resolvePrompt(sessionId: string, promptId: string, selectedKey: 
   return true;
 }
 
-/* ── AsyncLocalStorage for session context ── */
+/* AsyncLocalStorage for session context */
 
 const sessionContext = new AsyncLocalStorage<string>();
 

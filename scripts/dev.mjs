@@ -1,4 +1,5 @@
 import { spawn } from "node:child_process";
+import { randomBytes } from "node:crypto";
 import net from "node:net";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -11,6 +12,7 @@ const portCheckTimeoutMs = 750;
 const startupTimeoutMs = 60_000;
 const useShell = process.platform === "win32";
 const managedChildren = [];
+const apiToken = process.env.KK_AGENT_API_TOKEN?.trim() || randomBytes(32).toString("hex");
 const services = [
   {
     name: "backend",
@@ -54,9 +56,14 @@ function prefixStream(stream, prefix, target) {
 }
 
 function spawnManaged(name, args) {
+  const childEnv = {
+    ...process.env,
+    KK_AGENT_API_TOKEN: apiToken,
+    NEXT_PUBLIC_KK_AGENT_API_TOKEN: apiToken,
+  };
   const child = spawn("npm", args, {
     cwd: repoRoot,
-    env: process.env,
+    env: childEnv,
     shell: useShell,
     stdio: ["ignore", "pipe", "pipe"],
     windowsHide: false,

@@ -1,10 +1,19 @@
 import { getStateDirPath } from "../../../lib/state.js";
 import type { ToolExecutionResult, ToolRuntimeContext } from "../../../loop/types.js";
 import type { McpServerConfig } from "../../../mcp/types.js";
-import { createSkill } from "../../../skills/service.js";
 import { loadSkillFromPath } from "../../../skills/lib/loader.js";
 import { createSkillContextMessage } from "../../../skills/lib/xml.js";
 import type { CreateSkillBody, SkillDefinition } from "../../../skills/types.js";
+import { getErrorMessage } from "../../../../lib/error.js";
+import { BadRequestError } from "../../../../lib/errors.js";
+
+type CreateSkillHandler = (body: CreateSkillBody) => Promise<SkillDefinition>;
+
+let createSkillHandler: CreateSkillHandler | undefined;
+
+export function setCreateSkillHandler(handler: CreateSkillHandler): void {
+  createSkillHandler = handler;
+}
 
 function readStringArray(value: unknown): string[] {
   return Array.isArray(value) ? value.filter((entry): entry is string => typeof entry === "string" && entry.trim().length > 0) : [];
@@ -12,8 +21,9 @@ function readStringArray(value: unknown): string[] {
 
 function readInstructionOverrides(value: unknown): Record<string, string> {
   if (!value || typeof value !== "object") return {};
+  const obj = value as Record<string, unknown>;
   return Object.fromEntries(
-    Object.entries(value as Record<string, unknown>)
+    Object.entries(obj)
       .filter((entry): entry is [string, string] => typeof entry[1] === "string" && entry[1].trim().length > 0),
   );
 }
@@ -65,7 +75,10 @@ export async function executeSkillTool(
 ): Promise<ToolExecutionResult | null> {
   if (toolName === "CreateSkill") {
     try {
-      const created = await createSkill({
+      if (!createSkillHandler) {
+        throw new BadRequestError("CreateSkill is not available before the skills service is initialized.");
+      }
+      const created = await createSkillHandler({
         name: String(args.name ?? ""),
         description: String(args.description ?? ""),
         instruction: String(args.instruction ?? ""),
@@ -79,7 +92,7 @@ export async function executeSkillTool(
       };
     } catch (error) {
       return {
-        content: (error as Error).message,
+        content: getErrorMessage(error),
         isError: true,
       };
     }
@@ -141,7 +154,7 @@ export async function executeSkillTool(
     };
   } catch (error) {
     return {
-      content: (error as Error).message,
+      content: getErrorMessage(error),
       isError: true,
     };
   }

@@ -1,6 +1,9 @@
 import { useCallback, useRef, useState } from "react";
 import { session as sessionApi } from "@/lib/api";
+import { createLogger } from "@/lib/logger";
 import type { AttachmentMeta } from "@/types/api";
+
+const logger = createLogger("attachments");
 
 export interface PendingAttachment extends AttachmentMeta {
   previewUrl?: string;
@@ -60,7 +63,7 @@ export function useAttachments() {
           const previewUrl = file.type.startsWith("image/") ? URL.createObjectURL(file) : undefined;
           results.push({ ...meta, previewUrl });
         } catch (err) {
-          console.warn("[attachments] Upload failed:", (err as Error).message);
+          logger.warn("Upload failed:", err instanceof Error ? err.message : String(err));
         }
       }
       if (results.length > 0) {

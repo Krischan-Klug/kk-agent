@@ -1,4 +1,10 @@
 import type { Request, Response } from "express";
+import { requireParam } from "../../lib/http.js";
+import { NotFoundError } from "../../lib/errors.js";
+import {
+  CreateAgentBodySchema,
+  UpdateAgentBodySchema,
+} from "../../lib/schemas.js";
 import {
   listAgents,
   getAgent,
@@ -9,18 +15,13 @@ import {
   getLoopState,
   subscribeLoopState,
 } from "./service.js";
-import type { CreateAgentBody, UpdateAgentBody } from "./types.js";
 
 export async function doList(_req: Request, res: Response): Promise<Response> {
   return res.json(listAgents());
 }
 
 export async function doGet(req: Request, res: Response): Promise<Response> {
-  try {
-    return res.json(getAgent(req.params.id));
-  } catch (err) {
-    return res.status(404).json({ error: (err as Error).message });
-  }
+  return res.json(getAgent(requireParam(req, "id")));
 }
 
 export async function doListSystemVariables(_req: Request, res: Response): Promise<Response> {
@@ -28,45 +29,31 @@ export async function doListSystemVariables(_req: Request, res: Response): Promi
 }
 
 export async function doCreate(req: Request, res: Response): Promise<Response> {
-  try {
-    const body = req.body as CreateAgentBody;
-    if (!body.name) {
-      return res.status(400).json({ error: "name is required" });
-    }
-    const agent = await createAgent(body);
-    return res.status(201).json(agent);
-  } catch (err) {
-    return res.status(400).json({ error: (err as Error).message });
-  }
+  const body = CreateAgentBodySchema.parse(req.body);
+  const agent = await createAgent(body);
+  return res.status(201).json(agent);
 }
 
 export async function doUpdate(req: Request, res: Response): Promise<Response> {
-  try {
-    const body = req.body as UpdateAgentBody;
-    const agent = await updateAgent(req.params.id, body);
-    return res.json(agent);
-  } catch (err) {
-    return res.status(404).json({ error: (err as Error).message });
-  }
+  const body = UpdateAgentBodySchema.parse(req.body);
+  const agent = await updateAgent(requireParam(req, "id"), body);
+  return res.json(agent);
 }
 
 export async function doDelete(req: Request, res: Response): Promise<Response> {
-  try {
-    await deleteAgent(req.params.id);
-    return res.json({ deleted: true });
-  } catch (err) {
-    return res.status(404).json({ error: (err as Error).message });
-  }
+  await deleteAgent(requireParam(req, "id"));
+  return res.json({ deleted: true });
 }
 
 export async function doGetLoopState(req: Request, res: Response): Promise<Response> {
-  const state = getLoopState(req.params.sessionId);
-  if (!state) return res.status(404).json({ error: "No active loop for this session" });
+  const sessionId = requireParam(req, "sessionId");
+  const state = getLoopState(sessionId);
+  if (!state) throw new NotFoundError("Active loop", sessionId);
   return res.json(state);
 }
 
 export async function doLoopStateStream(req: Request, res: Response): Promise<void> {
-  const { sessionId } = req.params;
+  const sessionId = requireParam(req, "sessionId");
 
   res.writeHead(200, {
     "Content-Type": "text/event-stream",

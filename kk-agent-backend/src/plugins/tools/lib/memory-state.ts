@@ -11,8 +11,8 @@ let userMemory: { facts: MemoryFact[] } = { facts: [] };
 const sessionMemory = new Map<string, MemoryFact[]>();
 const loadedSessions = new Set<string>();
 
-function persistSessionFacts(sessionId: string): void {
-  void saveSessionData(sessionId, FACTS_FILE, sessionMemory.get(sessionId) ?? []);
+async function persistSessionFacts(sessionId: string): Promise<void> {
+  await saveSessionData(sessionId, FACTS_FILE, sessionMemory.get(sessionId) ?? []);
 }
 
 export async function ensureSessionFactsLoaded(sessionId: string): Promise<void> {
@@ -51,11 +51,11 @@ export function listSessionFacts(sessionId: string): MemoryFact[] {
   return [...(sessionMemory.get(sessionId) ?? [])];
 }
 
-export function replaceSessionFacts(sessionId: string, facts: MemoryFact[]): MemoryFact[] {
+export async function replaceSessionFacts(sessionId: string, facts: MemoryFact[]): Promise<MemoryFact[]> {
   const normalized = normalizeFacts(facts);
   sessionMemory.set(sessionId, normalized);
   loadedSessions.add(sessionId);
-  persistSessionFacts(sessionId);
+  await persistSessionFacts(sessionId);
   return listSessionFacts(sessionId);
 }
 

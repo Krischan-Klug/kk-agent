@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { agent as agentApi, mcp as mcpApi, provider as providerApi, settings as settingsApi, skills as skillsApi, tools as toolsApi } from "@/lib/api";
+import { createLogger } from "@/lib/logger";
 import type { AgentDefinition, AppDefaults, CreateAgentBody, McpListItem, ModelInfo, ModelSettings, ProviderConfig, SkillDefinition } from "@/types/api";
 import { PageBody } from "@/components/Layout.styled";
 import { MasterDetailLayout } from "@/components/MasterDetail.styled";
@@ -7,6 +8,8 @@ import Spinner from "@/components/Spinner";
 import AgentList from "@/components/agent/AgentList";
 import AgentEditor from "@/components/agent/AgentEditor";
 import CreateAgentModal from "@/components/agent/CreateAgentModal";
+
+const logger = createLogger("agent");
 
 export default function AgentPage() {
   const [agents, setAgents] = useState<AgentDefinition[]>([]);
@@ -38,7 +41,7 @@ export default function AgentPage() {
       setModels(providerModels.models);
       setModelSettings(providerModels.modelSettings ?? {});
     } catch (err) {
-      console.error("[agent-models]", err);
+      logger.error("Failed to load models:", err);
       setModels([]);
       setModelSettings({});
     }
@@ -89,7 +92,7 @@ export default function AgentPage() {
       setShowCreate(false);
       setNewName("");
     } catch (err) {
-      console.error("[agent-create]", err);
+      logger.error("Failed to create agent:", err);
     }
   }
 
@@ -111,7 +114,7 @@ export default function AgentPage() {
       setEditAgent(structuredClone(updated));
       await loadProviderModels(updated.defaultProviderId);
     } catch (err) {
-      console.error("[agent-save]", err);
+      logger.error("Failed to save agent:", err);
     } finally {
       setSaving(false);
     }
@@ -130,7 +133,7 @@ export default function AgentPage() {
       }
       selectAgent(remaining[0].id);
     } catch (err) {
-      console.error("[agent-delete]", err);
+      logger.error("Failed to delete agent:", err);
     }
   }
 

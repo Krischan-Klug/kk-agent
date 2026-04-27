@@ -1,78 +1,46 @@
 import { basename } from "node:path";
-import type { SessionPromptDebug, SessionRecord, SessionState, CreateSessionBody, SSEEvent } from "./types.js";
+import { escapeXml, toCData } from "../lib/xml.js";
+import type { SessionPromptDebug, SessionRecord, SessionState, CreateSessionBody } from "./types.js";
 import * as store from "./lib/store.js";
-import {
-  buildAttachmentPreviewDataUrl,
-  clearSessionAttachments,
-  getSessionAttachmentsByIds,
-} from "./lib/attachments.js";
+import { clearSessionAttachments } from "./lib/attachments.js";
 import { buildPrompt, getSystemVariables } from "../systemprompt/index.js";
 import { getAllMcpsCached, getMcpTools, getRunnableMcpIds } from "../mcp/service.js";
-import {
-  buildResolvedSystemToolRuntime,
-} from "../tools/service.js";
+import { buildResolvedSystemToolRuntime } from "../tools/service.js";
 import { getMemoryPromptContext, getTaskSummary } from "../tools/service.js";
-import { buildActiveSkillCatalogSection, getSkillsRootDir, listSkills } from "../skills/service.js";
-import { runAgentLoop } from "../loop/lib/agent-loop.js";
-import {
-  buildSystemReminderMessages,
-  clearSystemReminders,
-  drainSystemReminders,
-  enqueueSystemReminder,
-} from "../loop/lib/system-reminder.js";
-import type { LoopOptions, ModeRuntimeConfig } from "../loop/types.js";
-import { getAgent, getLoopState, setLoopState, clearLoopState, createLoopAbortController, abortLoop, clearLoopAbortController } from "../agent/service.js";
+import { buildActiveSkillCatalogSection, listSkills } from "../skills/service.js";
+import { buildSystemReminderMessages, clearSystemReminders, enqueueSystemReminder } from "../loop/lib/system-reminder.js";
+import type { ModeRuntimeConfig } from "../loop/types.js";
+import { getAgent, getLoopState, clearLoopState } from "../agent/service.js";
 import { getDefaults } from "../lib/defaults.js";
 import { clearSessionFacts, clearTasks } from "../tools/service.js";
 import { clearFilesystemReadState } from "../tools/lib/filesystem/read-state.js";
-import {
-  emitPrompt,
-  waitForResponse,
-  registerSession,
-  unregisterSession,
-  runWithSessionId,
-} from "../tools/lib/user-interaction/interaction-store.js";
-import {
-  cloneMessages,
-  generateSessionName,
-} from "./lib/message-state.js";
-import {
-  buildRunnableMcpInstructions,
-  collectLinkedSkillIds,
-} from "./lib/tool-selection.js";
-import { buildRuntimeToolCollection, executeRuntimeTool } from "./lib/runtime-tools.js";
-import { resolveSessionDefaults, resolveSessionLlmRequestConfig } from "./lib/session-resolution.js";
-import {
-  buildDenialReminderBody,
-  clearSessionDenials,
-  listSessionDenials,
-  recordSessionDenial,
-} from "./lib/denial-log.js";
-import { getAgentMode, getEnabledAgentModes } from "../agent/lib/mode-config.js";
+import { buildRunnableMcpInstructions, collectLinkedSkillIds } from "./lib/tool-selection.js";
+import { buildRuntimeToolCollection } from "./lib/runtime-tools.js";
+import { resolveSessionDefaults } from "./lib/session-resolution.js";
+import { clearSessionDenials } from "./lib/denial-log.js";
+import { getAgentMode } from "../agent/lib/mode-config.js";
 import type { AgentDefinition } from "../agent/types.js";
-import type { ModeRuntimeRef, RuntimeToolDefinition, ToolRuntimeContext } from "../loop/types.js";
-import { attachmentRefBlock, createTranscriptMessage, getMessageText, textBlock, type TranscriptAttachmentRefBlock, type TranscriptBlock, type TranscriptMessage } from "../lib/transcript.js";
+import { createTranscriptMessage, getMessageText, textBlock, type TranscriptAttachmentRefBlock, type TranscriptMessage } from "../lib/transcript.js";
 import { compactLlmRequestConfig } from "../provider/lib/request-config.js";
-import { allowsVisionInputs } from "../provider/lib/capabilities.js";
-import { getLoadedSkillIds } from "../skills/lib/xml.js";
 import { getDefaultProviderId, getModelCapabilities } from "../provider/service.js";
+import { NotFoundError } from "../../lib/errors.js";
 
-function normalizeSessionRequestConfig<T extends { llmRequestConfig?: unknown }>(session: T): T {
+export function normalizeSessionRequestConfig<T extends { llmRequestConfig?: unknown }>(session: T): T {
   return {
     ...session,
     llmRequestConfig: compactLlmRequestConfig(session.llmRequestConfig as Parameters<typeof compactLlmRequestConfig>[0]),
   };
 }
 
-function toPublicSession(session: SessionRecord): SessionState {
+export function toPublicSession(session: SessionRecord): SessionState {
   const normalized = normalizeSessionRequestConfig(session);
   const { providerState: _providerState, ...publicSession } = normalized;
   return publicSession;
 }
 
-function getSessionRecordOrThrow(id: string): SessionRecord {
+export function getSessionRecordOrThrow(id: string): SessionRecord {
   const session = store.getSession(id);
-  if (!session) throw new Error(`Session "${id}" not found`);
+  if (!session) throw new NotFoundError("Session", id);
   return normalizeSessionRequestConfig(session);
 }
 
@@ -81,13 +49,13 @@ function intersectIds(sessionIds: string[], modeIds: string[]): string[] {
   return modeIds.filter((id) => sessionSet.has(id));
 }
 
-interface SessionModeRuntimeConfig extends ModeRuntimeConfig {
+export interface SessionModeRuntimeConfig extends ModeRuntimeConfig {
   runtimeNotices: string[];
   activeToolIds: string[];
   activeMcpIds: string[];
 }
 
-function buildModeRuntimeConfig(
+export function buildModeRuntimeConfig(
   session: Pick<SessionState, "activeToolIds" | "activeMcpIds" | "activeSkillIds" | "model">,
   agent: AgentDefinition,
   modeId: string,
@@ -171,18 +139,6 @@ function buildCurrentSystemPrompt(
   );
 }
 
-function escapeXml(value: string): string {
-  return value
-    .replaceAll("&", "&amp;")
-    .replaceAll("\"", "&quot;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;");
-}
-
-function toCData(text: string): string {
-  return `<![CDATA[${text.replaceAll("]]>", "]]]]><![CDATA[>")}]]>`;
-}
-
 function buildSystemReminder(type: string, body: string): string {
   return [
     `<system-reminder type="${escapeXml(type)}">`,
@@ -214,7 +170,7 @@ function buildAccessSection(title: string, lines: string[]): string[] {
   return ["", title, ...lines];
 }
 
-function buildRuntimeMetaMessages(input: {
+export function buildRuntimeMetaMessages(input: {
   sessionId: string;
   modeId: string;
   modeName: string;
@@ -269,7 +225,7 @@ function buildRuntimeMetaMessages(input: {
   return [createMetaReminder("runtime_snapshot", body)];
 }
 
-function buildAttachmentMetaMessages(input: {
+export function buildAttachmentMetaMessages(input: {
   attachments: Array<{
     id?: string;
     filename: string;
@@ -339,7 +295,7 @@ function formatAttachmentSize(bytes: number): string {
 export async function createSession(body: CreateSessionBody): Promise<SessionState> {
   const agent = getAgent(body.agentId);
   const defaults = await resolveSessionDefaults(agent, body, body.providerId ?? getDefaultProviderId());
-  return toPublicSession(store.createSession({
+  return toPublicSession(await store.createSession({
     agentId: body.agentId,
     providerId: defaults.providerId,
     model: defaults.model,
@@ -359,8 +315,8 @@ export function listSessions(): SessionState[] {
   return store.listSessions().map(toPublicSession);
 }
 
-export function deleteSession(id: string): void {
-  if (!store.deleteSession(id)) throw new Error(`Session "${id}" not found`);
+export async function deleteSession(id: string): Promise<void> {
+  if (!(await store.deleteSession(id))) throw new NotFoundError("Session", id);
   clearLoopState(id);
   clearTasks(id);
   clearSessionFacts(id);
@@ -445,307 +401,6 @@ export function getCurrentPromptDebug(sessionId: string): SessionPromptDebug {
   };
 }
 
-async function prepareLoopRun(sessionId: string, message: string, attachmentIds?: string[]) {
-  const session = getSessionRecordOrThrow(sessionId);
-  const agent = getAgent(session.agentId);
-
-  const userBlocks: TranscriptBlock[] = [textBlock(message)];
-  const attachmentMetaMessages: TranscriptMessage[] = [];
-  const capabilities = getModelCapabilities(session.providerId, session.model);
-  const visionSupported = allowsVisionInputs(capabilities?.visionSupport);
-
-  if (attachmentIds?.length) {
-    const attachments = await getSessionAttachmentsByIds(sessionId, attachmentIds);
-    if (attachments.length > 0) {
-      for (const att of attachments) {
-        const previewDataUrl = att.category === "image" && visionSupported
-          ? await buildAttachmentPreviewDataUrl(att)
-          : undefined;
-
-        userBlocks.push(attachmentRefBlock({
-          attachmentId: att.id,
-          filename: att.filename,
-          mimeType: att.mimeType,
-          category: att.category,
-          source: att.source,
-          size: att.size,
-          previewDataUrl,
-        }));
-      }
-
-      attachmentMetaMessages.push(...buildAttachmentMetaMessages({
-        attachments: attachments.map((att) => ({
-          id: att.id,
-          filename: att.filename,
-          mimeType: att.mimeType,
-          category: att.category,
-          size: att.size,
-        })),
-        visionSupport: capabilities?.visionSupport,
-      }));
-    }
-  }
-
-  const userMessage = createTranscriptMessage({
-    role: "user",
-    content: userBlocks,
-  });
-
-  const messages = [...session.messages, userMessage];
-  store.updateSession(sessionId, { messages });
-
-  const modeRuntimeConfigs = Object.fromEntries(
-    getEnabledAgentModes(agent).map((mode) => [mode.id, buildModeRuntimeConfig(session, agent, mode.id)]),
-  ) as Record<string, SessionModeRuntimeConfig>;
-
-  return {
-    session,
-    agent,
-    messages,
-    attachmentMetaMessages,
-    modeRuntimeConfigs,
-    reasoning: resolveSessionLlmRequestConfig(session),
-  };
-}
-
-function finalizeLoopSession(
-  sessionId: string,
-  session: SessionRecord,
-  messages: TranscriptMessage[],
-  finalResponse: string,
-  providerState?: SessionRecord["providerState"],
-  providerDebug?: SessionRecord["providerDebug"],
-): SessionRecord {
-  const nextMessages = cloneMessages(messages);
-  const patch: Partial<SessionRecord> = {
-    messages: nextMessages,
-    providerState,
-    providerDebug,
-  };
-  if (!session.name && finalResponse) {
-    const name = generateSessionName(finalResponse);
-    if (name) patch.name = name;
-  }
-  return normalizeSessionRequestConfig(store.updateSession(sessionId, patch));
-}
-
-function buildLoopRequest(
-  prepared: Awaited<ReturnType<typeof prepareLoopRun>>,
-  sessionId: string,
-  handlers: Partial<Pick<LoopOptions, "onAssistantBlockDelta" | "onAssistantMessage" | "onSystemNotice" | "onToolExecutionUpdate" | "onLoopState" | "onStats">> = {},
-) {
-  const loopMessages = cloneMessages(prepared.messages);
-  const activeModeConfig = prepared.modeRuntimeConfigs[prepared.session.activeModeId] as SessionModeRuntimeConfig;
-  const activeAgentModeConfig = getAgentMode(prepared.agent, prepared.session.activeModeId);
-  const loadedSkillIds = getLoadedSkillIds(loopMessages);
-
-  return {
-    agentId: prepared.session.agentId,
-    sessionId,
-    providerId: prepared.session.providerId,
-    messages: loopMessages,
-    model: prepared.session.model,
-    buildEphemeralMetaMessages: ({
-      iteration,
-      modeId,
-      modeName,
-      model,
-    }: {
-      sessionId: string;
-      agentId: string;
-      modeId: string;
-      modeName?: string;
-      model: string;
-      iteration: number;
-    }) => {
-      const runtimeMessages = buildRuntimeMetaMessages({
-        sessionId,
-        modeId,
-        modeName: modeName ?? activeModeConfig.modePromptName,
-        model,
-        runtimeVariables: activeModeConfig.runtimeVariables,
-      });
-      const denials = listSessionDenials(sessionId);
-      if (denials.length > 0) {
-        enqueueSystemReminder(sessionId, {
-          type: "tool_denied",
-          body: buildDenialReminderBody(denials),
-        });
-      }
-      const reminderMessages = buildSystemReminderMessages(drainSystemReminders(sessionId));
-      return iteration === 1
-        ? [...runtimeMessages, ...prepared.attachmentMetaMessages, ...reminderMessages]
-        : [...runtimeMessages, ...reminderMessages];
-    },
-    llmRequestConfig: prepared.reasoning,
-    providerState: prepared.session.providerState,
-    toolContext: {
-      values: {
-        loadedSkillIds,
-        availableSkillIds: activeModeConfig.activeSkillIds,
-        skillInstructionsById: activeModeConfig.skillInstructionsById,
-        skillsRootDir: getSkillsRootDir(),
-      },
-    },
-    modeConfigs: prepared.modeRuntimeConfigs,
-    activeModeId: prepared.session.activeModeId,
-    agentVariables: prepared.agent.variables ?? {},
-    executeTool: (
-      toolName: string,
-      args: Record<string, unknown>,
-      mode: ModeRuntimeRef,
-      _context: ToolRuntimeContext,
-    ) => {
-      const modeRuntimeConfig = prepared.modeRuntimeConfigs[mode.id] as SessionModeRuntimeConfig;
-      const runtimeTool = modeRuntimeConfig.runtimeToolsByName[toolName];
-      if (!runtimeTool) {
-        return Promise.resolve({
-          content: `Tool "${toolName}" ist im Mode "${mode.id}" nicht erlaubt oder nicht verfuegbar.`,
-          isError: true,
-        });
-      }
-      return executeRuntimeTool(runtimeTool, toolName, args, _context);
-    },
-    resolveToolPermission: async (
-      runtimeTool: RuntimeToolDefinition,
-      toolName: string,
-      args: Record<string, unknown>,
-      mode: ModeRuntimeRef,
-    ) => {
-      const policy = runtimeTool.resolvePermission
-        ? await runtimeTool.resolvePermission(toolName, args, mode)
-        : runtimeTool.permissionPolicy;
-
-      switch (policy.kind) {
-        case "allow":
-          return { allowed: true };
-        case "deny":
-          recordSessionDenial(sessionId, toolName, args, policy.reason ?? "denied by policy");
-          return { allowed: false, reason: policy.reason };
-        case "prompt": {
-          const promptId = `${toolName}-${Date.now()}`;
-          emitPrompt(sessionId, {
-            promptId,
-            question: policy.question,
-            choices: policy.choices,
-          });
-          const result = await waitForResponse(sessionId, promptId);
-          if (result.isError) {
-            recordSessionDenial(sessionId, toolName, args, result.content);
-            return { allowed: false, reason: result.content };
-          }
-          try {
-            const parsed = JSON.parse(result.content) as { selectedKey?: string };
-            if (parsed.selectedKey && policy.allowKeys.includes(parsed.selectedKey)) {
-              return { allowed: true };
-            }
-          } catch {
-            // fall through
-          }
-          const reason = policy.deniedMessage ?? `Tool "${toolName}" was rejected by the user.`;
-          recordSessionDenial(sessionId, toolName, args, reason);
-          return { allowed: false, reason };
-        }
-      }
-      return { allowed: true };
-    },
-    autonomous: activeModeConfig.modeBehavior === "autonomous",
-    autonomousBudget: activeAgentModeConfig.config.autonomousBudget,
-    ...handlers,
-  };
-}
-
-export async function chat(
-  sessionId: string,
-  message: string,
-  attachmentIds?: string[],
-): Promise<{ response: string; session: SessionState }> {
-  const prepared = await prepareLoopRun(sessionId, message, attachmentIds);
-  const abortController = createLoopAbortController(sessionId);
-  let result;
-  try {
-    result = await runWithSessionId(sessionId, () =>
-      runAgentLoop({ ...buildLoopRequest(prepared, sessionId), abortSignal: abortController.signal }),
-    );
-  } finally {
-    clearLoopAbortController(sessionId);
-  }
-  return {
-    response: result.finalResponse,
-    session: toPublicSession(finalizeLoopSession(
-      sessionId,
-      prepared.session,
-      result.messages,
-      result.finalResponse,
-      result.providerState,
-      result.providerDebug,
-    )),
-  };
-}
-
-export async function chatStream(
-  sessionId: string,
-  message: string,
-  emit: (event: SSEEvent) => void,
-  attachmentIds?: string[],
-): Promise<void> {
-  const prepared = await prepareLoopRun(sessionId, message, attachmentIds);
-  for (const notice of prepared.modeRuntimeConfigs[prepared.session.activeModeId]?.runtimeNotices ?? []) {
-    emit({ type: "system_notice", level: "warning", message: notice });
-  }
-
-  registerSession(sessionId, (payload) => {
-    emit({
-      type: "user_prompt",
-      promptId: payload.promptId,
-      question: payload.question,
-      choices: payload.choices,
-    });
-  });
-
-  const abortController = createLoopAbortController(sessionId);
-  try {
-    const result = await runWithSessionId(sessionId, () =>
-      runAgentLoop({ ...buildLoopRequest(prepared, sessionId, {
-        onAssistantBlockDelta: (messageId, block) => emit({ type: "assistant_block_delta", messageId, block }),
-        onAssistantMessage: (messageObject) => emit({ type: "assistant_message_complete", message: messageObject }),
-        onSystemNotice: (level, messageText) => emit({ type: "system_notice", level, message: messageText }),
-        onToolExecutionUpdate: (toolUseId, toolName, status, resultMessage, detail, summary) =>
-          emit({ type: "tool_execution_update", toolUseId, toolName, status, result: resultMessage, detail, summary }),
-        onLoopState: (state) => {
-          setLoopState(sessionId, state);
-          emit({ type: "turn_state", state });
-        },
-        onStats: (stats) =>
-          emit({
-            type: "stats",
-            inputTokens: stats.inputTokens,
-            outputTokens: stats.outputTokens,
-            reasoningTokens: stats.reasoningTokens,
-            source: stats.source,
-          }),
-      }), abortSignal: abortController.signal }),
-    );
-
-    const updated = finalizeLoopSession(
-      sessionId,
-      prepared.session,
-      result.messages,
-      result.finalResponse,
-      result.providerState,
-      result.providerDebug,
-    );
-    emit({ type: "done", session: toPublicSession(updated) });
-  } finally {
-    clearLoopAbortController(sessionId);
-    unregisterSession(sessionId);
-  }
-}
-
-export function abortSessionLoop(sessionId: string): boolean {
-  return abortLoop(sessionId);
-}
-
 export async function updateSession(id: string, body: Partial<CreateSessionBody>): Promise<SessionState> {
   const session = getSessionRecordOrThrow(id);
   const nextAgentId = body.agentId ?? session.agentId;
@@ -790,7 +445,7 @@ export async function updateSession(id: string, body: Partial<CreateSessionBody>
       : {}),
   };
 
-  const updated = normalizeSessionRequestConfig(store.updateSession(id, patch));
+  const updated = normalizeSessionRequestConfig(await store.updateSession(id, patch));
   if (switchingAgent) {
     clearLoopState(id);
   }
@@ -805,28 +460,4 @@ export async function updateSession(id: string, body: Partial<CreateSessionBody>
 
 export async function patchSession(id: string, body: Partial<CreateSessionBody>): Promise<SessionState> {
   return updateSession(id, body);
-}
-
-type SessionIdArrayField = "activeMcpIds" | "activeToolIds" | "activeSkillIds";
-
-function removeIdFromSessionField(id: string, field: SessionIdArrayField): void {
-  for (const session of listSessions()) {
-    const current = session[field];
-    if (!current.includes(id)) continue;
-    store.updateSession(session.id, {
-      [field]: current.filter((entry) => entry !== id),
-    });
-  }
-}
-
-export function removeMcpFromSessions(mcpId: string): void {
-  removeIdFromSessionField(mcpId, "activeMcpIds");
-}
-
-export function removeToolFromSessions(toolId: string): void {
-  removeIdFromSessionField(toolId, "activeToolIds");
-}
-
-export function removeSkillFromSessions(skillId: string): void {
-  removeIdFromSessionField(skillId, "activeSkillIds");
 }

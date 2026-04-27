@@ -14,7 +14,11 @@ function createCallId(): string {
   return `call_${randomUUID().replace(/-/g, "").slice(0, 24)}`;
 }
 
-function deepMerge(target: unknown, source: unknown): unknown {
+function isAssembledOutputItem(value: unknown): value is AssembledOutputItem {
+  return isPlainObject(value) && typeof value.type === "string";
+}
+
+function mergeTransportValue(target: unknown, source: unknown): unknown {
   if (typeof target === "string" && typeof source === "string") {
     return target + source;
   }
@@ -22,7 +26,7 @@ function deepMerge(target: unknown, source: unknown): unknown {
   if (isPlainObject(target) && isPlainObject(source)) {
     const merged: Record<string, unknown> = { ...target };
     for (const [key, value] of Object.entries(source)) {
-      merged[key] = key in merged ? deepMerge(merged[key], value) : value;
+      merged[key] = key in merged ? mergeTransportValue(merged[key], value) : value;
     }
     return merged;
   }
@@ -434,7 +438,7 @@ export function handleResponsesStreamingEvent(
   const eventType = typeof data.type === "string" ? data.type : "";
 
   if (eventType === "response.output_item.added") {
-    const item = isPlainObject(data.item) ? data.item as AssembledOutputItem : undefined;
+    const item = isPlainObject(data.item) && isAssembledOutputItem(data.item) ? data.item : undefined;
     if (!item) return { output: currentOutput };
     return { output: [...currentOutput, item] };
   }
@@ -494,7 +498,7 @@ export function handleResponsesStreamingEvent(
         : { type: "output_text", text: "" };
       content[contentIndex] = part;
       const key = deltaType === "output_text" || deltaType === "text" ? "text" : deltaType;
-      part[key] = deepMerge(part[key], delta);
+      part[key] = mergeTransportValue(part[key], delta);
       item.content = content;
       return { output: next };
     }
@@ -510,7 +514,7 @@ export function handleResponsesStreamingEvent(
           ? { ...summary[summaryIndex] }
           : { type: "summary_text", text: "" };
         summary[summaryIndex] = part;
-        part.text = String(deepMerge(part.text ?? "", delta));
+        part.text = String(mergeTransportValue(part.text ?? "", delta));
         item.summary = summary;
         return { output: next };
       }
@@ -525,20 +529,20 @@ export function handleResponsesStreamingEvent(
           ? { ...content[contentIndex] }
           : { type: "reasoning_text", text: "" };
         content[contentIndex] = part;
-        part.text = String(deepMerge(part.text ?? "", delta));
+        part.text = String(mergeTransportValue(part.text ?? "", delta));
         item.content = content;
         return { output: next };
       }
     }
 
     const key = deltaType === "output_text" || deltaType === "text" ? "text" : deltaType;
-    item[key] = deepMerge(item[key], delta);
+    item[key] = mergeTransportValue(item[key], delta);
     return { output: next };
   }
 
   if (eventType === "response.output_item.done") {
     const outputIndex = typeof data.output_index === "number" ? data.output_index : currentOutput.length - 1;
-    const item = isPlainObject(data.item) ? data.item as AssembledOutputItem : undefined;
+    const item = isPlainObject(data.item) && isAssembledOutputItem(data.item) ? data.item : undefined;
     if (!item) return { output: currentOutput };
     const next = [...currentOutput];
     if (outputIndex >= 0 && outputIndex < next.length) next[outputIndex] = item;
@@ -591,7 +595,7 @@ export function handleResponsesStreamingEvent(
     return {
       output: finalOutput,
       metadata: {
-        usage: isPlainObject(response?.usage) ? response!.usage as Record<string, unknown> : undefined,
+        usage: isPlainObject(response?.usage) ? (response!.usage as Record<string, unknown>) : undefined,
         done: true,
         responseId: typeof response?.id === "string" ? response.id : undefined,
       },

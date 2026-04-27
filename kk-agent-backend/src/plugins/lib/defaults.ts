@@ -1,35 +1,9 @@
+import { deepMerge } from "./deepMerge.js";
 import { loadState, saveState } from "./state.js";
-import type { ModeBehavior, AgentPromptSections, AutonomousBudget } from "../agent/types.js";
+import type { AppDefaults } from "@krischan-klug/kk-agent-contract";
 import { getBuiltInModeMeta, getDefaultAllowedToolNames, getDefaultToolIds } from "../agent/lib/modes.js";
 
 const STATE_FILE = "defaults.json";
-
-export interface BuiltInModeTemplateDefaults {
-  label: string;
-  modeInstruction: string;
-  autonomousBudget?: AutonomousBudget;
-  toolIds: string[];
-  allowedToolNames: string[];
-  toolInstructions: Record<string, string>;
-}
-
-export interface AppDefaults {
-  agent: {
-    defaultModeBehavior: ModeBehavior;
-    promptSections: AgentPromptSections;
-    modeTemplates: Record<ModeBehavior, BuiltInModeTemplateDefaults>;
-  };
-  retry: {
-    emptyResponseInstruction: string;
-    invalidToolInstruction: string;
-  };
-  reasoning: {
-    defaultEffort: string;
-  };
-  attachment: {
-    visionNotSupportedInstruction: string;
-  };
-}
 
 const CODE_DEFAULTS: AppDefaults = {
   agent: {
@@ -245,27 +219,6 @@ const CODE_DEFAULTS: AppDefaults = {
 };
 
 let cache: AppDefaults = { ...CODE_DEFAULTS };
-
-function deepMerge(target: Record<string, unknown>, source: Record<string, unknown>): Record<string, unknown> {
-  const result = { ...target };
-  for (const key of Object.keys(source)) {
-    const sourceVal = source[key];
-    const targetVal = target[key];
-    if (
-      sourceVal !== null &&
-      sourceVal !== undefined &&
-      typeof sourceVal === "object" &&
-      !Array.isArray(sourceVal) &&
-      typeof targetVal === "object" &&
-      targetVal !== null
-    ) {
-      result[key] = deepMerge(targetVal as Record<string, unknown>, sourceVal as Record<string, unknown>);
-    } else {
-      result[key] = sourceVal;
-    }
-  }
-  return result;
-}
 
 function mergeDefaults(target: AppDefaults, source: Partial<AppDefaults>): AppDefaults {
   return deepMerge(target as unknown as Record<string, unknown>, source as unknown as Record<string, unknown>) as unknown as AppDefaults;

@@ -15,6 +15,10 @@ import type {
 } from "./types.js";
 import type { ProviderAdapter } from "./lib/adapter.js";
 import { createLocalProviderAdapter } from "./lib/adapters/local.js";
+import { createLogger } from "../../lib/logger.js";
+import { NotFoundError } from "../../lib/errors.js";
+
+const logger = createLogger("provider");
 import {
   DEFAULT_REASONING_LEVELS,
   clampNumber,
@@ -65,19 +69,19 @@ function getProviderById(providerId: string): ProviderConfig | undefined {
 function resolveProvider(providerId?: string): ProviderConfig {
   if (providerId) {
     const provider = getProviderById(providerId);
-    if (!provider) throw new Error(`Provider not found: ${providerId}`);
+    if (!provider) throw new NotFoundError("Provider", providerId);
     return provider;
   }
 
   if (state.providers.length === 0) {
-    throw new Error("No provider configured");
+    throw new NotFoundError("Provider");
   }
 
   if (state.providers.length === 1) {
     return state.providers[0]!;
   }
 
-  throw new Error("providerId is required when multiple providers are configured");
+  throw new NotFoundError("Provider");
 }
 
 export function resolveProviderId(providerId?: string): string {
@@ -170,7 +174,7 @@ function getAdapter(providerId: string): ProviderAdapter {
   if (cached) return cached;
 
   const provider = getProviderById(providerId);
-  if (!provider) throw new Error(`Provider not found: ${providerId}`);
+  if (!provider) throw new NotFoundError("Provider", providerId);
 
   const adapter = adapterFactory(provider);
   adapterCache.set(providerId, adapter);
@@ -527,7 +531,7 @@ export async function initState(): Promise<void> {
   state = normalizeStoredProvidersState(loaded);
 
   if (state.providers.length > 0) {
-    console.log(`[provider] Loaded ${state.providers.length} provider(s).`);
+    logger.info(`Loaded ${state.providers.length} provider(s).`);
   }
 }
 
@@ -552,7 +556,7 @@ function credentialsChanged(
 
 export async function updateProvider(id: string, updates: UpdateProviderBody): Promise<ProviderConfig> {
   const index = state.providers.findIndex((provider) => provider.id === id);
-  if (index === -1) throw new Error(`Provider not found: ${id}`);
+  if (index === -1) throw new NotFoundError("Provider", id);
 
   const current = state.providers[index];
   state.providers[index] = { ...current, ...updates };

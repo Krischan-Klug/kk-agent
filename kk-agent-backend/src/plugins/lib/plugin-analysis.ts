@@ -6,7 +6,10 @@ import type {
   PluginPlan,
   PluginSummary,
 } from "../types.js";
-import type { LoadedPlugin, PluginAnalysis } from "./plugin-loader.js";
+import type { LoadedPlugin, PluginAnalysis } from "./plugin-types.js";
+import { createLogger } from "../../lib/logger.js";
+
+const logger = createLogger("plugins");
 
 function createRegistry(plugins: LoadedPlugin[]): Record<string, PluginSummary> {
   const registry: Record<string, PluginSummary> = {};
@@ -95,7 +98,7 @@ export function analysePlugins(plugins: LoadedPlugin[], config: PluginConfigMap)
   try {
     order = topologicalOrder(plugins);
   } catch (error) {
-    console.warn("Failed to compute plugin load order:", error);
+    logger.warn("Failed to compute plugin load order:", error);
     order = plugins.map((plugin) => plugin.name);
   }
 

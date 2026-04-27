@@ -82,6 +82,7 @@ export default function CreateMcpModal({ open, form, creating, onChange, onCreat
             <KeyValueEditor
               values={form.env ?? {}}
               onChange={(env) => onChange({ ...form, env })}
+              sensitiveValues
             />
           </FormField>
         </>

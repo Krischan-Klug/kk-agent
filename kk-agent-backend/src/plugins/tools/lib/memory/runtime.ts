@@ -21,7 +21,7 @@ export async function executeMemoryTool(
 ): Promise<ToolCallResult | null> {
   if (toolName !== "remember_facts") return null;
 
-  const facts = Array.isArray(args.facts) ? args.facts as MemoryFact[] : [];
+  const facts = Array.isArray(args.facts) ? args.facts.filter((f): f is MemoryFact => f && typeof f === "object" && "id" in f && "text" in f) : [];
   const scope = String(args.scope ?? "");
   if (scope !== "session" && scope !== "user") {
     return { content: "scope must be 'session' or 'user'", isError: true };
@@ -29,7 +29,7 @@ export async function executeMemoryTool(
 
   if (scope === "session") {
     const sessionId = getSessionIdOrThrow();
-    const next = replaceSessionFacts(sessionId, facts);
+    const next = await replaceSessionFacts(sessionId, facts);
     return { content: `Session-Memory aktualisiert.\n${memorySummary(next)}`, isError: false };
   }
 

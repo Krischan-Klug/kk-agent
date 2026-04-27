@@ -2,6 +2,10 @@ import type { ModulePlugin } from "../types.js";
 import routes from "./routes.js";
 import { initMcpService, getAllMcps } from "./service.js";
 import { startMcp } from "./lib/process-manager.js";
+import { createLogger } from "../../lib/logger.js";
+import { getErrorMessage } from "../../lib/error.js";
+
+const logger = createLogger("mcp");
 
 export const McpPlugin: ModulePlugin = {
   name: "mcp",
@@ -14,9 +18,9 @@ export const McpPlugin: ModulePlugin = {
       if (!mcp.active) continue;
       try {
         await startMcp(mcp);
-        console.log(`[mcp] Started MCP: ${mcp.name}`);
+        logger.info(`Started MCP: ${mcp.name}`);
       } catch (err) {
-        console.error(`[mcp] Failed to start MCP "${mcp.name}":`, (err as Error).message);
+        logger.error(`Failed to start MCP "${mcp.name}":`, getErrorMessage(err));
       }
     }
   },

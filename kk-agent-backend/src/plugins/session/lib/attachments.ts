@@ -4,6 +4,10 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { basename, extname, join, resolve } from "node:path";
 import { getStateDirPath } from "../../lib/state.js";
 import type { StoredAttachment, AttachmentMeta, AttachmentSource } from "./attachment-types.js";
+import { createLogger } from "../../../lib/logger.js";
+import { getErrorMessage } from "../../../lib/error.js";
+
+const logger = createLogger("attachments");
 
 interface AllowedType {
   category: "image" | "text" | "pdf";
@@ -98,9 +102,18 @@ async function ensureSourceDir(sessionId: string, source: AttachmentSource): Pro
 }
 
 function normalizeStoredAttachment(entry: StoredAttachment | Record<string, unknown>): StoredAttachment {
+  const base = typeof entry === "object" && entry !== null ? (entry as Record<string, unknown>) : {};
   return {
-    ...(entry as StoredAttachment),
-    source: (entry as StoredAttachment).source ?? "user",
+    id: String(base.id ?? ""),
+    sessionId: String(base.sessionId ?? ""),
+    filename: String(base.filename ?? ""),
+    mimeType: String(base.mimeType ?? ""),
+    category: base.category === "image" || base.category === "text" || base.category === "pdf" ? base.category : "text",
+    size: typeof base.size === "number" ? base.size : 0,
+    source: base.source === "user" || base.source === "assistant" ? base.source : "user",
+    storedPath: String(base.storedPath ?? ""),
+    extractedText: typeof base.extractedText === "string" ? base.extractedText : undefined,
+    createdAt: typeof base.createdAt === "number" ? base.createdAt : Date.now(),
   };
 }
 
@@ -321,7 +334,7 @@ async function extractPdfText(buffer: Buffer): Promise<string> {
     await parser.destroy();
     return result.text;
   } catch (err) {
-    console.warn("[attachments] PDF text extraction failed:", (err as Error).message);
+    logger.warn("PDF text extraction failed:", getErrorMessage(err));
     return "[PDF text extraction failed]";
   }
 }

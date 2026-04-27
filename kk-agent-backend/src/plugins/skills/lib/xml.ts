@@ -1,17 +1,6 @@
 import { createTranscriptMessage, textBlock, type TranscriptMessage } from "../../lib/transcript.js";
+import { escapeXml, toCData } from "../../lib/xml.js";
 import type { SkillDefinition } from "../types.js";
-
-function escapeXml(value: string): string {
-  return value
-    .replaceAll("&", "&amp;")
-    .replaceAll("\"", "&quot;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;");
-}
-
-function toCData(text: string): string {
-  return `<![CDATA[${text.replaceAll("]]>", "]]]]><![CDATA[>")}]]>`;
-}
 
 function buildToolRefs(toolIds: string[]): string {
   if (toolIds.length === 0) return "";

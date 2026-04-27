@@ -5,6 +5,7 @@ declare global {
     kkAgentDesktop?: {
       isDesktop: boolean;
       apiBaseUrl: string;
+      apiToken?: string;
       platform?: string;
       appVersion?: string;
     };

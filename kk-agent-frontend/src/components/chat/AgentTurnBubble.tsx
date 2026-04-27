@@ -108,20 +108,16 @@ export default function AgentTurnBubble({ sessionId, currentAgentName, mcps, tur
   const hasToggle = turn.streaming || iterations.length > 1 || totalToolCalls > 0;
   const finalReasoning = collectReasoning(finalIteration.assistant.content).trim();
   const finalText = collectText(finalIteration.assistant.content).trim();
-  const collapsedAttachments = collectLatestAttachments(iterations);
-  const activeToolCalls = collectStreamingActiveToolCalls(iterations);
-  const latestToolCall = collectLatestToolCall(iterations);
-  const targetCollapsedToolCalls = useMemo(() => {
-    if (turn.streaming) {
-      if (activeToolCalls.length > 0) return activeToolCalls;
-      return latestToolCall ? [latestToolCall] : [];
-    }
-    return latestToolCall ? [latestToolCall] : [];
-  }, [activeToolCalls, latestToolCall, turn.streaming]);
-  const targetCollapsedToolCallsSignature = useMemo(
-    () => buildToolCallSignature(targetCollapsedToolCalls),
-    [targetCollapsedToolCalls],
+  const collapsedAttachments = useMemo(() => collectLatestAttachments(iterations), [iterations]);
+  const activeToolCalls = useMemo(() => collectStreamingActiveToolCalls(iterations), [iterations]);
+  const latestToolCall = useMemo(() => collectLatestToolCall(iterations), [iterations]);
+  const targetCollapsedToolCalls = useMemo(
+    () => turn.streaming
+      ? (activeToolCalls.length > 0 ? activeToolCalls : latestToolCall ? [latestToolCall] : [])
+      : (latestToolCall ? [latestToolCall] : []),
+    [activeToolCalls, latestToolCall, turn.streaming],
   );
+  const targetCollapsedToolCallsSignature = buildToolCallSignature(targetCollapsedToolCalls);
   const [retainedToolCalls, setRetainedToolCalls] = useState<ActiveToolCall[]>(targetCollapsedToolCalls);
   const collapsedToolCalls = targetCollapsedToolCalls.length > 0 ? targetCollapsedToolCalls : retainedToolCalls;
   const showThinking = Boolean(turn.streaming) && finalReasoning.length > 0;

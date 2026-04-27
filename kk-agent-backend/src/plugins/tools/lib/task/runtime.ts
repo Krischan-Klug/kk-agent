@@ -24,7 +24,7 @@ export async function executeTaskTool(
   const sessionId = getSessionIdOrThrow();
 
   if (toolName === "create_tasks") {
-    const tasks = createTasks(sessionId, Array.isArray(args.tasks) ? args.tasks as TaskDraft[] : []);
+    const tasks = await createTasks(sessionId, Array.isArray(args.tasks) ? args.tasks.filter((t): t is TaskDraft => t && typeof t === "object" && "title" in t) : []);
     return {
       content: `Tasks erstellt.\n${taskSummary(tasks)}`,
       isError: false,
@@ -32,7 +32,7 @@ export async function executeTaskTool(
   }
 
   if (toolName === "update_tasks") {
-    const tasks = updateTasks(sessionId, Array.isArray(args.tasks) ? args.tasks as TaskUpdateInput[] : []);
+    const tasks = await updateTasks(sessionId, Array.isArray(args.tasks) ? args.tasks.filter((t): t is TaskUpdateInput => t && typeof t === "object" && "id" in t) : []);
     return {
       content: `Tasks aktualisiert.\n${taskSummary(tasks)}`,
       isError: false,
@@ -40,7 +40,7 @@ export async function executeTaskTool(
   }
 
   if (toolName === "solve_tasks") {
-    const tasks = solveTasks(sessionId, Array.isArray(args.taskIds) ? args.taskIds as string[] : []);
+    const tasks = await solveTasks(sessionId, Array.isArray(args.taskIds) ? args.taskIds.filter((id): id is string => typeof id === "string") : []);
     return {
       content: `Tasks abgeschlossen.\n${taskSummary(tasks)}`,
       isError: false,

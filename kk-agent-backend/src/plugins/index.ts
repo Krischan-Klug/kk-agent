@@ -4,6 +4,9 @@ import { analysePlugins } from "./lib/plugin-analysis.js";
 import { initializePlannedPlugins } from "./lib/plugin-bootstrap.js";
 import { loadPluginConfig, writePluginConfig } from "./lib/plugin-config.js";
 import { internalPluginEntries } from "./internal-registry.js";
+import { createLogger } from "../lib/logger.js";
+
+const logger = createLogger("plugins");
 
 async function preparePlugins() {
   const config = await loadPluginConfig();
@@ -59,7 +62,7 @@ async function preparePlugins() {
     try {
       await writePluginConfig(config);
     } catch (error) {
-      console.warn("Failed to update plugins.config.json:", error);
+      logger.warn("Failed to update plugins.config.json:", error);
     }
   }
 

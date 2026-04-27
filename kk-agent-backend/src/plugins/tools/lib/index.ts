@@ -24,6 +24,7 @@ import { skillDefinition } from "./skill/definition.js";
 import { executeSkillTool } from "./skill/runtime.js";
 import { skillTools } from "./skill/tools.js";
 import type { ToolExecutionResult, ToolRuntimeContext } from "../../loop/types.js";
+import { getErrorMessage } from "../../../lib/error.js";
 
 type SystemToolModule = {
   definition: McpServerConfig;
@@ -35,6 +36,10 @@ type SystemToolModule = {
     context?: ToolRuntimeContext,
   ) => Promise<ToolExecutionResult | null>;
 };
+
+function isSystemMcpKey(value: unknown): value is SystemMcpKey {
+  return typeof value === "string" && value in SYSTEM_TOOL_MODULES;
+}
 
 const SYSTEM_TOOL_MODULES: Record<SystemMcpKey, SystemToolModule> = {
   filesystem: {
@@ -104,15 +109,13 @@ export function getDefaultSystemMcpMap(): Record<SystemMcpKey, McpServerConfig> 
 export function getSystemToolDefinitions(activeMcpIds: string[]): McpToolDefinition[] {
   const tools: McpToolDefinition[] = [];
   for (const id of activeMcpIds) {
-    const key = id as SystemMcpKey;
-    if (SYSTEM_TOOL_MODULES[key]) tools.push(...SYSTEM_TOOL_MODULES[key].tools);
+    if (isSystemMcpKey(id)) tools.push(...SYSTEM_TOOL_MODULES[id].tools);
   }
   return tools;
 }
 
 export function getSystemToolsForMcp(id: string): McpToolDefinition[] {
-  const key = id as SystemMcpKey;
-  return SYSTEM_TOOL_MODULES[key]?.tools ?? [];
+  return isSystemMcpKey(id) ? SYSTEM_TOOL_MODULES[id].tools : [];
 }
 
 export async function executeSystemTool(
@@ -122,10 +125,10 @@ export async function executeSystemTool(
   context?: ToolRuntimeContext,
 ): Promise<ToolExecutionResult | null> {
   try {
-    const key = mcp.systemKey as SystemMcpKey | undefined;
-    if (!key || !SYSTEM_TOOL_MODULES[key]) return null;
+    const key = mcp.systemKey;
+    if (!isSystemMcpKey(key)) return null;
     return await SYSTEM_TOOL_MODULES[key].execute(mcp, toolName, args, context);
   } catch (err) {
-    return { content: (err as Error).message, isError: true };
+    return { content: getErrorMessage(err), isError: true };
   }
 }

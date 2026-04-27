@@ -10,6 +10,12 @@ import type { CreateSkillBody, SkillDefinition, SkillMetadata, UpdateSkillBody }
 import { loadSkillFromPath, writeSkillBundle } from "./lib/loader.js";
 import { buildSkillsCatalogSection } from "./lib/xml.js";
 import { isModeBehavior } from "../agent/lib/modes.js";
+import { createLogger } from "../../lib/logger.js";
+import { getErrorMessage } from "../../lib/error.js";
+import { NotFoundError, ValidationError } from "../../lib/errors.js";
+import { setCreateSkillHandler } from "../tools/lib/skill/runtime.js";
+
+const logger = createLogger("skills");
 
 const DEFAULT_ALLOWED_MODE_BEHAVIORS: ModeBehavior[] = ["plan", "edit"];
 const DEFAULT_CREATE_SKILL_ID = "create-skill";
@@ -97,7 +103,7 @@ async function reloadSkills(): Promise<void> {
         ...normalizeSkillMetadata(loaded.metadata),
       });
     } catch (error) {
-      console.warn(`[skills] Skipping invalid skill "${skillId}": ${(error as Error).message}`);
+      logger.warn(`Skipping invalid skill "${skillId}": ${getErrorMessage(error)}`);
     }
   }
 
@@ -115,7 +121,7 @@ function buildUniqueId(name: string): string {
 
 function getSkillOrThrow(id: string): SkillDefinition {
   const skill = cachedSkills.find((entry) => entry.id === id);
-  if (!skill) throw new Error(`Skill "${id}" not found`);
+  if (!skill) throw new NotFoundError("Skill", id);
   return skill;
 }
 
@@ -159,6 +165,7 @@ async function ensureDefaultSkills(): Promise<void> {
 
 export async function initSkillService(nextRootDir?: string): Promise<void> {
   skillsRootDir = resolve(nextRootDir ?? getStateDirPath("skills"));
+  setCreateSkillHandler(createSkill);
   await ensureSkillsRoot();
   await ensureDefaultSkills();
   await reloadSkills();
@@ -211,9 +218,9 @@ export async function createSkill(body: CreateSkillBody): Promise<SkillDefinitio
   const name = body.name?.trim();
   const description = body.description?.trim();
   const instruction = body.instruction?.trim();
-  if (!name) throw new Error("name is required");
-  if (!description) throw new Error("description is required");
-  if (!instruction) throw new Error("instruction is required");
+  if (!name) throw new ValidationError("name is required");
+  if (!description) throw new ValidationError("description is required");
+  if (!instruction) throw new ValidationError("instruction is required");
 
   const id = buildUniqueId(name);
   await writeSkillBundleForId(id, {
@@ -248,6 +255,6 @@ export async function deleteSkill(id: string): Promise<void> {
   await rm(skillDir, { recursive: true, force: true });
   await reloadSkills();
   if (cachedSkills.some((skill) => skill.id === id)) {
-    throw new Error(`Skill "${id}" could not be deleted`);
+    throw new NotFoundError("Skill", id);
   }
 }

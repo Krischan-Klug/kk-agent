@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { session as sessionApi } from "@/lib/api";
+import { createLogger } from "@/lib/logger";
 import { emitAppEvent, SESSION_CHANGED_EVENT } from "@/lib/appEvents";
 import {
   getChatStreamSnapshot,
@@ -18,6 +19,8 @@ import type {
 } from "@/types/api";
 import type { PendingAttachment } from "@/hooks/useAttachments";
 import type { ActiveToolCall, StreamingTurnState } from "@/components/chat/types";
+
+const logger = createLogger("chat-stream");
 
 type Options = {
   session: SessionState | null;
@@ -385,13 +388,13 @@ export function useChatStreaming({
             if (debugOpen && mountedRef.current) loadDebugData(event.session.id);
             break;
           case "error":
-            console.error("[chat-stream]", event.message);
+            logger.error(event.message);
             resetStreamingState();
             break;
         }
       }, attachmentIds.length > 0 ? attachmentIds : undefined);
     } catch (err) {
-      console.error("[chat-stream]", err);
+      logger.error(err);
       resetStreamingState();
     } finally {
       updateChatStreamSnapshot(session.id, (previous) => ({ ...previous, sending: false }));
@@ -416,7 +419,7 @@ export function useChatStreaming({
       await sessionApi.respondToPrompt(session.id, streamSnapshot.pendingPrompt.promptId, selectedKey);
       updateChatStreamSnapshot(session.id, (previous) => ({ ...previous, pendingPrompt: null }));
     } catch (err) {
-      console.error("[chat-prompt-response]", err);
+      logger.error(err);
     }
   }, [session, streamSnapshot.pendingPrompt]);
 

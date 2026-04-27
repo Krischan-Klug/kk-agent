@@ -33,6 +33,6 @@ export async function startServer(options: { host?: string; port?: number } = {}
     app,
     server,
     host,
-    port: (address as AddressInfo).port,
+    port: address.port,
   };
 }

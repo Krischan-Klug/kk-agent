@@ -1,6 +1,6 @@
 import { buildCapabilityInstructions } from "../../systemprompt/index.js";
 import { getAllMcpsCached, getKnownMcpIds, getRunnableMcpIds } from "../../mcp/service.js";
-import { getInternalToolById, getKnownSystemMcpIds, getRunnableSystemMcpIds } from "../../tools/service.js";
+import { getSystemMcpById, getKnownSystemMcpIds, getRunnableSystemMcpIds } from "../../tools/service.js";
 import { listSkills } from "../../skills/service.js";
 import { filterToKnownIds } from "../../lib/ids.js";
 import type { AgentDefinition, AgentModeDefinition } from "../../agent/types.js";
@@ -72,7 +72,7 @@ export function collectLinkedSkillIds(
 ): string[] {
   const collected = new Set<string>();
   for (const id of activeToolIds) {
-    const tool = getInternalToolById(id);
+    const tool = getSystemMcpById(id);
     for (const skillId of tool?.skillIds ?? []) collected.add(skillId);
   }
   for (const mcp of getAllMcpsCached()) {

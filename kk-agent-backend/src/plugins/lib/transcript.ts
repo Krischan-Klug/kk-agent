@@ -1,12 +1,6 @@
 export {
   attachmentRefBlock,
-  collectAttachments,
-  collectReasoning,
-  collectText,
-  collectToolResults,
-  collectToolUses,
   createTranscriptMessage,
-  getAttachmentRefs,
   getMessageReasoning,
   getMessageText,
   getToolResults,
@@ -21,16 +15,9 @@ export {
 } from "@krischan-klug/kk-agent-contract";
 
 export type {
-  AttachmentCategory,
-  AttachmentSource,
   TranscriptAttachmentRefBlock,
   TranscriptBlock,
   TranscriptMessage,
-  TranscriptReasoningBlock,
-  TranscriptRole,
   TranscriptStopReason,
-  TranscriptTextBlock,
-  TranscriptToolResultBlock,
   TranscriptToolUseBlock,
-  TranscriptUsage,
 } from "@krischan-klug/kk-agent-contract";

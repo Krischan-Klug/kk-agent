@@ -30,20 +30,6 @@ export class ValidationError extends AppError {
   }
 }
 
-export class ProviderError extends AppError {
-  public readonly status?: number;
-  public readonly fatal: boolean;
-
-  constructor(message: string, options: { status?: number; fatal?: boolean } = {}) {
-    super(message, {
-      statusCode: options.status && options.status >= 400 && options.status < 600 ? options.status : 502,
-      code: "PROVIDER_ERROR",
-    });
-    this.status = options.status;
-    this.fatal = options.fatal ?? false;
-  }
-}
-
 export class ConflictError extends AppError {
   constructor(message: string) {
     super(message, {

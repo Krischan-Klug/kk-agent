@@ -7,7 +7,7 @@ const REGISTRY_PATH = getStatePath("mcps.json");
 const SYSTEM_IDS = new Set<string>(SYSTEM_MCP_KEYS);
 const DEFAULT_REGISTRY: { mcps: McpServerConfig[] } = { mcps: [] };
 
-export async function loadRegistry(): Promise<McpServerConfig[]> {
+async function loadRegistry(): Promise<McpServerConfig[]> {
   if (!existsSync(REGISTRY_PATH)) {
     await writeJsonFile(REGISTRY_PATH, DEFAULT_REGISTRY);
     return DEFAULT_REGISTRY.mcps;
@@ -18,7 +18,7 @@ export async function loadRegistry(): Promise<McpServerConfig[]> {
     .map((mcp) => ({ ...mcp, source: "custom" as const }));
 }
 
-export async function saveRegistry(mcps: McpServerConfig[]): Promise<void> {
+async function saveRegistry(mcps: McpServerConfig[]): Promise<void> {
   await writeJsonFile(REGISTRY_PATH, { mcps });
 }
 

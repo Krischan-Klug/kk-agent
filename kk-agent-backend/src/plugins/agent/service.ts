@@ -215,10 +215,6 @@ export async function removeMcpFromAgents(mcpId: string): Promise<void> {
   return removeFromAllAgents(mcpId, "mcp");
 }
 
-export async function removeToolFromAgents(toolId: string): Promise<void> {
-  return removeFromAllAgents(toolId, "tool");
-}
-
 export async function removeSkillFromAgents(skillId: string): Promise<void> {
   return removeFromAllAgents(skillId, "skill");
 }

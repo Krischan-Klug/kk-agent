@@ -36,7 +36,7 @@ export function clearActiveSessionId(): void {
   emitSessionStateChange();
 }
 
-export function getSidebarCollapsed(defaultValue = true): boolean {
+function getSidebarCollapsed(defaultValue = true): boolean {
   return getStoredBoolean(SIDEBAR_COLLAPSED_KEY, defaultValue);
 }
 

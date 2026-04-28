@@ -106,14 +106,6 @@ export function getDefaultSystemMcpMap(): Record<SystemMcpKey, McpServerConfig> 
   ) as Record<SystemMcpKey, McpServerConfig>;
 }
 
-export function getSystemToolDefinitions(activeMcpIds: string[]): McpToolDefinition[] {
-  const tools: McpToolDefinition[] = [];
-  for (const id of activeMcpIds) {
-    if (isSystemMcpKey(id)) tools.push(...SYSTEM_TOOL_MODULES[id].tools);
-  }
-  return tools;
-}
-
 export function getSystemToolsForMcp(id: string): McpToolDefinition[] {
   return isSystemMcpKey(id) ? SYSTEM_TOOL_MODULES[id].tools : [];
 }

@@ -227,7 +227,7 @@ export const ModelSettingsBodySchema = z.object({
 
 /* Tools / Memory / Tasks */
 
-export const TaskItemSchema = z.object({
+const TaskItemSchema = z.object({
   id: z.string(),
   title: z.string(),
   status: z.enum(["pending", "in_progress", "completed"]),
@@ -238,7 +238,7 @@ export const TaskItemsBodySchema = z.object({
   tasks: z.array(TaskItemSchema).optional(),
 });
 
-export const MemoryFactSchema = z.object({
+const MemoryFactSchema = z.object({
   id: z.string(),
   text: z.string(),
 });

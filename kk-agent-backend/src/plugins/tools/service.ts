@@ -9,7 +9,7 @@ import type {
 import { buildSystemMcps, createOverrideState, loadSystemMcpOverrides, saveSystemMcpOverrides } from "./lib/system-registry.js";
 import { executeSystemTool, getSystemToolsForMcp } from "./lib/index.js";
 import { clearSessionFacts, getMemoryPromptContext, initMemoryState, listSessionFacts, listUserFacts, replaceSessionFacts, replaceUserFacts } from "./lib/memory-state.js";
-import { clearTasks, createTasks, getTaskSummary, listTasks, replaceTasks, solveTasks, updateTasks } from "./lib/task-state.js";
+import { clearTasks, getTaskSummary, listTasks, replaceTasks } from "./lib/task-state.js";
 import type { MemoryFact, TaskItem } from "./types.js";
 import {
   getDefaultPathForScope,
@@ -261,7 +261,7 @@ export async function toggleSystemMcp(id: string, active: boolean): Promise<McpS
   return next;
 }
 
-export async function updateSystemMcpConfig(id: string, body: UpdateMcpBody): Promise<McpServerConfig> {
+async function updateSystemMcpConfig(id: string, body: UpdateMcpBody): Promise<McpServerConfig> {
   const systemMcp = getSystemMcpById(id);
   if (!systemMcp) throw new NotFoundError("System-MCP", id);
 
@@ -312,7 +312,6 @@ export async function executeSystemToolForId(
 export {
   clearSessionFacts,
   clearTasks,
-  createTasks,
   getMemoryPromptContext,
   getTaskSummary,
   listSessionFacts,
@@ -321,6 +320,4 @@ export {
   replaceSessionFacts,
   replaceTasks,
   replaceUserFacts,
-  solveTasks,
-  updateTasks,
 };

@@ -8,15 +8,15 @@ import { getEnabledAgentModes } from "../../agent/lib/mode-config.js";
 
 const REQUIRED_SESSION_TOOL_IDS = ["attachment"];
 
-export function sanitizeMcpIds(mcpIds: string[]): string[] {
+function sanitizeMcpIds(mcpIds: string[]): string[] {
   return filterToKnownIds(mcpIds, getKnownMcpIds());
 }
 
-export function sanitizeToolIds(toolIds: string[]): string[] {
+function sanitizeToolIds(toolIds: string[]): string[] {
   return filterToKnownIds(toolIds, getKnownSystemMcpIds(), REQUIRED_SESSION_TOOL_IDS);
 }
 
-export function sanitizeSkillIds(skillIds: string[]): string[] {
+function sanitizeSkillIds(skillIds: string[]): string[] {
   const knownActive = listSkills().filter((skill) => skill.active).map((skill) => skill.id);
   return filterToKnownIds(skillIds, knownActive);
 }

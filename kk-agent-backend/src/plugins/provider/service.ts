@@ -1,12 +1,11 @@
 import { randomUUID } from "node:crypto";
-import type { UnifiedRequest, UnifiedResponse, OnChunkFn, ProviderNotice, TokenStats } from "./lib/types.js";
+import type { UnifiedRequest, UnifiedResponse, OnChunkFn, ProviderNotice } from "./lib/types.js";
 import type {
   ContinuationMode,
   CreateProviderBody,
   EndpointType,
   ModelCapabilities,
   ModelInfo,
-  ModelObservation,
   ModelSettings,
   ObservationSupportState,
   ProviderConfig,
@@ -20,7 +19,6 @@ import { NotFoundError } from "../../lib/errors.js";
 
 const logger = createLogger("provider");
 import {
-  DEFAULT_REASONING_LEVELS,
   clampNumber,
   coerceReasoningSelection,
   getEndpointCapabilities,
@@ -36,22 +34,28 @@ import {
   mergeLlmRequestConfigs,
   sanitizeEndpointExtraBody,
 } from "./lib/request-config.js";
-import { estimateRequestTokens } from "./lib/token-estimator.js";
 import { loadState, saveState } from "../lib/state.js";
 import { getMessageReasoning } from "../lib/transcript.js";
+import {
+  applyEndpointSupport,
+  applyReasoningSupport,
+  applyResponsesStatefulness,
+  applyVisionSupport,
+  hasObservationUpdate,
+  mergeObservation,
+  normalizeObservation,
+  setObservedEndpointSupport,
+  setObservedReasoningSupport,
+  setObservedResponsesStatefulness,
+  setObservedVisionSupport,
+  type ObservationUpdate,
+} from "./lib/observations.js";
 
 const STATE_FILE = "providers.json";
 const DEFAULT_STATE: ProvidersState = {
   providers: [],
   modelSettings: {},
   observedCapabilities: {},
-};
-
-type ObservationUpdate = {
-  endpointSupport?: Partial<Record<EndpointType, ObservationSupportState>>;
-  reasoningSupport?: Partial<Record<EndpointType, ObservationSupportState>>;
-  responsesStatefulness?: ObservationSupportState;
-  visionSupport?: ObservationSupportState;
 };
 
 let state: ProvidersState = structuredClone(DEFAULT_STATE);
@@ -107,30 +111,6 @@ function normalizeStoredModelSettings(settings: ModelSettings | undefined): Mode
       extraBody: storedConfig?.extraBody,
     }),
   });
-}
-
-function normalizeObservationSupportRecord(
-  value?: Partial<Record<EndpointType, ObservationSupportState>>,
-): Partial<Record<EndpointType, ObservationSupportState>> | undefined {
-  if (!value) return undefined;
-  const next = Object.fromEntries(
-    Object.entries(value).filter(([, support]) => support === "supported" || support === "unsupported"),
-  ) as Partial<Record<EndpointType, ObservationSupportState>>;
-  return Object.keys(next).length > 0 ? next : undefined;
-}
-
-function normalizeObservation(record: ModelObservation): ModelObservation {
-  return {
-    endpointSupport: normalizeObservationSupportRecord(record.endpointSupport),
-    reasoningSupport: normalizeObservationSupportRecord(record.reasoningSupport),
-    responsesStatefulness: record.responsesStatefulness === "supported" || record.responsesStatefulness === "unsupported"
-      ? record.responsesStatefulness
-      : undefined,
-    visionSupport: record.visionSupport === "supported" || record.visionSupport === "unsupported"
-      ? record.visionSupport
-      : undefined,
-    lastObservedAt: record.lastObservedAt,
-  };
 }
 
 function normalizeStoredProvidersState(nextState: ProvidersState): ProvidersState {
@@ -207,176 +187,6 @@ async function persist(): Promise<void> {
 
 function getObservationKey(providerId: string, modelId: string): string {
   return `${providerId}::${modelId}`;
-}
-
-function setObservedEndpointSupport(
-  update: ObservationUpdate,
-  endpoint: EndpointType,
-  support: ObservationSupportState,
-): ObservationUpdate {
-  return {
-    ...update,
-    endpointSupport: {
-      ...(update.endpointSupport ?? {}),
-      [endpoint]: support,
-    },
-  };
-}
-
-function setObservedReasoningSupport(
-  update: ObservationUpdate,
-  endpoint: EndpointType,
-  support: ObservationSupportState,
-): ObservationUpdate {
-  return {
-    ...update,
-    reasoningSupport: {
-      ...(update.reasoningSupport ?? {}),
-      [endpoint]: support,
-    },
-  };
-}
-
-function setObservedResponsesStatefulness(
-  update: ObservationUpdate,
-  support: ObservationSupportState,
-): ObservationUpdate {
-  return {
-    ...update,
-    responsesStatefulness: support,
-  };
-}
-
-function setObservedVisionSupport(
-  update: ObservationUpdate,
-  support: ObservationSupportState,
-): ObservationUpdate {
-  return {
-    ...update,
-    visionSupport: support,
-  };
-}
-
-function mergeObservation(existing: ModelObservation | undefined, update: ObservationUpdate): ModelObservation {
-  return normalizeObservation({
-    endpointSupport: {
-      ...(existing?.endpointSupport ?? {}),
-      ...(update.endpointSupport ?? {}),
-    },
-    reasoningSupport: {
-      ...(existing?.reasoningSupport ?? {}),
-      ...(update.reasoningSupport ?? {}),
-    },
-    responsesStatefulness: update.responsesStatefulness ?? existing?.responsesStatefulness,
-    visionSupport: update.visionSupport ?? existing?.visionSupport,
-    lastObservedAt: new Date().toISOString(),
-  });
-}
-
-function hasObservationUpdate(update: ObservationUpdate): boolean {
-  return Object.keys(update.endpointSupport ?? {}).length > 0
-    || Object.keys(update.reasoningSupport ?? {}).length > 0
-    || update.responsesStatefulness !== undefined
-    || update.visionSupport !== undefined;
-}
-
-function applyEndpointSupport(
-  capabilities: ModelCapabilities,
-  endpoint: EndpointType,
-  support: ObservationSupportState,
-): ModelCapabilities {
-  return {
-    ...capabilities,
-    supportedEndpoints: capabilities.supportedEndpoints.includes(endpoint)
-      ? capabilities.supportedEndpoints
-      : [...capabilities.supportedEndpoints, endpoint],
-    endpointCapabilities: {
-      ...capabilities.endpointCapabilities,
-      [endpoint]: capabilities.endpointCapabilities[endpoint] ?? getEndpointCapabilities(capabilities, endpoint),
-    },
-    transportProfiles: {
-      ...capabilities.transportProfiles,
-      [endpoint]: {
-        ...getEndpointTransportProfile(capabilities, endpoint),
-        supported: support !== "unsupported",
-      },
-    },
-  };
-}
-
-function applyReasoningSupport(
-  capabilities: ModelCapabilities,
-  endpoint: EndpointType,
-  support: ObservationSupportState,
-): ModelCapabilities {
-  if (support !== "supported") return capabilities;
-
-  const allowedEfforts = (capabilities.reasoning?.allowedEfforts ?? capabilities.reasoningLevels).length > 0
-    ? (capabilities.reasoning?.allowedEfforts ?? capabilities.reasoningLevels)
-    : [...DEFAULT_REASONING_LEVELS];
-
-  const nextCapabilities: ModelCapabilities = {
-    ...capabilities,
-    supportsReasoning: true,
-    reasoningSource: "observed",
-    reasoningControl: capabilities.reasoningControl === "none" ? "effort" : capabilities.reasoningControl,
-    reasoningLevels: allowedEfforts,
-    reasoning: {
-      ...capabilities.reasoning,
-      allowedEfforts,
-    },
-  };
-
-  return {
-    ...nextCapabilities,
-    transportProfiles: {
-      ...nextCapabilities.transportProfiles,
-      "chat-completions": {
-        ...getEndpointTransportProfile(nextCapabilities, "chat-completions"),
-        reasoningTransport: nextCapabilities.reasoningControl === "on-off"
-          ? "chat-completions-on-off"
-          : "chat-completions-effort",
-      },
-      responses: {
-        ...getEndpointTransportProfile(nextCapabilities, "responses"),
-        reasoningTransport: "responses-effort",
-      },
-      [endpoint]: {
-        ...getEndpointTransportProfile(nextCapabilities, endpoint),
-        reasoningTransport: endpoint === "responses"
-          ? "responses-effort"
-          : nextCapabilities.reasoningControl === "on-off"
-            ? "chat-completions-on-off"
-            : "chat-completions-effort",
-      },
-    },
-  };
-}
-
-function applyResponsesStatefulness(
-  capabilities: ModelCapabilities,
-  support: ObservationSupportState,
-): ModelCapabilities {
-  return {
-    ...capabilities,
-    transportProfiles: {
-      ...capabilities.transportProfiles,
-      responses: {
-        ...getEndpointTransportProfile(capabilities, "responses"),
-        continuationMode: support === "supported" ? "previous-response-id" : "raw-output-replay",
-      },
-    },
-  };
-}
-
-function applyVisionSupport(
-  capabilities: ModelCapabilities,
-  support: ObservationSupportState,
-): ModelCapabilities {
-  return {
-    ...capabilities,
-    visionSupport: support === "supported" ? "supported" : "unsupported",
-  };
 }
 
 function mergeObservedCapabilities(provider: ProviderConfig, model: ModelInfo): ModelInfo {
@@ -762,11 +572,6 @@ export async function callProviderStream(request: UnifiedRequest, onChunk: OnChu
   return executeWithEndpointFallback(request, async (prepared, provider) => getAdapter(provider.id).chatStream(prepared, onChunk));
 }
 
-export async function estimateProviderTokens(request: UnifiedRequest): Promise<TokenStats> {
-  const { provider, prepared } = await prepareRequest(request);
-  return estimateRequestTokens(prepared, provider.baseUrl);
-}
-
 export function getModelCapabilities(providerId: string, modelId: string): ModelCapabilities | undefined {
   const models = modelsCache.get(providerId);
   return models?.find((m) => m.id === modelId)?.capabilities;
@@ -805,10 +610,6 @@ export function __setProviderAdapterFactoryForTests(factory?: (config: ProviderC
   adapterFactory = factory ?? createLocalProviderAdapter;
   adapterCache.clear();
   modelsCache.clear();
-}
-
-export function __setProviderPersistOverrideForTests(override?: () => Promise<void>): void {
-  persistOverride = override;
 }
 
 export function __getProviderStateForTests(): ProvidersState {

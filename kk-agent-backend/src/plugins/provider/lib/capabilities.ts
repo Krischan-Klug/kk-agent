@@ -6,7 +6,6 @@ export {
   getEndpointCapabilities,
   getEndpointTransportProfile,
   getPreferredEndpoint,
-  getReasoningLevels,
   normalizeCanonicalReasoningLevel,
   resolveMaxOutputRange,
 } from "@krischan-klug/kk-agent-contract";

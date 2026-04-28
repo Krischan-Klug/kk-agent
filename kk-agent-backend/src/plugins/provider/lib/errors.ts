@@ -1,11 +1,11 @@
-export type ProviderErrorKind =
+type ProviderErrorKind =
   | "prompt_too_long"
   | "max_output_tokens"
   | "rate_limit"
   | "transient"
   | "fatal";
 
-export interface ClassifiedProviderError {
+interface ClassifiedProviderError {
   kind: ProviderErrorKind;
   status?: number;
   message: string;

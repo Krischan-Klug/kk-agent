@@ -5,12 +5,12 @@ import {
 } from "../../lib/transcript.js";
 import { escapeXml as escapeXmlAttr, toCData as wrapCdata } from "../../lib/xml.js";
 
-export type SystemReminderType =
+type SystemReminderType =
   | "mode_changed"
   | "tool_denied"
   | "info";
 
-export interface SystemReminder {
+interface SystemReminder {
   type: SystemReminderType;
   body: string;
 }

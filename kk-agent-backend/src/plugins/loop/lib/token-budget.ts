@@ -1,6 +1,6 @@
 import type { TokenStats } from "../../provider/lib/types.js";
 
-export interface TokenBudgetConfig {
+interface TokenBudgetConfig {
   maxInputTokens?: number;
   maxOutputTokens?: number;
   continuationThreshold?: number; // 0..1
@@ -8,7 +8,7 @@ export interface TokenBudgetConfig {
   diminishingReturnsTokens?: number;
 }
 
-export interface TokenBudgetState {
+interface TokenBudgetState {
   usedInput: number;
   usedOutput: number;
   recentOutputDeltas: number[];
@@ -19,7 +19,7 @@ export interface TokenBudgetState {
   diminishingReturnsTokens: number;
 }
 
-export type ShouldContinueReason =
+type ShouldContinueReason =
   | "under_budget"
   | "input_exhausted"
   | "output_exhausted"

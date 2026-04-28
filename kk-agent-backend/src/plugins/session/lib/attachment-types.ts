@@ -1,6 +1,6 @@
 import type { AttachmentCategory, AttachmentSource } from "@krischan-klug/kk-agent-contract";
 
-export type { AttachmentCategory, AttachmentSource } from "@krischan-klug/kk-agent-contract";
+export type { AttachmentSource } from "@krischan-klug/kk-agent-contract";
 
 export interface StoredAttachment {
   id: string;
@@ -23,14 +23,4 @@ export interface AttachmentMeta {
   category: AttachmentCategory;
   source: AttachmentSource;
   size: number;
-}
-
-export interface AttachmentDisplayMeta {
-  attachmentId?: string;
-  filename: string;
-  mimeType: string;
-  category: AttachmentCategory;
-  source: AttachmentSource;
-  size: number;
-  previewDataUrl?: string;
 }

@@ -7,7 +7,7 @@ import { getErrorMessage } from "../../lib/error.js";
 
 const logger = createLogger("mcp");
 
-export const McpPlugin: ModulePlugin = {
+const McpPlugin: ModulePlugin = {
   name: "mcp",
   version: "0.1.0",
   description: "Custom MCP server manager with tool registry.",

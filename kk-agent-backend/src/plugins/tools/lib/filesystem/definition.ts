@@ -1,7 +1,7 @@
 import type { McpServerConfig } from "../../../mcp/types.js";
 import { getDefaultPathForScope } from "../access-paths.js";
 
-export const DEFAULT_FILESYSTEM_ROOT = getDefaultPathForScope("user");
+const DEFAULT_FILESYSTEM_ROOT = getDefaultPathForScope("user");
 
 export const filesystemDefinition: McpServerConfig = {
   id: "filesystem",

@@ -2,7 +2,7 @@ import type { ModulePlugin } from "../types.js";
 import routes from "./routes.js";
 import { initAgentService } from "./service.js";
 
-export const AgentPlugin: ModulePlugin = {
+const AgentPlugin: ModulePlugin = {
   name: "agent",
   version: "0.1.0",
   description: "Agent-Verwaltung — Agents mit System-Prompt, Iterations-Loop und MCP-Tools.",

@@ -2,11 +2,11 @@ import { homedir, platform } from "node:os";
 import { parse, resolve } from "node:path";
 import type { AccessScope, SystemMcpConfig } from "../../mcp/types.js";
 
-export function getUserRootPath(): string {
+function getUserRootPath(): string {
   return resolve(homedir());
 }
 
-export function getSystemRootPath(): string {
+function getSystemRootPath(): string {
   if (platform() === "win32") {
     const parsed = parse(getUserRootPath());
     return parsed.root || "C:\\";

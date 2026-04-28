@@ -7,7 +7,7 @@ interface SystemVariableDefinition {
   resolve: (context: ResolvedVariableContext) => string;
 }
 
-export interface PromptBuildContext {
+interface PromptBuildContext {
   sessionId?: string;
   modeId?: string;
   modeName?: string;

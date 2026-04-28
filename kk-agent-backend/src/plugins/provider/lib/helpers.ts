@@ -1,5 +1,4 @@
 import {
-  attachmentRefBlock,
   createTranscriptMessage,
   getMessageReasoning,
   getMessageText,
@@ -76,7 +75,7 @@ export function buildMessages(messages: TranscriptMessage[]) {
   });
 }
 
-export function buildTools(request: UnifiedRequest) {
+function buildTools(request: UnifiedRequest) {
   return request.tools?.map((tool) => ({
     type: "function" as const,
     function: { name: tool.name, description: tool.description, parameters: tool.parameters },
@@ -111,7 +110,7 @@ export function buildChatCompletionsBody(request: UnifiedRequest, stream: boolea
   return body;
 }
 
-export function buildAssistantMessage(input: {
+function buildAssistantMessage(input: {
   text?: string;
   reasoning?: string;
   toolCalls?: Array<{ id: string; name: string; arguments: Record<string, unknown> }>;
@@ -211,36 +210,4 @@ export function buildResponsesTools(tools?: UnifiedToolDefinition[], strict = fa
     parameters: tool.parameters,
     strict,
   }));
-}
-
-export function buildToolResultMessage(toolUseId: string, toolName: string, content: string, isError = false): TranscriptMessage {
-  return createTranscriptMessage({
-    role: "tool",
-    content: [{
-      type: "tool_result",
-      tool_use_id: toolUseId,
-      content: content.trim().length > 0 ? content : `(${toolName} completed with no output)`,
-      ...(isError ? { is_error: true } : {}),
-    }],
-  });
-}
-
-export function attachmentMetaToBlock(meta: {
-  id?: string;
-  filename: string;
-  mimeType: string;
-  category: "image" | "text" | "pdf";
-  source: "user" | "assistant";
-  size: number;
-  previewDataUrl?: string;
-}) {
-  return attachmentRefBlock({
-    attachmentId: meta.id,
-    filename: meta.filename,
-    mimeType: meta.mimeType,
-    category: meta.category,
-    source: meta.source,
-    size: meta.size,
-    previewDataUrl: meta.previewDataUrl,
-  });
 }

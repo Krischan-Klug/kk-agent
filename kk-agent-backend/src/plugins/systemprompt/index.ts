@@ -1,6 +1,6 @@
 import type { ModulePlugin } from "../types.js";
 
-export const SystempromptPlugin: ModulePlugin = {
+const SystempromptPlugin: ModulePlugin = {
   name: "systemprompt",
   version: "0.1.0",
   description: "Dynamic system prompt builder with MCP instructions.",
@@ -15,5 +15,4 @@ export {
   buildCapabilityInstructions,
   getSystemVariables,
   getSystemVariableNames,
-  type PromptBuildContext,
 } from "./lib/builder.js";

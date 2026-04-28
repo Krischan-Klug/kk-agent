@@ -3,12 +3,11 @@ import { basename, resolve, relative, sep, join } from "node:path";
 import YAML from "yaml";
 import type { ModeBehavior } from "../../agent/types.js";
 import type { SkillMetadata } from "../types.js";
-import { isModeBehavior } from "../../agent/lib/modes.js";
+import { normalizeSkillMetadata } from "./metadata.js";
 
 const METADATA_FILE = "kk-agent.skill.json";
-const DEFAULT_ALLOWED_MODE_BEHAVIORS: ModeBehavior[] = ["plan", "edit"];
 
-export interface LoadedSkillMetadata {
+interface LoadedSkillMetadata {
   name: string;
   description: string;
   instruction: string;
@@ -22,13 +21,6 @@ interface StoredSkillMetadata {
   recommendedToolIds?: string[];
   recommendedMcpIds?: string[];
   allowedModeBehaviors?: ModeBehavior[];
-}
-
-function normalizeModeBehaviors(modeBehaviors?: ModeBehavior[]): ModeBehavior[] {
-  const normalized = [...new Set((modeBehaviors ?? DEFAULT_ALLOWED_MODE_BEHAVIORS).filter((mode): mode is ModeBehavior =>
-    typeof mode === "string" && isModeBehavior(mode)
-  ))];
-  return normalized.length > 0 ? normalized : [...DEFAULT_ALLOWED_MODE_BEHAVIORS];
 }
 
 function isWithinRoot(rootDir: string, targetPath: string): boolean {
@@ -70,23 +62,13 @@ function buildSkillMarkdown(name: string, description: string, instruction: stri
   return `---\n${frontmatter}\n---\n\n${instruction.trim()}\n`;
 }
 
-function normalizeMetadata(metadata?: StoredSkillMetadata): SkillMetadata {
-  return {
-    active: metadata?.active ?? true,
-    source: "custom",
-    recommendedToolIds: [...new Set(metadata?.recommendedToolIds ?? [])],
-    recommendedMcpIds: [...new Set(metadata?.recommendedMcpIds ?? [])],
-    allowedModeBehaviors: normalizeModeBehaviors(metadata?.allowedModeBehaviors),
-  };
-}
-
-export async function readSkillMetadataFile(skillDir: string): Promise<SkillMetadata> {
+async function readSkillMetadataFile(skillDir: string): Promise<SkillMetadata> {
   const metadataPath = join(skillDir, METADATA_FILE);
   try {
     const raw = await readFile(metadataPath, "utf-8");
-    return normalizeMetadata(JSON.parse(raw) as StoredSkillMetadata);
+    return normalizeSkillMetadata(JSON.parse(raw) as StoredSkillMetadata);
   } catch {
-    return normalizeMetadata();
+    return normalizeSkillMetadata();
   }
 }
 

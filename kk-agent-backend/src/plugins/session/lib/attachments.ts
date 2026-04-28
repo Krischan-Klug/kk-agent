@@ -146,7 +146,7 @@ function formatSize(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-export function resolveType(mimeType: string, filename: string): AllowedType | undefined {
+function resolveType(mimeType: string, filename: string): AllowedType | undefined {
   const byMime = ALLOWED_TYPES.get(mimeType);
   if (byMime) return byMime;
   return EXTENSION_FALLBACKS.get(extname(filename).toLowerCase());

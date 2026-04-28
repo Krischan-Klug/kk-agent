@@ -35,7 +35,7 @@ export function buildSkillsCatalogSection(skills: SkillDefinition[]): string {
   return ["<skills_catalog>", ...skills.map(buildSkillEntry), "</skills_catalog>"].join("\n");
 }
 
-export function buildSkillContextXml(skill: SkillDefinition, instruction: string): string {
+function buildSkillContextXml(skill: SkillDefinition, instruction: string): string {
   return [
     `  <skill_context id="${escapeXml(skill.id)}" name="${escapeXml(skill.name)}" path="${escapeXml(skill.path)}" source="${escapeXml(skill.source ?? "custom")}" mode_behaviors="${escapeXml(skill.allowedModeBehaviors.join(","))}">`,
     `    <description>${escapeXml(skill.description)}</description>`,

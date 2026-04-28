@@ -1,6 +1,5 @@
 import semver from "semver";
 import type {
-  ModulePlugin,
   PluginConfigMap,
   PluginDependency,
   PluginPlan,

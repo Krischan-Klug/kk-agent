@@ -66,7 +66,7 @@ const DESTRUCTIVE_PATTERNS = [
   /\bgit\s+(reset|clean|checkout|restore|push|rebase|pull)\b/,
 ];
 
-export function normalizeShellCommand(command: string): string {
+function normalizeShellCommand(command: string): string {
   return command.trim().replace(/\s+/g, " ");
 }
 

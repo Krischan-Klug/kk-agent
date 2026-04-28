@@ -2,7 +2,7 @@ import type { ModulePlugin } from "../types.js";
 import { initToolsService } from "./service.js";
 import routes from "./routes.js";
 
-export const ToolsPlugin: ModulePlugin = {
+const ToolsPlugin: ModulePlugin = {
   name: "tools",
   version: "0.1.0",
   description: "Built-in local tools for filesystem, web search, terminal, memory, tasks, and chat attachments.",

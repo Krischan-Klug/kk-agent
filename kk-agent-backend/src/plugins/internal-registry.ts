@@ -9,7 +9,7 @@ import skills from "./skills/index.js";
 import provider from "./provider/index.js";
 import session from "./session/index.js";
 
-export interface InternalPluginEntry {
+interface InternalPluginEntry {
   directory: string;
   plugin: ModulePlugin;
 }

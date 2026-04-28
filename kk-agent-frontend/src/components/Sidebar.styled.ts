@@ -146,23 +146,6 @@ export const SessionAdd = styled.button`
   }
 `;
 
-export const SessionDebug = styled.button`
-  border: none;
-  background: transparent;
-  color: var(--text-muted);
-  cursor: pointer;
-  font-size: 11px;
-  line-height: 1;
-  padding: 0;
-  flex: 0 0 auto;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-
-  &:hover {
-    color: var(--text-primary);
-  }
-`;
-
 export const SessionItem = styled.a<{ $active?: boolean; $collapsed?: boolean }>`
   display: flex;
   align-items: center;

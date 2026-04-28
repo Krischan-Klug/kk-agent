@@ -50,7 +50,7 @@ function buildUniqueModeId(seed: string, used: Set<string>): string {
   return next;
 }
 
-export function buildDefaultModeConfig(behavior: ModeBehavior): AgentModeConfig {
+function buildDefaultModeConfig(behavior: ModeBehavior): AgentModeConfig {
   const defaults = getDefaults();
   const template = defaults.agent.modeTemplates[behavior];
   return {
@@ -68,7 +68,7 @@ export function buildDefaultModeConfig(behavior: ModeBehavior): AgentModeConfig 
   };
 }
 
-export function normalizeModeConfig(
+function normalizeModeConfig(
   behavior: ModeBehavior,
   current?: Partial<AgentModeConfig>,
 ): AgentModeConfig {

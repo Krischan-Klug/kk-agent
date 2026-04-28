@@ -3,7 +3,7 @@ import { settings as settingsApi, tools as toolsApi } from "@/lib/api";
 import type { AppDefaults, McpListItem } from "@/types/api";
 import { useApiQuery } from "./useApiQuery";
 
-export interface UseDefaultsForm {
+interface UseDefaultsForm {
   draft: AppDefaults | null;
   setDraft: (draft: AppDefaults) => void;
   internalTools: McpListItem[];

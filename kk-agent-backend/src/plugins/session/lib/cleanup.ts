@@ -16,10 +16,6 @@ export async function removeMcpFromSessions(mcpId: string): Promise<void> {
   await removeIdFromSessionField(mcpId, "activeMcpIds");
 }
 
-export async function removeToolFromSessions(toolId: string): Promise<void> {
-  await removeIdFromSessionField(toolId, "activeToolIds");
-}
-
 export async function removeSkillFromSessions(skillId: string): Promise<void> {
   await removeIdFromSessionField(skillId, "activeSkillIds");
 }

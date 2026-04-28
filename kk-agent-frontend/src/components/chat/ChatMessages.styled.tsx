@@ -79,7 +79,7 @@ export const RoleMetaGroup = styled.button`
   font: inherit;
 `;
 
-export const CollapsibleCard = styled.details`
+const CollapsibleCard = styled.details`
   margin-top: var(--space-sm);
   border-radius: var(--radius-sm);
   overflow: hidden;

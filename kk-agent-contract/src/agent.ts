@@ -1,5 +1,4 @@
 import type { LlmRequestConfig } from "./provider.js";
-import type { ReasoningEffort } from "./common.js";
 export type ModeBehavior = "plan" | "edit" | "autonomous";
 export type AgentModeSource = "builtin" | "custom";
 export type ToolAccessScope = "user" | "system";

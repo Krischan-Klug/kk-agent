@@ -16,7 +16,7 @@ import type {
 import { getErrorMessage } from "../../../lib/error.js";
 import { fitToolResultsToBudget, persistLargeToolResult } from "./tool-result-storage.js";
 
-export interface ToolExecutionUpdate {
+interface ToolExecutionUpdate {
   toolUseId: string;
   toolName: string;
   status: ToolExecutionStatus;

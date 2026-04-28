@@ -29,7 +29,7 @@ function buildAgent(
   };
 }
 
-export function getDefaultAgent(): AgentDefinition {
+function getDefaultAgent(): AgentDefinition {
   return buildAgent(
     "swagos",
     "Swagos",

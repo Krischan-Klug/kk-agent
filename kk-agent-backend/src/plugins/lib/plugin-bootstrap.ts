@@ -5,7 +5,7 @@ import { createLogger } from "../../lib/logger.js";
 
 const logger = createLogger("plugins");
 
-export const CORE_PLUGIN_NAME = "core";
+const CORE_PLUGIN_NAME = "core";
 
 function buildContext(analysis: PluginAnalysis, entry: PluginAnalysisEntry): PluginLifecycleContext {
   const resolved: Record<string, PluginSummary> = {};

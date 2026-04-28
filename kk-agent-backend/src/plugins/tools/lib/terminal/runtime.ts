@@ -1,6 +1,6 @@
 import { exec, spawn } from "node:child_process";
 import { createWriteStream, existsSync } from "node:fs";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, writeFile } from "node:fs/promises";
 import { randomUUID } from "node:crypto";
 import { join, resolve, sep } from "node:path";
 import { promisify } from "node:util";
@@ -38,10 +38,6 @@ function resolveWithinWorkingDirectory(allowedRoot: string, baseDirectory: strin
     throw new Error(`Working directory override "${String(target ?? "")}" is outside the allowed access scope`);
   }
   return candidate;
-}
-
-function powershellSingleQuote(value: string): string {
-  return value.replace(/'/g, "''");
 }
 
 async function runBackgroundCommand(

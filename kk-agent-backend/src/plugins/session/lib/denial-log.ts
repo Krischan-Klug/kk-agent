@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 
-export interface DenialEntry {
+interface DenialEntry {
   toolName: string;
   argsHash: string;
   reason: string;

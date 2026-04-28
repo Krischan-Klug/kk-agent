@@ -1,9 +1,8 @@
 import { createServer, type Server } from "node:http";
-import type { AddressInfo } from "node:net";
 import type { Express } from "express";
 import { createApp } from "./app.js";
 
-export interface StartedServer {
+interface StartedServer {
   app: Express;
   server: Server;
   host: string;

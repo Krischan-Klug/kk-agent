@@ -12,5 +12,3 @@ export function truncateSelfBoundedReadOutput(content: string, maxChars = DEFAUL
     `[output truncated to stay within read tool limit; ${content.length} chars total. Narrow the read with offset and limit.]`,
   ].join("\n");
 }
-
-export { DEFAULT_READ_RESULT_MAX_CHARS };

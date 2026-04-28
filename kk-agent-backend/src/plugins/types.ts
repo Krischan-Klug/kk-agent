@@ -27,7 +27,7 @@ export interface ModulePlugin {
   afterInit?(app: Express, context: PluginLifecycleContext): void | Promise<void>;
 }
 
-export type PluginStatus = "enabled" | "disabled" | "skipped";
+type PluginStatus = "enabled" | "disabled" | "skipped";
 
 export interface PluginPlan {
   name: string;

@@ -6,7 +6,7 @@ export type MessageGroup =
   | { kind: "single"; message: SessionMessage; key: string }
   | { kind: "agent-turn"; iterations: AgentIterationView[]; key: string; streaming?: boolean };
 
-export type AgentTurnGroup = Extract<MessageGroup, { kind: "agent-turn" }>;
+type AgentTurnGroup = Extract<MessageGroup, { kind: "agent-turn" }>;
 
 export function groupMessages(messages: SessionMessage[]): MessageGroup[] {
   const groups: MessageGroup[] = [];

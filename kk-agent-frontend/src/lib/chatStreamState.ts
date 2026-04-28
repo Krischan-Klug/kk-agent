@@ -1,7 +1,7 @@
 import type { AgentLoopState } from "@/types/api";
 import type { PendingPrompt, StreamingTurnState, TokenDisplayStats } from "@/components/chat/types";
 
-export type ChatStreamSnapshot = {
+type ChatStreamSnapshot = {
   sending: boolean;
   streaming: boolean;
   streamTurn: StreamingTurnState | null;

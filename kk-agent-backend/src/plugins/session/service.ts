@@ -8,7 +8,7 @@ import { getAllMcpsCached, getMcpTools, getRunnableMcpIds } from "../mcp/service
 import { buildResolvedSystemToolRuntime } from "../tools/service.js";
 import { getMemoryPromptContext, getTaskSummary } from "../tools/service.js";
 import { buildActiveSkillCatalogSection, listSkills } from "../skills/service.js";
-import { buildSystemReminderMessages, clearSystemReminders, enqueueSystemReminder } from "../loop/lib/system-reminder.js";
+import { clearSystemReminders, enqueueSystemReminder } from "../loop/lib/system-reminder.js";
 import type { ModeRuntimeConfig } from "../loop/types.js";
 import { getAgent, getLoopState, clearLoopState } from "../agent/service.js";
 import { getDefaults } from "../lib/defaults.js";
@@ -326,12 +326,6 @@ export async function deleteSession(id: string): Promise<void> {
   clearSessionDenials(id);
 }
 
-export function getCurrentSystemPrompt(sessionId: string): string {
-  const session = getSessionRecordOrThrow(sessionId);
-  const agent = getAgent(session.agentId);
-  return buildCurrentSystemPrompt(sessionId, session, agent);
-}
-
 export function getCurrentPromptDebug(sessionId: string): SessionPromptDebug {
   const session = getSessionRecordOrThrow(sessionId);
   const agent = getAgent(session.agentId);
@@ -401,7 +395,7 @@ export function getCurrentPromptDebug(sessionId: string): SessionPromptDebug {
   };
 }
 
-export async function updateSession(id: string, body: Partial<CreateSessionBody>): Promise<SessionState> {
+async function updateSession(id: string, body: Partial<CreateSessionBody>): Promise<SessionState> {
   const session = getSessionRecordOrThrow(id);
   const nextAgentId = body.agentId ?? session.agentId;
   const agent = getAgent(nextAgentId);

@@ -3,9 +3,9 @@ import type { ProviderTransportState, ProviderTurnDebug, TokenStats, UnifiedTool
 import type { ModeBehavior, AgentPromptSections } from "../agent/types.js";
 import type { LlmRequestConfig } from "../provider/types.js";
 
-export type ToolInterruptBehavior = "cancel" | "block";
+type ToolInterruptBehavior = "cancel" | "block";
 
-export interface RuntimeToolResultPolicy {
+interface RuntimeToolResultPolicy {
   previewThresholdChars?: number;
   previewChars?: number;
   contextBudgetChars?: number;
@@ -13,7 +13,7 @@ export interface RuntimeToolResultPolicy {
   excludeFromContextBudget?: boolean;
 }
 
-export type RuntimeToolPermissionPolicy =
+type RuntimeToolPermissionPolicy =
   | { kind: "allow" }
   | { kind: "deny"; reason: string }
   | {

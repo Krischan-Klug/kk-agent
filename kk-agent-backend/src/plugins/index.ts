@@ -1,5 +1,4 @@
 import type { Express } from "express";
-import type { PluginPlan } from "./types.js";
 import { analysePlugins } from "./lib/plugin-analysis.js";
 import { initializePlannedPlugins } from "./lib/plugin-bootstrap.js";
 import { loadPluginConfig, writePluginConfig } from "./lib/plugin-config.js";
@@ -41,7 +40,6 @@ async function preparePlugins() {
     return {
       name: pluginName,
       directory,
-      entry: `${directory}/index.ts`,
       mod: plugin,
       config: {
         enabled: config[pluginName]!.enabled,
@@ -67,17 +65,6 @@ async function preparePlugins() {
   }
 
   return analysePlugins(plugins, config);
-}
-
-export async function planPlugins(): Promise<{
-  plan: PluginPlan[];
-  staleConfigEntries: string[];
-}> {
-  const analysis = await preparePlugins();
-  return {
-    plan: analysis.entries.map((entry) => entry.plan),
-    staleConfigEntries: analysis.staleConfigEntries,
-  };
 }
 
 export default async function initPlugins(app: Express): Promise<void> {

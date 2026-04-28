@@ -57,7 +57,7 @@ function buildOptions(overrides: Partial<LoopOptions> = {}): LoopOptions {
   };
 }
 
-test("runAgentLoop keeps going across multiple tool turns until the model stops", async (t) => {
+test("runAgentLoop keeps going across multiple tool turns until the model stops", async () => {
   let callCount = 0;
   const modelPassRunner: LoopOptions["modelPassRunner"] = async () => {
     callCount += 1;

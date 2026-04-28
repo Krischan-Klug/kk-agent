@@ -5,7 +5,6 @@ export type {
   McpServerConfig,
   McpSseConfig,
   McpStdioConfig,
-  McpSource,
   McpToolDefinition,
   SystemMcpConfig,
   SystemMcpKey,

@@ -32,7 +32,7 @@ export const defaultThemes: Theme[] = [
   },
 ];
 
-export function getCustomThemes(): Theme[] {
+function getCustomThemes(): Theme[] {
   return getStoredJson<Theme[]>(CUSTOM_THEMES_KEY, []);
 }
 
@@ -54,14 +54,14 @@ export function deleteCustomTheme(id: string): void {
   saveCustomThemes(getCustomThemes().filter((t) => t.id !== id));
 }
 
-export function hexToRgba(hex: string, alpha: number): string {
+function hexToRgba(hex: string, alpha: number): string {
   const r = parseInt(hex.slice(1, 3), 16);
   const g = parseInt(hex.slice(3, 5), 16);
   const b = parseInt(hex.slice(5, 7), 16);
   return `rgba(${r}, ${g}, ${b}, ${alpha})`;
 }
 
-export function lightenHex(hex: string, amount: number): string {
+function lightenHex(hex: string, amount: number): string {
   const r = Math.min(255, parseInt(hex.slice(1, 3), 16) + amount);
   const g = Math.min(255, parseInt(hex.slice(3, 5), 16) + amount);
   const b = Math.min(255, parseInt(hex.slice(5, 7), 16) + amount);
@@ -81,11 +81,11 @@ export function getSavedThemeId(): string {
   return getStoredString(THEME_STORAGE_KEY) || defaultThemes[0].id;
 }
 
-export function getThemeById(id: string): Theme {
+function getThemeById(id: string): Theme {
   return getAllThemes().find((t) => t.id === id) || defaultThemes[0];
 }
 
-export function applyTheme(theme: Theme): void {
+function applyTheme(theme: Theme): void {
   const root = document.documentElement;
   for (const key of THEME_VARIABLE_KEYS) {
     const value = theme.variables[key];

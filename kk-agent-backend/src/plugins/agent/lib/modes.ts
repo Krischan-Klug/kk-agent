@@ -1,14 +1,14 @@
 import type { AgentModeDefinition, ModeBehavior } from "../types.js";
 import { SYSTEM_MCP_KEYS } from "../../mcp/types.js";
 
-export interface BuiltInModeMeta {
+interface BuiltInModeMeta {
   id: ModeBehavior;
   label: string;
   behavior: ModeBehavior;
   source: AgentModeDefinition["source"];
 }
 
-export const READ_ONLY_TOOL_NAMES = [
+const READ_ONLY_TOOL_NAMES = [
   "Read",
   "Glob",
   "Grep",
@@ -22,13 +22,13 @@ export const READ_ONLY_TOOL_NAMES = [
   "ask_user",
 ];
 
-export const PLANNING_TOOL_NAMES = [
+const PLANNING_TOOL_NAMES = [
   ...READ_ONLY_TOOL_NAMES,
   "create_tasks",
   "update_tasks",
 ];
 
-export const EDIT_TOOL_NAMES = [
+const EDIT_TOOL_NAMES = [
   "Read",
   "Edit",
   "Write",
@@ -49,11 +49,11 @@ export const EDIT_TOOL_NAMES = [
   "remember_facts",
 ];
 
-export const EDIT_TOOL_IDS: string[] = [...SYSTEM_MCP_KEYS];
+const EDIT_TOOL_IDS: string[] = [...SYSTEM_MCP_KEYS];
 
-export const PLAN_TOOL_IDS: string[] = EDIT_TOOL_IDS.filter((id) => id !== "memory");
+const PLAN_TOOL_IDS: string[] = EDIT_TOOL_IDS.filter((id) => id !== "memory");
 
-export const BUILT_IN_MODE_META: Record<ModeBehavior, BuiltInModeMeta> = {
+const BUILT_IN_MODE_META: Record<ModeBehavior, BuiltInModeMeta> = {
   plan: {
     id: "plan",
     label: "Plan",

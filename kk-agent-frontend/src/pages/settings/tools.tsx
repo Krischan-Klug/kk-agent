@@ -1,108 +1,29 @@
-import { useEffect, useState } from "react";
-import styled from "styled-components";
-import { skills as skillsApi, tools as toolsApi } from "@/lib/api";
+import { tools as toolsApi } from "@/lib/api";
 import { createLogger } from "@/lib/logger";
-import type { McpListItem, SkillDefinition } from "@/types/api";
-import { useToggleSet } from "@/hooks/useToggleSet";
+import type { McpListItem } from "@/types/api";
+import { useMcpCardCollection } from "@/hooks/useMcpCardCollection";
 import Spinner from "@/components/Spinner";
 import SettingsLayout from "@/components/SettingsLayout";
 import McpCard from "@/components/mcp/McpCard";
+import McpCardGrid from "@/components/mcp/McpCardGrid";
 import { EmptyHint } from "@/components/PageForm";
-import { buildEditForm, type EditForm } from "@/components/mcp/types";
 
 const logger = createLogger("settings/tools");
 
-const Grid = styled.div`
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: var(--space-lg);
-
-  @media (max-width: 1400px) {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-  }
-
-  @media (max-width: 1100px) {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  @media (max-width: 720px) {
-    grid-template-columns: 1fr;
-  }
-`;
-
 export default function SettingsToolsPage() {
-  const [toolMcps, setToolMcps] = useState<McpListItem[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [instructions, setInstructions] = useState<Record<string, string>>({});
-  const [editForms, setEditForms] = useState<Record<string, EditForm>>({});
-  const [skillList, setSkillList] = useState<SkillDefinition[]>([]);
-  const expandedTools = useToggleSet();
-  const expandedInstructions = useToggleSet();
-  const expandedEdit = useToggleSet();
-
-  useEffect(() => {
-    void loadTools();
-    void loadSkills();
-  }, []);
-
-  async function loadTools() {
-    try {
-      const data = await toolsApi.list();
-      setToolMcps(data);
-      setInstructions(Object.fromEntries(data.map((tool) => [tool.id, tool.instruction])));
-    } catch (err) {
-      logger.error("Failed to load tools:", err);
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  async function loadSkills() {
-    try {
-      setSkillList(await skillsApi.list());
-    } catch (err) {
-      logger.error("Failed to load skills:", err);
-    }
-  }
-
-  async function handleSkillToggle(tool: McpListItem, skillId: string, linked: boolean) {
-    const current = tool.skillIds ?? [];
-    const next = linked
-      ? [...new Set([...current, skillId])]
-      : current.filter((id) => id !== skillId);
-    try {
-      await toolsApi.update(tool.id, { skillIds: next });
-      await loadTools();
-    } catch (err) {
-      logger.error("Failed to toggle skill:", err);
-    }
-  }
-
-  function openEdit(tool: McpListItem) {
-    setEditForms((prev) => ({ ...prev, [tool.id]: buildEditForm(tool) }));
-    expandedEdit.add(tool.id);
-  }
+  const collection = useMcpCardCollection(toolsApi, logger, "tools");
 
   async function handleStateToggle(tool: McpListItem) {
     try {
       await toolsApi.toggle(tool.id, !tool.active);
-      await loadTools();
+      await collection.loadItems();
     } catch (err) {
       logger.error("Failed to toggle tool:", err);
     }
   }
 
-  async function handleSaveInstruction(id: string) {
-    try {
-      await toolsApi.setInstruction(id, instructions[id] ?? "");
-      await loadTools();
-    } catch (err) {
-      logger.error("Failed to save instruction:", err);
-    }
-  }
-
   async function handleSaveEdit(tool: McpListItem) {
-    const form = editForms[tool.id];
+    const form = collection.editForms[tool.id];
     if (!form) return;
 
     const previewThresholdChars = form.previewThresholdChars.trim() ? Number(form.previewThresholdChars) : undefined;
@@ -125,8 +46,8 @@ export default function SettingsToolsPage() {
             : {}),
         },
       });
-      expandedEdit.remove(tool.id);
-      await loadTools();
+      collection.expandedEdit.remove(tool.id);
+      await collection.loadItems();
     } catch (err) {
       logger.error("Failed to save tool edit:", err);
     }
@@ -134,35 +55,35 @@ export default function SettingsToolsPage() {
 
   return (
     <SettingsLayout>
-      {loading ? (
+      {collection.loading ? (
         <Spinner />
       ) : (
-        <Grid>
-          {toolMcps.map((tool) => (
+        <McpCardGrid>
+          {collection.items.map((tool) => (
             <McpCard
               key={tool.id}
               mcp={tool}
-              instruction={instructions[tool.id] ?? ""}
-              editForm={editForms[tool.id]}
-              editOpen={expandedEdit.has(tool.id)}
-              toolsOpen={expandedTools.has(tool.id)}
-              instructionsOpen={expandedInstructions.has(tool.id)}
+              instruction={collection.instructions[tool.id] ?? ""}
+              editForm={collection.editForms[tool.id]}
+              editOpen={collection.expandedEdit.has(tool.id)}
+              toolsOpen={collection.expandedTools.has(tool.id)}
+              instructionsOpen={collection.expandedInstructions.has(tool.id)}
               onStateToggle={() => void handleStateToggle(tool)}
-              onEditToggle={() => expandedEdit.toggle(tool.id)}
+              onEditToggle={() => collection.expandedEdit.toggle(tool.id)}
               onDelete={() => undefined}
-              onInstructionToggle={() => expandedInstructions.toggle(tool.id)}
-              onInstructionChange={(value) => setInstructions((prev) => ({ ...prev, [tool.id]: value }))}
-              onInstructionSave={() => void handleSaveInstruction(tool.id)}
-              onToolsToggle={() => expandedTools.toggle(tool.id)}
-              onOpenEdit={() => openEdit(tool)}
-              onEditFormChange={(form) => setEditForms((prev) => ({ ...prev, [tool.id]: form }))}
+              onInstructionToggle={() => collection.expandedInstructions.toggle(tool.id)}
+              onInstructionChange={(value) => collection.setInstructions((prev) => ({ ...prev, [tool.id]: value }))}
+              onInstructionSave={() => void collection.handleSaveInstruction(tool.id)}
+              onToolsToggle={() => collection.expandedTools.toggle(tool.id)}
+              onOpenEdit={() => collection.openEdit(tool)}
+              onEditFormChange={(form) => collection.setEditForms((prev) => ({ ...prev, [tool.id]: form }))}
               onSaveEdit={() => void handleSaveEdit(tool)}
-              availableSkills={skillList.map((skill) => ({ id: skill.id, name: skill.name }))}
-              onSkillToggle={(skillId, linked) => void handleSkillToggle(tool, skillId, linked)}
+              availableSkills={collection.skillOptions}
+              onSkillToggle={(skillId, linked) => void collection.handleSkillToggle(tool, skillId, linked)}
             />
           ))}
-          {toolMcps.length === 0 && <EmptyHint>Keine internen Tools gefunden.</EmptyHint>}
-        </Grid>
+          {collection.items.length === 0 && <EmptyHint>Keine internen Tools gefunden.</EmptyHint>}
+        </McpCardGrid>
       )}
     </SettingsLayout>
   );

@@ -2,7 +2,7 @@ import type { ModulePlugin } from "../types.js";
 import routes from "./routes.js";
 import { configure, initState } from "./service.js";
 
-export const ProviderPlugin: ModulePlugin = {
+const ProviderPlugin: ModulePlugin = {
   name: "provider",
   version: "0.3.0",
   description: "Provider registry with unified model capabilities and endpoint mapping.",

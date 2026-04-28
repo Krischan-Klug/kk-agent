@@ -1,6 +1,6 @@
 import type { ModulePlugin } from "../types.js";
 
-export const LoopPlugin: ModulePlugin = {
+const LoopPlugin: ModulePlugin = {
   name: "loop",
   version: "0.1.0",
   description: "Agent loop — turns an LLM into an autonomous agent by orchestrating tool calls.",
@@ -10,5 +10,4 @@ export const LoopPlugin: ModulePlugin = {
 
 export default LoopPlugin;
 
-export { runAgentLoop } from "./lib/agent-loop.js";
 export * from "./types.js";

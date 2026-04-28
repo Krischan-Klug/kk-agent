@@ -91,7 +91,7 @@ export interface AssembledAssistantTurn {
   parseIssues: ToolCallParseIssue[];
 }
 
-export interface ChatCompletionsTransportState {
+interface ChatCompletionsTransportState {
   endpoint: "chat-completions";
 }
 
@@ -120,7 +120,7 @@ export interface UnifiedResponse {
   debug?: ProviderTurnDebug;
 }
 
-export type StreamChunk =
+type StreamChunk =
   | { type: "assistant_block_delta"; messageId: string; block: TranscriptBlock }
   | { type: "assistant_message"; message: TranscriptMessage; finishReason: TranscriptStopReason }
   | { type: "done"; finishReason: TranscriptStopReason }

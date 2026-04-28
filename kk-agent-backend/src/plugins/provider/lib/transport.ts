@@ -137,7 +137,7 @@ function createIssue(input: {
   };
 }
 
-export function issueToNotice(issue: ToolCallParseIssue): ProviderNotice {
+function issueToNotice(issue: ToolCallParseIssue): ProviderNotice {
   return {
     level: issue.severity === "warning" ? "warning" : "error",
     code: issue.code,
@@ -402,7 +402,7 @@ export function finalizeResponsesOutput(input: {
   let text = "";
   let reasoning = "";
 
-  input.output.forEach((item, index) => {
+  input.output.forEach((item) => {
     switch (item.type) {
       case "message":
         text += collectMessageText(item);

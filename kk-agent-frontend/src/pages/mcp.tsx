@@ -1,111 +1,40 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import styled from "styled-components";
-import { mcp as mcpApi, skills as skillsApi } from "@/lib/api";
+import { mcp as mcpApi } from "@/lib/api";
 import { createLogger } from "@/lib/logger";
-import type { CreateMcpBody, McpListItem, SkillDefinition } from "@/types/api";
-import { useToggleSet } from "@/hooks/useToggleSet";
+import type { CreateMcpBody, McpListItem } from "@/types/api";
+import { useMcpCardCollection } from "@/hooks/useMcpCardCollection";
 import { PageBody } from "@/components/Layout.styled";
 import Button from "@/components/Button";
 import Spinner from "@/components/Spinner";
 import Modal from "@/components/Modal";
 import McpCard from "@/components/mcp/McpCard";
+import McpCardGrid from "@/components/mcp/McpCardGrid";
 import CreateMcpModal from "@/components/mcp/CreateMcpModal";
 import { ActionsRow, EmptyHint, MutedText } from "@/components/PageForm";
-import { buildEditForm, EMPTY_MCP_FORM, type EditForm } from "@/components/mcp/types";
+import { EMPTY_MCP_FORM } from "@/components/mcp/types";
 
 const logger = createLogger("mcp");
-
-const Grid = styled.div`
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: var(--space-lg);
-
-  @media (max-width: 1400px) {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-  }
-
-  @media (max-width: 1100px) {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  @media (max-width: 720px) {
-    grid-template-columns: 1fr;
-  }
-`;
 
 const HeaderActions = styled.div`
   margin-bottom: var(--space-lg);
 `;
 
 export default function McpPage() {
-  const [mcps, setMcps] = useState<McpListItem[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [instructions, setInstructions] = useState<Record<string, string>>({});
-  const [editForms, setEditForms] = useState<Record<string, EditForm>>({});
   const [showCreate, setShowCreate] = useState(false);
   const [createForm, setCreateForm] = useState<CreateMcpBody>(EMPTY_MCP_FORM);
   const [creating, setCreating] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
-  const [skillList, setSkillList] = useState<SkillDefinition[]>([]);
-  const expandedTools = useToggleSet();
-  const expandedInstructions = useToggleSet();
-  const expandedEdit = useToggleSet();
-
-  useEffect(() => {
-    void loadMcps();
-    void loadSkills();
-  }, []);
-
-  async function loadSkills() {
-    try {
-      setSkillList(await skillsApi.list());
-    } catch (err) {
-      logger.error("Failed to load skills:", err);
-    }
-  }
-
-  async function handleSkillToggle(mcp: McpListItem, skillId: string, linked: boolean) {
-    const current = mcp.skillIds ?? [];
-    const next = linked
-      ? [...new Set([...current, skillId])]
-      : current.filter((id) => id !== skillId);
-    try {
-      await mcpApi.update(mcp.id, { skillIds: next });
-      await loadMcps();
-    } catch (err) {
-      logger.error("Failed to toggle skill:", err);
-    }
-  }
-
-  async function loadMcps() {
-    try {
-      const data = await mcpApi.list();
-      setMcps(data);
-      setInstructions(Object.fromEntries(data.map((mcp) => [mcp.id, mcp.instruction])));
-    } catch (err) {
-      logger.error("Failed to load MCPs:", err);
-    } finally {
-      setLoading(false);
-    }
-  }
+  const collection = useMcpCardCollection(mcpApi, logger, "MCPs");
 
   async function handleStartStop(mcp: McpListItem) {
     try {
       if (mcp.source === "system") await mcpApi.toggle(mcp.id, !mcp.active);
       else if (mcp.running) await mcpApi.stop(mcp.id);
       else await mcpApi.start(mcp.id);
-      await loadMcps();
+      await collection.loadItems();
     } catch (err) {
       logger.error("Failed to toggle MCP state:", err);
-    }
-  }
-
-  async function handleSaveInstruction(id: string) {
-    try {
-      await mcpApi.setInstruction(id, instructions[id]);
-      await loadMcps();
-    } catch (err) {
-      logger.error("Failed to save instruction:", err);
     }
   }
 
@@ -125,7 +54,7 @@ export default function McpPage() {
       });
       setShowCreate(false);
       setCreateForm(EMPTY_MCP_FORM);
-      await loadMcps();
+      await collection.loadItems();
     } catch (err) {
       logger.error("Failed to create MCP:", err);
     } finally {
@@ -137,19 +66,14 @@ export default function McpPage() {
     try {
       await mcpApi.remove(id);
       setDeleteTarget(null);
-      await loadMcps();
+      await collection.loadItems();
     } catch (err) {
       logger.error("Failed to delete MCP:", err);
     }
   }
 
-  function openEdit(mcp: McpListItem) {
-    setEditForms((prev) => ({ ...prev, [mcp.id]: buildEditForm(mcp) }));
-    expandedEdit.add(mcp.id);
-  }
-
   async function handleSaveEdit(mcp: McpListItem, restart?: boolean) {
-    const form = editForms[mcp.id];
+    const form = collection.editForms[mcp.id];
     if (!form) return;
 
     try {
@@ -178,46 +102,46 @@ export default function McpPage() {
         await mcpApi.start(mcp.id);
       }
 
-      expandedEdit.remove(mcp.id);
-      await loadMcps();
+      collection.expandedEdit.remove(mcp.id);
+      await collection.loadItems();
     } catch (err) {
       logger.error("Failed to save MCP edit:", err);
     }
   }
 
-  if (loading) return <Spinner />;
+  if (collection.loading) return <Spinner />;
 
   return (
     <PageBody>
       <HeaderActions>
-        <Button onClick={() => setShowCreate(true)}>MCP hinzufügen</Button>
+        <Button onClick={() => setShowCreate(true)}>MCP hinzufuegen</Button>
       </HeaderActions>
-      <Grid>
-        {mcps.map((mcp) => (
+      <McpCardGrid>
+        {collection.items.map((mcp) => (
           <McpCard
             key={mcp.id}
             mcp={mcp}
-            instruction={instructions[mcp.id] ?? ""}
-            editForm={editForms[mcp.id]}
-            editOpen={expandedEdit.has(mcp.id)}
-            toolsOpen={expandedTools.has(mcp.id)}
-            instructionsOpen={expandedInstructions.has(mcp.id)}
+            instruction={collection.instructions[mcp.id] ?? ""}
+            editForm={collection.editForms[mcp.id]}
+            editOpen={collection.expandedEdit.has(mcp.id)}
+            toolsOpen={collection.expandedTools.has(mcp.id)}
+            instructionsOpen={collection.expandedInstructions.has(mcp.id)}
             onStateToggle={() => void handleStartStop(mcp)}
-            onEditToggle={() => expandedEdit.toggle(mcp.id)}
+            onEditToggle={() => collection.expandedEdit.toggle(mcp.id)}
             onDelete={() => setDeleteTarget(mcp.id)}
-            onInstructionToggle={() => expandedInstructions.toggle(mcp.id)}
-            onInstructionChange={(value) => setInstructions((prev) => ({ ...prev, [mcp.id]: value }))}
-            onInstructionSave={() => void handleSaveInstruction(mcp.id)}
-            onToolsToggle={() => expandedTools.toggle(mcp.id)}
-            onOpenEdit={() => openEdit(mcp)}
-            onEditFormChange={(form) => setEditForms((prev) => ({ ...prev, [mcp.id]: form }))}
+            onInstructionToggle={() => collection.expandedInstructions.toggle(mcp.id)}
+            onInstructionChange={(value) => collection.setInstructions((prev) => ({ ...prev, [mcp.id]: value }))}
+            onInstructionSave={() => void collection.handleSaveInstruction(mcp.id)}
+            onToolsToggle={() => collection.expandedTools.toggle(mcp.id)}
+            onOpenEdit={() => collection.openEdit(mcp)}
+            onEditFormChange={(form) => collection.setEditForms((prev) => ({ ...prev, [mcp.id]: form }))}
             onSaveEdit={(restart) => void handleSaveEdit(mcp, restart)}
-            availableSkills={skillList.map((skill) => ({ id: skill.id, name: skill.name }))}
-            onSkillToggle={(skillId, linked) => void handleSkillToggle(mcp, skillId, linked)}
+            availableSkills={collection.skillOptions}
+            onSkillToggle={(skillId, linked) => void collection.handleSkillToggle(mcp, skillId, linked)}
           />
         ))}
-        {mcps.length === 0 && <EmptyHint>Keine externen MCP Server konfiguriert.</EmptyHint>}
-      </Grid>
+        {collection.items.length === 0 && <EmptyHint>Keine externen MCP Server konfiguriert.</EmptyHint>}
+      </McpCardGrid>
       <CreateMcpModal
         open={showCreate}
         form={createForm}
@@ -227,13 +151,13 @@ export default function McpPage() {
         onClose={() => setShowCreate(false)}
       />
       {deleteTarget && (
-        <Modal title="MCP löschen?" onClose={() => setDeleteTarget(null)}>
+        <Modal title="MCP loeschen?" onClose={() => setDeleteTarget(null)}>
           <MutedText>
-            Der MCP Server wird gestoppt und entfernt. Diese Aktion kann nicht rückgängig gemacht werden.
+            Der MCP Server wird gestoppt und entfernt. Diese Aktion kann nicht rueckgaengig gemacht werden.
           </MutedText>
           <ActionsRow>
             <Button variant="danger" onClick={() => void handleDelete(deleteTarget)}>
-              Löschen
+              Loeschen
             </Button>
             <Button variant="secondary" onClick={() => setDeleteTarget(null)}>
               Abbrechen

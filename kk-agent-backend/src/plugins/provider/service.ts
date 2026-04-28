@@ -1,7 +1,6 @@
 import { randomUUID } from "node:crypto";
 import type { UnifiedRequest, UnifiedResponse, OnChunkFn, ProviderNotice } from "./lib/types.js";
 import type {
-  ContinuationMode,
   CreateProviderBody,
   EndpointType,
   ModelCapabilities,
@@ -18,24 +17,10 @@ import { createLogger } from "../../lib/logger.js";
 import { NotFoundError } from "../../lib/errors.js";
 
 const logger = createLogger("provider");
-import {
-  clampNumber,
-  coerceReasoningSelection,
-  getEndpointCapabilities,
-  getEndpointTransportProfile,
-  getPreferredEndpoint,
-  normalizeCanonicalReasoningLevel,
-  resolveMaxOutputRange,
-} from "./lib/capabilities.js";
-import {
-  buildResolvedLlmRequestConfig,
-  compactLlmRequestConfig,
-  compactModelSettings,
-  mergeLlmRequestConfigs,
-  sanitizeEndpointExtraBody,
-} from "./lib/request-config.js";
 import { loadState, saveState } from "../lib/state.js";
 import { getMessageReasoning } from "../lib/transcript.js";
+import { getModelSettingsKey, normalizeStoredModelSettings } from "./lib/model-settings.js";
+import { normalizeRequestOptions } from "./lib/request-options.js";
 import {
   applyEndpointSupport,
   applyReasoningSupport,
@@ -96,23 +81,6 @@ export function getDefaultProviderId(): string | undefined {
   return state.providers.length === 1 ? state.providers[0]?.id : undefined;
 }
 
-function normalizeStoredModelSettings(settings: ModelSettings | undefined): ModelSettings {
-  const storedConfig = settings?.llmRequestConfig;
-  const normalizedReasoningEffort = normalizeCanonicalReasoningLevel(storedConfig?.common?.reasoningEffort);
-
-  return compactModelSettings({
-    llmRequestConfig: compactLlmRequestConfig({
-      common: {
-        endpoint: storedConfig?.common?.endpoint,
-        reasoningEffort: normalizedReasoningEffort,
-        temperature: storedConfig?.common?.temperature,
-        maxOutputTokens: storedConfig?.common?.maxOutputTokens,
-      },
-      extraBody: storedConfig?.extraBody,
-    }),
-  });
-}
-
 function normalizeStoredProvidersState(nextState: ProvidersState): ProvidersState {
   return {
     providers: nextState.providers ?? [],
@@ -171,10 +139,6 @@ function clearObservedCapabilities(providerId: string): void {
     Object.entries(state.observedCapabilities).filter(([key]) => !key.startsWith(`${providerId}::`)),
   );
   modelsCache.delete(providerId);
-}
-
-function getModelSettingsKey(providerId: string, modelId: string): string {
-  return `${providerId}::${modelId}`;
 }
 
 async function persist(): Promise<void> {
@@ -260,68 +224,6 @@ function isUnsupportedVisionError(error: unknown): boolean {
   const message = getErrorMessage(error).toLowerCase();
   return (message.includes("image") || message.includes("vision") || message.includes("multimodal"))
     && (message.includes("unsupported") || message.includes("not support") || message.includes("invalid"));
-}
-
-function mergeModelAndRequestConfig(settings: ModelSettings, request: UnifiedRequest) {
-  return mergeLlmRequestConfigs(
-    settings.llmRequestConfig,
-    request.llmRequestConfig,
-  );
-}
-
-function normalizeRequestOptions(
-  model: ModelInfo | undefined,
-  settings: ModelSettings,
-  request: UnifiedRequest,
-  forcedEndpoint?: EndpointType,
-): Pick<
-  UnifiedRequest,
-  "endpoint" | "transportProfile" | "resolvedLlmRequestConfig"
-> & { explicitEndpointSelection: boolean } {
-  const mergedConfig = mergeModelAndRequestConfig(settings, request);
-  const explicitEndpointSelection = mergedConfig?.common?.endpoint !== undefined;
-  const endpoint = forcedEndpoint ?? getPreferredEndpoint(model?.capabilities, mergedConfig?.common?.endpoint);
-  const endpointCapabilities = getEndpointCapabilities(model?.capabilities, endpoint);
-  const continuationMode: ContinuationMode = endpoint === "responses"
-    ? getEndpointTransportProfile(model?.capabilities, endpoint).continuationMode
-    : "none";
-  const transportProfile = endpoint === "responses"
-    ? {
-        ...getEndpointTransportProfile(model?.capabilities, endpoint),
-        continuationMode,
-      }
-    : getEndpointTransportProfile(model?.capabilities, endpoint);
-  const maxOutputRange = resolveMaxOutputRange(model, endpoint);
-  const omittedUnsupportedKeys: string[] = [];
-  const rawReasoningSelection = mergedConfig?.common?.reasoningEffort;
-  const reasoningEffort = coerceReasoningSelection(model?.capabilities, endpoint, rawReasoningSelection);
-  const temperature = endpointCapabilities.temperatureSupported
-    ? clampNumber(mergedConfig?.common?.temperature, endpointCapabilities.temperatureRange)
-    : undefined;
-  const maxOutputTokens = endpointCapabilities.maxOutputTokensSupported
-    ? clampNumber(mergedConfig?.common?.maxOutputTokens, maxOutputRange)
-    : undefined;
-
-  const sanitizedExtraBody = sanitizeEndpointExtraBody(endpoint, mergedConfig?.extraBody?.[endpoint]);
-  omittedUnsupportedKeys.push(...sanitizedExtraBody.omittedKeys.map((key) => `extraBody.${endpoint}.${key}`));
-  const resolvedLlmRequestConfig = buildResolvedLlmRequestConfig({
-    endpoint,
-    common: {
-      endpoint,
-      reasoningEffort,
-      temperature,
-      maxOutputTokens,
-    },
-    extraBody: sanitizedExtraBody.value,
-    omittedUnsupportedKeys,
-  });
-
-  return {
-    endpoint,
-    transportProfile,
-    resolvedLlmRequestConfig,
-    explicitEndpointSelection,
-  };
 }
 
 export function configure(settings: { baseUrl?: string }): void {

@@ -118,6 +118,7 @@ type Props = {
   editOpen: boolean;
   toolsOpen: boolean;
   instructionsOpen: boolean;
+  hideMcpMetadata?: boolean;
   availableSkills?: SkillOption[];
   onStateToggle: () => void;
   onEditToggle: () => void;
@@ -198,6 +199,7 @@ export default function McpCard({
   editOpen,
   toolsOpen,
   instructionsOpen,
+  hideMcpMetadata = false,
   availableSkills,
   onStateToggle,
   onEditToggle,
@@ -239,8 +241,12 @@ export default function McpCard({
             >
               <Badge variant={mcp.running ? "success" : "danger"}>{mcp.running ? "running" : "stopped"}</Badge>
             </StatusToggle>
-            <Badge>{mcp.source === "system" ? "system" : "custom"}</Badge>
-            <Badge>{mcp.transport}</Badge>
+            {!hideMcpMetadata && (
+              <>
+                <Badge>{mcp.source === "system" ? "system" : "custom"}</Badge>
+                <Badge>{mcp.transport}</Badge>
+              </>
+            )}
           </Name>
           <Controls>
             <Button size="sm" variant="secondary" onClick={handleEditToggle}>

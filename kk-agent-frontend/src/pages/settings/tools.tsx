@@ -68,6 +68,7 @@ export default function SettingsToolsPage() {
               editOpen={collection.expandedEdit.has(tool.id)}
               toolsOpen={collection.expandedTools.has(tool.id)}
               instructionsOpen={collection.expandedInstructions.has(tool.id)}
+              hideMcpMetadata
               onStateToggle={() => void handleStateToggle(tool)}
               onEditToggle={() => collection.expandedEdit.toggle(tool.id)}
               onDelete={() => undefined}

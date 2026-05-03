@@ -4,68 +4,82 @@ import type {
   ModelSettings,
   ProviderConfig,
 } from "@/types/api";
+import Card from "@/components/Card";
 import Button from "@/components/Button";
 import Input from "@/components/Input";
+import {
+  ActionsRow,
+  FormField,
+  FormRow,
+} from "@/components/PageForm";
 import ModelSettingsSection from "./ModelSettingsSection";
 
-const Wrapper = styled.div`
-  background: var(--bg-elevated);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
-  padding: var(--space-lg);
+const Header = styled.div<{ $withBody: boolean }>`
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  margin-bottom: ${(p) => (p.$withBody ? "var(--space-md)" : "0")};
 `;
 
-const Header = styled.div`
+const HeaderTop = styled.div`
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: var(--space-md);
-  cursor: pointer;
+  flex-wrap: nowrap;
 `;
 
-const Name = styled.div`
-  font-weight: 600;
+const NameRow = styled.div`
   display: flex;
   align-items: center;
   gap: var(--space-sm);
-  flex-wrap: wrap;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+`;
+
+const NameText = styled.span`
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 600;
 `;
 
 const Meta = styled.span`
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   font-size: var(--font-size-sm);
   color: var(--text-muted);
   font-family: var(--font-mono);
 `;
 
-const HeaderActions = styled.div`
+const Controls = styled.div`
   display: flex;
   align-items: center;
   gap: var(--space-sm);
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
+  flex-shrink: 0;
+`;
+
+const ProviderStatusDot = styled.span<{ $state: "ok" | "error" | "unknown" }>`
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  background: ${(p) => {
+    if (p.$state === "ok") return "var(--success)";
+    if (p.$state === "error") return "var(--danger)";
+    return "var(--text-muted)";
+  }};
 `;
 
 const ExpandedContent = styled.div`
   display: flex;
   flex-direction: column;
   gap: var(--space-md);
-  margin-top: var(--space-md);
-  border-top: 1px solid var(--border);
-  padding-top: var(--space-md);
-`;
-
-const FormRow = styled.div`
-  display: flex;
-  gap: var(--space-md);
-  align-items: flex-start;
-  flex-wrap: wrap;
-`;
-
-const FormField = styled.div<{ $flex?: number }>`
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  flex: ${(p) => p.$flex ?? "unset"};
-  min-width: 150px;
 `;
 
 const Label = styled.label`
@@ -76,14 +90,6 @@ const Label = styled.label`
 const TestResult = styled.span<{ $ok: boolean }>`
   font-size: var(--font-size-sm);
   color: ${(p) => (p.$ok ? "var(--success)" : "var(--danger)")};
-`;
-
-const FooterActions = styled.div`
-  display: flex;
-  justify-content: flex-end;
-  align-items: center;
-  gap: var(--space-sm);
-  flex-wrap: wrap;
 `;
 
 type Props = {
@@ -113,16 +119,28 @@ export default function ProviderCard({
   onFieldChange,
   onModelSettingsSave,
 }: Props) {
+  const statusState = testResult ? (testResult.ok ? "ok" : "error") : "unknown";
+  const statusTitle = isTesting
+    ? "Wird getestet"
+    : testResult
+      ? (testResult.ok ? "Verifiziert" : "Test fehlgeschlagen")
+      : "Noch nicht getestet";
+
   return (
-    <Wrapper>
-      <Header onClick={onToggleExpand}>
-        <Name>
-          {provider.name}
-          <Meta>{provider.baseUrl}</Meta>
-        </Name>
-        <HeaderActions>
-          <span style={{ color: "var(--text-muted)", fontSize: "var(--font-size-sm)" }}>{isExpanded ? "▲" : "▼"}</span>
-        </HeaderActions>
+    <Card>
+      <Header $withBody={isExpanded}>
+        <HeaderTop>
+          <NameRow>
+            <NameText title={provider.name}>{provider.name}</NameText>
+            <ProviderStatusDot $state={statusState} title={statusTitle} />
+            <Meta title={provider.baseUrl}>{provider.baseUrl}</Meta>
+          </NameRow>
+          <Controls>
+            <Button size="sm" variant="secondary" onClick={onToggleExpand}>
+              {isExpanded ? "Schliessen" : "Bearbeiten"}
+            </Button>
+          </Controls>
+        </HeaderTop>
       </Header>
 
       {isExpanded && (
@@ -156,7 +174,7 @@ export default function ProviderCard({
             onSave={onModelSettingsSave}
           />
 
-          <FooterActions>
+          <ActionsRow>
             <Button size="sm" variant="secondary" onClick={onTest} disabled={isTesting}>
               {isTesting ? "..." : "Testen"}
             </Button>
@@ -164,9 +182,9 @@ export default function ProviderCard({
             <Button size="sm" variant="danger" onClick={onDelete}>
               Provider loeschen
             </Button>
-          </FooterActions>
+          </ActionsRow>
         </ExpandedContent>
       )}
-    </Wrapper>
+    </Card>
   );
 }

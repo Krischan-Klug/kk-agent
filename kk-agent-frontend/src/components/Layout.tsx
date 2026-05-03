@@ -5,6 +5,7 @@ import ProviderOnboardingWizard from "./onboarding/ProviderOnboardingWizard";
 import Spinner from "./Spinner";
 import { provider as providerApi } from "@/lib/api";
 import { createLogger } from "@/lib/logger";
+import { verifyProviders } from "@/lib/providerVerification";
 import type { ProviderConfig } from "@/types/api";
 
 const logger = createLogger("layout");
@@ -19,7 +20,11 @@ export default function Layout({ children }: LayoutProps) {
 
   const loadProviders = useCallback(async () => {
     try {
-      setProviders(await providerApi.listProviders());
+      const providerList = await providerApi.listProviders();
+      setProviders(providerList);
+      if (providerList.length > 0) {
+        void verifyProviders(providerList.map((provider) => provider.id), providerApi.testProvider);
+      }
     } catch (error) {
       logger.error("Failed to load providers for onboarding:", error);
       setProviders([]);

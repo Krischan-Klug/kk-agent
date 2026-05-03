@@ -9,7 +9,7 @@ import Button from "@/components/Button";
 import Spinner from "@/components/Spinner";
 import Modal from "@/components/Modal";
 import McpCard from "@/components/mcp/McpCard";
-import McpCardGrid from "@/components/mcp/McpCardGrid";
+import McpCardList from "@/components/mcp/McpCardList";
 import CreateMcpModal from "@/components/mcp/CreateMcpModal";
 import { ActionsRow, EmptyHint, MutedText } from "@/components/PageForm";
 import { EMPTY_MCP_FORM } from "@/components/mcp/types";
@@ -41,14 +41,12 @@ export default function McpPage() {
   async function handleCreate() {
     setCreating(true);
     try {
-      const env = Object.keys(createForm.env ?? {}).length > 0 ? createForm.env : undefined;
       await mcpApi.create({
         name: createForm.name,
         transport: createForm.transport,
         emoji: createForm.emoji || undefined,
         command: createForm.transport === "stdio" ? createForm.command : undefined,
         args: createForm.transport === "stdio" && createForm.args?.length ? createForm.args : undefined,
-        env: createForm.transport === "stdio" ? env : undefined,
         url: createForm.transport === "sse" ? createForm.url : undefined,
         instruction: createForm.instruction || undefined,
       });
@@ -77,21 +75,23 @@ export default function McpPage() {
     if (!form) return;
 
     try {
-      const env = Object.keys(form.env).length > 0 ? form.env : undefined;
-      await mcpApi.update(mcp.id, {
-        name: form.name,
-        emoji: form.emoji || undefined,
-        ...(mcp.source === "system"
-          ? {
-              systemConfig: {
-                ...(mcp.systemKey === "filesystem" ? { basePath: form.basePath } : {}),
-                ...(mcp.systemKey === "terminal" ? { workingDirectory: form.workingDirectory } : {}),
-              },
-            }
-          : mcp.transport === "stdio"
-            ? { command: form.command, args: form.args.split("\n").filter(Boolean), env }
-            : { url: form.url }),
-      });
+      await Promise.all([
+        mcpApi.update(mcp.id, {
+          name: form.name,
+          emoji: form.emoji || undefined,
+          ...(mcp.source === "system"
+            ? {
+                systemConfig: {
+                  ...(mcp.systemKey === "filesystem" ? { basePath: form.basePath } : {}),
+                  ...(mcp.systemKey === "terminal" ? { workingDirectory: form.workingDirectory } : {}),
+                },
+              }
+            : mcp.transport === "stdio"
+              ? { command: form.command, args: form.args.split("\n").filter(Boolean), env: {} }
+              : { url: form.url }),
+        }),
+        mcpApi.setInstruction(mcp.id, collection.instructions[mcp.id] ?? ""),
+      ]);
 
       if (restart && mcp.source !== "system") {
         try {
@@ -116,7 +116,7 @@ export default function McpPage() {
       <HeaderActions>
         <Button onClick={() => setShowCreate(true)}>MCP hinzufuegen</Button>
       </HeaderActions>
-      <McpCardGrid>
+      <McpCardList>
         {collection.items.map((mcp) => (
           <McpCard
             key={mcp.id}
@@ -126,6 +126,15 @@ export default function McpPage() {
             editOpen={collection.expandedEdit.has(mcp.id)}
             toolsOpen={collection.expandedTools.has(mcp.id)}
             instructionsOpen={collection.expandedInstructions.has(mcp.id)}
+            hideMcpMetadata
+            showConfigDetail={false}
+            compactHeader
+            showDeleteButton={false}
+            showDeleteInEdit
+            showInstructionControls={false}
+            showToolsControls={false}
+            showInstructionInEdit
+            systemVariables={collection.systemVariables}
             onStateToggle={() => void handleStartStop(mcp)}
             onEditToggle={() => collection.expandedEdit.toggle(mcp.id)}
             onDelete={() => setDeleteTarget(mcp.id)}
@@ -141,11 +150,12 @@ export default function McpPage() {
           />
         ))}
         {collection.items.length === 0 && <EmptyHint>Keine externen MCP Server konfiguriert.</EmptyHint>}
-      </McpCardGrid>
+      </McpCardList>
       <CreateMcpModal
         open={showCreate}
         form={createForm}
         creating={creating}
+        systemVariables={collection.systemVariables}
         onChange={setCreateForm}
         onCreate={handleCreate}
         onClose={() => setShowCreate(false)}

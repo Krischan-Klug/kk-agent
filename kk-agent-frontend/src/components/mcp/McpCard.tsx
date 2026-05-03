@@ -1,49 +1,54 @@
+import { useState } from "react";
 import styled from "styled-components";
 import type { McpListItem } from "@/types/api";
 import Card from "@/components/Card";
 import Badge from "@/components/Badge";
 import Button from "@/components/Button";
 import TextArea from "@/components/TextArea";
-import KeyValueEditor from "@/components/KeyValueEditor";
 import Input from "@/components/Input";
 import {
   ActionsRow,
   FieldLabel,
   FormField,
+  MutedText,
   Section,
   SectionTitle,
 } from "@/components/PageForm";
+import { StatusDot } from "@/components/agent/AgentEditor.styled";
+import { useDropdown } from "@/hooks/useDropdown";
 import type { EditForm } from "./types";
 import { getConfigSummary } from "./types";
 
-const Header = styled.div`
+const Header = styled.div<{ $withBody: boolean }>`
   display: flex;
   flex-direction: column;
   gap: var(--space-sm);
-  margin-bottom: var(--space-md);
+  margin-bottom: ${(p) => (p.$withBody ? "var(--space-md)" : "0")};
 `;
 
-const HeaderTop = styled.div`
+const HeaderTop = styled.div<{ $compact?: boolean }>`
   display: flex;
-  align-items: flex-start;
+  align-items: ${(p) => (p.$compact ? "center" : "flex-start")};
   justify-content: space-between;
   gap: var(--space-md);
+  flex-wrap: nowrap;
 `;
 
 const Name = styled.div`
   display: flex;
   align-items: center;
   gap: var(--space-sm);
-  flex-wrap: wrap;
   flex: 1;
   min-width: 0;
+  flex-wrap: nowrap;
+  overflow: hidden;
 `;
 
 const Controls = styled.div`
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   gap: var(--space-sm);
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   flex-shrink: 0;
 `;
 
@@ -64,9 +69,18 @@ const HeaderNameInput = styled(Input)`
 
 const HeaderEmojiInput = styled(Input)`
   width: 56px;
+  min-width: 56px;
   text-align: center;
   font-size: 1.2em;
   flex-shrink: 0;
+`;
+
+const NameText = styled.span`
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 600;
 `;
 
 const ConfigDetail = styled.div`
@@ -109,6 +123,105 @@ const ScopeSelect = styled.select`
   }
 `;
 
+const SkillPicker = styled.div`
+  position: relative;
+  margin-top: var(--space-sm);
+`;
+
+const SkillPickerButton = styled.button`
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-primary);
+  border-radius: var(--radius-sm);
+  font-size: var(--font-size-sm);
+  cursor: pointer;
+
+  &:hover {
+    border-color: var(--accent);
+    background: var(--bg-hover);
+  }
+
+  &::after {
+    content: "▼";
+    font-size: 8px;
+    opacity: 0.7;
+  }
+`;
+
+const SkillPickerMenu = styled.div`
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  z-index: 20;
+  width: min(360px, 100%);
+  max-height: 240px;
+  overflow-y: auto;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+`;
+
+const SkillOptionButton = styled.button<{ $active: boolean }>`
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-sm);
+  width: 100%;
+  padding: var(--space-sm) var(--space-md);
+  border: none;
+  background: ${(p) => (p.$active ? "var(--accent-muted)" : "transparent")};
+  color: var(--text-primary);
+  text-align: left;
+  cursor: pointer;
+
+  &:hover {
+    background: var(--bg-hover);
+  }
+`;
+
+const SkillOptionLabel = styled.span`
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+`;
+
+const SkillOptionMark = styled.span<{ $active: boolean }>`
+  flex-shrink: 0;
+  color: ${(p) => (p.$active ? "var(--accent)" : "var(--text-muted)")};
+`;
+
+const LinkedSkillsPreview = styled.div`
+  margin-top: var(--space-sm);
+  max-height: 96px;
+  overflow-y: auto;
+  padding: var(--space-sm) var(--space-md);
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+`;
+
+const LinkedSkillsPreviewList = styled.div`
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+`;
+
+const LinkedSkillsPreviewItem = styled.div`
+  font-size: var(--font-size-sm);
+  color: var(--text-primary);
+`;
+
+const LinkedSkillsEmpty = styled.div`
+  font-size: var(--font-size-sm);
+  color: var(--text-muted);
+`;
+
 type SkillOption = { id: string; name: string };
 
 type Props = {
@@ -119,7 +232,15 @@ type Props = {
   toolsOpen: boolean;
   instructionsOpen: boolean;
   hideMcpMetadata?: boolean;
+  showConfigDetail?: boolean;
+  compactHeader?: boolean;
+  showDeleteButton?: boolean;
+  showDeleteInEdit?: boolean;
+  showInstructionControls?: boolean;
+  showToolsControls?: boolean;
+  showInstructionInEdit?: boolean;
   availableSkills?: SkillOption[];
+  systemVariables?: string[];
   onStateToggle: () => void;
   onEditToggle: () => void;
   onDelete: () => void;
@@ -133,64 +254,7 @@ type Props = {
   onSkillToggle?: (skillId: string, linked: boolean) => void;
 };
 
-const INSTRUCTION_TEMPLATES: { label: string; body: string }[] = [
-  {
-    label: "Standard Workflow",
-    body: [
-      "## Standard Workflow",
-      "1. Identify the user's intent and required inputs.",
-      "2. Call the relevant tool with minimal arguments first.",
-      "3. Verify the result before chaining further calls.",
-      "4. Summarize the outcome for the user in 1-3 sentences.",
-    ].join("\n"),
-  },
-  {
-    label: "Common Errors",
-    body: [
-      "## Common Errors",
-      "- Missing required field: re-read the user's request and ask if it cannot be inferred.",
-      "- Permission denied: do not retry; explain the limitation.",
-      "- Timeout / no response: retry once, then escalate.",
-    ].join("\n"),
-  },
-  {
-    label: "When to Use",
-    body: [
-      "## When to Use",
-      "- Use this MCP only when the user explicitly references its domain.",
-      "- Prefer internal tools for generic file or shell tasks.",
-      "- Do not use it for actions outside its declared scope.",
-    ].join("\n"),
-  },
-];
-
-const SkillList = styled.div`
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-xs);
-  margin-top: var(--space-sm);
-`;
-
-const SkillChip = styled.button<{ $active: boolean }>`
-  border: 1px solid ${(props) => (props.$active ? "var(--accent)" : "var(--border)")};
-  background: ${(props) => (props.$active ? "var(--accent-soft, var(--bg-elevated))" : "var(--bg-elevated)")};
-  color: var(--text-primary);
-  padding: 4px 10px;
-  border-radius: var(--radius-sm);
-  font-size: var(--font-size-sm);
-  cursor: pointer;
-
-  &:hover {
-    border-color: var(--accent);
-  }
-`;
-
-const TemplateRow = styled.div`
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-xs);
-  margin-top: var(--space-sm);
-`;
+const DEFAULT_MCP_EMOJI = "🧩";
 
 export default function McpCard({
   mcp,
@@ -200,7 +264,15 @@ export default function McpCard({
   toolsOpen,
   instructionsOpen,
   hideMcpMetadata = false,
+  showConfigDetail = true,
+  compactHeader = false,
+  showDeleteButton = true,
+  showDeleteInEdit = false,
+  showInstructionControls = true,
+  showToolsControls = true,
+  showInstructionInEdit = false,
   availableSkills,
+  systemVariables = [],
   onStateToggle,
   onEditToggle,
   onDelete,
@@ -213,86 +285,150 @@ export default function McpCard({
   onSaveEdit,
   onSkillToggle,
 }: Props) {
+  const [showSystemVariables, setShowSystemVariables] = useState(false);
+  const skillDropdown = useDropdown<HTMLDivElement>();
   const linkedSkillIds = mcp.skillIds ?? [];
-
-  function appendTemplate(body: string) {
-    const next = instruction.trim().length > 0
-      ? `${instruction.trim()}\n\n${body}`
-      : body;
-    onInstructionChange(next);
-  }
   const handleEditToggle = editOpen ? onEditToggle : onOpenEdit;
   const configSummary = getConfigSummary(mcp);
-  const customEnv = mcp.source !== "system" && mcp.transport === "stdio"
-    ? (mcp.server as { env?: Record<string, string> }).env ?? {}
-    : {};
-  const hasCustomEnv = Object.keys(customEnv).length > 0;
+  const showInstructionEditor = showInstructionInEdit ? editOpen : instructionsOpen;
+  const isActive = mcp.source === "system" ? mcp.active !== false : mcp.running;
+  const linkedSkills = (availableSkills ?? []).filter((skill) => linkedSkillIds.includes(skill.id));
+  const hasBody =
+    (!editOpen && showConfigDetail && Boolean(configSummary))
+    || (editOpen && Boolean(editForm))
+    || ((showInstructionControls || showToolsControls) && !showInstructionInEdit)
+    || (showInstructionEditor && !showInstructionInEdit)
+    || toolsOpen;
+
+  function renderLinkedSkills() {
+    if (!availableSkills || availableSkills.length === 0 || !onSkillToggle) return null;
+
+    return (
+      <div style={{ marginTop: "var(--space-md)" }}>
+        <SectionTitle as="span">Linked Skills</SectionTitle>
+        <MutedText>
+          Skills linked here are automatically added to the skill catalog of any session that uses this {mcp.source === "system" ? "tool" : "MCP"}.
+        </MutedText>
+        <SkillPicker ref={skillDropdown.ref}>
+          <SkillPickerButton type="button" onClick={skillDropdown.toggle}>
+            Skills waehlen ({linkedSkills.length})
+          </SkillPickerButton>
+          {skillDropdown.open && (
+            <SkillPickerMenu>
+              {availableSkills.map((skill) => {
+                const linked = linkedSkillIds.includes(skill.id);
+                return (
+                  <SkillOptionButton
+                    key={skill.id}
+                    type="button"
+                    $active={linked}
+                    onClick={() => onSkillToggle(skill.id, !linked)}
+                  >
+                    <SkillOptionLabel title={skill.name}>{skill.name}</SkillOptionLabel>
+                    <SkillOptionMark $active={linked}>{linked ? "✓" : "+"}</SkillOptionMark>
+                  </SkillOptionButton>
+                );
+              })}
+            </SkillPickerMenu>
+          )}
+        </SkillPicker>
+        <LinkedSkillsPreview>
+          {linkedSkills.length > 0 ? (
+            <LinkedSkillsPreviewList>
+              {linkedSkills.map((skill) => (
+                <LinkedSkillsPreviewItem key={skill.id}>{skill.name}</LinkedSkillsPreviewItem>
+              ))}
+            </LinkedSkillsPreviewList>
+          ) : (
+            <LinkedSkillsEmpty>Keine Skills verlinkt.</LinkedSkillsEmpty>
+          )}
+        </LinkedSkillsPreview>
+      </div>
+    );
+  }
+
+  function renderSystemVariables() {
+    if (systemVariables.length === 0) return null;
+
+    return (
+      <>
+        <ActionsRow style={{ marginTop: "var(--space-md)" }}>
+          <Button size="sm" variant="secondary" type="button" onClick={() => setShowSystemVariables((prev) => !prev)}>
+            {showSystemVariables ? "Systemvariablen ausblenden" : "Systemvariablen anzeigen"}
+          </Button>
+        </ActionsRow>
+        {showSystemVariables && <MutedText>{systemVariables.join(", ")}</MutedText>}
+      </>
+    );
+  }
 
   return (
     <Card>
-      <Header>
-        <HeaderTop>
+      <Header $withBody={hasBody}>
+        <HeaderTop $compact={compactHeader}>
           <Name>
-            <StatusToggle
-              type="button"
-              onClick={onStateToggle}
-              aria-label={mcp.running ? "Stoppen" : "Starten"}
-              title={mcp.running ? "Stoppen" : "Starten"}
-            >
-              <Badge variant={mcp.running ? "success" : "danger"}>{mcp.running ? "running" : "stopped"}</Badge>
-            </StatusToggle>
-            {!hideMcpMetadata && (
+            {!compactHeader && (
               <>
-                <Badge>{mcp.source === "system" ? "system" : "custom"}</Badge>
-                <Badge>{mcp.transport}</Badge>
+                <StatusToggle
+                  type="button"
+                  onClick={onStateToggle}
+                  aria-label={mcp.running ? "Stoppen" : "Starten"}
+                  title={mcp.running ? "Stoppen" : "Starten"}
+                >
+                  <Badge variant={mcp.running ? "success" : "danger"}>{mcp.running ? "running" : "stopped"}</Badge>
+                </StatusToggle>
+                {!hideMcpMetadata && (
+                  <>
+                    <Badge>{mcp.source === "system" ? "system" : "custom"}</Badge>
+                    <Badge>{mcp.transport}</Badge>
+                  </>
+                )}
               </>
+            )}
+            {editOpen && editForm ? (
+              <>
+                <HeaderEmojiInput
+                  value={editForm.emoji}
+                  onChange={(e) => onEditFormChange({ ...editForm, emoji: e.target.value })}
+                  placeholder={DEFAULT_MCP_EMOJI}
+                />
+                <HeaderNameInput
+                  value={editForm.name}
+                  onChange={(e) => onEditFormChange({ ...editForm, name: e.target.value })}
+                />
+              </>
+            ) : (
+              <>
+                <span style={{ fontSize: "1.2em" }}>{mcp.emoji || DEFAULT_MCP_EMOJI}</span>
+                <NameText title={mcp.name}>{mcp.name}</NameText>
+              </>
+            )}
+            {compactHeader && (
+              <StatusToggle
+                type="button"
+                onClick={onStateToggle}
+                aria-label={isActive ? "Deaktivieren" : "Aktivieren"}
+                title={isActive ? "Aktiv" : "Inaktiv"}
+              >
+                <StatusDot $running={isActive} />
+              </StatusToggle>
             )}
           </Name>
           <Controls>
             <Button size="sm" variant="secondary" onClick={handleEditToggle}>
               {editOpen ? "Schliessen" : "Bearbeiten"}
             </Button>
-            {mcp.source !== "system" && (
+            {showDeleteButton && mcp.source !== "system" && (
               <Button size="sm" variant="danger" onClick={onDelete}>
                 Loeschen
               </Button>
             )}
           </Controls>
         </HeaderTop>
-        <Name>
-          {editOpen && editForm ? (
-            <>
-              <HeaderEmojiInput
-                value={editForm.emoji}
-                onChange={(e) => onEditFormChange({ ...editForm, emoji: e.target.value })}
-                placeholder="???"
-              />
-              <HeaderNameInput
-                value={editForm.name}
-                onChange={(e) => onEditFormChange({ ...editForm, name: e.target.value })}
-              />
-            </>
-          ) : (
-            <>
-              <span style={{ fontSize: "1.2em" }}>{mcp.emoji || "???"}</span>
-              <span style={{ fontWeight: 600 }}>{mcp.name}</span>
-            </>
-          )}
-        </Name>
       </Header>
 
-      {!editOpen && (configSummary || hasCustomEnv) && (
-        <ConfigDetail>
-          {configSummary}
-          {hasCustomEnv && (
-              <div style={{ marginTop: "var(--space-xs)", color: "var(--text-muted)", fontSize: "var(--font-size-sm)" }}>
-                env:{" "}
-                {Object.entries(customEnv)
-                  .map(([k]) => `${k}=*****`)
-                  .join(", ")}
-              </div>
-            )}
-        </ConfigDetail>
+      {!editOpen && showConfigDetail && configSummary && (
+        <ConfigDetail>{configSummary}</ConfigDetail>
       )}
 
       {editOpen && editForm && (
@@ -383,10 +519,6 @@ export default function McpCard({
                 <FieldLabel>Args (ein Argument pro Zeile)</FieldLabel>
                 <TextArea value={editForm.args} onChange={(e) => onEditFormChange({ ...editForm, args: e.target.value })} rows={4} />
               </FormField>
-              <FormField>
-                <FieldLabel>Umgebungsvariablen</FieldLabel>
-                <KeyValueEditor values={editForm.env} onChange={(env) => onEditFormChange({ ...editForm, env })} sensitiveValues />
-              </FormField>
             </>
           ) : (
             <FormField>
@@ -404,71 +536,65 @@ export default function McpCard({
                 Speichern & Neustarten
               </Button>
             )}
+            {showDeleteInEdit && mcp.source !== "system" && (
+              <Button size="sm" variant="danger" onClick={onDelete}>
+                Loeschen
+              </Button>
+            )}
             <Button size="sm" variant="secondary" onClick={onEditToggle}>
               Abbrechen
             </Button>
           </ActionsRow>
+
+          {showInstructionInEdit && (
+            <>
+              <SectionTitle style={{ marginTop: "var(--space-md)" }}>Instruction</SectionTitle>
+              <TextArea
+                value={instruction}
+                onChange={(e) => onInstructionChange(e.target.value)}
+                rows={14}
+                style={{ marginTop: "var(--space-sm)" }}
+              />
+              {renderLinkedSkills()}
+            </>
+          )}
+          {renderSystemVariables()}
         </Section>
       )}
 
-      <ActionsRow style={{ marginTop: "var(--space-md)" }}>
-        <SectionTitle as="span">Instruction</SectionTitle>
-        <Button size="sm" variant="secondary" onClick={onInstructionToggle}>
-          {instructionsOpen ? "Schliessen" : "Bearbeiten"}
-        </Button>
-        {instructionsOpen && (
-          <Button size="sm" variant="secondary" onClick={onInstructionSave}>
-            Speichern
-          </Button>
-        )}
-        <Button size="sm" variant="secondary" onClick={onToolsToggle}>
-          {toolsOpen ? "Tools verbergen" : `Tools (${mcp.tools.length})`}
-        </Button>
-      </ActionsRow>
-
-      {instructionsOpen && (
-        <>
-          <TemplateRow>
-            {INSTRUCTION_TEMPLATES.map((template) => (
-              <Button
-                key={template.label}
-                size="sm"
-                variant="secondary"
-                onClick={() => appendTemplate(template.body)}
-              >
-                + {template.label}
+      {(showInstructionControls || showToolsControls) && (
+        <ActionsRow style={{ marginTop: "var(--space-md)" }}>
+          {showInstructionControls && (
+            <>
+              <SectionTitle as="span">Instruction</SectionTitle>
+              <Button size="sm" variant="secondary" onClick={onInstructionToggle}>
+                {instructionsOpen ? "Schliessen" : "Bearbeiten"}
               </Button>
-            ))}
-          </TemplateRow>
+              {instructionsOpen && (
+                <Button size="sm" variant="secondary" onClick={onInstructionSave}>
+                  Speichern
+                </Button>
+              )}
+            </>
+          )}
+          {showToolsControls && (
+            <Button size="sm" variant="secondary" onClick={onToolsToggle}>
+              {toolsOpen ? "Tools verbergen" : `Tools (${mcp.tools.length})`}
+            </Button>
+          )}
+        </ActionsRow>
+      )}
+
+      {showInstructionEditor && !showInstructionInEdit && (
+        <>
           <TextArea
             value={instruction}
             onChange={(e) => onInstructionChange(e.target.value)}
             rows={14}
             style={{ marginTop: "var(--space-sm)" }}
           />
-          {availableSkills && availableSkills.length > 0 && onSkillToggle && (
-            <div style={{ marginTop: "var(--space-md)" }}>
-              <SectionTitle as="span">Linked Skills</SectionTitle>
-              <div style={{ fontSize: "var(--font-size-sm)", color: "var(--text-secondary)", marginTop: "var(--space-xs)" }}>
-                Skills linked here are automatically added to the skill catalog of any session that uses this {mcp.source === "system" ? "tool" : "MCP"}.
-              </div>
-              <SkillList>
-                {availableSkills.map((skill) => {
-                  const linked = linkedSkillIds.includes(skill.id);
-                  return (
-                    <SkillChip
-                      key={skill.id}
-                      type="button"
-                      $active={linked}
-                      onClick={() => onSkillToggle(skill.id, !linked)}
-                    >
-                      {linked ? "✓ " : "+ "}{skill.name}
-                    </SkillChip>
-                  );
-                })}
-              </SkillList>
-            </div>
-          )}
+          {renderLinkedSkills()}
+          {renderSystemVariables()}
         </>
       )}
 

@@ -2,6 +2,7 @@ import { useRouter } from "next/router";
 import Link from "next/link";
 import styled from "styled-components";
 import { PageBody } from "./Layout.styled";
+import Spinner from "./Spinner";
 
 const settingsNav = [
   { href: "/settings/defaults", label: "📋 Defaults" },
@@ -12,6 +13,7 @@ const settingsNav = [
 
 const Wrapper = styled.div`
   display: flex;
+  width: 100%;
   gap: var(--space-lg);
   align-items: flex-start;
 `;
@@ -25,8 +27,9 @@ const SubNav = styled.nav`
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
   padding: var(--space-sm);
+  align-self: flex-start;
   position: sticky;
-  top: var(--space-lg);
+  top: 0;
 `;
 
 const SubNavItem = styled.div<{ $active: boolean }>`
@@ -49,7 +52,17 @@ const Content = styled.div`
   min-width: 0;
 `;
 
-export default function SettingsLayout({ children }: { children: React.ReactNode }) {
+const LoadingState = styled.div`
+  min-height: 120px;
+  padding-top: var(--space-sm);
+`;
+
+type SettingsLayoutProps = {
+  children?: React.ReactNode;
+  loading?: boolean;
+};
+
+export default function SettingsLayout({ children, loading = false }: SettingsLayoutProps) {
   const router = useRouter();
 
   return (
@@ -62,7 +75,7 @@ export default function SettingsLayout({ children }: { children: React.ReactNode
             </Link>
           ))}
         </SubNav>
-        <Content>{children}</Content>
+        <Content>{loading ? <LoadingState><Spinner /></LoadingState> : children}</Content>
       </Wrapper>
     </PageBody>
   );

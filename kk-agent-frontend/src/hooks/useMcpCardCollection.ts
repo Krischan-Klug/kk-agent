@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { skills as skillsApi } from "@/lib/api";
+import { agent as agentApi, skills as skillsApi } from "@/lib/api";
 import type { Logger } from "@/lib/logger";
 import type { McpListItem, SkillDefinition, UpdateMcpBody } from "@/types/api";
 import { useToggleSet } from "@/hooks/useToggleSet";
@@ -17,6 +17,7 @@ export function useMcpCardCollection(api: McpCardCollectionApi, logger: Logger, 
   const [instructions, setInstructions] = useState<Record<string, string>>({});
   const [editForms, setEditForms] = useState<Record<string, EditForm>>({});
   const [skillList, setSkillList] = useState<SkillDefinition[]>([]);
+  const [systemVariables, setSystemVariables] = useState<string[]>([]);
   const expandedTools = useToggleSet();
   const expandedInstructions = useToggleSet();
   const expandedEdit = useToggleSet();
@@ -41,10 +42,20 @@ export function useMcpCardCollection(api: McpCardCollectionApi, logger: Logger, 
     }
   }, [logger]);
 
+  const loadSystemVariables = useCallback(async () => {
+    try {
+      const response = await agentApi.systemVariables();
+      setSystemVariables(response.variables);
+    } catch (err) {
+      logger.error("Failed to load system variables:", err);
+    }
+  }, [logger]);
+
   useEffect(() => {
     void loadItems();
     void loadSkills();
-  }, [loadItems, loadSkills]);
+    void loadSystemVariables();
+  }, [loadItems, loadSkills, loadSystemVariables]);
 
   const openEdit = useCallback((item: McpListItem) => {
     setEditForms((prev) => ({ ...prev, [item.id]: buildEditForm(item) }));
@@ -81,6 +92,7 @@ export function useMcpCardCollection(api: McpCardCollectionApi, logger: Logger, 
     editForms,
     setEditForms,
     skillOptions: skillList.map((skill) => ({ id: skill.id, name: skill.name })),
+    systemVariables,
     expandedTools,
     expandedInstructions,
     expandedEdit,

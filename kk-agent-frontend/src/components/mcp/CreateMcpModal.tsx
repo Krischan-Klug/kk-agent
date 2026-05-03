@@ -1,26 +1,30 @@
+import { useState } from "react";
+import Button from "@/components/Button";
 import FormModal from "@/components/FormModal";
 import TextArea from "@/components/TextArea";
 import Input from "@/components/Input";
-import KeyValueEditor from "@/components/KeyValueEditor";
 import { TabBar, TabButton } from "@/components/Tabs";
-import { FieldLabel, FormField, FormRow } from "@/components/PageForm";
+import { ActionsRow, FieldLabel, FormField, FormRow, MutedText } from "@/components/PageForm";
 import type { CreateMcpBody } from "@/types/api";
 
 type Props = {
   open: boolean;
   form: CreateMcpBody;
   creating: boolean;
+  systemVariables: string[];
   onChange: (form: CreateMcpBody) => void;
   onCreate: () => void;
   onClose: () => void;
 };
 
-export default function CreateMcpModal({ open, form, creating, onChange, onCreate, onClose }: Props) {
+export default function CreateMcpModal({ open, form, creating, systemVariables, onChange, onCreate, onClose }: Props) {
+  const [showSystemVariables, setShowSystemVariables] = useState(false);
+
   if (!open) return null;
 
   return (
     <FormModal
-      title="MCP Server hinzufügen"
+      title="MCP Server hinzufuegen"
       onClose={onClose}
       onSubmit={onCreate}
       submitDisabled={!form.name}
@@ -41,7 +45,7 @@ export default function CreateMcpModal({ open, form, creating, onChange, onCreat
             <Input
               value={form.emoji ?? ""}
               onChange={(e) => onChange({ ...form, emoji: e.target.value })}
-              placeholder="???"
+              placeholder="🧩"
               style={{ width: 60, textAlign: "center", fontSize: "1.2em" }}
             />
           </FormField>
@@ -77,14 +81,6 @@ export default function CreateMcpModal({ open, form, creating, onChange, onCreat
               placeholder={"-y\n@modelcontextprotocol/server-filesystem\n/path/to/dir"}
             />
           </FormField>
-          <FormField>
-            <FieldLabel>Umgebungsvariablen</FieldLabel>
-            <KeyValueEditor
-              values={form.env ?? {}}
-              onChange={(env) => onChange({ ...form, env })}
-              sensitiveValues
-            />
-          </FormField>
         </>
       ) : (
         <FormField>
@@ -102,9 +98,15 @@ export default function CreateMcpModal({ open, form, creating, onChange, onCreat
           value={form.instruction ?? ""}
           onChange={(e) => onChange({ ...form, instruction: e.target.value })}
           rows={4}
-          placeholder="System-Instruction für diesen MCP..."
+          placeholder="System-Instruction fuer diesen MCP..."
         />
       </FormField>
+      <ActionsRow>
+        <Button size="sm" variant="secondary" type="button" onClick={() => setShowSystemVariables((prev) => !prev)}>
+          {showSystemVariables ? "Systemvariablen ausblenden" : "Systemvariablen anzeigen"}
+        </Button>
+      </ActionsRow>
+      {showSystemVariables && <MutedText>{systemVariables.join(", ")}</MutedText>}
     </FormModal>
   );
 }

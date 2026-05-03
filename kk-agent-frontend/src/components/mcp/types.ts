@@ -6,7 +6,6 @@ export type EditForm = {
   command: string;
   args: string;
   url: string;
-  env: Record<string, string>;
   accessScope: "user" | "system";
   basePath: string;
   workingDirectory: string;
@@ -19,7 +18,6 @@ export const EMPTY_MCP_FORM: CreateMcpBody = {
   transport: "stdio",
   command: "",
   args: [],
-  env: {},
   url: "",
   instruction: "",
   emoji: "",
@@ -33,7 +31,6 @@ export function buildEditForm(mcp: McpListItem): EditForm {
     command: server.command ?? "",
     args: (server.args ?? []).join("\n"),
     url: server.url ?? "",
-    env: server.env ?? {},
     accessScope: mcp.systemConfig?.accessScope ?? "user",
     basePath: mcp.systemConfig?.basePath ?? "",
     workingDirectory: mcp.systemConfig?.workingDirectory ?? "",

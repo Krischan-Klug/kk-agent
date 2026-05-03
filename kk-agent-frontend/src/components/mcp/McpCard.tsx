@@ -546,6 +546,7 @@ export default function McpCard({
             </Button>
           </ActionsRow>
 
+          {renderSystemVariables()}
           {showInstructionInEdit && (
             <>
               <SectionTitle style={{ marginTop: "var(--space-md)" }}>Instruction</SectionTitle>
@@ -558,7 +559,6 @@ export default function McpCard({
               {renderLinkedSkills()}
             </>
           )}
-          {renderSystemVariables()}
         </Section>
       )}
 
@@ -587,6 +587,7 @@ export default function McpCard({
 
       {showInstructionEditor && !showInstructionInEdit && (
         <>
+          {renderSystemVariables()}
           <TextArea
             value={instruction}
             onChange={(e) => onInstructionChange(e.target.value)}
@@ -594,7 +595,6 @@ export default function McpCard({
             style={{ marginTop: "var(--space-sm)" }}
           />
           {renderLinkedSkills()}
-          {renderSystemVariables()}
         </>
       )}
 

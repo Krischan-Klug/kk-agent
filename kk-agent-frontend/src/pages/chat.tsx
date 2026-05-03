@@ -11,7 +11,6 @@ import Button from "@/components/Button";
 import Spinner from "@/components/Spinner";
 import ChatDebugPanel, { type ChatDebugTab } from "@/components/ChatDebugPanel";
 import ChatComposer from "@/components/chat/ChatComposer";
-import CreateSessionModal from "@/components/chat/CreateSessionModal";
 import ChatMessages from "@/components/chat/ChatMessages";
 import { EmptyState } from "@/components/chat/ChatMessages.styled";
 import { emitAppEvent, CHAT_DEBUG_TOGGLE_EVENT } from "@/lib/appEvents";
@@ -21,7 +20,8 @@ import { useChatSessionData } from "@/hooks/useChatSessionData";
 import { useChatStreaming } from "@/hooks/useChatStreaming";
 import { session as sessionApi } from "@/lib/api";
 import { createLogger } from "@/lib/logger";
-import { resolveDefaultSessionAgentId, resolveSessionCreationContext, type SessionCreationContext } from "@/lib/sessionFactory";
+import { resolveDefaultSessionAgentId } from "@/lib/sessionFactory";
+import { getSessionModelRef } from "@/lib/modelRefs";
 import type { SessionRuntimeMcpDebug, SessionRuntimeSkillDebug, SessionRuntimeToolDebug } from "@/types/api";
 
 const logger = createLogger("chat");
@@ -67,7 +67,6 @@ export default function ChatPage() {
   const [debugRuntimeTools, setDebugRuntimeTools] = useState<SessionRuntimeToolDebug[] | null>(null);
   const [debugRuntimeMcps, setDebugRuntimeMcps] = useState<SessionRuntimeMcpDebug[] | null>(null);
   const [debugRuntimeSkills, setDebugRuntimeSkills] = useState<SessionRuntimeSkillDebug[] | null>(null);
-  const [sessionCreateContext, setSessionCreateContext] = useState<SessionCreationContext | null>(null);
   const [creatingSession, setCreatingSession] = useState(false);
   const debugPromptRequestRef = useRef(0);
   const attachments = useAttachments();
@@ -136,8 +135,8 @@ export default function ChatPage() {
     [sessionData.session?.messages, streaming.streamTurn, scrollToBottom],
   );
 
-  const modelInfo = sessionData.session ? sessionData.modelInfoMap.get(sessionData.session.model) : undefined;
-  const modelSettings = sessionData.session ? sessionData.modelSettingsMap[sessionData.session.model] : undefined;
+  const modelInfo = sessionData.session ? sessionData.modelInfoMap.get(getSessionModelRef(sessionData.session)) : undefined;
+  const modelSettings = sessionData.session ? sessionData.modelSettingsMap[getSessionModelRef(sessionData.session)] : undefined;
   const resolvedEndpoint = getResolvedEndpoint(modelInfo, modelSettings);
   const endpointCapabilities = getEndpointCapabilities(modelInfo, resolvedEndpoint);
   const reasoningLevels = getReasoningLevels(modelInfo);
@@ -161,31 +160,10 @@ export default function ChatPage() {
 
   async function beginNewSession() {
     try {
-      const context = await resolveSessionCreationContext(
-        sessionData.agents,
-        resolveDefaultSessionAgentId(sessionData.agents),
-      );
-      if (context.requiresProviderSelection) {
-        setSessionCreateContext(context);
-        return;
-      }
-
       setCreatingSession(true);
-      await sessionData.handleNewSession(context.selectedProviderId);
+      await sessionData.handleNewSession(resolveDefaultSessionAgentId(sessionData.agents));
     } catch (err) {
       logger.error("Failed to create session:", err);
-    } finally {
-      setCreatingSession(false);
-    }
-  }
-
-  async function handleCreateSessionWithProvider(providerId: string) {
-    try {
-      setCreatingSession(true);
-      await sessionData.handleNewSession(providerId);
-      setSessionCreateContext(null);
-    } catch (err) {
-      logger.error("Failed to create session with provider:", err);
     } finally {
       setCreatingSession(false);
     }
@@ -200,13 +178,6 @@ export default function ChatPage() {
           <p>Keine aktive Session.</p>
           <Button onClick={() => void beginNewSession()} disabled={creatingSession}>Neue Session starten</Button>
         </EmptyState>
-        <CreateSessionModal
-          open={sessionCreateContext !== null}
-          context={sessionCreateContext}
-          creating={creatingSession}
-          onCreate={(providerId) => { void handleCreateSessionWithProvider(providerId); }}
-          onClose={() => setSessionCreateContext(null)}
-        />
       </ChatWrapper>
     );
   }
@@ -232,10 +203,8 @@ export default function ChatPage() {
         debugTasks={sessionData.tasks}
         debugSessionFacts={sessionData.sessionFacts}
         debugUserFacts={sessionData.userFacts}
-        providers={sessionData.providers}
         models={sessionData.models}
         selectedEndpoint={activeSession.llmRequestConfig?.common?.endpoint ?? resolvedEndpoint}
-        onProviderSwitch={sessionData.handleProviderSwitch}
         onModelSwitch={sessionData.handleModelSwitch}
         onToolToggle={sessionData.handleToolToggle}
         onMcpToggle={sessionData.handleMcpToggle}
@@ -296,13 +265,6 @@ export default function ChatPage() {
       >
         Debug
       </FloatingDebugButton>
-      <CreateSessionModal
-        open={sessionCreateContext !== null}
-        context={sessionCreateContext}
-        creating={creatingSession}
-        onCreate={(providerId) => { void handleCreateSessionWithProvider(providerId); }}
-        onClose={() => setSessionCreateContext(null)}
-      />
     </ChatWrapper>
   );
 }

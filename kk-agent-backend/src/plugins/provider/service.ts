@@ -37,6 +37,7 @@ import {
 } from "./lib/observations.js";
 
 const STATE_FILE = "providers.json";
+const MODEL_REF_SEPARATOR = "::";
 const DEFAULT_STATE: ProvidersState = {
   providers: [],
   modelSettings: {},
@@ -73,14 +74,6 @@ function resolveProvider(providerId?: string): ProviderConfig {
   throw new NotFoundError("Provider");
 }
 
-export function resolveProviderId(providerId?: string): string {
-  return resolveProvider(providerId).id;
-}
-
-export function getDefaultProviderId(): string | undefined {
-  return state.providers.length === 1 ? state.providers[0]?.id : undefined;
-}
-
 function normalizeStoredProvidersState(nextState: ProvidersState): ProvidersState {
   return {
     providers: nextState.providers ?? [],
@@ -95,10 +88,6 @@ function normalizeStoredProvidersState(nextState: ProvidersState): ProvidersStat
 
 function getSingleProviderId(): string | undefined {
   return state.providers.length === 1 ? state.providers[0]?.id : undefined;
-}
-
-function getProviderForModelSettings(providerId?: string): ProviderConfig {
-  return resolveProvider(providerId ?? getSingleProviderId());
 }
 
 function resolveProviderForModels(providerId?: string): ProviderConfig {
@@ -150,7 +139,19 @@ async function persist(): Promise<void> {
 }
 
 function getObservationKey(providerId: string, modelId: string): string {
-  return `${providerId}::${modelId}`;
+  return getModelRef(providerId, modelId);
+}
+
+function getModelRef(providerId: string, modelId: string): string {
+  return `${providerId}${MODEL_REF_SEPARATOR}${modelId}`;
+}
+
+function parseModelRef(value: string): { providerId: string; modelId: string } | undefined {
+  const separatorIndex = value.indexOf(MODEL_REF_SEPARATOR);
+  if (separatorIndex <= 0) return undefined;
+  const providerId = value.slice(0, separatorIndex);
+  const modelId = value.slice(separatorIndex + MODEL_REF_SEPARATOR.length);
+  return providerId && modelId ? { providerId, modelId } : undefined;
 }
 
 function mergeObservedCapabilities(provider: ProviderConfig, model: ModelInfo): ModelInfo {
@@ -291,20 +292,55 @@ export async function testProvider(id: string): Promise<{ ok: boolean; error?: s
   return getAdapter(id).testConnection();
 }
 
-export async function getModels(providerId?: string): Promise<ModelInfo[]> {
-  const provider = resolveProviderForModels(providerId);
+async function getProviderModels(provider: ProviderConfig): Promise<ModelInfo[]> {
   const models = (await getAdapter(provider.id).listModels()).map((model) => mergeObservedCapabilities(provider, model));
   modelsCache.set(provider.id, models);
   return models;
+}
+
+export async function getModels(providerId?: string): Promise<ModelInfo[]> {
+  if (!providerId) {
+    if (state.providers.length === 0) throw new NotFoundError("Provider");
+
+    const settled = await Promise.allSettled(state.providers.map((provider) => getProviderModels(provider)));
+    const models = settled.flatMap((result) => result.status === "fulfilled" ? result.value : []);
+    if (models.length > 0) return models;
+
+    const firstRejection = settled.find((result): result is PromiseRejectedResult => result.status === "rejected");
+    if (firstRejection) throw firstRejection.reason;
+    return [];
+  }
+
+  const provider = resolveProviderForModels(providerId);
+  return getProviderModels(provider);
 }
 
 export async function resolveProviderModel(
   providerId?: string,
   preferredModel?: string,
 ): Promise<{ providerId: string; model: string }> {
+  if (!providerId) {
+    if (preferredModel) {
+      const modelRef = parseModelRef(preferredModel);
+      if (modelRef) {
+        const models = await getModels(modelRef.providerId);
+        if (models.some((model) => model.id === modelRef.modelId)) {
+          return { providerId: modelRef.providerId, model: modelRef.modelId };
+        }
+      }
+    }
+
+    const models = await getModels();
+    if (models.length === 0) throw new Error("No models available from configured providers");
+    const resolvedModel = preferredModel
+      ? models.find((model) => model.id === preferredModel) ?? models[0]!
+      : models[0]!;
+    return { providerId: resolvedModel.providerId, model: resolvedModel.id };
+  }
+
   const provider = resolveRequestProvider(providerId);
   const models = await getModels(provider.id);
-  if (models.length === 0) throw new Error("No models available for the selected provider");
+  if (models.length === 0) throw new Error("No models available for the provider");
 
   const resolvedModel = preferredModel && models.some((model) => model.id === preferredModel)
     ? preferredModel
@@ -484,12 +520,11 @@ export function getModelSettings(providerId: string, modelId: string): ModelSett
 }
 
 export function getAllModelSettings(providerId?: string): Record<string, ModelSettings> {
-  const provider = getProviderForModelSettings(providerId);
   return Object.fromEntries(
     Object.entries(state.modelSettings)
-      .filter(([key]) => key.startsWith(`${provider.id}::`))
+      .filter(([key]) => !providerId || key.startsWith(`${providerId}${MODEL_REF_SEPARATOR}`))
       .map(([key, value]) => [
-        key.slice(provider.id.length + 2),
+        key,
         normalizeStoredModelSettings(value),
       ]),
   );

@@ -10,6 +10,7 @@ import {
   callProvider,
   getModelSettings,
   getModels,
+  resolveProviderModel,
   updateProvider,
 } from "./service.js";
 import { createTranscriptMessage, reasoningBlock, textBlock } from "../lib/transcript.js";
@@ -371,4 +372,67 @@ test("observed reasoning restores canonical efforts for on-off declared models",
   assert.equal(model?.capabilities.supportsReasoning, true);
   assert.deepEqual(model?.capabilities.reasoningLevels, ["minimal", "low", "medium", "high"]);
   assert.deepEqual(model?.capabilities.reasoning?.allowedEfforts, ["minimal", "low", "medium", "high"]);
+});
+
+test("getModels without provider aggregates models from all providers", async () => {
+  __resetProviderServiceForTests({
+    providers: [
+      { id: "provider-1", name: "Local A", baseUrl: "http://provider-a.test" },
+      { id: "provider-2", name: "Local B", baseUrl: "http://provider-b.test" },
+    ],
+    modelSettings: {
+      "provider-1::shared-model": {
+        llmRequestConfig: { common: { temperature: 0.2 } },
+      },
+      "provider-2::shared-model": {
+        llmRequestConfig: { common: { temperature: 0.8 } },
+      },
+    },
+  });
+
+  __setProviderAdapterFactoryForTests((provider) => createAdapter({
+    async listModels() {
+      return [{
+        ...createOpenAiCompatibleModel(),
+        id: "shared-model",
+        providerId: provider.id,
+      }];
+    },
+    async chat(request) {
+      return createResponse(request);
+    },
+  }));
+
+  const models = await getModels();
+  assert.deepEqual(models.map((model) => `${model.providerId}::${model.id}`), [
+    "provider-1::shared-model",
+    "provider-2::shared-model",
+  ]);
+});
+
+test("resolveProviderModel accepts a global model ref without active provider state", async () => {
+  __resetProviderServiceForTests({
+    providers: [
+      { id: "provider-1", name: "Local A", baseUrl: "http://provider-a.test" },
+      { id: "provider-2", name: "Local B", baseUrl: "http://provider-b.test" },
+    ],
+  });
+
+  __setProviderAdapterFactoryForTests((provider) => createAdapter({
+    async listModels() {
+      return [{
+        ...createOpenAiCompatibleModel(),
+        id: "model-a",
+        providerId: provider.id,
+      }];
+    },
+    async chat(request) {
+      return createResponse(request);
+    },
+  }));
+
+  assert.deepEqual(await resolveProviderModel(undefined, "provider-2::model-a"), {
+    providerId: "provider-2",
+    model: "model-a",
+  });
 });

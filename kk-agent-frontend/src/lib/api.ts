@@ -82,7 +82,7 @@ export const provider = {
   getModels: (providerId?: string) =>
     request<{
       models: ModelInfo[];
-      providerId: string;
+      providerId?: string;
       modelSettings: Record<string, ModelSettings>;
     }>(
       `/provider/models${providerId ? `?providerId=${encodeURIComponent(providerId)}` : ""}`,

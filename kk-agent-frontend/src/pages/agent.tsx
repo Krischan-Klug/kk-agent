@@ -29,15 +29,9 @@ export default function AgentPage() {
   const [newName, setNewName] = useState("");
   const [saving, setSaving] = useState(false);
 
-  async function loadProviderModels(providerId?: string) {
-    if (!providerId) {
-      setModels([]);
-      setModelSettings({});
-      return;
-    }
-
+  async function loadModels() {
     try {
-      const providerModels = await providerApi.getModels(providerId);
+      const providerModels = await providerApi.getModels();
       setModels(providerModels.models);
       setModelSettings(providerModels.modelSettings ?? {});
     } catch (err) {
@@ -61,7 +55,7 @@ export default function AgentPage() {
           const firstAgent = agentList[0];
           setSelectedId(firstAgent.id);
           setEditAgent(structuredClone(firstAgent));
-          await loadProviderModels(firstAgent.defaultProviderId);
+          await loadModels();
         } else {
           setModels([]);
           setModelSettings({});
@@ -70,16 +64,11 @@ export default function AgentPage() {
       .finally(() => setLoading(false));
   }, []);
 
-  useEffect(() => {
-    void loadProviderModels(editAgent?.defaultProviderId);
-  }, [editAgent?.defaultProviderId]);
-
   function selectAgent(id: string) {
     const agent = agents.find((entry) => entry.id === id);
     if (!agent) return;
     setSelectedId(id);
     setEditAgent(structuredClone(agent));
-    void loadProviderModels(agent.defaultProviderId);
   }
 
   async function handleCreate() {
@@ -112,7 +101,7 @@ export default function AgentPage() {
       });
       setAgents((prev) => prev.map((agent) => (agent.id === selectedId ? updated : agent)));
       setEditAgent(structuredClone(updated));
-      await loadProviderModels(updated.defaultProviderId);
+      await loadModels();
     } catch (err) {
       logger.error("Failed to save agent:", err);
     } finally {

@@ -20,6 +20,7 @@ import {
   getResolvedEndpoint,
 } from "@/lib/modelCapabilities";
 import { compactLlmRequestConfig, mergeLlmRequestConfigs } from "@/lib/llmRequestConfig";
+import { getAgentModelRef, toModelRef } from "@/lib/modelRefs";
 import Button from "@/components/Button";
 import { ActionsRow, EmptyHint } from "@/components/PageForm";
 import { EditorArea } from "./AgentEditor.styled";
@@ -93,10 +94,11 @@ export default function AgentEditor({
     ?? currentAgent.modes[0];
   const selectedModeDefinition = currentAgent.modes.find((mode) => mode.id === selectedModeId) ?? fallbackMode;
   const effectiveSelectedModeId = selectedModeDefinition?.id ?? currentAgent.defaultModeId;
-  const selectedModelInfo = currentAgent.defaultModel
-    ? models.find((model) => model.id === currentAgent.defaultModel)
+  const selectedModelRef = getAgentModelRef(currentAgent);
+  const selectedModelInfo = selectedModelRef
+    ? models.find((model) => toModelRef(model) === selectedModelRef)
     : undefined;
-  const selectedModelSettings = selectedModelInfo ? modelSettings[selectedModelInfo.id] : undefined;
+  const selectedModelSettings = selectedModelInfo ? modelSettings[toModelRef(selectedModelInfo)] : undefined;
   const selectedEndpoint = currentAgent.llmRequestConfig?.common?.endpoint
     ?? getResolvedEndpoint(selectedModelInfo, selectedModelSettings);
   const endpointCapabilities = getEndpointCapabilities(selectedModelInfo, selectedEndpoint);

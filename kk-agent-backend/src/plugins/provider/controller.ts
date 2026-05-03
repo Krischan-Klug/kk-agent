@@ -13,16 +13,15 @@ import {
   addProvider,
   updateProvider,
   removeProvider,
-  resolveProviderId,
   testProvider,
 } from "./service.js";
 
 export async function listModels(req: Request, res: Response): Promise<Response> {
-  const providerId = resolveProviderId(typeof req.query.providerId === "string" ? req.query.providerId : undefined);
+  const providerId = typeof req.query.providerId === "string" ? req.query.providerId : undefined;
   const models = await getModels(providerId);
   return res.json({
     models,
-    providerId,
+    ...(providerId ? { providerId } : {}),
     modelSettings: getAllModelSettings(providerId),
   });
 }

@@ -12,6 +12,7 @@ import type {
   ToolAccessScope,
 } from "@/types/api";
 import { normalizeCanonicalReasoningEffort } from "@/lib/modelCapabilities";
+import { getAgentModelRef, getModelLabel, parseModelRef, toModelRef } from "@/lib/modelRefs";
 import Button from "@/components/Button";
 import Input from "@/components/Input";
 import TextArea from "@/components/TextArea";
@@ -131,20 +132,6 @@ export function AgentInfoSection({
       </FormRow>
       <FormRow>
         <FormField>
-          <FieldLabel>Default Provider</FieldLabel>
-          <Select
-            value={currentAgent.defaultProviderId ?? ""}
-            onChange={(e) => onChange({
-              ...currentAgent,
-              defaultProviderId: e.target.value || undefined,
-              defaultModel: undefined,
-            })}
-          >
-            <option value="">-- Kein Default --</option>
-            {providers.map((provider) => <option key={provider.id} value={provider.id}>{provider.name}</option>)}
-          </Select>
-        </FormField>
-        <FormField>
           <FieldLabel>Modes</FieldLabel>
           <ModeTabs>
             {currentAgent.modes.map((mode) => (
@@ -165,12 +152,22 @@ export function AgentInfoSection({
         <FormField>
           <FieldLabel>Default Model</FieldLabel>
           <Select
-            value={currentAgent.defaultModel ?? ""}
-            onChange={(e) => onChange({ ...currentAgent, defaultModel: e.target.value || undefined })}
-            disabled={!currentAgent.defaultProviderId}
+            value={getAgentModelRef(currentAgent)}
+            onChange={(e) => {
+              const parsed = parseModelRef(e.target.value);
+              onChange({
+                ...currentAgent,
+                defaultProviderId: parsed?.providerId,
+                defaultModel: parsed?.modelId,
+              });
+            }}
           >
             <option value="">-- Kein Default --</option>
-            {models.map((model) => <option key={model.id} value={model.id}>{model.id}</option>)}
+            {models.map((model) => (
+              <option key={toModelRef(model)} value={toModelRef(model)}>
+                {getModelLabel(model, providers)}
+              </option>
+            ))}
           </Select>
         </FormField>
         {showReasoning && (

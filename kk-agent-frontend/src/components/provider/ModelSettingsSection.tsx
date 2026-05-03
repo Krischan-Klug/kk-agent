@@ -10,6 +10,7 @@ import {
   compactLlmRequestConfig,
   mergeLlmRequestConfigs,
 } from "@/lib/llmRequestConfig";
+import { toModelRef } from "@/lib/modelRefs";
 import { useToggleSet } from "@/hooks/useToggleSet";
 import LlmRequestConfigEditor from "@/components/LlmRequestConfigEditor";
 import { ENDPOINT_OPTIONS } from "./constants";
@@ -159,29 +160,29 @@ const Select = styled.select`
 type Props = {
   models: ModelInfo[];
   modelSettings: Record<string, ModelSettings>;
-  onSave: (modelId: string, settings: ModelSettings) => void;
+  onSave: (model: ModelInfo, settings: ModelSettings) => void;
 };
 
 export default function ModelSettingsSection({ models, modelSettings, onSave }: Props) {
   const expandedModels = useToggleSet();
 
-  function saveModelSettings(modelId: string, patch: Partial<ModelSettings>) {
-    const settings = modelSettings[modelId] ?? {};
-    onSave(modelId, {
+  function saveModelSettings(model: ModelInfo, patch: Partial<ModelSettings>) {
+    const settings = modelSettings[toModelRef(model)] ?? {};
+    onSave(model, {
       ...settings,
       ...patch,
     });
   }
 
-  function saveRequestConfig(modelId: string, nextConfig: LlmRequestConfig | undefined) {
-    saveModelSettings(modelId, {
+  function saveRequestConfig(model: ModelInfo, nextConfig: LlmRequestConfig | undefined) {
+    saveModelSettings(model, {
       llmRequestConfig: compactLlmRequestConfig(nextConfig),
     });
   }
 
-  function handleLlmConfigChange(modelId: string, patch: NonNullable<ModelSettings["llmRequestConfig"]>) {
-    const settings = modelSettings[modelId] ?? {};
-    saveRequestConfig(modelId, mergeLlmRequestConfigs(settings.llmRequestConfig, patch));
+  function handleLlmConfigChange(model: ModelInfo, patch: NonNullable<ModelSettings["llmRequestConfig"]>) {
+    const settings = modelSettings[toModelRef(model)] ?? {};
+    saveRequestConfig(model, mergeLlmRequestConfigs(settings.llmRequestConfig, patch));
   }
 
   return (
@@ -193,7 +194,8 @@ export default function ModelSettingsSection({ models, modelSettings, onSave }: 
         </span>
       ) : (
         models.map((model) => {
-          const settings = modelSettings[model.id] ?? {};
+          const modelRef = toModelRef(model);
+          const settings = modelSettings[modelRef] ?? {};
           const isOpen = expandedModels.has(model.id);
           const selectedEndpoint = getResolvedEndpoint(model, settings);
           const supportedEndpoints = model.capabilities.supportedEndpoints;
@@ -238,7 +240,7 @@ export default function ModelSettingsSection({ models, modelSettings, onSave }: 
                           key={option.value}
                           type="button"
                           $active={selectedEndpoint === option.value}
-                          onClick={() => handleLlmConfigChange(model.id, {
+                          onClick={() => handleLlmConfigChange(model, {
                             common: {
                               endpoint: option.value,
                             },
@@ -264,7 +266,7 @@ export default function ModelSettingsSection({ models, modelSettings, onSave }: 
                         <Label>Default reasoning</Label>
                         <Select
                           value={settings.llmRequestConfig?.common?.reasoningEffort ?? ""}
-                          onChange={(event) => handleLlmConfigChange(model.id, {
+                          onChange={(event) => handleLlmConfigChange(model, {
                             common: {
                               reasoningEffort: normalizeCanonicalReasoningEffort(event.target.value),
                             },
@@ -283,7 +285,7 @@ export default function ModelSettingsSection({ models, modelSettings, onSave }: 
                     value={settings.llmRequestConfig}
                     selectedEndpoint={selectedEndpoint}
                     endpointCapabilities={endpointCapabilities}
-                    onChange={(patch) => handleLlmConfigChange(model.id, patch)}
+                    onChange={(patch) => handleLlmConfigChange(model, patch)}
                   />
                 </>
               )}

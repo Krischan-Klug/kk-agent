@@ -8,7 +8,7 @@ import { clearSessionFacts, clearTasks } from "../tools/service.js";
 import { clearFilesystemReadState } from "../tools/lib/filesystem/read-state.js";
 import { resolveSessionDefaults } from "./lib/session-resolution.js";
 import { clearSessionDenials } from "./lib/denial-log.js";
-import { getDefaultProviderId, getModelCapabilities } from "../provider/service.js";
+import { getModelCapabilities } from "../provider/service.js";
 import { listSkills } from "../skills/service.js";
 import { NotFoundError } from "../../lib/errors.js";
 import {
@@ -35,7 +35,7 @@ export {
 
 export async function createSession(body: CreateSessionBody): Promise<SessionState> {
   const agent = getAgent(body.agentId);
-  const defaults = await resolveSessionDefaults(agent, body, body.providerId ?? getDefaultProviderId());
+  const defaults = await resolveSessionDefaults(agent, body);
   return toPublicSession(await store.createSession({
     agentId: body.agentId,
     providerId: defaults.providerId,

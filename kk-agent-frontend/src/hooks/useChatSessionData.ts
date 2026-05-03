@@ -8,7 +8,6 @@ import type {
   MemoryFact,
   ModelInfo,
   ModelSettings,
-  ProviderConfig,
   SessionState,
   SkillDefinition,
   TaskItem,
@@ -18,6 +17,7 @@ import { clearActiveSessionId, getActiveSessionId } from "@/lib/sessionState";
 import { createAndActivateSession, resolveDefaultSessionAgentId } from "@/lib/sessionFactory";
 import { compactLlmRequestConfig, mergeLlmRequestConfigs } from "@/lib/llmRequestConfig";
 import { normalizeCanonicalReasoningEffort } from "@/lib/modelCapabilities";
+import { parseModelRef, toModelRef } from "@/lib/modelRefs";
 
 const logger = createLogger("chat-context");
 
@@ -45,7 +45,6 @@ export function useChatSessionData({ onDebugOpen, setDebugOpen }: Options) {
   const [toolMcps, setToolMcps] = useState<McpListItem[]>([]);
   const [skills, setSkills] = useState<SkillDefinition[]>([]);
   const [agents, setAgents] = useState<AgentDefinition[]>([]);
-  const [providers, setProviders] = useState<ProviderConfig[]>([]);
   const [tasks, setTasks] = useState<TaskItem[]>([]);
   const [sessionFacts, setSessionFacts] = useState<MemoryFact[]>([]);
   const [userFacts, setUserFacts] = useState<MemoryFact[]>([]);
@@ -78,11 +77,11 @@ export function useChatSessionData({ onDebugOpen, setDebugOpen }: Options) {
     }
   }, []);
 
-  const loadModels = useCallback(async (providerId: string) => {
+  const loadModels = useCallback(async () => {
     try {
-      const result = await providerApi.getModels(providerId);
-      setModels(result.models.map((model) => model.id));
-      setModelInfoMap(new Map(result.models.map((model) => [model.id, model])));
+      const result = await providerApi.getModels();
+      setModels(result.models.map(toModelRef));
+      setModelInfoMap(new Map(result.models.map((model) => [toModelRef(model), model])));
       setModelSettingsMap(result.modelSettings ?? {});
     } catch {
       // ignore
@@ -120,7 +119,7 @@ export function useChatSessionData({ onDebugOpen, setDebugOpen }: Options) {
           toolsApi.listSessionMemory(nextSession.id),
           toolsApi.listUserMemory(),
         ]),
-        loadModels(nextSession.providerId),
+        loadModels(),
       ]);
 
       return {
@@ -150,12 +149,12 @@ export function useChatSessionData({ onDebugOpen, setDebugOpen }: Options) {
 
     void (async () => {
       try {
-        const [snapshot, availableMcps, availableAgents, availableSkills, availableProviders] = await Promise.all([
+        const [snapshot, availableMcps, availableAgents, availableSkills] = await Promise.all([
           fetchSessionSnapshot(),
           loadAvailableMcps(),
           agentApi.list(),
           skillsApi.list(),
-          providerApi.listProviders(),
+          loadModels(),
         ]);
         if (disposed) return;
         applyBootstrapSnapshot(snapshot);
@@ -163,7 +162,6 @@ export function useChatSessionData({ onDebugOpen, setDebugOpen }: Options) {
         setMcps(availableMcps.mcps);
         setAgents(availableAgents);
         setSkills(availableSkills);
-        setProviders(availableProviders);
       } catch {
         if (!disposed) setLoading(false);
       }
@@ -176,7 +174,7 @@ export function useChatSessionData({ onDebugOpen, setDebugOpen }: Options) {
       disposed = true;
       removeSessionListener();
     };
-  }, [applyBootstrapSnapshot, fetchSessionSnapshot, loadAvailableMcps, loadSession]);
+  }, [applyBootstrapSnapshot, fetchSessionSnapshot, loadAvailableMcps, loadModels, loadSession]);
 
   useEffect(() => addAppEventListener(CHAT_DEBUG_TOGGLE_EVENT, () => {
     setDebugOpen((previous) => {
@@ -190,39 +188,21 @@ export function useChatSessionData({ onDebugOpen, setDebugOpen }: Options) {
     if (!session) return;
     const nextSession = await sessionApi.update(session.id, body);
     setSession(nextSession);
-    await loadModels(nextSession.providerId);
+    await loadModels();
     await loadContextData(nextSession.id);
   }, [loadContextData, loadModels, session]);
 
-  const handleModelSwitch = useCallback(async (model: string) => {
-    if (!session || model === session.model) return;
+  const handleModelSwitch = useCallback(async (modelRef: string) => {
+    if (!session) return;
+    const parsed = parseModelRef(modelRef);
+    if (!parsed) return;
+    if (parsed.providerId === session.providerId && parsed.modelId === session.model) return;
     try {
-      await updateSessionAndSet({ model });
+      await updateSessionAndSet({ providerId: parsed.providerId, model: parsed.modelId });
     } catch (err) {
       logger.error("Failed to switch model:", err);
     }
   }, [session, updateSessionAndSet]);
-
-  const handleProviderSwitch = useCallback(async (providerId: string) => {
-    if (!session || providerId === session.providerId) return;
-    try {
-      const result = await providerApi.getModels(providerId);
-      const nextModel = result.models.some((model) => model.id === session.model)
-        ? session.model
-        : result.models[0]?.id;
-      const nextSession = await sessionApi.update(session.id, {
-        providerId,
-        ...(nextModel ? { model: nextModel } : {}),
-      });
-      setSession(nextSession);
-      setModels(result.models.map((model) => model.id));
-      setModelInfoMap(new Map(result.models.map((model) => [model.id, model])));
-      setModelSettingsMap(result.modelSettings ?? {});
-      await loadContextData(nextSession.id);
-    } catch (err) {
-      logger.error("Failed to switch provider:", err);
-    }
-  }, [loadContextData, session]);
 
   const handleMcpToggle = useCallback(async (mcpId: string, enabled: boolean) => {
     if (!session) return;
@@ -320,15 +300,16 @@ export function useChatSessionData({ onDebugOpen, setDebugOpen }: Options) {
     }
   }, [session, updateSessionAndSet]);
 
-  const handleNewSession = useCallback(async (providerId?: string) => {
+  const handleNewSession = useCallback(async (fallbackAgentId?: string) => {
     try {
-      const newSession = await createAndActivateSession(agents, resolveDefaultSessionAgentId(agents), providerId);
+      const newSession = await createAndActivateSession(agents, fallbackAgentId ?? resolveDefaultSessionAgentId(agents));
       setSession(newSession);
       await loadContextData(newSession.id);
+      await loadModels();
     } catch (err) {
       logger.error("Failed to create new session:", err);
     }
-  }, [agents, loadContextData]);
+  }, [agents, loadContextData, loadModels]);
 
   const handleSaveTasks = useCallback(async (nextTasks: TaskItem[]) => {
     if (!session) return;
@@ -370,7 +351,6 @@ export function useChatSessionData({ onDebugOpen, setDebugOpen }: Options) {
     models,
     modelInfoMap,
     modelSettingsMap,
-    providers,
     mcps,
     toolMcps,
     skills,
@@ -381,7 +361,6 @@ export function useChatSessionData({ onDebugOpen, setDebugOpen }: Options) {
     currentAgentName,
     loadContextData,
     loadDebugData,
-    handleProviderSwitch,
     handleModelSwitch,
     handleMcpToggle,
     handleToolToggle,

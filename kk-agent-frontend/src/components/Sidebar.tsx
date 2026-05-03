@@ -4,9 +4,6 @@ import { useRouter } from "next/router";
 import Spinner from "@/components/Spinner";
 import { agent as agentApi, session as sessionApi } from "@/lib/api";
 import { createLogger } from "@/lib/logger";
-
-const logger = createLogger("sidebar");
-import CreateSessionModal from "@/components/chat/CreateSessionModal";
 import { getRunningChatStreamSessionIds, subscribeChatStreamStore } from "@/lib/chatStreamState";
 import type { SessionState } from "@/types/api";
 import { addAppEventListener, emitAppEvent, SESSION_CHANGED_EVENT } from "@/lib/appEvents";
@@ -17,7 +14,7 @@ import {
   useStoredActiveSessionId,
   useStoredSidebarCollapsed,
 } from "@/lib/sessionState";
-import { createAndActivateSession, type SessionCreationContext, resolveSessionCreationContext } from "@/lib/sessionFactory";
+import { createAndActivateSession } from "@/lib/sessionFactory";
 import {
   SidebarWrapper,
   LogoRow,
@@ -38,6 +35,8 @@ import {
   SessionAdd,
   SessionDelete,
 } from "./Sidebar.styled";
+
+const logger = createLogger("sidebar");
 
 const CHAT_EMOJI = "\u{1F4AC}";
 const AGENT_EMOJI = "\u{1F916}";
@@ -68,8 +67,6 @@ export default function Sidebar() {
   const [sessions, setSessions] = useState<SessionState[]>([]);
   const [serverRunningSessionIds, setServerRunningSessionIds] = useState<string[]>([]);
   const [clientRunningSessionIds, setClientRunningSessionIds] = useState<string[]>(getRunningChatStreamSessionIds());
-  const [sessionCreateContext, setSessionCreateContext] = useState<SessionCreationContext | null>(null);
-  const [creatingSession, setCreatingSession] = useState(false);
   const activeSessionId = useStoredActiveSessionId();
   const collapsed = useStoredSidebarCollapsed();
 
@@ -126,35 +123,11 @@ export default function Sidebar() {
   async function createSession() {
     try {
       const fallbackAgentId = sessions.find((session) => session.id === activeSessionId)?.agentId ?? sessions[0]?.agentId;
-      const context = await resolveSessionCreationContext([], fallbackAgentId);
-      if (context.requiresProviderSelection) {
-        setSessionCreateContext(context);
-        return;
-      }
-
-      setCreatingSession(true);
-      await createAndActivateSession([], fallbackAgentId, context.selectedProviderId);
+      await createAndActivateSession([], fallbackAgentId);
       await loadSessions();
       await router.push("/chat");
     } catch (err) {
       logger.error("Failed to create session:", err);
-    } finally {
-      setCreatingSession(false);
-    }
-  }
-
-  async function createSessionWithProvider(providerId: string) {
-    try {
-      const fallbackAgentId = sessionCreateContext?.agentId ?? sessions.find((session) => session.id === activeSessionId)?.agentId ?? sessions[0]?.agentId;
-      setCreatingSession(true);
-      await createAndActivateSession([], fallbackAgentId, providerId);
-      setSessionCreateContext(null);
-      await loadSessions();
-      await router.push("/chat");
-    } catch (err) {
-      logger.error("Failed to create session with provider:", err);
-    } finally {
-      setCreatingSession(false);
     }
   }
 
@@ -242,13 +215,6 @@ export default function Sidebar() {
           </SessionItem>
         ))}
       </>
-      <CreateSessionModal
-        open={sessionCreateContext !== null}
-        context={sessionCreateContext}
-        creating={creatingSession}
-        onCreate={(providerId) => { void createSessionWithProvider(providerId); }}
-        onClose={() => setSessionCreateContext(null)}
-      />
     </SidebarWrapper>
   );
 }

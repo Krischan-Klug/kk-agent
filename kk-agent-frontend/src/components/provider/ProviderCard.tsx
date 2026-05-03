@@ -4,14 +4,13 @@ import type {
   ModelSettings,
   ProviderConfig,
 } from "@/types/api";
-import Badge from "@/components/Badge";
 import Button from "@/components/Button";
 import Input from "@/components/Input";
 import ModelSettingsSection from "./ModelSettingsSection";
 
-const Wrapper = styled.div<{ $active: boolean }>`
+const Wrapper = styled.div`
   background: var(--bg-elevated);
-  border: 1px solid ${(p) => (p.$active ? "var(--accent)" : "var(--border)")};
+  border: 1px solid var(--border);
   border-radius: var(--radius-md);
   padding: var(--space-lg);
 `;
@@ -81,49 +80,39 @@ const TestResult = styled.span<{ $ok: boolean }>`
 
 type Props = {
   provider: ProviderConfig;
-  isSelected: boolean;
   isExpanded: boolean;
   isTesting: boolean;
   testResult?: { ok: boolean; error?: string };
   models: ModelInfo[];
   modelSettings: Record<string, ModelSettings>;
   onToggleExpand: () => void;
-  onSelect: () => void;
   onTest: () => void;
   onDelete: () => void;
   onFieldChange: (field: keyof ProviderConfig, value: string) => void;
-  onModelSettingsSave: (modelId: string, settings: ModelSettings) => void;
+  onModelSettingsSave: (model: ModelInfo, settings: ModelSettings) => void;
 };
 
 export default function ProviderCard({
   provider,
-  isSelected,
   isExpanded,
   isTesting,
   testResult,
   models,
   modelSettings,
   onToggleExpand,
-  onSelect,
   onTest,
   onDelete,
   onFieldChange,
   onModelSettingsSave,
 }: Props) {
   return (
-    <Wrapper $active={isSelected}>
+    <Wrapper>
       <Header onClick={onToggleExpand}>
         <Name>
-          {isSelected && <Badge variant="info">ausgewaehlt</Badge>}
           {provider.name}
           <Meta>{provider.baseUrl}</Meta>
         </Name>
         <HeaderActions>
-          {!isSelected && (
-            <Button size="sm" variant="secondary" onClick={(e) => { e.stopPropagation(); onSelect(); }}>
-              Auswaehlen
-            </Button>
-          )}
           <Button size="sm" variant="secondary" onClick={(e) => { e.stopPropagation(); onTest(); }} disabled={isTesting}>
             {isTesting ? "..." : "Testen"}
           </Button>
@@ -157,13 +146,11 @@ export default function ProviderCard({
             </FormField>
           </FormRow>
 
-          {isSelected && (
-            <ModelSettingsSection
-              models={models}
-              modelSettings={modelSettings}
-              onSave={onModelSettingsSave}
-            />
-          )}
+          <ModelSettingsSection
+            models={models}
+            modelSettings={modelSettings}
+            onSave={onModelSettingsSave}
+          />
 
           <div style={{ display: "flex", justifyContent: "flex-end" }}>
             <Button size="sm" variant="danger" onClick={onDelete}>

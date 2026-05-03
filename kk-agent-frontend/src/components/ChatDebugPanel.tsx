@@ -3,7 +3,6 @@ import styled from "styled-components";
 import type {
   LlmRequestConfig,
   McpListItem,
-  ProviderConfig,
   SessionState,
   TaskItem,
   MemoryFact,
@@ -21,6 +20,7 @@ import TextArea from "@/components/TextArea";
 import CapabilitySelect from "@/components/CapabilitySelect";
 import LlmRequestConfigEditor from "@/components/LlmRequestConfigEditor";
 import SelectMenu, { type SelectMenuOption } from "@/components/SelectMenu";
+import { getSessionModelRef } from "@/lib/modelRefs";
 
 export type ChatDebugTab = "prompt" | "meta" | "tools" | "mcps" | "skills" | "session" | "messages" | "tasks" | "memory";
 
@@ -139,10 +139,8 @@ type Props = {
   debugTasks: TaskItem[];
   debugSessionFacts: MemoryFact[];
   debugUserFacts: MemoryFact[];
-  providers: ProviderConfig[];
   models: string[];
   selectedEndpoint: "chat-completions" | "responses";
-  onProviderSwitch: (providerId: string) => void;
   onModelSwitch: (model: string) => void;
   onToolToggle: (toolId: string, enabled: boolean) => void;
   onMcpToggle: (mcpId: string, enabled: boolean) => void;
@@ -189,10 +187,8 @@ export default function ChatDebugPanel({
   debugTasks,
   debugSessionFacts,
   debugUserFacts,
-  providers,
   models,
   selectedEndpoint,
-  onProviderSwitch,
   onModelSwitch,
   onToolToggle,
   onMcpToggle,
@@ -398,17 +394,10 @@ export default function ChatDebugPanel({
         <DebugTab $active={debugTab === "memory"} onClick={() => toggleTab("memory")}>Memory</DebugTab>
         <DebugControls>
           {loopState && <Badge variant="info">{`${loopState.modeId} (${loopState.modeBehavior})`}</Badge>}
-          {providers.length > 0 ? (
-            <SelectMenu
-              value={session.providerId}
-              options={providers.map((provider) => ({ value: provider.id, label: provider.name }))}
-              onSelect={onProviderSwitch}
-            />
-          ) : null}
           {models.length > 0 ? (
             <SelectMenu
-              value={session.model}
-              options={models.map((model) => ({ value: model, label: model }))}
+              value={getSessionModelRef(session)}
+              options={models.map((modelRef) => ({ value: modelRef, label: modelRef }))}
               onSelect={onModelSwitch}
               mono
             />

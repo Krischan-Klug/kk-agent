@@ -1,0 +1,38 @@
+{
+  "core": {
+    "enabled": true,
+    "settings": {}
+  },
+  "agent": {
+    "enabled": true,
+    "settings": {}
+  },
+  "loop": {
+    "enabled": true,
+    "settings": {}
+  },
+  "systemprompt": {
+    "enabled": true,
+    "settings": {}
+  },
+  "tools": {
+    "enabled": true,
+    "settings": {}
+  },
+  "mcp": {
+    "enabled": true,
+    "settings": {}
+  },
+  "skills": {
+    "enabled": true,
+    "settings": {}
+  },
+  "provider": {
+    "enabled": true,
+    "settings": {}
+  },
+  "session": {
+    "enabled": true,
+    "settings": {}
+  }
+}

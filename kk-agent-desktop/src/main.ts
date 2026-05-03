@@ -123,10 +123,11 @@ async function waitForBackendFromLogs(child: ChildProcess): Promise<string> {
 
     const handleLine = (line: string) => {
       logger.info(`[backend] ${line}`);
-      if (!line.startsWith(BACKEND_READY_PREFIX)) return;
+      const readyIndex = line.indexOf(BACKEND_READY_PREFIX);
+      if (readyIndex === -1) return;
 
       try {
-        const payload = JSON.parse(line.slice(BACKEND_READY_PREFIX.length)) as { host: string; port: number };
+        const payload = JSON.parse(line.slice(readyIndex + BACKEND_READY_PREFIX.length)) as { host: string; port: number };
         cleanup();
         resolve(`http://${payload.host}:${payload.port}`);
       } catch (error) {

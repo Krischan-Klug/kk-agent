@@ -1,0 +1,12 @@
+{
+  "active": true,
+  "recommendedToolIds": [
+    "skill",
+    "user-interaction"
+  ],
+  "recommendedMcpIds": [],
+  "allowedModeBehaviors": [
+    "plan",
+    "edit"
+  ]
+}

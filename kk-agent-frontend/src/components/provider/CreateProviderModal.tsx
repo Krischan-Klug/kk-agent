@@ -1,6 +1,5 @@
 import FormModal from "@/components/FormModal";
-import Input from "@/components/Input";
-import { FieldLabel, FormField } from "@/components/PageForm";
+import ProviderFormFields from "./ProviderFormFields";
 
 type Props = {
   open: boolean;
@@ -24,18 +23,15 @@ export default function CreateProviderModal(props: Props) {
       onSubmit={props.onCreate}
       submitDisabled={!props.name.trim() || !props.baseUrl.trim()}
     >
-      <FormField>
-        <FieldLabel>Name</FieldLabel>
-        <Input value={props.name} onChange={(e) => props.onNameChange(e.target.value)} placeholder="z.B. Lokaler LLM Server" autoFocus />
-      </FormField>
-      <FormField>
-        <FieldLabel>Base URL</FieldLabel>
-        <Input value={props.baseUrl} onChange={(e) => props.onBaseUrlChange(e.target.value)} />
-      </FormField>
-      <FormField>
-        <FieldLabel>API Key</FieldLabel>
-        <Input type="password" value={props.apiKey} onChange={(e) => props.onApiKeyChange(e.target.value)} placeholder="optional" />
-      </FormField>
+      <ProviderFormFields
+        name={props.name}
+        baseUrl={props.baseUrl}
+        apiKey={props.apiKey}
+        onNameChange={props.onNameChange}
+        onBaseUrlChange={props.onBaseUrlChange}
+        onApiKeyChange={props.onApiKeyChange}
+        autoFocus
+      />
     </FormModal>
   );
 }

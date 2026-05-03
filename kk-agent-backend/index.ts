@@ -13,7 +13,8 @@ async function main(): Promise<void> {
   const started = await startServer({ host, port });
 
   logger.info(`Backend listening on http://${started.host}:${started.port}`);
-  logger.info(`KK_AGENT_BACKEND_READY ${JSON.stringify({ host: started.host, port: started.port })}`);
+  // Machine-readable line consumed by the Electron main process. Keep it unprefixed.
+  console.log(`KK_AGENT_BACKEND_READY ${JSON.stringify({ host: started.host, port: started.port })}`);
 }
 
 void main().catch((error) => {

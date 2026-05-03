@@ -7,6 +7,20 @@ import { createLogger } from "../lib/logger.js";
 
 const logger = createLogger("plugins");
 
+function createDefaultPluginConfigEntry() {
+  return { enabled: true, settings: {} };
+}
+
+function isAllInternalPluginsDisabled(config: Awaited<ReturnType<typeof loadPluginConfig>>): boolean {
+  if (internalPluginEntries.length === 0) return false;
+
+  return internalPluginEntries.every(({ directory, plugin }) => {
+    const pluginName = plugin.name ?? directory;
+    const entry = config[pluginName] ?? config[directory];
+    return entry?.enabled === false;
+  });
+}
+
 async function preparePlugins() {
   const config = await loadPluginConfig();
   const directories = internalPluginEntries.map((entry) => entry.directory);
@@ -15,9 +29,19 @@ async function preparePlugins() {
     return { entries: [], registry: {}, staleConfigEntries: Object.keys(config) };
   }
 
+  if (isAllInternalPluginsDisabled(config)) {
+    for (const { directory, plugin } of internalPluginEntries) {
+      const pluginName = plugin.name ?? directory;
+      const entry = config[pluginName] ?? config[directory] ?? createDefaultPluginConfigEntry();
+      config[pluginName] = { ...entry, enabled: true, settings: entry.settings ?? {} };
+    }
+    configChanged = true;
+    logger.warn("Recovered plugins.config.json: all internal plugins were disabled.");
+  }
+
   const plugins = internalPluginEntries.map(({ directory, plugin }) => {
     if (!(directory in config)) {
-      config[directory] = { enabled: false, settings: {} };
+      config[directory] = createDefaultPluginConfigEntry();
       configChanged = true;
     }
 
@@ -29,7 +53,7 @@ async function preparePlugins() {
     }
 
     if (typeof config[pluginName]?.enabled !== "boolean") {
-      config[pluginName]!.enabled = false;
+      config[pluginName]!.enabled = true;
       configChanged = true;
     }
     if (!config[pluginName]?.settings || typeof config[pluginName]?.settings !== "object" || Array.isArray(config[pluginName]?.settings)) {

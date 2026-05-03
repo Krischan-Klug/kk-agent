@@ -24,6 +24,8 @@ import type {
   SkillDefinition,
   SessionPromptDebug,
   CreateSkillBody,
+  ImportSkillResult,
+  UpdateSkillLinksBody,
   UpdateSkillBody,
 } from "@/types/api";
 
@@ -274,6 +276,24 @@ export const agent = {
 export const skills = {
   list: () => request<SkillDefinition[]>("/skills"),
 
+  importBundle: async (files: Array<{ file: File; path: string }>): Promise<ImportSkillResult> => {
+    const form = new FormData();
+    for (const entry of files) {
+      form.append("files", entry.file, entry.file.name);
+      form.append("paths", entry.path);
+    }
+    const res = await fetch(`${BASE}/skills/import`, {
+      method: "POST",
+      headers: authHeaders(),
+      body: form,
+    });
+    if (!res.ok) {
+      const text = await res.text();
+      throw new Error(`${res.status}: ${text}`);
+    }
+    return res.json() as Promise<ImportSkillResult>;
+  },
+
   create: (body: CreateSkillBody) =>
     request<SkillDefinition>("/skills", {
       method: "POST",
@@ -282,6 +302,12 @@ export const skills = {
 
   update: (id: string, body: UpdateSkillBody) =>
     request<SkillDefinition>(`/skills/${id}`, {
+      method: "PUT",
+      body: JSON.stringify(body),
+    }),
+
+  updateLinks: (id: string, body: UpdateSkillLinksBody) =>
+    request<SkillDefinition>(`/skills/${id}/links`, {
       method: "PUT",
       body: JSON.stringify(body),
     }),

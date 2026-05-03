@@ -127,11 +127,9 @@ export function getCurrentPromptDebug(sessionId: string): SessionPromptDebug {
         name: skill.name,
         description: skill.description,
         instruction: skill.instruction,
-        active: skill.active,
         source: skill.source,
-        recommendedToolIds: [...skill.recommendedToolIds],
-        recommendedMcpIds: [...skill.recommendedMcpIds],
-        allowedModeBehaviors: [...skill.allowedModeBehaviors],
+        linkedToolIds: [...skill.linkedToolIds],
+        linkedMcpIds: [...skill.linkedMcpIds],
       })),
   };
 }

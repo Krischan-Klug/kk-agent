@@ -16,13 +16,6 @@ test("Skill loads a skill bundle as a hidden meta user message", async () => {
       name: "Repo Analysis",
       description: "Analyze before changing code.",
       instruction: "Use Read before Edit.",
-      metadata: {
-        active: true,
-        source: "custom",
-        recommendedToolIds: ["filesystem"],
-        recommendedMcpIds: ["git-inspector"],
-        allowedModeBehaviors: ["plan", "edit"],
-      },
     });
 
     const result = await executeSkillTool(
@@ -48,8 +41,6 @@ test("Skill loads a skill bundle as a hidden meta user message", async () => {
     const skillContext = result?.additionalMessages?.[0]?.content[0];
     assert.ok(skillContext && "text" in skillContext);
     assert.ok(skillContext.text.includes("<skill_context"));
-    assert.ok(skillContext.text.includes('<tool_ref id="filesystem" />'));
-    assert.ok(skillContext.text.includes('<mcp_ref id="git-inspector" />'));
     assert.ok(skillContext.text.includes("Use Grep before proposing edits."));
   } finally {
     await rm(root, { recursive: true, force: true });
@@ -100,8 +91,6 @@ test("CreateSkill writes a new skill bundle without auto-loading it", async () =
         name: "Review Skill",
         description: "Review code for bugs and regressions.",
         instruction: "Read diffs before suggesting changes.",
-        allowedModeBehaviors: ["edit", "autonomous"],
-        recommendedToolIds: ["skill", "missing-tool"],
       },
       {
         values: {

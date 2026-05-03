@@ -19,6 +19,7 @@ export type {
   CreateSessionBody,
   EndpointCapabilities,
   EndpointType,
+  ImportSkillResult,
   LlmRequestConfig,
   CreateMcpBody,
   CreateSkillBody,
@@ -47,6 +48,7 @@ export type {
   UpdateMcpBody,
   UpdateProviderBody,
   UpdateSessionBody,
+  UpdateSkillLinksBody,
   UpdateSkillBody,
 } from "@krischan-klug/kk-agent-contract";
 

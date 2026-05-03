@@ -18,7 +18,7 @@ test("buildPrompt inserts runtime before mode context and keeps tool guidance be
     PROMPT_SECTIONS,
     "Plan carefully.",
     "<tool_instruction id=\"filesystem\" name=\"Filesystem\">Read first</tool_instruction>",
-    "<skills_catalog>\n  <skill id=\"repo-analysis\" name=\"Repo Analysis\" path=\"C:\\skills\\repo-analysis\" source=\"custom\" mode_behaviors=\"plan,edit\">\n    <description>Analyze repo state.</description>\n  </skill>\n</skills_catalog>",
+    "<skills_catalog>\n  <skill id=\"repo-analysis\" name=\"Repo Analysis\" path=\"C:\\skills\\repo-analysis\" source=\"custom\">\n    <description>Analyze repo state.</description>\n  </skill>\n</skills_catalog>",
     {},
     { modeId: "plan", modeName: "plan" },
   );

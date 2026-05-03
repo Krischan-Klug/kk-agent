@@ -33,7 +33,26 @@ test("loadSkillFromPath loads valid SKILL.md metadata", async () => {
   assert.equal(loaded.name, "demo-skill");
   assert.equal(loaded.description, "Test skill");
   assert.equal(loaded.instruction, "Use this skill carefully.");
+  assert.deepEqual(loaded.links, { linkedToolIds: [], linkedMcpIds: [] });
   assert.ok(loaded.skillFilePath.endsWith("SKILL.md"));
+});
+
+test("loadSkillFromPath loads kk-agent tool and mcp links from overlay metadata", async () => {
+  const root = await mkdtemp(join(tmpdir(), "kk-agent-skill-loader-"));
+  const skillDir = await createSkillBundle(root, "linked-skill", "Use linked capabilities.");
+  await mkdir(join(skillDir, "agents"), { recursive: true });
+  await writeFile(
+    join(skillDir, "agents", "kk-agent.json"),
+    JSON.stringify({ toolIds: ["filesystem", "filesystem"], mcpIds: ["github"] }, null, 2),
+    "utf-8",
+  );
+
+  const loaded = await loadSkillFromPath(root, "linked-skill");
+
+  assert.deepEqual(loaded.links, {
+    linkedToolIds: ["filesystem"],
+    linkedMcpIds: ["github"],
+  });
 });
 
 test("loadSkillFromPath rejects missing description frontmatter", async () => {

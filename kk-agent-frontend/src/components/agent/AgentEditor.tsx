@@ -183,13 +183,7 @@ export default function AgentEditor({
     updateModeDefinition(selectedModeDefinition.id, (mode) => ({
       ...mode,
       behavior,
-      config: {
-        ...mode.config,
-        skillIds: mode.config.skillIds.filter((skillId) => {
-          const skill = skills.find((entry) => entry.id === skillId);
-          return !skill || skill.allowedModeBehaviors.includes(behavior);
-        }),
-      },
+      config: mode.config,
     }));
   }
 
@@ -281,8 +275,9 @@ export default function AgentEditor({
 
       <SkillsSection
         selectedModeConfig={selectedModeConfig}
-        selectedModeDefinition={selectedModeDefinition}
         skills={skills}
+        internalTools={internalTools}
+        mcps={mcps}
         visibleSkillInstructions={visibleSkillInstructions}
         setVisibleSkillInstructions={setVisibleSkillInstructions}
         getEffectiveSkillInstruction={getEffectiveSkillInstruction}

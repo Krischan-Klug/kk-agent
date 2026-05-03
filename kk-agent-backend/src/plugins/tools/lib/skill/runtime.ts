@@ -3,11 +3,11 @@ import type { ToolExecutionResult, ToolRuntimeContext } from "../../../loop/type
 import type { McpServerConfig } from "../../../mcp/types.js";
 import { loadSkillFromPath } from "../../../skills/lib/loader.js";
 import { createSkillContextMessage } from "../../../skills/lib/xml.js";
-import type { CreateSkillBody, SkillDefinition } from "../../../skills/types.js";
+import type { SkillDefinition } from "../../../skills/types.js";
 import { getErrorMessage } from "../../../../lib/error.js";
 import { BadRequestError } from "../../../../lib/errors.js";
 
-type CreateSkillHandler = (body: CreateSkillBody) => Promise<SkillDefinition>;
+type CreateSkillHandler = (body: { name: string; description: string; instruction: string }) => Promise<SkillDefinition>;
 
 let createSkillHandler: CreateSkillHandler | undefined;
 
@@ -28,24 +28,8 @@ function readInstructionOverrides(value: unknown): Record<string, string> {
   );
 }
 
-function readBoolean(value: unknown): boolean | undefined {
-  return typeof value === "boolean" ? value : undefined;
-}
-
-function readOptionalStringArray(value: unknown): string[] | undefined {
-  if (value === undefined) return undefined;
-  return readStringArray(value);
-}
-
 function buildLoadedSkillSummary(skill: SkillDefinition): string {
-  const lines = [`Loaded skill "${skill.id}" (${skill.name}).`];
-  if (skill.recommendedToolIds.length > 0) {
-    lines.push(`Recommended tools: ${skill.recommendedToolIds.join(", ")}`);
-  }
-  if (skill.recommendedMcpIds.length > 0) {
-    lines.push(`Recommended MCPs: ${skill.recommendedMcpIds.join(", ")}`);
-  }
-  return lines.join("\n");
+  return `Loaded skill "${skill.id}" (${skill.name}).`;
 }
 
 function addLoadedSkillId(context: ToolRuntimeContext, skillId: string): ToolRuntimeContext {
@@ -60,11 +44,7 @@ function addLoadedSkillId(context: ToolRuntimeContext, skillId: string): ToolRun
 }
 
 function buildCreatedSkillSummary(skill: SkillDefinition): string {
-  const lines = [`Created skill "${skill.id}" (${skill.name}).`, `Path: ${skill.path}`];
-  if (skill.allowedModeBehaviors.length > 0) {
-    lines.push(`Allowed mode behaviors: ${skill.allowedModeBehaviors.join(", ")}`);
-  }
-  return lines.join("\n");
+  return [`Created skill "${skill.id}" (${skill.name}).`, `Path: ${skill.path}`].join("\n");
 }
 
 export async function executeSkillTool(
@@ -82,10 +62,6 @@ export async function executeSkillTool(
         name: String(args.name ?? ""),
         description: String(args.description ?? ""),
         instruction: String(args.instruction ?? ""),
-        active: readBoolean(args.active),
-        allowedModeBehaviors: readOptionalStringArray(args.allowedModeBehaviors) as CreateSkillBody["allowedModeBehaviors"],
-        recommendedToolIds: readOptionalStringArray(args.recommendedToolIds),
-        recommendedMcpIds: readOptionalStringArray(args.recommendedMcpIds),
       });
       return {
         content: buildCreatedSkillSummary(created),
@@ -129,20 +105,15 @@ export async function executeSkillTool(
 
   try {
     const loaded = await loadSkillFromPath(skillsRootDir, skillId);
-    if (!loaded.metadata.active) {
-      return {
-        content: `Skill "${skillId}" is inactive and cannot be loaded.`,
-        isError: true,
-      };
-    }
-
     const skill: SkillDefinition = {
       id: skillId,
       path: loaded.resolvedPath,
       name: loaded.name,
       description: loaded.description,
       instruction: loaded.instruction,
-      ...loaded.metadata,
+      source: "custom",
+      linkedToolIds: [...loaded.links.linkedToolIds],
+      linkedMcpIds: [...loaded.links.linkedMcpIds],
     };
     const instructionOverrides = readInstructionOverrides(context.values.skillInstructionsById);
     const instruction = instructionOverrides[skillId] ?? skill.instruction;

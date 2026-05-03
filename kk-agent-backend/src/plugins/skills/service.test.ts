@@ -5,34 +5,31 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { initToolsService } from "../tools/service.js";
 import type { SkillDefinition } from "./types.js";
-import { buildSkillCatalogSection, createSkill, initSkillService, listSkills, updateSkill } from "./service.js";
+import { DEFAULT_CREATE_SKILL_BODY } from "./lib/default-create-skill.js";
+import { buildSkillCatalogSection, createSkill, importSkill, initSkillService, listSkills, updateSkill, updateSkillLinks } from "./service.js";
 
 const BASE_SKILL: SkillDefinition = {
   id: "repo-analysis",
   path: "C:\\skills\\repo-analysis",
-  active: true,
   source: "custom",
-  recommendedToolIds: ["filesystem"],
-  recommendedMcpIds: ["git-inspector"],
-  allowedModeBehaviors: ["plan", "edit"],
   name: "Repo Analysis",
   description: "Analyze a repository before making changes.",
   instruction: "Use Read, Glob and Grep before proposing edits.",
+  linkedToolIds: [],
+  linkedMcpIds: [],
 };
 
-test("buildSkillCatalogSection emits metadata XML with tool and mcp references", () => {
+test("buildSkillCatalogSection emits XML without proprietary metadata", () => {
   const xml = buildSkillCatalogSection([BASE_SKILL]);
 
   assert.ok(xml.includes("<skills_catalog>"));
   assert.ok(xml.includes('<skill id="repo-analysis"'));
-  assert.ok(xml.includes("<recommended_tools>"));
-  assert.ok(xml.includes('<tool_ref id="filesystem" />'));
-  assert.ok(xml.includes("<recommended_mcps>"));
-  assert.ok(xml.includes('<mcp_ref id="git-inspector" />'));
-  assert.ok(!xml.includes("Use Read, Glob and Grep before proposing edits."));
+  assert.ok(xml.includes("<description>Analyze a repository before making changes.</description>"));
+  assert.ok(!xml.includes("recommended_tools"));
+  assert.ok(!xml.includes("recommended_mcps"));
 });
 
-test("createSkill writes a bundle into the skills state directory and updateSkill rewrites SKILL.md", async () => {
+test("createSkill writes a standard SKILL.md bundle and updateSkill rewrites it", async () => {
   const root = await mkdtemp(join(tmpdir(), "kk-agent-skill-service-"));
   await initToolsService();
   await initSkillService(root);
@@ -41,79 +38,100 @@ test("createSkill writes a bundle into the skills state directory and updateSkil
     name: "Repo Analysis",
     description: "Analyze before editing.",
     instruction: "Read first, edit later.",
-    active: true,
-    allowedModeBehaviors: ["plan"],
   });
 
   assert.equal(created.id, "repo-analysis");
   assert.equal(listSkills().length, 2);
 
   const skillMarkdown = await readFile(join(root, created.id, "SKILL.md"), "utf-8");
+  const skillLinks = await readFile(join(root, created.id, "agents", "kk-agent.json"), "utf-8");
   assert.ok(skillMarkdown.includes("name: Repo Analysis"));
   assert.ok(skillMarkdown.includes("description: Analyze before editing."));
   assert.ok(skillMarkdown.includes("Read first, edit later."));
+  assert.equal(skillLinks, ["{", '  "toolIds": [],', '  "mcpIds": []', "}"].join("\n"));
 
   const updated = await updateSkill(created.id, {
     description: "Updated description.",
     instruction: "Use Glob and Grep too.",
-    allowedModeBehaviors: ["plan", "edit"],
   });
 
   assert.equal(updated.description, "Updated description.");
-  assert.equal(updated.allowedModeBehaviors.join(","), "plan,edit");
 
   const updatedMarkdown = await readFile(join(root, created.id, "SKILL.md"), "utf-8");
   assert.ok(updatedMarkdown.includes("description: Updated description."));
   assert.ok(updatedMarkdown.includes("Use Glob and Grep too."));
 });
 
-test("createSkill sanitizes ids, preserves autonomous mode, and generates unique slugs", async () => {
+test("updateSkillLinks writes sanitized kk-agent link metadata", async () => {
   const root = await mkdtemp(join(tmpdir(), "kk-agent-skill-service-"));
   await initToolsService();
   await initSkillService(root);
 
-  const first = await createSkill({
-    name: "Skill Builder",
-    description: "Create skills.",
-    instruction: "Ask only focused follow-up questions.",
-    allowedModeBehaviors: ["autonomous"],
-    recommendedToolIds: ["skill", "missing-tool"],
-    recommendedMcpIds: ["missing-mcp"],
-  });
-  const second = await createSkill({
-    name: "Skill Builder",
-    description: "Create skills again.",
-    instruction: "Write lean instructions.",
+  const created = await createSkill({
+    name: "Repo Analysis",
+    description: "Analyze before editing.",
+    instruction: "Read first, edit later.",
   });
 
-  assert.equal(first.id, "skill-builder");
-  assert.equal(second.id, "skill-builder-2");
-  assert.deepEqual(first.allowedModeBehaviors, ["autonomous"]);
-  assert.deepEqual(first.recommendedToolIds, ["skill"]);
-  assert.deepEqual(first.recommendedMcpIds, []);
+  const updated = await updateSkillLinks(created.id, {
+    toolIds: ["filesystem", "filesystem", "missing-tool"],
+    mcpIds: ["missing-mcp"],
+  });
+
+  assert.deepEqual(updated.linkedToolIds, ["filesystem"]);
+  assert.deepEqual(updated.linkedMcpIds, []);
+
+  const skillLinks = await readFile(join(root, created.id, "agents", "kk-agent.json"), "utf-8");
+  assert.equal(skillLinks, ["{", '  "toolIds": [', '    "filesystem"', "  ],", '  "mcpIds": []', "}"].join("\n"));
 });
 
-test("initSkillService seeds create-skill once and does not overwrite it", async () => {
+test("importSkill installs a standard skill bundle from uploaded files", async () => {
+  const root = await mkdtemp(join(tmpdir(), "kk-agent-skill-service-"));
+  await initToolsService();
+  await initSkillService(root);
+
+  const imported = await importSkill([
+    {
+      path: "openai-docs/SKILL.md",
+      content: Buffer.from(
+        [
+          "---",
+          "name: openai-docs",
+          "description: Use when the user asks about OpenAI docs.",
+          "---",
+          "",
+          "Search the docs first.",
+          "",
+        ].join("\n"),
+        "utf-8",
+      ),
+    },
+    {
+      path: "openai-docs/references/latest-model.md",
+      content: Buffer.from("latest model fallback", "utf-8"),
+    },
+  ]);
+
+  assert.equal(imported.skill.id, "openai-docs");
+  assert.equal(imported.skill.name, "openai-docs");
+  assert.equal(imported.skill.description, "Use when the user asks about OpenAI docs.");
+
+  const importedMarkdown = await readFile(join(root, "openai-docs", "SKILL.md"), "utf-8");
+  const importedLinks = await readFile(join(root, "openai-docs", "agents", "kk-agent.json"), "utf-8");
+  assert.ok(importedMarkdown.includes("name: openai-docs"));
+  assert.ok(importedMarkdown.includes("Search the docs first."));
+  assert.equal(importedLinks, ["{", '  "toolIds": [],', '  "mcpIds": []', "}"].join("\n"));
+});
+
+test("initSkillService seeds only the current default create-skill and preserves custom edits", async () => {
   const root = await mkdtemp(join(tmpdir(), "kk-agent-skill-service-"));
   await initToolsService();
   await initSkillService(root);
 
   const seeded = listSkills().find((skill) => skill.id === "create-skill");
   assert.ok(seeded);
-  assert.deepEqual(seeded?.allowedModeBehaviors, ["plan", "edit"]);
-  assert.equal(seeded?.recommendedToolIds.join(","), "skill,user-interaction");
-  assert.match(seeded?.description ?? "", /KK-Agent skill bundle|state\/skills/i);
-  assert.match(seeded?.instruction ?? "", /load `create-skill` with Skill before you ask follow-up questions, draft content, or call CreateSkill/i);
-  assert.match(seeded?.instruction ?? "", /always use CreateSkill/i);
-  assert.match(seeded?.instruction ?? "", /Do not manually write SKILL\.md or kk-agent\.skill\.json/i);
-  assert.match(seeded?.instruction ?? "", /YAML frontmatter/i);
-  assert.match(seeded?.instruction ?? "", /name: Repo Analysis/);
-  assert.match(seeded?.instruction ?? "", /Do not encode trigger lists as `Trigger:` mini-syntax/i);
-  assert.match(seeded?.instruction ?? "", /"allowedModeBehaviors": \["plan", "edit"\]/);
-  assert.match(seeded?.instruction ?? "", /allowedModeBehaviors to plan and edit/i);
-  assert.match(seeded?.instruction ?? "", /ask_user/);
-  assert.match(seeded?.instruction ?? "", /multiple choice/i);
-  assert.match(seeded?.instruction ?? "", /Do not model timers, schedules, background jobs/i);
+  assert.equal(seeded?.description, DEFAULT_CREATE_SKILL_BODY.description);
+  assert.equal(seeded?.instruction, DEFAULT_CREATE_SKILL_BODY.instruction);
 
   const seedPath = join(root, "create-skill", "SKILL.md");
   await writeFile(seedPath, "---\nname: Create Skill\ndescription: Custom seeded description.\n---\n\nKeep this custom body.\n", "utf-8");

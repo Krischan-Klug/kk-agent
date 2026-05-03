@@ -88,11 +88,9 @@ export interface SessionRuntimeSkillDebug {
   name: string;
   description: string;
   instruction: string;
-  active: boolean;
   source?: "system" | "custom";
-  recommendedToolIds: string[];
-  recommendedMcpIds: string[];
-  allowedModeBehaviors: ModeBehavior[];
+  linkedToolIds: string[];
+  linkedMcpIds: string[];
 }
 
 export interface SessionPromptDebug {

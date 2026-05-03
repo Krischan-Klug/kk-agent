@@ -305,14 +305,17 @@ export default function ChatDebugPanel({
     if (skillsSnapshot.length === 0) return "Keine aktuell aktiven Runtime-Skills.";
     return skillsSnapshot
       .map((skill) => {
-        const toolRefs = skill.recommendedToolIds.length > 0
-          ? `Tools: ${skill.recommendedToolIds.join(", ")}`
-          : "Tools: -";
-        const mcpRefs = skill.recommendedMcpIds.length > 0
-          ? `MCPs: ${skill.recommendedMcpIds.join(", ")}`
-          : "MCPs: -";
-        const modeBehaviors = `Mode behaviors: ${skill.allowedModeBehaviors.join(", ")}`;
-        return `-- ${skill.name} (${skill.id}) --\nsource=${skill.source ?? "custom"} active=${skill.active}\n${skill.description}\n${toolRefs}\n${mcpRefs}\n${modeBehaviors}\n\n${skill.instruction}`;
+        const linkedTools = skill.linkedToolIds.length > 0 ? skill.linkedToolIds.join(", ") : "-";
+        const linkedMcps = skill.linkedMcpIds.length > 0 ? skill.linkedMcpIds.join(", ") : "-";
+        return [
+          `-- ${skill.name} (${skill.id}) --`,
+          `source=${skill.source ?? "custom"}`,
+          `linked_tools=${linkedTools}`,
+          `linked_mcps=${linkedMcps}`,
+          skill.description,
+          "",
+          skill.instruction,
+        ].join("\n");
       })
       .join("\n\n");
   }

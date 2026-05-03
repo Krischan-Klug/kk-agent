@@ -17,8 +17,7 @@ function sanitizeToolIds(toolIds: string[]): string[] {
 }
 
 function sanitizeSkillIds(skillIds: string[]): string[] {
-  const knownActive = listSkills().filter((skill) => skill.active).map((skill) => skill.id);
-  return filterToKnownIds(skillIds, knownActive);
+  return filterToKnownIds(skillIds, listSkills().map((skill) => skill.id));
 }
 
 function getSessionRunnableMcpIds(activeToolIds: string[], activeMcpIds: string[]): string[] {

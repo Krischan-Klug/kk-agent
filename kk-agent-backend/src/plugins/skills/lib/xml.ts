@@ -2,30 +2,10 @@ import { createTranscriptMessage, textBlock, type TranscriptMessage } from "../.
 import { escapeXml, toCData } from "../../lib/xml.js";
 import type { SkillDefinition } from "../types.js";
 
-function buildToolRefs(toolIds: string[]): string {
-  if (toolIds.length === 0) return "";
-  return [
-    "    <recommended_tools>",
-    ...toolIds.map((toolId) => `      <tool_ref id="${escapeXml(toolId)}" />`),
-    "    </recommended_tools>",
-  ].join("\n");
-}
-
-function buildMcpRefs(mcpIds: string[]): string {
-  if (mcpIds.length === 0) return "";
-  return [
-    "    <recommended_mcps>",
-    ...mcpIds.map((mcpId) => `      <mcp_ref id="${escapeXml(mcpId)}" />`),
-    "    </recommended_mcps>",
-  ].join("\n");
-}
-
 function buildSkillEntry(skill: SkillDefinition): string {
   return [
-    `  <skill id="${escapeXml(skill.id)}" name="${escapeXml(skill.name)}" path="${escapeXml(skill.path)}" source="${escapeXml(skill.source ?? "custom")}" mode_behaviors="${escapeXml(skill.allowedModeBehaviors.join(","))}">`,
+    `  <skill id="${escapeXml(skill.id)}" name="${escapeXml(skill.name)}" path="${escapeXml(skill.path)}" source="${escapeXml(skill.source ?? "custom")}">`,
     `    <description>${escapeXml(skill.description)}</description>`,
-    buildToolRefs(skill.recommendedToolIds),
-    buildMcpRefs(skill.recommendedMcpIds),
     "  </skill>",
   ].filter(Boolean).join("\n");
 }
@@ -37,10 +17,8 @@ export function buildSkillsCatalogSection(skills: SkillDefinition[]): string {
 
 function buildSkillContextXml(skill: SkillDefinition, instruction: string): string {
   return [
-    `  <skill_context id="${escapeXml(skill.id)}" name="${escapeXml(skill.name)}" path="${escapeXml(skill.path)}" source="${escapeXml(skill.source ?? "custom")}" mode_behaviors="${escapeXml(skill.allowedModeBehaviors.join(","))}">`,
+    `  <skill_context id="${escapeXml(skill.id)}" name="${escapeXml(skill.name)}" path="${escapeXml(skill.path)}" source="${escapeXml(skill.source ?? "custom")}">`,
     `    <description>${escapeXml(skill.description)}</description>`,
-    buildToolRefs(skill.recommendedToolIds),
-    buildMcpRefs(skill.recommendedMcpIds),
     `    <instruction format="markdown">${toCData(instruction.trim())}</instruction>`,
     "  </skill_context>",
   ].filter(Boolean).join("\n");

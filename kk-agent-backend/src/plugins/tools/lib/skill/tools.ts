@@ -3,13 +3,13 @@ import type { McpToolDefinition } from "../../../mcp/types.js";
 export const skillTools: McpToolDefinition[] = [
   {
     name: "Skill",
-    description: "Load a registered skill from <skills_catalog> into the conversation before following its workflow. Use the exact skill id.",
+    description: "Load a listed skill from <skills_catalog> before following its workflow. Use the exact skill id.",
     inputSchema: {
       type: "object",
       properties: {
         skill: {
           type: "string",
-          description: "Exact skill id from <skills_catalog> to load.",
+          description: "Exact skill id from <skills_catalog>.",
         },
       },
       required: ["skill"],
@@ -18,47 +18,21 @@ export const skillTools: McpToolDefinition[] = [
   },
   {
     name: "CreateSkill",
-    description: "Create a new local skill bundle in state/skills. Provide the content fields and metadata only; the tool writes a valid KK-Agent SKILL.md bundle with YAML frontmatter and optional kk-agent.skill.json metadata.",
+    description: "Create or rewrite a local skill bundle in state/skills. Provide only the content fields; the tool writes SKILL.md.",
     inputSchema: {
       type: "object",
       properties: {
         name: {
           type: "string",
-          description: "Human-readable skill name only. Do not include YAML keys or file formatting. The skill id is generated automatically from this name.",
+          description: "Human-readable skill name. The skill id is generated automatically.",
         },
         description: {
           type: "string",
-          description: "Trigger-oriented skill description only. Do not include `description:` prefixes, YAML quoting, or trigger mini-syntax; the tool serializes frontmatter safely.",
+          description: "One sentence describing what the skill does and when to use it.",
         },
         instruction: {
           type: "string",
-          description: "Lean instruction body only. Do not include frontmatter, opening `---`, or file scaffolding; the tool writes the final SKILL.md format.",
-        },
-        active: {
-          type: "boolean",
-          description: "Whether the new skill should be active immediately. Defaults to true.",
-        },
-        allowedModeBehaviors: {
-          type: "array",
-          description: "Mode behaviors where the skill may be used. Defaults to plan and edit when omitted.",
-          items: {
-            type: "string",
-            enum: ["plan", "edit", "autonomous"],
-          },
-        },
-        recommendedToolIds: {
-          type: "array",
-          description: "Optional internal tool ids that materially help use this skill.",
-          items: {
-            type: "string",
-          },
-        },
-        recommendedMcpIds: {
-          type: "array",
-          description: "Optional MCP ids that materially help use this skill.",
-          items: {
-            type: "string",
-          },
+          description: "Instruction body only. Do not include frontmatter or file scaffolding.",
         },
       },
       required: ["name", "description", "instruction"],

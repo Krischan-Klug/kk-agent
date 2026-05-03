@@ -870,8 +870,9 @@ export function ExternalMcpsSection({
 
 type SkillsSectionProps = {
   selectedModeConfig: AgentModeConfig;
-  selectedModeDefinition: AgentModeDefinition;
   skills: SkillDefinition[];
+  internalTools: McpListItem[];
+  mcps: McpListItem[];
   visibleSkillInstructions: Record<string, boolean>;
   setVisibleSkillInstructions: Dispatch<SetStateAction<Record<string, boolean>>>;
   getEffectiveSkillInstruction: (skillId: string, fallback: string) => string;
@@ -880,8 +881,9 @@ type SkillsSectionProps = {
 
 export function SkillsSection({
   selectedModeConfig,
-  selectedModeDefinition,
   skills,
+  internalTools,
+  mcps,
   visibleSkillInstructions,
   setVisibleSkillInstructions,
   getEffectiveSkillInstruction,
@@ -893,18 +895,20 @@ export function SkillsSection({
       {skills.map((skill) => {
         const isActive = selectedModeConfig.skillIds.includes(skill.id);
         const showInstruction = visibleSkillInstructions[skill.id] ?? false;
-        const isAvailableInMode = skill.allowedModeBehaviors.includes(selectedModeDefinition.behavior);
         const effectiveInstruction = getEffectiveSkillInstruction(skill.id, skill.instruction);
         const isCustomized = effectiveInstruction.trim() !== skill.instruction.trim();
+        const linkedToolNames = skill.linkedToolIds
+          .map((toolId) => internalTools.find((tool) => tool.id === toolId)?.name ?? toolId);
+        const linkedMcpNames = skill.linkedMcpIds
+          .map((mcpId) => mcps.find((mcp) => mcp.id === mcpId)?.name ?? mcpId);
 
         return (
-          <CapabilityRow key={skill.id} $active={isActive && skill.active && isAvailableInMode}>
+          <CapabilityRow key={skill.id} $active={isActive}>
             <CapabilityHeader>
               <CheckboxRow>
                 <input
                   type="checkbox"
                   checked={isActive}
-                  disabled={!skill.active || (!isAvailableInMode && !isActive)}
                   onChange={() => {
                     const nextSkillIds = isActive
                       ? selectedModeConfig.skillIds.filter((id) => id !== skill.id)
@@ -917,7 +921,6 @@ export function SkillsSection({
                 />
                 <span style={{ fontSize: "1.1em" }}>{SKILL_EMOJI}</span>
                 <span style={{ fontWeight: 500 }}>{skill.name}</span>
-                <StatusDot $running={skill.active && isAvailableInMode} />
               </CheckboxRow>
               {isActive && (
                 <HeaderActions>
@@ -954,13 +957,13 @@ export function SkillsSection({
               )}
             </CapabilityHeader>
             <MutedText>{skill.description}</MutedText>
-            <MutedText>
-              Behavior: {skill.allowedModeBehaviors.join(", ")}
-              {skill.recommendedToolIds.length > 0 ? ` | Tools: ${skill.recommendedToolIds.join(", ")}` : ""}
-              {skill.recommendedMcpIds.length > 0 ? ` | MCPs: ${skill.recommendedMcpIds.join(", ")}` : ""}
-            </MutedText>
-            {!skill.active && <MutedText>Skill ist global deaktiviert.</MutedText>}
-            {skill.active && !isAvailableInMode && <MutedText>In diesem Mode nicht verfuegbar.</MutedText>}
+            {(linkedToolNames.length > 0 || linkedMcpNames.length > 0) && (
+              <MutedText>
+                {linkedToolNames.length > 0 ? `Tools: ${linkedToolNames.join(", ")}` : ""}
+                {linkedToolNames.length > 0 && linkedMcpNames.length > 0 ? " | " : ""}
+                {linkedMcpNames.length > 0 ? `MCPs: ${linkedMcpNames.join(", ")}` : ""}
+              </MutedText>
+            )}
             {isActive && showInstruction && (
               <TextArea
                 rows={6}

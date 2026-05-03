@@ -61,12 +61,6 @@ export default function SkillList({
             <SidebarItemTitle>{skill.name}</SidebarItemTitle>
             <SidebarItemDescription>{skill.description}</SidebarItemDescription>
             <SidebarMeta>
-              <Badge variant={skill.active ? "success" : "danger"}>
-                {skill.active ? "Aktiv" : "Deaktiviert"}
-              </Badge>
-              <Badge variant="default">
-                {skill.allowedModeBehaviors.length} Verhalten{skill.allowedModeBehaviors.length === 1 ? "" : "s"}
-              </Badge>
               {usageCount > 0 && <Badge variant="info">{usageCount} Verknuepfung{usageCount === 1 ? "" : "en"}</Badge>}
             </SidebarMeta>
           </SidebarItem>

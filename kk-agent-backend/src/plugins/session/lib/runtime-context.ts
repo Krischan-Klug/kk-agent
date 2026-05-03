@@ -68,7 +68,7 @@ export function buildModeRuntimeConfig(
       effectiveInstructions,
     ),
     skillsCatalog: activeToolIds.includes("skill")
-      ? buildActiveSkillCatalogSection(activeSkillIds, mode.behavior)
+      ? buildActiveSkillCatalogSection(activeSkillIds)
       : "",
     activeSkillIds,
     skillInstructionsById,

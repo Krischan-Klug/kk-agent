@@ -1,26 +1,21 @@
 import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
-import { basename, resolve, relative, sep, join } from "node:path";
+import { basename, join, relative, resolve, sep } from "node:path";
 import YAML from "yaml";
-import type { ModeBehavior } from "../../agent/types.js";
-import type { SkillMetadata } from "../types.js";
-import { normalizeSkillMetadata } from "./metadata.js";
 
-const METADATA_FILE = "kk-agent.skill.json";
+const KK_AGENT_FILE = join("agents", "kk-agent.json");
 
-interface LoadedSkillMetadata {
+interface SkillLinks {
+  linkedToolIds: string[];
+  linkedMcpIds: string[];
+}
+
+interface LoadedSkillBundle {
   name: string;
   description: string;
   instruction: string;
   skillFilePath: string;
   resolvedPath: string;
-  metadata: SkillMetadata;
-}
-
-interface StoredSkillMetadata {
-  active?: boolean;
-  recommendedToolIds?: string[];
-  recommendedMcpIds?: string[];
-  allowedModeBehaviors?: ModeBehavior[];
+  links: SkillLinks;
 }
 
 function isWithinRoot(rootDir: string, targetPath: string): boolean {
@@ -62,14 +57,41 @@ function buildSkillMarkdown(name: string, description: string, instruction: stri
   return `---\n${frontmatter}\n---\n\n${instruction.trim()}\n`;
 }
 
-async function readSkillMetadataFile(skillDir: string): Promise<SkillMetadata> {
-  const metadataPath = join(skillDir, METADATA_FILE);
+function normalizeIds(values: unknown): string[] {
+  if (!Array.isArray(values)) return [];
+  return [...new Set(values.filter((value): value is string => typeof value === "string" && value.trim().length > 0))];
+}
+
+export function normalizeSkillLinks(links?: Partial<{ linkedToolIds: string[]; linkedMcpIds: string[] }>): SkillLinks {
+  return {
+    linkedToolIds: normalizeIds(links?.linkedToolIds),
+    linkedMcpIds: normalizeIds(links?.linkedMcpIds),
+  };
+}
+
+async function readSkillLinks(skillDir: string): Promise<SkillLinks> {
   try {
-    const raw = await readFile(metadataPath, "utf-8");
-    return normalizeSkillMetadata(JSON.parse(raw) as StoredSkillMetadata);
+    const raw = await readFile(join(skillDir, KK_AGENT_FILE), "utf-8");
+    const parsed = JSON.parse(raw) as { toolIds?: string[]; mcpIds?: string[] } | null;
+    return normalizeSkillLinks({
+      linkedToolIds: parsed?.toolIds,
+      linkedMcpIds: parsed?.mcpIds,
+    });
   } catch {
-    return normalizeSkillMetadata();
+    return normalizeSkillLinks();
   }
+}
+
+export async function writeSkillLinks(skillDir: string, links: SkillLinks): Promise<void> {
+  await mkdir(join(skillDir, "agents"), { recursive: true });
+  await writeFile(
+    join(skillDir, KK_AGENT_FILE),
+    JSON.stringify({
+      toolIds: links.linkedToolIds,
+      mcpIds: links.linkedMcpIds,
+    }, null, 2),
+    "utf-8",
+  );
 }
 
 export async function writeSkillBundle(
@@ -78,24 +100,23 @@ export async function writeSkillBundle(
     name: string;
     description: string;
     instruction: string;
-    metadata: SkillMetadata;
+    links?: SkillLinks;
   },
 ): Promise<void> {
   await mkdir(skillDir, { recursive: true });
   await writeFile(join(skillDir, "SKILL.md"), buildSkillMarkdown(body.name, body.description, body.instruction), "utf-8");
-  await writeFile(
-    join(skillDir, METADATA_FILE),
-    JSON.stringify({
-      active: body.metadata.active,
-      recommendedToolIds: body.metadata.recommendedToolIds,
-      recommendedMcpIds: body.metadata.recommendedMcpIds,
-      allowedModeBehaviors: body.metadata.allowedModeBehaviors,
-    }, null, 2),
-    "utf-8",
-  );
+  await writeSkillLinks(skillDir, normalizeSkillLinks(body.links));
 }
 
-export async function loadSkillFromPath(rootDir: string, skillPath: string): Promise<LoadedSkillMetadata> {
+export async function resolveSkillBundleRoot(rootDir: string): Promise<string> {
+  const skillFiles = await walkForSkillFiles(rootDir);
+  if (skillFiles.length !== 1) {
+    throw new Error(`Expected exactly one SKILL.md, found ${skillFiles.length}.`);
+  }
+  return resolve(skillFiles[0]!, "..");
+}
+
+export async function loadSkillFromPath(rootDir: string, skillPath: string): Promise<LoadedSkillBundle> {
   const resolvedRoot = resolve(rootDir);
   const resolvedPath = resolve(resolvedRoot, skillPath);
 
@@ -103,12 +124,9 @@ export async function loadSkillFromPath(rootDir: string, skillPath: string): Pro
     throw new Error(`Skill path must stay within root directory "${resolvedRoot}".`);
   }
 
-  const skillFiles = await walkForSkillFiles(resolvedPath);
-  if (skillFiles.length !== 1) {
-    throw new Error(`Expected exactly one SKILL.md in "${resolvedPath}", found ${skillFiles.length}.`);
-  }
-
-  const raw = await readFile(skillFiles[0]!, "utf-8");
+  const bundleRoot = await resolveSkillBundleRoot(resolvedPath);
+  const skillFilePath = join(bundleRoot, "SKILL.md");
+  const raw = await readFile(skillFilePath, "utf-8");
   const { frontmatter, body } = parseFrontmatter(raw);
   const name = typeof frontmatter.name === "string" ? frontmatter.name.trim() : "";
   const description = typeof frontmatter.description === "string" ? frontmatter.description.trim() : "";
@@ -121,8 +139,8 @@ export async function loadSkillFromPath(rootDir: string, skillPath: string): Pro
     name,
     description,
     instruction: body,
-    skillFilePath: skillFiles[0]!,
-    resolvedPath,
-    metadata: await readSkillMetadataFile(resolvedPath),
+    skillFilePath,
+    resolvedPath: bundleRoot,
+    links: await readSkillLinks(bundleRoot),
   };
 }

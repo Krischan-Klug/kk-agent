@@ -188,20 +188,17 @@ export const CreateSkillBodySchema = z.object({
   name: NonEmptyStringSchema,
   description: NonEmptyStringSchema,
   instruction: NonEmptyStringSchema,
-  active: z.boolean().optional(),
-  recommendedToolIds: z.array(NonEmptyStringSchema).optional(),
-  recommendedMcpIds: z.array(NonEmptyStringSchema).optional(),
-  allowedModeBehaviors: z.array(z.enum(["plan", "edit", "autonomous"])).optional(),
 });
 
 export const UpdateSkillBodySchema = z.object({
   name: OptionalTrimmedStringSchema,
   description: OptionalTrimmedStringSchema,
   instruction: OptionalTrimmedStringSchema,
-  active: z.boolean().optional(),
-  recommendedToolIds: z.array(z.string()).optional(),
-  recommendedMcpIds: z.array(z.string()).optional(),
-  allowedModeBehaviors: z.array(z.enum(["plan", "edit", "autonomous"])).optional(),
+});
+
+export const UpdateSkillLinksBodySchema = z.object({
+  toolIds: z.array(z.string()).optional(),
+  mcpIds: z.array(z.string()).optional(),
 });
 
 /* Provider */

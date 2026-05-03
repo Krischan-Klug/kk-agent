@@ -17,8 +17,8 @@ function normalizeToolIds(toolIds: string[]): string[] {
   return dedupeIds(toolIds, REQUIRED_TOOL_IDS);
 }
 
-function normalizeSkillIds(skillIds: string[], behavior: ModeBehavior): string[] {
-  return filterToKnownIds(skillIds, getKnownSkillIds({ behavior }));
+function normalizeSkillIds(skillIds: string[]): string[] {
+  return filterToKnownIds(skillIds, getKnownSkillIds());
 }
 
 function normalizeToolAccessScopes(scopes: Record<string, ToolAccessScope> = {}): Record<string, ToolAccessScope> {
@@ -78,7 +78,7 @@ function normalizeModeConfig(
     modeInstruction: current?.modeInstruction ?? defaults.modeInstruction,
     toolIds: normalizeToolIds(current?.toolIds ?? defaults.toolIds),
     mcpIds: [...new Set(current?.mcpIds ?? defaults.mcpIds)],
-    skillIds: normalizeSkillIds(current?.skillIds ?? defaults.skillIds, behavior),
+    skillIds: normalizeSkillIds(current?.skillIds ?? defaults.skillIds),
     toolAccessScopes: { ...defaults.toolAccessScopes, ...normalizeToolAccessScopes(current?.toolAccessScopes) },
     toolInstructions: { ...defaults.toolInstructions, ...current?.toolInstructions },
     mcpInstructions: { ...defaults.mcpInstructions, ...current?.mcpInstructions },

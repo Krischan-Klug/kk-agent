@@ -77,8 +77,9 @@ export type {
 
 export type {
   CreateSkillBody,
+  ImportSkillResult,
   SkillDefinition,
-  SkillMetadata,
+  UpdateSkillLinksBody,
   UpdateSkillBody,
 } from "./skill.js";
 

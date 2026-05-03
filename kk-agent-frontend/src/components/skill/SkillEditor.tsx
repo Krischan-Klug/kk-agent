@@ -1,8 +1,7 @@
 import styled from "styled-components";
-import type { ModeBehavior, CreateSkillBody, McpListItem, SkillDefinition, UpdateSkillBody } from "@/types/api";
+import type { CreateSkillBody, McpListItem, SkillDefinition, UpdateSkillBody } from "@/types/api";
 import Button from "@/components/Button";
 import Input from "@/components/Input";
-import Select from "@/components/Select";
 import TextArea from "@/components/TextArea";
 import {
   ActionsRow,
@@ -23,6 +22,15 @@ const EditorArea = styled.div`
   display: flex;
   flex-direction: column;
   gap: var(--space-lg);
+`;
+
+const SummaryCard = styled.div`
+  padding: var(--space-sm);
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  font-size: var(--font-size-sm);
+  color: var(--text-secondary);
 `;
 
 const ToggleGrid = styled.div`
@@ -48,25 +56,17 @@ const ToggleCard = styled.label`
   }
 `;
 
-const SummaryCard = styled.div`
-  padding: var(--space-sm);
-  background: var(--bg-surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  font-size: var(--font-size-sm);
-  color: var(--text-secondary);
-`;
-
-export type SkillDraft = CreateSkillBody;
+export type SkillDraft = CreateSkillBody & {
+  linkedToolIds: string[];
+  linkedMcpIds: string[];
+};
 
 export const EMPTY_SKILL_DRAFT: SkillDraft = {
   name: "",
   description: "",
   instruction: "",
-  active: true,
-  recommendedToolIds: [],
-  recommendedMcpIds: [],
-  allowedModeBehaviors: ["plan", "edit", "autonomous"],
+  linkedToolIds: [],
+  linkedMcpIds: [],
 };
 
 export function skillToDraft(skill: SkillDefinition): SkillDraft {
@@ -74,10 +74,8 @@ export function skillToDraft(skill: SkillDefinition): SkillDraft {
     name: skill.name,
     description: skill.description,
     instruction: skill.instruction,
-    active: skill.active,
-    recommendedToolIds: [...skill.recommendedToolIds],
-    recommendedMcpIds: [...skill.recommendedMcpIds],
-    allowedModeBehaviors: [...skill.allowedModeBehaviors],
+    linkedToolIds: [...skill.linkedToolIds],
+    linkedMcpIds: [...skill.linkedMcpIds],
   };
 }
 
@@ -86,10 +84,6 @@ export function toCreateBody(draft: SkillDraft): CreateSkillBody {
     name: draft.name.trim(),
     description: draft.description.trim(),
     instruction: draft.instruction.trim(),
-    active: draft.active,
-    recommendedToolIds: draft.recommendedToolIds,
-    recommendedMcpIds: draft.recommendedMcpIds,
-    allowedModeBehaviors: draft.allowedModeBehaviors,
   };
 }
 
@@ -101,18 +95,13 @@ function toggleEntry(list: string[], value: string, enabled: boolean): string[] 
   return enabled ? [...new Set([...list, value])] : list.filter((entry) => entry !== value);
 }
 
-function toggleMode(list: ModeBehavior[], value: ModeBehavior, enabled: boolean): ModeBehavior[] {
-  const next = enabled ? [...new Set([...list, value])] : list.filter((entry) => entry !== value);
-  return next.length > 0 ? next : ["plan", "edit", "autonomous"];
-}
-
 type Props = {
   skill: SkillDefinition | null;
   draft: SkillDraft | null;
   isCreateMode: boolean;
   saving: boolean;
-  toolCapabilities: McpListItem[];
-  mcpCapabilities: McpListItem[];
+  internalTools: McpListItem[];
+  mcps: McpListItem[];
   usage?: SkillUsage;
   onChange: (draft: SkillDraft) => void;
   onSave: () => void;
@@ -125,8 +114,8 @@ export default function SkillEditor({
   draft,
   isCreateMode,
   saving,
-  toolCapabilities,
-  mcpCapabilities,
+  internalTools,
+  mcps,
   usage,
   onChange,
   onSave,
@@ -136,7 +125,7 @@ export default function SkillEditor({
   if (!draft) {
     return (
       <EditorArea>
-        <EmptyHint>Waehle einen Skill aus oder erstelle einen neuen.</EmptyHint>
+        <EmptyHint>Waehle einen Skill aus oder importiere einen Bundle-Ordner.</EmptyHint>
       </EditorArea>
     );
   }
@@ -150,17 +139,17 @@ export default function SkillEditor({
       <Section>
         <SectionTitle>{title}</SectionTitle>
         <MutedText>
-          Skills werden als lokale Bundles in <code>state/skills</code> gespeichert. Die Ansicht entspricht bewusst dem Agent-Editor.
+          Skills sind Standard-Bundles mit <code>SKILL.md</code> in <code>state/skills</code>. KK-Agent-Links werden separat in <code>agents/kk-agent.json</code> gespeichert.
         </MutedText>
         {!isCreateMode && skill && (
           <SummaryCard>
-            ID: {skill.id} · Pfad: {skill.path}
+            ID: {skill.id} | Pfad: {skill.path}
           </SummaryCard>
         )}
       </Section>
 
       <Section>
-        <SectionTitle>Skill Info</SectionTitle>
+        <SectionTitle>SKILL.md</SectionTitle>
         <FormRow>
           <FormField $flex={1}>
             <FieldLabel>Name</FieldLabel>
@@ -171,107 +160,74 @@ export default function SkillEditor({
             />
           </FormField>
           <FormField $flex={2}>
-            <FieldLabel>Kurzbeschreibung</FieldLabel>
+            <FieldLabel>Beschreibung</FieldLabel>
             <Input
               value={draft.description}
               onChange={(e) => onChange({ ...draft, description: e.target.value })}
-              placeholder="Beschreibt Aufgabe und Trigger knapp."
+              placeholder="Eine kurze Beschreibung mit Trigger."
             />
           </FormField>
         </FormRow>
         <FormField>
           <FieldLabel>Instruction</FieldLabel>
           <TextArea
-            rows={10}
+            rows={12}
             value={draft.instruction}
             onChange={(e) => onChange({ ...draft, instruction: e.target.value })}
-            placeholder={"Nutze Read, Glob und Grep vor Aenderungen.\nHalte Ergebnisse knapp und dateibezogen."}
+            placeholder={"Read the relevant files first.\nList the main risks.\nKeep the final summary short."}
           />
-          <MutedText>Kurz, direkt, imperative Form. Kein Fuelltext, keine doppelten Erklaerungen.</MutedText>
         </FormField>
       </Section>
 
       <Section>
-        <SectionTitle>Verfuegbarkeit</SectionTitle>
-        <FormRow>
-          <FormField $minWidth="180px">
-            <FieldLabel>Status</FieldLabel>
-            <Select
-              value={draft.active ? "active" : "inactive"}
-              onChange={(e) => onChange({ ...draft, active: e.target.value === "active" })}
-            >
-              <option value="active">Aktiv</option>
-              <option value="inactive">Deaktiviert</option>
-            </Select>
-          </FormField>
-        </FormRow>
-        <FormField>
-          <FieldLabel>Mode Behaviors</FieldLabel>
+        <SectionTitle>Verknuepfte interne Tools</SectionTitle>
+        {internalTools.length > 0 ? (
           <ToggleGrid>
-            {(["plan", "edit", "autonomous"] as ModeBehavior[]).map((mode) => (
-              <ToggleCard key={mode}>
-                <input
-                  type="checkbox"
-                  checked={draft.allowedModeBehaviors?.includes(mode) ?? false}
-                  onChange={(e) => onChange({
-                    ...draft,
-                    allowedModeBehaviors: toggleMode(
-                      draft.allowedModeBehaviors ?? EMPTY_SKILL_DRAFT.allowedModeBehaviors!,
-                      mode,
-                      e.target.checked,
-                    ),
-                  })}
-                />
-                <span>{mode}</span>
-              </ToggleCard>
-            ))}
-          </ToggleGrid>
-        </FormField>
-      </Section>
-
-      <Section>
-        <SectionTitle>Empfehlungen</SectionTitle>
-        <FormField>
-          <FieldLabel>Interne Tools</FieldLabel>
-          <ToggleGrid>
-            {toolCapabilities.map((tool) => (
+            {internalTools.map((tool) => (
               <ToggleCard key={tool.id}>
                 <input
                   type="checkbox"
-                  checked={draft.recommendedToolIds?.includes(tool.id) ?? false}
+                  checked={draft.linkedToolIds.includes(tool.id)}
                   onChange={(e) => onChange({
                     ...draft,
-                    recommendedToolIds: toggleEntry(draft.recommendedToolIds ?? [], tool.id, e.target.checked),
+                    linkedToolIds: toggleEntry(draft.linkedToolIds, tool.id, e.target.checked),
                   })}
                 />
                 <span>{tool.name}</span>
               </ToggleCard>
             ))}
           </ToggleGrid>
-        </FormField>
-        <FormField>
-          <FieldLabel>MCPs</FieldLabel>
+        ) : (
+          <EmptyHint>Keine internen Tools vorhanden.</EmptyHint>
+        )}
+      </Section>
+
+      <Section>
+        <SectionTitle>Verknuepfte MCPs</SectionTitle>
+        {mcps.length > 0 ? (
           <ToggleGrid>
-            {mcpCapabilities.map((mcp) => (
+            {mcps.map((mcp) => (
               <ToggleCard key={mcp.id}>
                 <input
                   type="checkbox"
-                  checked={draft.recommendedMcpIds?.includes(mcp.id) ?? false}
+                  checked={draft.linkedMcpIds.includes(mcp.id)}
                   onChange={(e) => onChange({
                     ...draft,
-                    recommendedMcpIds: toggleEntry(draft.recommendedMcpIds ?? [], mcp.id, e.target.checked),
+                    linkedMcpIds: toggleEntry(draft.linkedMcpIds, mcp.id, e.target.checked),
                   })}
                 />
                 <span>{mcp.name}</span>
               </ToggleCard>
             ))}
           </ToggleGrid>
-        </FormField>
+        ) : (
+          <EmptyHint>Keine MCPs vorhanden.</EmptyHint>
+        )}
       </Section>
 
       {!isCreateMode && (
         <Section>
-          <SectionTitle>Verknuepfungen</SectionTitle>
+          <SectionTitle>Aktuelle Verwendungen</SectionTitle>
           {hasUsage ? (
             <>
               {usage.tools.length > 0 && <SurfaceBox><strong>Tools:</strong> {usage.tools.join(", ")}</SurfaceBox>}

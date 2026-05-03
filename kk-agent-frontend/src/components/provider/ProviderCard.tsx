@@ -78,6 +78,14 @@ const TestResult = styled.span<{ $ok: boolean }>`
   color: ${(p) => (p.$ok ? "var(--success)" : "var(--danger)")};
 `;
 
+const FooterActions = styled.div`
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: var(--space-sm);
+  flex-wrap: wrap;
+`;
+
 type Props = {
   provider: ProviderConfig;
   isExpanded: boolean;
@@ -113,10 +121,6 @@ export default function ProviderCard({
           <Meta>{provider.baseUrl}</Meta>
         </Name>
         <HeaderActions>
-          <Button size="sm" variant="secondary" onClick={(e) => { e.stopPropagation(); onTest(); }} disabled={isTesting}>
-            {isTesting ? "..." : "Testen"}
-          </Button>
-          {testResult && <TestResult $ok={testResult.ok}>{testResult.ok ? "✓ OK" : `✗ ${testResult.error ?? "Fehler"}`}</TestResult>}
           <span style={{ color: "var(--text-muted)", fontSize: "var(--font-size-sm)" }}>{isExpanded ? "▲" : "▼"}</span>
         </HeaderActions>
       </Header>
@@ -152,11 +156,15 @@ export default function ProviderCard({
             onSave={onModelSettingsSave}
           />
 
-          <div style={{ display: "flex", justifyContent: "flex-end" }}>
-            <Button size="sm" variant="danger" onClick={onDelete}>
-              Provider löschen
+          <FooterActions>
+            <Button size="sm" variant="secondary" onClick={onTest} disabled={isTesting}>
+              {isTesting ? "..." : "Testen"}
             </Button>
-          </div>
+            {testResult && <TestResult $ok={testResult.ok}>{testResult.ok ? "OK" : testResult.error ?? "Fehler"}</TestResult>}
+            <Button size="sm" variant="danger" onClick={onDelete}>
+              Provider loeschen
+            </Button>
+          </FooterActions>
         </ExpandedContent>
       )}
     </Wrapper>

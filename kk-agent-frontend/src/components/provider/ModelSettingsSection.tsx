@@ -79,19 +79,23 @@ const ContextInfo = styled.span`
   font-family: var(--font-mono);
 `;
 
-const BadgeRow = styled.div`
+const CapabilityRow = styled.div`
   display: flex;
   align-items: center;
   gap: var(--space-xs);
   flex-wrap: wrap;
 `;
 
-const CapabilityBadge = styled.span`
+const IconChip = styled.span`
   display: inline-flex;
   align-items: center;
-  gap: 4px;
-  padding: 2px 8px;
+  justify-content: center;
+  min-width: 22px;
+  height: 22px;
+  padding: 0 6px;
   font-size: 0.7rem;
+  font-weight: 700;
+  font-family: var(--font-mono);
   border-radius: 999px;
   color: var(--accent);
   background: var(--accent-muted);
@@ -116,7 +120,11 @@ const SegmentButton = styled.button<{ $active: boolean }>`
   cursor: pointer;
 `;
 
-const StaticEndpointBadge = styled(CapabilityBadge)`
+const StaticEndpointBadge = styled(IconChip)`
+  min-width: unset;
+  height: auto;
+  padding: 2px 8px;
+  font-weight: 500;
   color: var(--text-secondary);
   background: var(--bg-elevated);
 `;
@@ -216,21 +224,10 @@ export default function ModelSettingsSection({ models, modelSettings, onSave }: 
                       </ContextInfo>
                     )}
                   </ModelName>
-                  <BadgeRow>
-                    {model.capabilities.supportsTools && <CapabilityBadge>Tools</CapabilityBadge>}
-                    {showReasoning && <CapabilityBadge>Reasoning {reasoningLevels.join(", ")}</CapabilityBadge>}
-                    {endpointCapabilities.temperatureSupported && endpointCapabilities.temperatureRange && (
-                      <CapabilityBadge>
-                        Temperature {endpointCapabilities.temperatureRange.min}-{endpointCapabilities.temperatureRange.max}
-                      </CapabilityBadge>
-                    )}
-                    {endpointCapabilities.maxOutputTokensSupported && endpointCapabilities.maxOutputTokensRange && (
-                      <CapabilityBadge>
-                        Max output {endpointCapabilities.maxOutputTokensRange.max.toLocaleString()}
-                      </CapabilityBadge>
-                    )}
-                    {model.capabilities.supportsStreaming && <CapabilityBadge>Streaming</CapabilityBadge>}
-                  </BadgeRow>
+                  <CapabilityRow>
+                    {model.capabilities.supportsTools && <IconChip title="Tools verfuegbar">🛠️</IconChip>}
+                    {showReasoning && <IconChip title={`Reasoning verfuegbar: ${reasoningLevels.join(", ")}`}>🧠</IconChip>}
+                  </CapabilityRow>
                 </ModelMeta>
                 <SettingsRow>
                   {supportedEndpoints.length > 1 ? (

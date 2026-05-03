@@ -15,10 +15,10 @@ export default function CreateSkillModal({ open, name, onNameChange, onCreate, o
 
   return (
     <FormModal
-      title="Neuer Skill"
+      title="New Skill"
       onClose={onClose}
       onSubmit={onCreate}
-      submitLabel="Weiter"
+      submitLabel="Continue"
       submitDisabled={!name.trim()}
     >
       <FormField>
@@ -26,10 +26,10 @@ export default function CreateSkillModal({ open, name, onNameChange, onCreate, o
         <Input
           value={name}
           onChange={(e) => onNameChange(e.target.value)}
-          placeholder="z.B. Repo Analysis"
+          placeholder="e.g. Repo Analysis"
           autoFocus
         />
-        <MutedText>Beschreibung, Instruction und Empfehlungen bearbeitest du danach im Editor.</MutedText>
+        <MutedText>Description, instruction, and recommendations can be edited afterward in the editor.</MutedText>
       </FormField>
     </FormModal>
   );

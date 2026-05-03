@@ -121,10 +121,10 @@ export default function ProviderCard({
 }: Props) {
   const statusState = testResult ? (testResult.ok ? "ok" : "error") : "unknown";
   const statusTitle = isTesting
-    ? "Wird getestet"
+    ? "Testing"
     : testResult
-      ? (testResult.ok ? "Verifiziert" : "Test fehlgeschlagen")
-      : "Noch nicht getestet";
+      ? (testResult.ok ? "Verified" : "Test failed")
+      : "Not tested yet";
 
   return (
     <Card>
@@ -137,7 +137,7 @@ export default function ProviderCard({
           </NameRow>
           <Controls>
             <Button size="sm" variant="secondary" onClick={onToggleExpand}>
-              {isExpanded ? "Schliessen" : "Bearbeiten"}
+              {isExpanded ? "Close" : "Edit"}
             </Button>
           </Controls>
         </HeaderTop>
@@ -176,11 +176,11 @@ export default function ProviderCard({
 
           <ActionsRow>
             <Button size="sm" variant="secondary" onClick={onTest} disabled={isTesting}>
-              {isTesting ? "..." : "Testen"}
+              {isTesting ? "..." : "Test"}
             </Button>
-            {testResult && <TestResult $ok={testResult.ok}>{testResult.ok ? "OK" : testResult.error ?? "Fehler"}</TestResult>}
+            {testResult && <TestResult $ok={testResult.ok}>{testResult.ok ? "OK" : testResult.error ?? "Error"}</TestResult>}
             <Button size="sm" variant="danger" onClick={onDelete}>
-              Provider loeschen
+              Delete provider
             </Button>
           </ActionsRow>
         </ExpandedContent>

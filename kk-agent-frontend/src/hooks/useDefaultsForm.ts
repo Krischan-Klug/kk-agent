@@ -47,7 +47,7 @@ export function useDefaultsForm(): UseDefaultsForm {
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);
     } catch (err) {
-      setSaveError(err instanceof Error ? err.message : "Fehler beim Speichern");
+      setSaveError(err instanceof Error ? err.message : "Error saving");
     } finally {
       setSaving(false);
     }

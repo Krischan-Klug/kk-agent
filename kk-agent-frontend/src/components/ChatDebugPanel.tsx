@@ -265,34 +265,34 @@ export default function ChatDebugPanel({
   let content = "";
 
   function renderRuntimeTools(tools: SessionRuntimeToolDebug[] | null): string {
-    if (tools === null) return "Lade...";
-    if (tools.length === 0) return "Keine aktuell verfuegbaren Runtime-Tools.";
+    if (tools === null) return "Loading...";
+    if (tools.length === 0) return "No currently available runtime tools.";
     return tools
       .map((tool) => {
         const params = tool.inputSchema?.properties
           ? Object.entries(tool.inputSchema.properties as Record<string, { type?: string; description?: string }>)
               .map(([key, value]) => `    ${key}: ${value.type ?? "any"} - ${value.description ?? ""}`)
               .join("\n")
-          : "    (keine Parameter)";
+          : "    (no parameters)";
         return `-- ${tool.name} [${tool.source}:${tool.capabilityId}] --\n${tool.description}\n${params}`;
       })
       .join("\n\n");
   }
 
   function renderRuntimeMcps(mcps: SessionRuntimeMcpDebug[] | null): string {
-    if (mcps === null) return "Lade...";
-    if (mcps.length === 0) return "Keine aktuell verfuegbaren Runtime-MCPs.";
+    if (mcps === null) return "Loading...";
+    if (mcps.length === 0) return "No currently available runtime MCPs.";
     return mcps
       .map((mcp) => {
         const header = `-- ${mcp.emoji || "🔌"} ${mcp.name} (${mcp.id}) --`;
         const tools = mcp.tools.length === 0
-          ? "  (keine Tools)"
+          ? "  (no tools)"
           : mcp.tools.map((tool) => {
               const params = tool.inputSchema?.properties
                 ? Object.entries(tool.inputSchema.properties as Record<string, { type?: string; description?: string }>)
                     .map(([key, value]) => `    ${key}: ${value.type ?? "any"} - ${value.description ?? ""}`)
                     .join("\n")
-                : "    (keine Parameter)";
+                : "    (no parameters)";
               return `  ${tool.name}\n    ${tool.description ?? ""}\n${params}`;
             }).join("\n\n");
         return `${header}\nsource=${mcp.source ?? "custom"} active=${mcp.active} running=${mcp.running}\n${mcp.instruction}\n\n${tools}`;
@@ -301,8 +301,8 @@ export default function ChatDebugPanel({
   }
 
   function renderRuntimeSkills(skillsSnapshot: SessionRuntimeSkillDebug[] | null): string {
-    if (skillsSnapshot === null) return "Lade...";
-    if (skillsSnapshot.length === 0) return "Keine aktuell aktiven Runtime-Skills.";
+    if (skillsSnapshot === null) return "Loading...";
+    if (skillsSnapshot.length === 0) return "No currently active runtime skills.";
     return skillsSnapshot
       .map((skill) => {
         const linkedTools = skill.linkedToolIds.length > 0 ? skill.linkedToolIds.join(", ") : "-";
@@ -321,12 +321,12 @@ export default function ChatDebugPanel({
   }
 
   if (debugTab === "prompt") {
-    content = debugPrompt ?? "Lade...";
+    content = debugPrompt ?? "Loading...";
   } else if (debugTab === "meta") {
     content = debugMetaMessages === null
-      ? "Lade..."
+      ? "Loading..."
       : debugMetaMessages.length === 0
-        ? "Keine aktuellen Meta-Messages."
+        ? "No current meta messages."
         : debugMetaMessages.join("\n\n");
   } else if (debugTab === "tools") {
     content = renderRuntimeTools(debugRuntimeTools);
@@ -373,7 +373,7 @@ export default function ChatDebugPanel({
             return `[attachment:${block.filename}]`;
           })
           .join("\n")
-          .slice(0, 300) || "(leer)";
+          .slice(0, 300) || "(empty)";
         return `[${idx}] ${role}\n  message_id: ${m.id}\n  ${preview}${preview.length >= 300 ? "..." : ""}`;
       })
       .join("\n\n");
@@ -429,7 +429,7 @@ export default function ChatDebugPanel({
             onToggle={onToolToggle}
             kind="tool"
             label="Tools"
-            emptyHint="Keine internen Tools gefunden"
+            emptyHint="No internal tools found"
           />
           <CapabilitySelect
             items={debugMcps}
@@ -437,7 +437,7 @@ export default function ChatDebugPanel({
             onToggle={onMcpToggle}
             kind="mcp"
             label="MCPs"
-            emptyHint="Keine MCP Server konfiguriert"
+            emptyHint="No MCP servers configured"
           />
           <CapabilitySelect
             items={skills}
@@ -445,7 +445,7 @@ export default function ChatDebugPanel({
             onToggle={onSkillToggle}
             kind="skill"
             label="Skills"
-            emptyHint="Keine Skills konfiguriert"
+            emptyHint="No skills configured"
           />
         </DebugControls>
       </DebugTabs>
@@ -472,7 +472,7 @@ export default function ChatDebugPanel({
               <Input
                 value={task.title}
                 onChange={(e) => updateTask(index, { title: e.target.value })}
-                placeholder="Task-Titel"
+                placeholder="Task title"
               />
               <InlineSelect
                 value={task.status}
@@ -485,17 +485,17 @@ export default function ChatDebugPanel({
               <Input
                 value={task.notes ?? ""}
                 onChange={(e) => updateTask(index, { notes: e.target.value })}
-                placeholder="Notizen"
+                placeholder="Notes"
               />
               <Button variant="secondary" size="sm" onClick={() => removeTask(index)}>
-                Entfernen
+                Remove
               </Button>
             </TaskRow>
           ))}
           <RowActions>
-            <Button variant="secondary" size="sm" onClick={addTask}>Task hinzufuegen</Button>
+            <Button variant="secondary" size="sm" onClick={addTask}>Add task</Button>
             <Button size="sm" onClick={() => void saveTasks()} disabled={saving === "tasks"}>
-              {saving === "tasks" ? "Speichert..." : "Tasks speichern"}
+              {saving === "tasks" ? "Saving..." : "Save tasks"}
             </Button>
           </RowActions>
         </EditorWrap>
@@ -507,11 +507,11 @@ export default function ChatDebugPanel({
             <TextArea
               value={sessionMemoryDraft}
               onChange={(e) => setSessionMemoryDraft(e.target.value)}
-              placeholder={"Ein Fakt pro Zeile\nNur session-relevante Infos"}
+              placeholder={"One fact per line\nOnly session-relevant info"}
             />
             <RowActions style={{ marginTop: "var(--space-sm)" }}>
               <Button size="sm" onClick={() => void saveSessionMemory()} disabled={saving === "session"}>
-                {saving === "session" ? "Speichert..." : "Session Memory speichern"}
+                {saving === "session" ? "Saving..." : "Save session memory"}
               </Button>
             </RowActions>
           </div>
@@ -519,11 +519,11 @@ export default function ChatDebugPanel({
             <TextArea
               value={userMemoryDraft}
               onChange={(e) => setUserMemoryDraft(e.target.value)}
-              placeholder={"Ein Fakt pro Zeile\nNur laengerfristige Nutzerinfos"}
+              placeholder={"One fact per line\nOnly long-term user info"}
             />
             <RowActions style={{ marginTop: "var(--space-sm)" }}>
               <Button size="sm" onClick={() => void saveUserMemory()} disabled={saving === "user"}>
-                {saving === "user" ? "Speichert..." : "User Memory speichern"}
+                {saving === "user" ? "Saving..." : "Save user memory"}
               </Button>
             </RowActions>
           </div>

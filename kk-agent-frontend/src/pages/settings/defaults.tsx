@@ -52,7 +52,7 @@ export default function DefaultsPage() {
         <PageWrapper>
           <Panel>
             <PanelTitle>Defaults</PanelTitle>
-            <Hint>Globale Defaults fuer neue Agenten im manuellen Mode-Modell.</Hint>
+            <Hint>Global defaults for new agents in manual mode model.</Hint>
 
             <CollapsibleSection title="Agent Core" expanded={expanded.agentCore} onToggle={() => toggle("agentCore")}>
               <AgentCoreSection draft={draft} setDraft={setDraft} chatModes={CHAT_MODES} />
@@ -93,9 +93,9 @@ export default function DefaultsPage() {
 
             <ActionsRow>
               <Button onClick={() => void save()} disabled={!dirty || saving}>
-                {saving ? "Speichert..." : "Speichern"}
+                {saving ? "Saving..." : "Save"}
               </Button>
-              {saved && <SaveMsg>Gespeichert.</SaveMsg>}
+              {saved && <SaveMsg>Saved.</SaveMsg>}
               {error && <SaveMsg>{error}</SaveMsg>}
             </ActionsRow>
           </Panel>

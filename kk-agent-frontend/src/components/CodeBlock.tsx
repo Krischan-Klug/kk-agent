@@ -131,7 +131,7 @@ export default function CodeBlock({ code, language }: CodeBlockProps) {
     <Wrapper>
       <Header>
         <span>{language ? <LangBadge $color={langColor}>{language}</LangBadge> : <span />}</span>
-        <CopyBtn onClick={handleCopy}>{copied ? "Kopiert!" : "Kopieren"}</CopyBtn>
+        <CopyBtn onClick={handleCopy}>{copied ? "Copied!" : "Copy"}</CopyBtn>
       </Header>
       <CodeBody $collapsed={collapsed}>
         <Highlight theme={themes.vsDark} code={displayCode} language={prismLang}>
@@ -152,7 +152,7 @@ export default function CodeBlock({ code, language }: CodeBlockProps) {
         <ToggleBar onClick={() => setExpanded(!expanded)}>
           {expanded
             ? "▲ Einklappen"
-            : `▼ ${lines.length - PREVIEW_LINES} weitere Zeilen anzeigen`}
+            : `▼ ${lines.length - PREVIEW_LINES} more lines`}
         </ToggleBar>
       )}
     </Wrapper>

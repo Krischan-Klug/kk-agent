@@ -347,9 +347,9 @@ export default function SkillsPage() {
           });
         }}
       >
-        <strong>Skill-Bundle importieren</strong>
+        <strong>Import skill bundle</strong>
         <MutedText>
-          Ziehe einen Skill-Ordner hierher oder waehle ihn ueber den Upload-Button aus. Erforderlich ist ein Bundle mit genau einem <code>SKILL.md</code>.
+          Drag a skill folder here or select it via the upload button. The bundle must contain exactly one <code>SKILL.md</code>.
         </MutedText>
         <ActionsRow>
           <Button
@@ -358,7 +358,7 @@ export default function SkillsPage() {
             onClick={() => directoryInputRef.current?.click()}
             disabled={uploading}
           >
-            {uploading ? "Importiert..." : "Bundle hochladen"}
+            {uploading ? "Importing..." : "Upload bundle"}
           </Button>
         </ActionsRow>
         <input

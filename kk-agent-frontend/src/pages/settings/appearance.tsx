@@ -229,7 +229,7 @@ export default function AppearancePage() {
           >
             {theme.custom && (
               <DeleteBtn
-                title="Theme löschen"
+                title="Delete theme"
                 onClick={(e) => {
                   e.stopPropagation();
                   handleDelete(theme.id);
@@ -254,25 +254,25 @@ export default function AppearancePage() {
 
       {creating && (
         <CreateForm>
-          <SectionTitle style={{ margin: 0 }}>Neues Theme</SectionTitle>
+          <SectionTitle style={{ margin: 0 }}>New Theme</SectionTitle>
 
           <FieldLabel>Name</FieldLabel>
           <Input
             value={name}
             onChange={(e) => setName(e.target.value)}
-            placeholder="z.B. Neon Purple"
+            placeholder="e.g. Neon Purple"
           />
 
-          <FieldLabel>Beschreibung</FieldLabel>
+          <FieldLabel>Description</FieldLabel>
           <Input
             value={description}
             onChange={(e) => setDescription(e.target.value)}
-            placeholder="Kurze Beschreibung..."
+            placeholder="Short description..."
           />
 
           <ColorRow>
             <ColorField>
-              <FieldLabel>Akzentfarbe</FieldLabel>
+              <FieldLabel>Accent color</FieldLabel>
               <ColorInput
                 type="color"
                 value={accent}
@@ -288,10 +288,10 @@ export default function AppearancePage() {
 
           <FormActions>
             <Button onClick={handleCreate} disabled={!name.trim()}>
-              Erstellen
+              Create
             </Button>
             <Button onClick={() => setCreating(false)} style={{ background: "var(--bg-hover)" }}>
-              Abbrechen
+              Cancel
             </Button>
           </FormActions>
         </CreateForm>

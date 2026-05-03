@@ -125,12 +125,12 @@ export default function SkillEditor({
   if (!draft) {
     return (
       <EditorArea>
-        <EmptyHint>Waehle einen Skill aus oder importiere einen Bundle-Ordner.</EmptyHint>
+        <EmptyHint>Select a skill or import a bundle folder.</EmptyHint>
       </EditorArea>
     );
   }
 
-  const title = isCreateMode ? "Skill erstellen" : draft.name || skill?.name || "Skill";
+  const title = isCreateMode ? "Create skill" : draft.name || skill?.name || "Skill";
   const hasUsage = usage && (usage.tools.length > 0 || usage.mcps.length > 0);
   const saveDisabled = !draft.name.trim() || !draft.description.trim() || !draft.instruction.trim() || saving;
 
@@ -139,11 +139,11 @@ export default function SkillEditor({
       <Section>
         <SectionTitle>{title}</SectionTitle>
         <MutedText>
-          Skills sind Standard-Bundles mit <code>SKILL.md</code> in <code>state/skills</code>. KK-Agent-Links werden separat in <code>agents/kk-agent.json</code> gespeichert.
+          Skills are standard bundles with <code>SKILL.md</code> in <code>state/skills</code>. KK-Agent links are stored separately in <code>agents/kk-agent.json</code>.
         </MutedText>
         {!isCreateMode && skill && (
           <SummaryCard>
-            ID: {skill.id} | Pfad: {skill.path}
+            ID: {skill.id} | Path: {skill.path}
           </SummaryCard>
         )}
       </Section>
@@ -156,15 +156,15 @@ export default function SkillEditor({
             <Input
               value={draft.name}
               onChange={(e) => onChange({ ...draft, name: e.target.value })}
-              placeholder="z.B. Repo Analysis"
+              placeholder="e.g. Repo Analysis"
             />
           </FormField>
           <FormField $flex={2}>
-            <FieldLabel>Beschreibung</FieldLabel>
+            <FieldLabel>Description</FieldLabel>
             <Input
               value={draft.description}
               onChange={(e) => onChange({ ...draft, description: e.target.value })}
-              placeholder="Eine kurze Beschreibung mit Trigger."
+              placeholder="A short description with trigger."
             />
           </FormField>
         </FormRow>
@@ -180,7 +180,7 @@ export default function SkillEditor({
       </Section>
 
       <Section>
-        <SectionTitle>Verknuepfte interne Tools</SectionTitle>
+        <SectionTitle>Linked internal tools</SectionTitle>
         {internalTools.length > 0 ? (
           <ToggleGrid>
             {internalTools.map((tool) => (
@@ -198,12 +198,12 @@ export default function SkillEditor({
             ))}
           </ToggleGrid>
         ) : (
-          <EmptyHint>Keine internen Tools vorhanden.</EmptyHint>
+          <EmptyHint>No internal tools present.</EmptyHint>
         )}
       </Section>
 
       <Section>
-        <SectionTitle>Verknuepfte MCPs</SectionTitle>
+        <SectionTitle>Linked MCPs</SectionTitle>
         {mcps.length > 0 ? (
           <ToggleGrid>
             {mcps.map((mcp) => (
@@ -221,35 +221,35 @@ export default function SkillEditor({
             ))}
           </ToggleGrid>
         ) : (
-          <EmptyHint>Keine MCPs vorhanden.</EmptyHint>
+          <EmptyHint>No MCPs present.</EmptyHint>
         )}
       </Section>
 
       {!isCreateMode && (
         <Section>
-          <SectionTitle>Aktuelle Verwendungen</SectionTitle>
+          <SectionTitle>Current usages</SectionTitle>
           {hasUsage ? (
             <>
               {usage.tools.length > 0 && <SurfaceBox><strong>Tools:</strong> {usage.tools.join(", ")}</SurfaceBox>}
               {usage.mcps.length > 0 && <SurfaceBox><strong>MCPs:</strong> {usage.mcps.join(", ")}</SurfaceBox>}
             </>
           ) : (
-            <EmptyHint>Keine Verknuepfungen vorhanden.</EmptyHint>
+            <EmptyHint>No links present.</EmptyHint>
           )}
         </Section>
       )}
 
       <ActionsRow>
         <Button onClick={onSave} disabled={saveDisabled}>
-          {saving ? (isCreateMode ? "Erstellt..." : "Speichert...") : (isCreateMode ? "Skill erstellen" : "Speichern")}
+          {saving ? (isCreateMode ? "Creating..." : "Saving...") : (isCreateMode ? "Create skill" : "Save")}
         </Button>
         {isCreateMode ? (
           <Button variant="secondary" onClick={onCancelCreate} disabled={saving}>
-            Verwerfen
+            Discard
           </Button>
         ) : (
           <Button variant="danger" onClick={onDelete} disabled={saving}>
-            Loeschen
+            Delete
           </Button>
         )}
       </ActionsRow>

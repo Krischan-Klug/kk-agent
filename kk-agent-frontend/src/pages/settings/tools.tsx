@@ -88,7 +88,7 @@ export default function SettingsToolsPage() {
             onSkillToggle={(skillId, linked) => void collection.handleSkillToggle(tool, skillId, linked)}
           />
         ))}
-        {collection.items.length === 0 && <EmptyHint>Keine internen Tools gefunden.</EmptyHint>}
+        {collection.items.length === 0 && <EmptyHint>No internal tools found.</EmptyHint>}
       </McpCardList>
     </SettingsLayout>
   );

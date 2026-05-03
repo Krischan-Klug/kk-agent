@@ -155,8 +155,8 @@ export default function Sidebar() {
         <SidebarToggle
           $collapsed={collapsed}
           type="button"
-          aria-label={collapsed ? "Sidebar aufklappen" : "Sidebar einklappen"}
-          title={collapsed ? "Sidebar aufklappen" : "Sidebar einklappen"}
+          aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+          title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
           onClick={(e) => {
             e.stopPropagation();
             updateSidebarCollapsed(!collapsed);
@@ -180,7 +180,7 @@ export default function Sidebar() {
         <SidebarSectionRow $collapsed={collapsed}>
           <SidebarSection $collapsed={collapsed}>Sessions</SidebarSection>
           <SidebarSectionActions>
-            <SessionAdd type="button" aria-label="Neue Session" title="Neue Session" onClick={() => void createSession()}>
+            <SessionAdd type="button" aria-label="New session" title="New session" onClick={() => void createSession()}>
               +
             </SessionAdd>
           </SidebarSectionActions>
@@ -202,8 +202,8 @@ export default function Sidebar() {
             </SessionMeta>
             <SessionDelete
               type="button"
-              aria-label="Session loeschen"
-              title="Session loeschen"
+              aria-label="Delete session"
+              title="Delete session"
               onClick={(e) => {
                 e.preventDefault();
                 e.stopPropagation();

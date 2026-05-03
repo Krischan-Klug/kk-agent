@@ -311,7 +311,7 @@ export default function McpCard({
         </MutedText>
         <SkillPicker ref={skillDropdown.ref}>
           <SkillPickerButton type="button" onClick={skillDropdown.toggle}>
-            Skills waehlen ({linkedSkills.length})
+            Select skills ({linkedSkills.length})
           </SkillPickerButton>
           {skillDropdown.open && (
             <SkillPickerMenu>
@@ -340,7 +340,7 @@ export default function McpCard({
               ))}
             </LinkedSkillsPreviewList>
           ) : (
-            <LinkedSkillsEmpty>Keine Skills verlinkt.</LinkedSkillsEmpty>
+            <LinkedSkillsEmpty>No skills linked.</LinkedSkillsEmpty>
           )}
         </LinkedSkillsPreview>
       </div>
@@ -354,7 +354,7 @@ export default function McpCard({
       <>
         <ActionsRow style={{ marginTop: "var(--space-md)" }}>
           <Button size="sm" variant="secondary" type="button" onClick={() => setShowSystemVariables((prev) => !prev)}>
-            {showSystemVariables ? "Systemvariablen ausblenden" : "Systemvariablen anzeigen"}
+            {showSystemVariables ? "Hide system variables" : "Show system variables"}
           </Button>
         </ActionsRow>
         {showSystemVariables && <MutedText>{systemVariables.join(", ")}</MutedText>}
@@ -372,8 +372,8 @@ export default function McpCard({
                 <StatusToggle
                   type="button"
                   onClick={onStateToggle}
-                  aria-label={mcp.running ? "Stoppen" : "Starten"}
-                  title={mcp.running ? "Stoppen" : "Starten"}
+                  aria-label={mcp.running ? "Stop" : "Start"}
+                  title={mcp.running ? "Stop" : "Start"}
                 >
                   <Badge variant={mcp.running ? "success" : "danger"}>{mcp.running ? "running" : "stopped"}</Badge>
                 </StatusToggle>
@@ -407,8 +407,8 @@ export default function McpCard({
               <StatusToggle
                 type="button"
                 onClick={onStateToggle}
-                aria-label={isActive ? "Deaktivieren" : "Aktivieren"}
-                title={isActive ? "Aktiv" : "Inaktiv"}
+                aria-label={isActive ? "Disable" : "Enable"}
+                title={isActive ? "Active" : "Inactive"}
               >
                 <StatusDot $running={isActive} />
               </StatusToggle>
@@ -416,11 +416,11 @@ export default function McpCard({
           </Name>
           <Controls>
             <Button size="sm" variant="secondary" onClick={handleEditToggle}>
-              {editOpen ? "Schliessen" : "Bearbeiten"}
+              {editOpen ? "Close" : "Edit"}
             </Button>
             {showDeleteButton && mcp.source !== "system" && (
               <Button size="sm" variant="danger" onClick={onDelete}>
-                Loeschen
+                Delete
               </Button>
             )}
           </Controls>
@@ -451,7 +451,7 @@ export default function McpCard({
                     <FieldLabel>Base Path</FieldLabel>
                     <Input
                       value={editForm.basePath}
-                      placeholder="Leer lassen fuer automatischen Scope-Default"
+                      placeholder="Leave empty for automatic scope default"
                       onChange={(e) => onEditFormChange({ ...editForm, basePath: e.target.value })}
                     />
                   </FormField>
@@ -473,14 +473,14 @@ export default function McpCard({
                     <FieldLabel>Working Directory</FieldLabel>
                     <Input
                       value={editForm.workingDirectory}
-                      placeholder="Leer lassen fuer automatischen Scope-Default"
+                      placeholder="Leave empty for automatic scope default"
                       onChange={(e) => onEditFormChange({ ...editForm, workingDirectory: e.target.value })}
                     />
                   </FormField>
                   <ConfigDetail>
                     {editForm.accessScope === "system"
-                      ? "system erlaubt systemweiten Terminal-Zugriff mit erhoehter Ausfuehrung."
-                      : "user erlaubt nur Terminal-Zugriff innerhalb des aktuellen Nutzerbereichs."}
+                      ? "system allows system-wide terminal access with elevated execution."
+                      : "user allows only terminal access within the current user scope."}
                   </ConfigDetail>
                 </>
               )}
@@ -492,7 +492,7 @@ export default function McpCard({
                       type="number"
                       min={1}
                       value={editForm.previewThresholdChars}
-                      placeholder="Leer lassen fuer Tool-Default"
+                      placeholder="Leave empty for tool default"
                       onChange={(e) => onEditFormChange({ ...editForm, previewThresholdChars: e.target.value })}
                     />
                   </FormField>
@@ -502,7 +502,7 @@ export default function McpCard({
                       type="number"
                       min={200}
                       value={editForm.previewChars}
-                      placeholder="Leer lassen fuer Tool-Default"
+                      placeholder="Leave empty for tool default"
                       onChange={(e) => onEditFormChange({ ...editForm, previewChars: e.target.value })}
                     />
                   </FormField>
@@ -516,7 +516,7 @@ export default function McpCard({
                 <Input value={editForm.command} onChange={(e) => onEditFormChange({ ...editForm, command: e.target.value })} />
               </FormField>
               <FormField>
-                <FieldLabel>Args (ein Argument pro Zeile)</FieldLabel>
+                <FieldLabel>Args (one argument per line)</FieldLabel>
                 <TextArea value={editForm.args} onChange={(e) => onEditFormChange({ ...editForm, args: e.target.value })} rows={4} />
               </FormField>
             </>
@@ -529,20 +529,20 @@ export default function McpCard({
 
           <ActionsRow>
             <Button size="sm" onClick={() => onSaveEdit(false)}>
-              Speichern
+              Save
             </Button>
             {mcp.source !== "system" && mcp.running && (
               <Button size="sm" onClick={() => onSaveEdit(true)}>
-                Speichern & Neustarten
+                Save & Restart
               </Button>
             )}
             {showDeleteInEdit && mcp.source !== "system" && (
               <Button size="sm" variant="danger" onClick={onDelete}>
-                Loeschen
+                Delete
               </Button>
             )}
             <Button size="sm" variant="secondary" onClick={onEditToggle}>
-              Abbrechen
+              Cancel
             </Button>
           </ActionsRow>
 
@@ -568,18 +568,18 @@ export default function McpCard({
             <>
               <SectionTitle as="span">Instruction</SectionTitle>
               <Button size="sm" variant="secondary" onClick={onInstructionToggle}>
-                {instructionsOpen ? "Schliessen" : "Bearbeiten"}
+                {instructionsOpen ? "Close" : "Edit"}
               </Button>
               {instructionsOpen && (
                 <Button size="sm" variant="secondary" onClick={onInstructionSave}>
-                  Speichern
+                  Save
                 </Button>
               )}
             </>
           )}
           {showToolsControls && (
             <Button size="sm" variant="secondary" onClick={onToolsToggle}>
-              {toolsOpen ? "Tools verbergen" : `Tools (${mcp.tools.length})`}
+              {toolsOpen ? "Hide tools" : `Tools (${mcp.tools.length})`}
             </Button>
           )}
         </ActionsRow>

@@ -23,7 +23,7 @@ export default function KeyValueEditor({
   onChange,
   addLabel = "+ Variable",
   keyPlaceholder = "KEY",
-  valuePlaceholder = "Wert",
+  valuePlaceholder = "Value",
   sensitiveValues = false,
 }: Props) {
   const entries = Object.entries(values);

@@ -133,7 +133,7 @@ export default function CapabilitySelect({
   onToggle,
   kind = "mcp",
   label = "Capabilities",
-  emptyHint = "Keine Eintraege konfiguriert",
+  emptyHint = "No entries configured",
 }: Props) {
   const { open, ref, toggle } = useDropdown<HTMLDivElement>();
 

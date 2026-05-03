@@ -163,13 +163,13 @@ export default function SettingsProviderPage() {
       <>
         <HeaderActions>
           <Button size="sm" onClick={() => setShowCreate(true)}>
-            + Provider hinzufuegen
+            + Add Provider
           </Button>
         </HeaderActions>
         <Grid>
           {providers.length === 0 ? (
             <Card>
-              <span style={{ color: "var(--text-muted)" }}>Keine lokalen Provider konfiguriert. Fuege einen hinzu.</span>
+              <span style={{ color: "var(--text-muted)" }}>No local providers configured. Add one.</span>
             </Card>
           ) : (
             providers.map((provider) => (

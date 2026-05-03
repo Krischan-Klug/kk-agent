@@ -39,15 +39,15 @@ export default function SkillList({
   return (
     <SidebarList>
       <Button size="sm" onClick={onCreate}>
-        Neuer Skill
+        New skill
       </Button>
 
       {createDraftName !== undefined && (
         <SidebarItem type="button" $active={selectedId === null}>
-          <SidebarItemTitle>{createDraftName.trim() || "Neuer Skill"}</SidebarItemTitle>
-          <SidebarItemDescription>Noch nicht gespeichert.</SidebarItemDescription>
+          <SidebarItemTitle>{createDraftName.trim() || "New skill"}</SidebarItemTitle>
+          <SidebarItemDescription>Not saved yet.</SidebarItemDescription>
           <SidebarMeta>
-            <Badge variant="info">Neu</Badge>
+            <Badge variant="info">New</Badge>
           </SidebarMeta>
         </SidebarItem>
       )}
@@ -61,7 +61,7 @@ export default function SkillList({
             <SidebarItemTitle>{skill.name}</SidebarItemTitle>
             <SidebarItemDescription>{skill.description}</SidebarItemDescription>
             <SidebarMeta>
-              {usageCount > 0 && <Badge variant="info">{usageCount} Verknuepfung{usageCount === 1 ? "" : "en"}</Badge>}
+              {usageCount > 0 && <Badge variant="info">{usageCount} Link{usageCount === 1 ? "" : "en"}</Badge>}
             </SidebarMeta>
           </SidebarItem>
         );

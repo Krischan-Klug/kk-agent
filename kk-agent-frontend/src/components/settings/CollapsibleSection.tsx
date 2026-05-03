@@ -18,7 +18,7 @@ export default function CollapsibleSection({ title, expanded, onToggle, children
     <SectionCardWrapper>
       <SectionToggle type="button" onClick={onToggle}>
         <SectionTitle>{title}</SectionTitle>
-        <SectionToggleMeta>{expanded ? "Einklappen" : "Aufklappen"}</SectionToggleMeta>
+        <SectionToggleMeta>{expanded ? "Collapse" : "Expand"}</SectionToggleMeta>
       </SectionToggle>
       {expanded && children}
     </SectionCardWrapper>

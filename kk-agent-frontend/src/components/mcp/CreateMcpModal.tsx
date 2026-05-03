@@ -24,7 +24,7 @@ export default function CreateMcpModal({ open, form, creating, systemVariables, 
 
   return (
     <FormModal
-      title="MCP Server hinzufuegen"
+      title="Add MCP Server"
       onClose={onClose}
       onSubmit={onCreate}
       submitDisabled={!form.name}
@@ -37,7 +37,7 @@ export default function CreateMcpModal({ open, form, creating, systemVariables, 
             <Input
               value={form.name}
               onChange={(e) => onChange({ ...form, name: e.target.value })}
-              placeholder="z.B. Filesystem"
+              placeholder="e.g. Filesystem"
             />
           </FormField>
           <FormField>
@@ -69,11 +69,11 @@ export default function CreateMcpModal({ open, form, creating, systemVariables, 
             <Input
               value={form.command ?? ""}
               onChange={(e) => onChange({ ...form, command: e.target.value })}
-              placeholder="z.B. npx"
+              placeholder="e.g. npx"
             />
           </FormField>
           <FormField>
-            <FieldLabel>Args (ein Argument pro Zeile)</FieldLabel>
+            <FieldLabel>Args (one argument per line)</FieldLabel>
             <TextArea
               value={(form.args ?? []).join("\n")}
               onChange={(e) => onChange({ ...form, args: e.target.value.split("\n").filter(Boolean) })}
@@ -98,12 +98,12 @@ export default function CreateMcpModal({ open, form, creating, systemVariables, 
           value={form.instruction ?? ""}
           onChange={(e) => onChange({ ...form, instruction: e.target.value })}
           rows={4}
-          placeholder="System-Instruction fuer diesen MCP..."
+          placeholder="System instruction for this MCP..."
         />
       </FormField>
       <ActionsRow>
         <Button size="sm" variant="secondary" type="button" onClick={() => setShowSystemVariables((prev) => !prev)}>
-          {showSystemVariables ? "Systemvariablen ausblenden" : "Systemvariablen anzeigen"}
+          {showSystemVariables ? "Hide system variables" : "Show system variables"}
         </Button>
       </ActionsRow>
       {showSystemVariables && <MutedText>{systemVariables.join(", ")}</MutedText>}

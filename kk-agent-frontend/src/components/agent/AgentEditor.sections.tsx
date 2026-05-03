@@ -113,7 +113,7 @@ export function AgentInfoSection({
           <Input value={currentAgent.name} onChange={(e) => onChange({ ...currentAgent, name: e.target.value })} />
         </FormField>
         <FormField $flex={2}>
-          <FieldLabel>Beschreibung</FieldLabel>
+          <FieldLabel>Description</FieldLabel>
           <Input value={currentAgent.description} onChange={(e) => onChange({ ...currentAgent, description: e.target.value })} />
         </FormField>
         <FormField>
@@ -145,7 +145,7 @@ export function AgentInfoSection({
           </ModeTabs>
           <ActionsRow>
             <Button type="button" size="sm" variant="secondary" onClick={addCustomMode}>
-              Custom Mode hinzufuegen
+              Add custom mode
             </Button>
           </ActionsRow>
         </FormField>
@@ -288,7 +288,7 @@ export function ModeSettingsSection({
                   enabled: e.target.checked,
                 }))}
               />
-              <span>Aktiviert</span>
+              <span>Enabled</span>
             </CheckboxRow>
             {!isSelectedModeDefault && selectedModeDefinition.enabled && (
               <Button
@@ -297,7 +297,7 @@ export function ModeSettingsSection({
                 variant="secondary"
                 onClick={() => onChange({ ...currentAgent, defaultModeId: selectedModeDefinition.id })}
               >
-                Als Default setzen
+                Set as default
               </Button>
             )}
             {canDeleteSelectedMode && (
@@ -307,7 +307,7 @@ export function ModeSettingsSection({
                 variant="danger"
                 onClick={() => deleteCustomMode(selectedModeDefinition.id)}
               >
-                Loeschen
+                Delete
               </Button>
             )}
           </ActionsRow>
@@ -341,7 +341,7 @@ export function VariablesSection({
       <KeyValueEditor values={currentAgent.variables} onChange={(value) => onChange({ ...currentAgent, variables: value })} />
       <ActionsRow>
         <Button size="sm" variant="secondary" onClick={onToggleSystemVariables}>
-          {showSystemVariables ? "Systemvariablen ausblenden" : "Systemvariablen anzeigen"}
+          {showSystemVariables ? "Hide system variables" : "Show system variables"}
         </Button>
       </ActionsRow>
       {showSystemVariables && <MutedText>{systemVariables.join(", ")}</MutedText>}
@@ -374,7 +374,7 @@ export function PromptSectionsSection({
                   <OverrideMark title="Agent-Override">{OVERRIDE_EMOJI}</OverrideMark>
                   <IconActionButton
                     type="button"
-                    title="Auf Default zuruecksetzen"
+                    title="Reset to default"
                     onClick={() => updateModeConfig({
                       ...selectedModeConfig,
                       promptSections: {
@@ -426,7 +426,7 @@ export function ModeInstructionSection({
             <OverrideMark title="Agent-Override">{OVERRIDE_EMOJI}</OverrideMark>
             <IconActionButton
               type="button"
-              title="Auf Default zuruecksetzen"
+              title="Reset to default"
               onClick={() => updateModeConfig({ ...selectedModeConfig, modeInstruction: defaultModeInstruction })}
             >
               {RESET_EMOJI}
@@ -570,7 +570,7 @@ export function InternalToolsSection({
                       [toolGroup.id]: !isExpanded,
                     }))}
                   >
-                    {isExpanded ? "Weniger" : "Details"}
+                    {isExpanded ? "Less" : "Details"}
                   </ExpandButton>
                   <ExpandButton
                     type="button"
@@ -579,14 +579,14 @@ export function InternalToolsSection({
                       [toolGroup.id]: !showInstruction,
                     }))}
                   >
-                    {showInstruction ? "Instruction ausblenden" : "Instruction anzeigen"}
+                    {showInstruction ? "Hide instruction" : "Show instruction"}
                   </ExpandButton>
                   {isCustomized && (
                     <>
                       <OverrideMark title="Agent-Override">{OVERRIDE_EMOJI}</OverrideMark>
                       <IconActionButton
                         type="button"
-                        title="Auf Default zuruecksetzen"
+                        title="Reset to default"
                         onClick={() => updateModeConfig({
                           ...selectedModeConfig,
                           toolInstructions: setCapabilityInstruction(
@@ -648,7 +648,7 @@ export function InternalToolsSection({
                           <OverrideMark title="Agent-Override">{OVERRIDE_EMOJI}</OverrideMark>
                           <IconActionButton
                             type="button"
-                            title="Auf Default zuruecksetzen"
+                            title="Reset to default"
                             onClick={() => {
                               const nextScopes = { ...selectedModeConfig.toolAccessScopes };
                               delete nextScopes[toolGroup.id];
@@ -785,14 +785,14 @@ export function ExternalMcpsSection({
                       [mcp.id]: !showInstruction,
                     }))}
                   >
-                    {showInstruction ? "Instruction ausblenden" : "Instruction anzeigen"}
+                    {showInstruction ? "Hide instruction" : "Show instruction"}
                   </ExpandButton>
                   {isCustomized && (
                     <>
                       <OverrideMark title="Agent-Override">{OVERRIDE_EMOJI}</OverrideMark>
                       <IconActionButton
                         type="button"
-                        title="Auf Default zuruecksetzen"
+                        title="Reset to default"
                         onClick={() => updateModeConfig({
                           ...selectedModeConfig,
                           mcpInstructions: setCapabilityInstruction(
@@ -931,14 +931,14 @@ export function SkillsSection({
                       [skill.id]: !showInstruction,
                     }))}
                   >
-                    {showInstruction ? "Instruction ausblenden" : "Instruction anzeigen"}
+                    {showInstruction ? "Hide instruction" : "Show instruction"}
                   </ExpandButton>
                   {isCustomized && (
                     <>
                       <OverrideMark title="Agent-Override">{OVERRIDE_EMOJI}</OverrideMark>
                       <IconActionButton
                         type="button"
-                        title="Auf Skill-Default zuruecksetzen"
+                        title="Reset to skill default"
                         onClick={() => updateModeConfig({
                           ...selectedModeConfig,
                           skillInstructions: setCapabilityInstruction(
@@ -982,7 +982,7 @@ export function SkillsSection({
           </CapabilityRow>
         );
       })}
-      {skills.length === 0 && <EmptyHint>Keine Skills konfiguriert.</EmptyHint>}
+      {skills.length === 0 && <EmptyHint>No skills configured.</EmptyHint>}
     </Section>
   );
 }

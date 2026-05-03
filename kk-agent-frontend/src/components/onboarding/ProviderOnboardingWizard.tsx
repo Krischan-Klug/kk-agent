@@ -85,7 +85,7 @@ export default function ProviderOnboardingWizard({ onComplete }: Props) {
         await cleanupProvider(created.id);
         setState({
           kind: "error",
-          message: testResult.error || "Provider-Verbindung fehlgeschlagen.",
+          message: testResult.error || "Provider connection failed.",
         });
         return;
       }
@@ -95,12 +95,12 @@ export default function ProviderOnboardingWizard({ onComplete }: Props) {
         await cleanupProvider(created.id);
         setState({
           kind: "error",
-          message: "Provider erreichbar, aber es wurden keine Modelle gefunden.",
+          message: "Provider reachable, but no models were found.",
         });
         return;
       }
 
-      setState({ kind: "success", message: `${modelsResult.models.length} Modell(e) gefunden.` });
+      setState({ kind: "success", message: `${modelsResult.models.length} model(s) found.` });
       onComplete(created);
     } catch (error) {
       if (created) {
@@ -113,10 +113,10 @@ export default function ProviderOnboardingWizard({ onComplete }: Props) {
   }
 
   return (
-    <Modal title="Provider einrichten" onClose={() => {}} showClose={false}>
+    <Modal title="Set up provider" onClose={() => {}} showClose={false}>
       <Body>
         <MutedText>
-          Lege einen lokalen oder selbst gehosteten LLM-Provider an, damit Sessions gestartet werden koennen.
+          Set up a local or self-hosted LLM provider so sessions can be started.
         </MutedText>
         <ProviderFormFields
           name={name}
@@ -131,7 +131,7 @@ export default function ProviderOnboardingWizard({ onComplete }: Props) {
         {state.kind === "success" ? <StatusBox $tone="success">{state.message}</StatusBox> : null}
         <ActionsRow>
           <Button onClick={() => void handleSubmit()} disabled={!canSubmit}>
-            {state.kind === "saving" ? <Spinner size={14} /> : "Speichern & testen"}
+            {state.kind === "saving" ? <Spinner size={14} /> : "Save & test"}
           </Button>
         </ActionsRow>
       </Body>

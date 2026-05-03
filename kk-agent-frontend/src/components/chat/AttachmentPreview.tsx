@@ -86,7 +86,7 @@ export default function AttachmentPreview({ attachments, onRemove }: Props) {
           <span style={{ fontSize: "10px", color: "var(--text-muted)" }}>
             {formatAttachmentSize(attachment.size)}
           </span>
-          <RemoveBtn onClick={() => onRemove(attachment.id)} aria-label="Entfernen">
+          <RemoveBtn onClick={() => onRemove(attachment.id)} aria-label="Remove">
             &times;
           </RemoveBtn>
         </Chip>

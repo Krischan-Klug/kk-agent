@@ -27,7 +27,7 @@ export default function ProviderFormFields({
         <Input
           value={name}
           onChange={(e) => onNameChange(e.target.value)}
-          placeholder="z.B. Lokaler LLM Server"
+          placeholder="e.g. Local LLM Server"
           autoFocus={autoFocus}
         />
       </FormField>

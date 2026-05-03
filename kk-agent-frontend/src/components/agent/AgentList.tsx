@@ -21,7 +21,7 @@ export default function AgentList({ agents, mcps, selectedId, onSelect, onCreate
   return (
     <SidebarList>
       <Button size="sm" onClick={onCreate}>
-        Neuer Agent
+        New Agent
       </Button>
       {agents.map((agent) => {
         const capabilityIds = [

@@ -595,16 +595,16 @@ export default function ChatComposer({
                 <AttachIconButton
                   onClick={() => fileInputRef.current?.click()}
                   disabled={sending}
-                  aria-label="Datei anhaengen"
-                  title="Datei anhaengen"
+                  aria-label="Attach file"
+                  title="Attach file"
                 >
                   +
                 </AttachIconButton>
                 {sending && onAbort ? (
                   <SendIconButton
                     onClick={onAbort}
-                    aria-label="Abbrechen"
-                    title="Abbrechen"
+                    aria-label="Abort"
+                    title="Abort"
                   >
                     x
                   </SendIconButton>
@@ -612,7 +612,7 @@ export default function ChatComposer({
                   <SendIconButton
                     onClick={onSend}
                     disabled={!canSend}
-                    aria-label="Nachricht senden"
+                    aria-label="Send message"
                   >
                     ^
                   </SendIconButton>

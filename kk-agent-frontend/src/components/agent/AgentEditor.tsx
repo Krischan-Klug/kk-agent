@@ -82,7 +82,7 @@ export default function AgentEditor({
   if (!agent) {
     return (
       <EditorArea>
-        <EmptyHint>Waehle einen Agent aus oder erstelle einen neuen.</EmptyHint>
+        <EmptyHint>Select an agent or create a new one.</EmptyHint>
       </EditorArea>
     );
   }
@@ -285,8 +285,8 @@ export default function AgentEditor({
       />
 
       <ActionsRow>
-        <Button onClick={onSave} disabled={saving}>{saving ? "Speichert..." : "Speichern"}</Button>
-        <Button variant="danger" onClick={onDelete}>Loeschen</Button>
+        <Button onClick={onSave} disabled={saving}>{saving ? "Saving..." : "Save"}</Button>
+        <Button variant="danger" onClick={onDelete}>Delete</Button>
       </ActionsRow>
     </EditorArea>
   );

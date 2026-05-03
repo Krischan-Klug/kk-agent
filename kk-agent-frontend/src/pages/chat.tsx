@@ -84,8 +84,8 @@ export default function ChatPage() {
       }
     } catch {
       if (requestId === debugPromptRequestRef.current) {
-        setDebugPrompt("[Fehler beim Laden]");
-        setDebugMetaMessages(["[Fehler beim Laden]"]);
+        setDebugPrompt("[Error loading]");
+        setDebugMetaMessages(["[Error loading]"]);
         setDebugRuntimeTools([]);
         setDebugRuntimeMcps([]);
         setDebugRuntimeSkills([]);
@@ -175,8 +175,8 @@ export default function ChatPage() {
     return (
       <ChatWrapper>
         <EmptyState>
-          <p>Keine aktive Session.</p>
-          <Button onClick={() => void beginNewSession()} disabled={creatingSession}>Neue Session starten</Button>
+          <p>No active session.</p>
+          <Button onClick={() => void beginNewSession()} disabled={creatingSession}>Start new session</Button>
         </EmptyState>
       </ChatWrapper>
     );
@@ -259,8 +259,8 @@ export default function ChatPage() {
       />
       <FloatingDebugButton
         type="button"
-        aria-label="Debug umschalten"
-        title="Debug umschalten"
+        aria-label="Toggle debug"
+        title="Toggle debug"
         onClick={() => emitAppEvent(CHAT_DEBUG_TOGGLE_EVENT)}
       >
         Debug

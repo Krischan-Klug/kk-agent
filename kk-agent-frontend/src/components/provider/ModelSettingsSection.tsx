@@ -195,10 +195,10 @@ export default function ModelSettingsSection({ models, modelSettings, onSave }: 
 
   return (
     <>
-      <SectionDivider>Modelle</SectionDivider>
+      <SectionDivider>Models</SectionDivider>
       {models.length === 0 ? (
         <span style={{ color: "var(--text-muted)", fontSize: "var(--font-size-sm)" }}>
-          Keine Modelle verfuegbar. Ist der Provider gestartet?
+          No models available. Is the provider started?
         </span>
       ) : (
         models.map((model) => {
@@ -225,8 +225,8 @@ export default function ModelSettingsSection({ models, modelSettings, onSave }: 
                     )}
                   </ModelName>
                   <CapabilityRow>
-                    {model.capabilities.supportsTools && <IconChip title="Tools verfuegbar">🛠️</IconChip>}
-                    {showReasoning && <IconChip title={`Reasoning verfuegbar: ${reasoningLevels.join(", ")}`}>🧠</IconChip>}
+                    {model.capabilities.supportsTools && <IconChip title="Tools available">🛠️</IconChip>}
+                    {showReasoning && <IconChip title={`Reasoning available: ${reasoningLevels.join(", ")}`}>🧠</IconChip>}
                   </CapabilityRow>
                 </ModelMeta>
                 <SettingsRow>

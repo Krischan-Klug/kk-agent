@@ -22,7 +22,7 @@ export const defaultThemes: Theme[] = [
   {
     id: "custom-1774905357884",
     name: "Swagos",
-    description: "Warmer Kupfer-Look fuer Swagos.",
+    description: "Warm copper look for Swagos.",
     variables: {
       "--accent": "#c15f3c",
       "--accent-hover": "#df7d5a",

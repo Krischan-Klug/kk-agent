@@ -18,7 +18,7 @@ export default function CreateProviderModal(props: Props) {
 
   return (
     <FormModal
-      title="Neuer Provider"
+      title="New Provider"
       onClose={props.onClose}
       onSubmit={props.onCreate}
       submitDisabled={!props.name.trim() || !props.baseUrl.trim()}

@@ -114,7 +114,7 @@ export default function McpPage() {
   return (
     <PageBody>
       <HeaderActions>
-        <Button onClick={() => setShowCreate(true)}>MCP hinzufuegen</Button>
+        <Button onClick={() => setShowCreate(true)}>Add MCP</Button>
       </HeaderActions>
       <McpCardList>
         {collection.items.map((mcp) => (
@@ -149,7 +149,7 @@ export default function McpPage() {
             onSkillToggle={(skillId, linked) => void collection.handleSkillToggle(mcp, skillId, linked)}
           />
         ))}
-        {collection.items.length === 0 && <EmptyHint>Keine externen MCP Server konfiguriert.</EmptyHint>}
+        {collection.items.length === 0 && <EmptyHint>No external MCP servers configured.</EmptyHint>}
       </McpCardList>
       <CreateMcpModal
         open={showCreate}
@@ -161,16 +161,16 @@ export default function McpPage() {
         onClose={() => setShowCreate(false)}
       />
       {deleteTarget && (
-        <Modal title="MCP loeschen?" onClose={() => setDeleteTarget(null)}>
+        <Modal title="Delete MCP?" onClose={() => setDeleteTarget(null)}>
           <MutedText>
-            Der MCP Server wird gestoppt und entfernt. Diese Aktion kann nicht rueckgaengig gemacht werden.
+            The MCP server will be stopped and removed. This action cannot be undone.
           </MutedText>
           <ActionsRow>
             <Button variant="danger" onClick={() => void handleDelete(deleteTarget)}>
-              Loeschen
+              Delete
             </Button>
             <Button variant="secondary" onClick={() => setDeleteTarget(null)}>
-              Abbrechen
+              Cancel
             </Button>
           </ActionsRow>
         </Modal>

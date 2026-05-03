@@ -154,8 +154,8 @@ export default function AgentTurnBubble({ sessionId, currentAgentName, mcps, tur
           <RoleMetaGroup
             type="button"
             onClick={() => setExpanded((previous) => !previous)}
-            aria-label={expanded ? "Details ausblenden" : "Details einblenden"}
-            title={expanded ? "Details ausblenden" : "Details einblenden"}
+            aria-label={expanded ? "Hide details" : "Show details"}
+            title={expanded ? "Hide details" : "Show details"}
           >
             {expanded && !turn.streaming && (
               <IterationPill>

@@ -125,7 +125,7 @@ export default function ChatMessages({
     <Messages ref={messagesRef} onScroll={onMessagesScroll}>
       {session.messages.length === 0 && !streaming && (
         <EmptyState>
-          <p>Schreibe eine Nachricht um zu starten.</p>
+          <p>Send a message to start.</p>
         </EmptyState>
       )}
 

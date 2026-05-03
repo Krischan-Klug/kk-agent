@@ -15,7 +15,7 @@ export default function CreateAgentModal({ open, name, onNameChange, onCreate, o
 
   return (
     <FormModal
-      title="Neuer Agent"
+      title="New Agent"
       onClose={onClose}
       onSubmit={onCreate}
       submitDisabled={!name.trim()}
@@ -25,7 +25,7 @@ export default function CreateAgentModal({ open, name, onNameChange, onCreate, o
         <Input
           value={name}
           onChange={(e) => onNameChange(e.target.value)}
-          placeholder="z.B. Coding Agent"
+          placeholder="e.g. Coding Agent"
           autoFocus
         />
       </FormField>

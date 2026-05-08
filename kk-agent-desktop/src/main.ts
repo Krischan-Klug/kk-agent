@@ -1,4 +1,4 @@
-import { app, BrowserWindow, net, protocol } from "electron";
+import { app, BrowserWindow, Menu, net, protocol } from "electron";
 import { createLogger } from "./logger";
 import { spawn, type ChildProcess } from "node:child_process";
 import { randomBytes } from "node:crypto";
@@ -202,6 +202,7 @@ async function createMainWindow(apiBaseUrl: string, apiToken?: string): Promise<
       ],
     },
   });
+  mainWindow.setMenu(null);
 
   mainWindow.once("ready-to-show", () => {
     mainWindow?.show();
@@ -258,6 +259,8 @@ app.on("before-quit", () => {
 
 app.whenReady().then(async () => {
   try {
+    Menu.setApplicationMenu(null);
+
     if (!isDev) {
       await registerFrontendProtocol();
     }

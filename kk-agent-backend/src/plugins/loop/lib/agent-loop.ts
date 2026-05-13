@@ -212,6 +212,7 @@ export async function runAgentLoop(opts: LoopOptions): Promise<LoopResult> {
           update.detail,
           update.summary,
           update.input,
+          update.metadata,
         );
       },
       runtimeContext,

@@ -195,11 +195,42 @@ export const ToolBlockLabel = styled.div`
   margin-bottom: var(--space-xs);
 `;
 
+export const ToolContentSection = styled.div`
+  &:not(:first-child) {
+    margin-top: var(--space-sm);
+  }
+`;
+
 export const ToolResultBlock = styled.div<{ $isError: boolean }>`
   margin-top: var(--space-sm);
   padding-top: var(--space-sm);
   border-top: 1px solid var(--border);
   color: ${(p) => (p.$isError ? "var(--danger)" : "var(--text-secondary)")};
+`;
+
+export const ToolDetailSection = styled.div`
+  margin-top: var(--space-xs);
+`;
+
+export const ToolDetailMuted = styled.div`
+  color: var(--text-muted);
+  font-size: 0.85em;
+`;
+
+export const ToolDetailLine = styled.div`
+  font-size: 0.85em;
+  margin-top: 2px;
+`;
+
+export const ToolDetailPre = styled.pre`
+  background: var(--bg-surface);
+  padding: var(--space-sm);
+  border-radius: var(--radius-sm);
+  overflow-x: auto;
+  white-space: pre;
+  font-size: 0.85em;
+  margin: var(--space-xs) 0 0;
+  max-height: 200px;
 `;
 
 export const EmptyState = styled.div`

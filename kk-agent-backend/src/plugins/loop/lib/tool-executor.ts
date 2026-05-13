@@ -24,6 +24,7 @@ interface ToolExecutionUpdate {
   result?: TranscriptMessage;
   detail?: string;
   summary?: string;
+  metadata?: Record<string, unknown>;
 }
 
 type TrackedTool = {
@@ -31,7 +32,7 @@ type TrackedTool = {
   runtimeTool?: RuntimeToolDefinition;
   status: ToolExecutionStatus;
   isConcurrencySafe: boolean;
-  result?: { content: string; isError: boolean };
+  result?: { content: string; isError: boolean; metadata?: Record<string, unknown> };
   streamedResult?: TranscriptMessage;
   finalResult?: TranscriptMessage;
   assistantBlocks?: TranscriptBlock[];
@@ -39,6 +40,7 @@ type TrackedTool = {
   yielded: boolean;
   promise?: Promise<void>;
   contextModifier?: (context: ToolRuntimeContext) => ToolRuntimeContext;
+  metadata?: Record<string, unknown>;
 };
 
 function toToolResultMessage(toolUse: TranscriptToolUseBlock, content: string, isError = false): TranscriptMessage {
@@ -268,6 +270,7 @@ export class StreamingToolExecutor {
         tracked.result = {
           content: execution.content,
           isError: execution.isError === true,
+          metadata: execution.metadata,
         };
         tracked.assistantBlocks = execution.assistantBlocks;
         tracked.additionalMessages = execution.additionalMessages;
@@ -277,7 +280,7 @@ export class StreamingToolExecutor {
           tracked.result.isError,
         );
         tracked.status = tracked.result.isError ? "error" : "completed";
-
+        tracked.metadata = execution.metadata;
         tracked.contextModifier = execution.contextModifier;
 
         this.emitUpdate(tracked, {
@@ -285,6 +288,7 @@ export class StreamingToolExecutor {
           result: tracked.streamedResult,
           detail: tracked.result.isError ? `${tracked.toolUse.name} failed` : `${tracked.toolUse.name} completed`,
           summary: `${tracked.toolUse.name} ${tracked.result.isError ? "failed" : "completed"}`,
+          metadata: execution.metadata,
         });
         this.flushReadyResults();
       } catch (error) {
@@ -319,6 +323,7 @@ export class StreamingToolExecutor {
         result: tracked.streamedResult,
         detail: tracked.result?.isError ? `${tracked.toolUse.name} failed` : `${tracked.toolUse.name} yielded`,
         summary: `${tracked.toolUse.name} result ready`,
+        metadata: tracked.metadata,
       });
     }
   }

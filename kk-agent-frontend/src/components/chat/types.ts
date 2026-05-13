@@ -9,6 +9,7 @@ export interface ActiveToolCall {
   displayText?: string;
   detail?: string;
   summary?: string;
+  metadata?: Record<string, unknown>;
 }
 
 export interface AgentIterationView {

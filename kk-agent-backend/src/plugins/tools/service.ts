@@ -40,6 +40,32 @@ const SELF_BOUNDED_READ_SYSTEM_TOOLS = new Set([
   "read_attachment",
 ]);
 
+function buildSystemToolCategory(toolName: string): RuntimeToolDefinition["category"] {
+  if (["Read", "Edit", "Write"].includes(toolName)) return "filesystem";
+  if (["Glob", "Grep"].includes(toolName)) return "search";
+  if (["WebSearch", "WebFetch"].includes(toolName)) return "web";
+  return "other";
+}
+
+function buildSystemToolOperationKind(toolName: string): RuntimeToolDefinition["operationKind"] {
+  if (toolName === "Read" || toolName === "read_attachment") return "read";
+  if (["Edit", "Write"].includes(toolName)) return "write";
+  if (["Glob", "Grep"].includes(toolName)) return "search";
+  if (["WebSearch", "WebFetch"].includes(toolName)) return "fetch";
+  return undefined;
+}
+
+function buildSystemToolDisplayMeta(toolName: string): RuntimeToolDefinition["display"] {
+  if (toolName === "Read") return { title: "Read", summaryInputKeys: ["file_path"] };
+  if (toolName === "Edit") return { title: "Edit", summaryInputKeys: ["file_path"] };
+  if (toolName === "Write") return { title: "Write", summaryInputKeys: ["file_path"] };
+  if (toolName === "Glob") return { title: "Glob", summaryInputKeys: ["pattern"] };
+  if (toolName === "Grep") return { title: "Grep", summaryInputKeys: ["pattern"] };
+  if (toolName === "WebSearch") return { title: "WebSearch", summaryInputKeys: ["query"] };
+  if (toolName === "WebFetch") return { title: "WebFetch", summaryInputKeys: ["url"] };
+  return undefined;
+}
+
 function isConcurrencySafeSystemTool(toolName: string, input: Record<string, unknown>): boolean {
   if (toolName === "Bash") {
     return isReadOnlyShellCommand(String(input.command ?? ""));
@@ -241,6 +267,10 @@ export function buildResolvedSystemToolRuntime(
         resultPolicy: buildSystemToolResultPolicy(resolved.mcp, tool.name),
         permissionPolicy: buildSystemToolPermissionPolicy(tool.name),
         resolvePermission: buildSystemToolPermissionResolver(tool.name),
+        category: buildSystemToolCategory(tool.name),
+        operationKind: buildSystemToolOperationKind(tool.name),
+        display: buildSystemToolDisplayMeta(tool.name),
+        selfBoundedResult: SELF_BOUNDED_READ_SYSTEM_TOOLS.has(tool.name),
       };
     }
   }

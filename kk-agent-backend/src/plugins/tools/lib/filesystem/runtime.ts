@@ -4,14 +4,76 @@ import type { McpServerConfig, ToolCallResult } from "../../../mcp/types.js";
 import { getDefaultPathForScope, resolveAccessScope, resolveFilesystemSystemConfig } from "../access-paths.js";
 import { truncateSelfBoundedReadOutput } from "../read-output.js";
 import { getCurrentSessionId } from "../user-interaction/interaction-store.js";
-import { hasCurrentReadForSession, recordReadForSession } from "./read-state.js";
+import {
+  clearFilesystemReadState,
+  getReadStateForSession,
+  recordReadForSession,
+  verifyReadStateForSession,
+} from "./read-state.js";
 import { getErrnoCode } from "../../../../lib/error.js";
+import { globWithRipgrep, grepWithRipgrep, isRipgrepAvailable } from "./ripgrep.js";
 
-const GLOB_RESULT_LIMIT = 200;
-const GREP_RESULT_LIMIT = 200;
+const GLOB_RESULT_LIMIT = 250;
+const GREP_RESULT_LIMIT = 250;
 const READ_LINE_LIMIT = 2000;
+const MAX_READ_BYTES_BEFORE_REJECT = 10 * 1024 * 1024; // 10 MB
 
-const IGNORED_DIRS = new Set(["node_modules", ".git", "dist", "build", ".next", "__pycache__"]);
+const IGNORED_DIRS = new Set(["node_modules", ".git", "dist", "build", ".next", "__pycache__", ".svn", ".hg", ".jj"]);
+
+const BINARY_EXTENSIONS = new Set([
+  // images
+  ".png", ".jpg", ".jpeg", ".gif", ".bmp", ".webp", ".ico", ".svg",
+  // pdfs
+  ".pdf",
+  // archives
+  ".zip", ".tar", ".gz", ".bz2", ".7z", ".rar",
+  // executables
+  ".exe", ".dll", ".so", ".dylib", ".bin",
+  // audio/video
+  ".mp3", ".mp4", ".avi", ".mov", ".wav", ".flac", ".ogg", ".webm",
+  // fonts
+  ".woff", ".woff2", ".ttf", ".otf", ".eot",
+  // other binaries
+  ".wasm", ".class", ".pyc", ".o", ".obj",
+]);
+
+const BLOCKED_DEVICE_PATHS = new Set([
+  "/dev/zero",
+  "/dev/random",
+  "/dev/urandom",
+  "/dev/full",
+  "/dev/stdin",
+  "/dev/tty",
+  "/dev/console",
+]);
+
+function isBlockedDevicePath(target: string): boolean {
+  const normalized = target.replace(/\\/g, "/").toLowerCase();
+  if (BLOCKED_DEVICE_PATHS.has(normalized)) return true;
+  // proc fd paths: /proc/*/fd/0, /proc/*/fd/1, /proc/*/fd/2
+  if (/^\/proc\/\d+\/fd\/[0-2]$/.test(normalized)) return true;
+  return false;
+}
+
+function isBinaryByExtension(filePath: string): boolean {
+  const ext = extname(filePath).toLowerCase();
+  return BINARY_EXTENSIONS.has(ext);
+}
+
+function isBinaryBuffer(buffer: Buffer): boolean {
+  const check = buffer.subarray(0, 8192);
+  for (let i = 0; i < check.length; i++) {
+    if (check[i] === 0) return true;
+  }
+  return false;
+}
+
+function detectImagePdf(filePath: string): "image" | "pdf" | "binary" | null {
+  const ext = extname(filePath).toLowerCase();
+  if (ext === ".pdf") return "pdf";
+  if ([".png", ".jpg", ".jpeg", ".gif", ".bmp", ".webp", ".ico"].includes(ext)) return "image";
+  return null;
+}
 
 function getFilesystemBasePath(config: McpServerConfig): string {
   return resolveFilesystemSystemConfig(config.systemConfig).basePath ?? resolve("/");
@@ -92,14 +154,6 @@ function globToRegex(pattern: string): RegExp {
   return new RegExp(regex, "i");
 }
 
-function isBinary(buffer: Buffer): boolean {
-  const check = buffer.subarray(0, 512);
-  for (let i = 0; i < check.length; i++) {
-    if (check[i] === 0) return true;
-  }
-  return false;
-}
-
 function buildRegex(pattern: string, caseSensitive = false, multiline = false): RegExp {
   const flags = `${caseSensitive ? "" : "i"}${multiline ? "m" : ""}`;
   try {
@@ -175,7 +229,7 @@ async function walkForGrep(
 
     try {
       const buffer = await readFile(fullPath);
-      if (isBinary(buffer)) return;
+      if (isBinaryBuffer(buffer)) return;
 
       const text = buffer.toString("utf-8");
       if (multiline) {
@@ -214,11 +268,98 @@ function getSessionIdOrThrow(): string {
   return sessionId;
 }
 
-function ensureReadBeforeMutating(path: string, modifiedAtMs: number): void {
-  const sessionId = getSessionIdOrThrow();
-  if (!hasCurrentReadForSession(sessionId, path, modifiedAtMs)) {
-    throw new Error("This file has changed or has not been read in the current conversation. Use Read before editing or overwriting it.");
+function detectLineEnding(content: string): "\n" | "\r\n" {
+  const crlfCount = content.split("\r\n").length - 1;
+  const lfCount = content.split("\n").length - 1;
+  return crlfCount > lfCount / 2 ? "\r\n" : "\n";
+}
+
+function normalizeLineEndings(content: string, lineEnding: "\n" | "\r\n"): string {
+  if (lineEnding === "\r\n") {
+    return content.replace(/\r?\n/g, "\r\n");
   }
+  return content.replace(/\r\n/g, "\n");
+}
+
+function generateUnifiedDiff(filePath: string, oldContent: string, newContent: string): string {
+  const oldLines = oldContent.split(/\r?\n/);
+  const newLines = newContent.split(/\r?\n/);
+  // Simple line-based diff: find changed ranges
+  const hunks: { startOld: number; countOld: number; startNew: number; countNew: number; lines: string[] }[] = [];
+
+  let i = 0;
+  let j = 0;
+  while (i < oldLines.length || j < newLines.length) {
+    if (i < oldLines.length && j < newLines.length && oldLines[i] === newLines[j]) {
+      i++;
+      j++;
+      continue;
+    }
+
+    const startOld = i;
+    const startNew = j;
+    const hunkLines: string[] = [];
+
+    while (i < oldLines.length && j < newLines.length && oldLines[i] !== newLines[j]) {
+      // Heuristic: look ahead to find next match
+      let found = false;
+      for (let a = i; a < Math.min(i + 5, oldLines.length); a++) {
+        for (let b = j; b < Math.min(j + 5, newLines.length); b++) {
+          if (oldLines[a] === newLines[b]) {
+            for (let k = i; k < a; k++) hunkLines.push(`-${oldLines[k]}`);
+            for (let k = j; k < b; k++) hunkLines.push(`+${newLines[k]}`);
+            i = a;
+            j = b;
+            found = true;
+            break;
+          }
+        }
+        if (found) break;
+      }
+      if (!found) {
+        if (i < oldLines.length) {
+          hunkLines.push(`-${oldLines[i]}`);
+          i++;
+        }
+        if (j < newLines.length) {
+          hunkLines.push(`+${newLines[j]}`);
+          j++;
+        }
+      }
+    }
+
+    // Handle remaining old lines
+    while (i < oldLines.length && (j >= newLines.length || oldLines[i] !== newLines[j])) {
+      hunkLines.push(`-${oldLines[i]}`);
+      i++;
+    }
+    // Handle remaining new lines
+    while (j < newLines.length && (i >= oldLines.length || oldLines[i] !== newLines[j])) {
+      hunkLines.push(`+${newLines[j]}`);
+      j++;
+    }
+
+    hunks.push({
+      startOld: startOld + 1,
+      countOld: i - startOld,
+      startNew: startNew + 1,
+      countNew: j - startNew,
+      lines: hunkLines,
+    });
+  }
+
+  if (hunks.length === 0) return "";
+
+  const output = [`--- ${filePath}`, `+++ ${filePath}`];
+  for (const hunk of hunks) {
+    output.push(`@@ -${hunk.startOld},${hunk.countOld} +${hunk.startNew},${hunk.countNew} @@`);
+    output.push(...hunk.lines);
+  }
+  return output.join("\n");
+}
+
+function countChangedLines(diff: string): number {
+  return diff.split("\n").filter((line) => line.startsWith("+") || line.startsWith("-")).length;
 }
 
 export async function executeFilesystemTool(
@@ -231,23 +372,92 @@ export async function executeFilesystemTool(
 
   if (toolName === "Read") {
     const path = resolveWithinRoot(allowedRoot, basePath, args.file_path);
-    const raw = await readFile(path, "utf-8");
+
+    if (isBlockedDevicePath(path)) {
+      return {
+        content: `Cannot read blocked device path: ${path}`,
+        isError: true,
+        metadata: { filePath: path, operation: "read", blocked: true },
+      };
+    }
+
+    const imagePdf = detectImagePdf(path);
+    if (imagePdf) {
+      return {
+        content: `Cannot read ${imagePdf} file as text: ${path}. Use attachment tools or request the file in a different way.`,
+        isError: true,
+        metadata: { filePath: path, operation: "read", unsupportedType: imagePdf },
+      };
+    }
+
+    if (isBinaryByExtension(path)) {
+      return {
+        content: `Cannot read binary file: ${path}`,
+        isError: true,
+        metadata: { filePath: path, operation: "read", binary: true },
+      };
+    }
+
     const info = await stat(path);
+    if (info.size > MAX_READ_BYTES_BEFORE_REJECT) {
+      return {
+        content: `File is too large to read (${info.size} bytes): ${path}. Use a more targeted approach.`,
+        isError: true,
+        metadata: { filePath: path, operation: "read", tooLarge: true, size: info.size },
+      };
+    }
+
+    const raw = await readFile(path, "utf-8");
     const lines = raw.split("\n");
     const total = lines.length;
 
     const offset = typeof args.offset === "number" ? Math.max(1, Math.floor(args.offset)) : 1;
     const limit = typeof args.limit === "number" ? Math.max(1, Math.floor(args.limit)) : READ_LINE_LIMIT;
 
+    if (offset > total) {
+      return {
+        content: `File has ${total} lines, but offset ${offset} is beyond the end of the file.`,
+        isError: false,
+        metadata: { filePath: path, operation: "read", totalLines: total, offset },
+      };
+    }
+
     const slice = lines.slice(offset - 1, offset - 1 + limit);
     const endLine = Math.min(offset - 1 + limit, total);
     const width = String(endLine).length;
     const numbered = slice.map((line, i) => `${String(offset + i).padStart(width)}\t${line}`).join("\n");
     const showingAll = offset === 1 && endLine >= total;
-    const footer = showingAll ? "" : `\n\n[Lines ${offset}-${endLine} of ${total}]`;
+    const header = `${path}\n`;
+    const footer = showingAll
+      ? `\n[${total} lines total]`
+      : `\n[Lines ${offset}-${endLine} of ${total}]\n\nWhen output is truncated, narrow the read with offset and limit.`;
 
-    recordReadForSession(getSessionIdOrThrow(), path, info.mtimeMs);
-    return { content: truncateSelfBoundedReadOutput(numbered + footer), isError: false };
+    const fullOutput = header + numbered + footer;
+    const truncated = truncateSelfBoundedReadOutput(fullOutput);
+    const isTruncated = truncated !== fullOutput;
+
+    await recordReadForSession(
+      getSessionIdOrThrow(),
+      path,
+      info.mtimeMs,
+      info.size,
+      showingAll,
+      offset,
+      limit,
+    );
+
+    return {
+      content: truncated,
+      isError: false,
+      metadata: {
+        filePath: path,
+        operation: "read",
+        totalLines: total,
+        startLine: offset,
+        endLine,
+        truncated: isTruncated,
+      },
+    };
   }
 
   if (toolName === "Edit") {
@@ -255,39 +465,167 @@ export async function executeFilesystemTool(
     const oldString = String(args.old_string ?? "");
     const newString = String(args.new_string ?? "");
     const replaceAll = args.replace_all === true;
-    if (!oldString) throw new Error("old_string is required");
 
-    const existingInfo = await stat(path);
-    ensureReadBeforeMutating(path, existingInfo.mtimeMs);
-    const content = await readFile(path, "utf-8");
-    const occurrences = content.split(oldString).length - 1;
-
-    if (occurrences === 0) throw new Error("old_string not found in file");
-    if (occurrences > 1 && !replaceAll) {
-      throw new Error(`old_string found ${occurrences} times. Add more context or set replace_all=true.`);
+    if (oldString === newString) {
+      return {
+        content: "old_string and new_string are identical. No change needed.",
+        isError: true,
+        metadata: { filePath: path, operation: "edit" },
+      };
     }
 
-    const updated = replaceAll ? content.split(oldString).join(newString) : content.replace(oldString, newString);
+    if (!oldString) {
+      return {
+        content: "old_string is required and cannot be empty.",
+        isError: true,
+        metadata: { filePath: path, operation: "edit" },
+      };
+    }
+
+    const existingInfo = await stat(path);
+    const sessionId = getSessionIdOrThrow();
+    const verify = await verifyReadStateForSession(sessionId, path, existingInfo.mtimeMs, existingInfo.size);
+    if (!verify.allowed) {
+      return {
+        content: verify.reason!,
+        isError: true,
+        metadata: { filePath: path, operation: "edit", stale: true },
+      };
+    }
+
+    const content = await readFile(path, "utf-8");
+
+    if (isBinaryBuffer(Buffer.from(content, "utf-8"))) {
+      return {
+        content: `Cannot edit binary file: ${path}`,
+        isError: true,
+        metadata: { filePath: path, operation: "edit", binary: true },
+      };
+    }
+
+    const occurrences = content.split(oldString).length - 1;
+
+    if (occurrences === 0) {
+      // Provide a helpful excerpt strategy
+      const excerptLength = Math.min(oldString.length + 40, 200);
+      const excerpt = oldString.length > 60 ? oldString.slice(0, 60) + "..." : oldString;
+      return {
+        content: `old_string not found in file. The exact string was not found.\n\nHint: re-read the file to get the current content, then try again with the exact text.\n\nSearched for:\n${excerpt}`,
+        isError: true,
+        metadata: { filePath: path, operation: "edit", notFound: true },
+      };
+    }
+
+    if (occurrences > 1 && !replaceAll) {
+      return {
+        content: `old_string found ${occurrences} times. Add more context or set replace_all=true.`,
+        isError: true,
+        metadata: { filePath: path, operation: "edit", occurrences, replaceAll: false },
+      };
+    }
+
+    const lineEnding = detectLineEnding(content);
+    const normalizedNewString = normalizeLineEndings(newString, lineEnding);
+
+    const updated = replaceAll
+      ? content.split(oldString).join(normalizedNewString)
+      : content.replace(oldString, normalizedNewString);
+
+    const diff = generateUnifiedDiff(path, content, updated);
+    const changedLines = countChangedLines(diff);
+
     await writeFile(path, updated, "utf-8");
     const updatedInfo = await stat(path);
-    recordReadForSession(getSessionIdOrThrow(), path, updatedInfo.mtimeMs);
-    return { content: `Edited file: ${path}`, isError: false };
+    await recordReadForSession(sessionId, path, updatedInfo.mtimeMs, updatedInfo.size, true);
+
+    return {
+      content: [`Edited file: ${path}`, diff ? `\n${diff}` : "", `\n[${replaceAll ? "All " : ""}${occurrences} occurrence(s) replaced, ${changedLines} line(s) changed]`].join("\n"),
+      isError: false,
+      metadata: {
+        filePath: path,
+        operation: "edit",
+        occurrences: replaceAll ? occurrences : 1,
+        changedLines,
+        created: false,
+        diff,
+      },
+    };
   }
 
   if (toolName === "Write") {
     const path = resolveWithinRoot(allowedRoot, basePath, args.file_path);
+    const contentToWrite = String(args.content ?? "");
+    const sessionId = getSessionIdOrThrow();
+
+    let existingContent: string | undefined;
+    let existingInfo: import("node:fs").Stats | undefined;
+    let isUpdate = false;
+
     try {
-      const existingInfo = await stat(path);
-      ensureReadBeforeMutating(path, existingInfo.mtimeMs);
+      existingInfo = await stat(path);
+      isUpdate = true;
     } catch (error) {
       if (getErrnoCode(error) !== "ENOENT") throw error;
     }
 
+    if (isUpdate && existingInfo) {
+      const verify = await verifyReadStateForSession(sessionId, path, existingInfo.mtimeMs, existingInfo.size);
+      if (!verify.allowed) {
+        return {
+          content: verify.reason!,
+          isError: true,
+          metadata: { filePath: path, operation: "write", stale: true },
+        };
+      }
+
+      existingContent = await readFile(path, "utf-8");
+
+      if (isBinaryBuffer(Buffer.from(existingContent, "utf-8"))) {
+        return {
+          content: `Cannot overwrite binary file: ${path}`,
+          isError: true,
+          metadata: { filePath: path, operation: "write", binary: true },
+        };
+      }
+    }
+
     await mkdir(dirname(path), { recursive: true });
-    await writeFile(path, String(args.content ?? ""), "utf-8");
+
+    let finalContent = contentToWrite;
+    if (existingContent !== undefined) {
+      const lineEnding = detectLineEnding(existingContent);
+      finalContent = normalizeLineEndings(contentToWrite, lineEnding);
+    }
+
+    await writeFile(path, finalContent, "utf-8");
     const updatedInfo = await stat(path);
-    recordReadForSession(getSessionIdOrThrow(), path, updatedInfo.mtimeMs);
-    return { content: `Wrote file: ${path}`, isError: false };
+    await recordReadForSession(sessionId, path, updatedInfo.mtimeMs, updatedInfo.size, true);
+
+    if (isUpdate && existingContent !== undefined) {
+      const diff = generateUnifiedDiff(path, existingContent, finalContent);
+      const changedLines = countChangedLines(diff);
+      return {
+        content: [`Updated file: ${path}`, diff ? `\n${diff}` : "", `\n[${changedLines} line(s) changed]`].join("\n"),
+        isError: false,
+        metadata: {
+          filePath: path,
+          operation: "update",
+          changedLines,
+          diff,
+          bytesWritten: finalContent.length,
+        },
+      };
+    }
+
+    return {
+      content: `Created file: ${path}`,
+      isError: false,
+      metadata: {
+        filePath: path,
+        operation: "create",
+        bytesWritten: finalContent.length,
+      },
+    };
   }
 
   if (toolName === "Glob") {
@@ -295,10 +633,42 @@ export async function executeFilesystemTool(
     const pattern = String(args.pattern ?? "").trim();
     if (!pattern) throw new Error("pattern is required");
 
-    const results: string[] = [];
-    await walkForGlob(start, start, globToRegex(pattern), results);
-    const footer = results.length >= GLOB_RESULT_LIMIT ? `\n\n[limit reached - showing first ${GLOB_RESULT_LIMIT} matches]` : "";
-    return { content: (results.length ? results.join("\n") : "No files matched.") + footer, isError: false };
+    let results: string[] = [];
+    let truncated = false;
+
+    const useRipgrep = await isRipgrepAvailable();
+    if (useRipgrep) {
+      try {
+        const rgResult = await globWithRipgrep({ root: start, pattern, limit: GLOB_RESULT_LIMIT });
+        results = rgResult.paths.map((p) => resolve(start, p));
+        truncated = rgResult.truncated;
+      } catch {
+        // fallback to JS traversal
+        results = [];
+      }
+    }
+
+    if (results.length === 0) {
+      const manualResults: string[] = [];
+      await walkForGlob(start, start, globToRegex(pattern), manualResults);
+      results = manualResults;
+      truncated = results.length >= GLOB_RESULT_LIMIT;
+      if (truncated) results = results.slice(0, GLOB_RESULT_LIMIT);
+    }
+
+    const footer = truncated
+      ? `\n\n[limit reached - showing first ${GLOB_RESULT_LIMIT} matches]`
+      : "";
+
+    return {
+      content: (results.length ? results.join("\n") : "No files matched.") + footer,
+      isError: false,
+      metadata: {
+        pattern,
+        numFiles: results.length,
+        truncated,
+      },
+    };
   }
 
   if (toolName === "Grep") {
@@ -314,32 +684,100 @@ export async function executeFilesystemTool(
         : "files_with_matches";
     const caseSensitive = args.case_sensitive === true;
     const multiline = args.multiline === true;
-    const headLimit = typeof args.head_limit === "number" ? Math.max(1, Math.floor(args.head_limit)) : GREP_RESULT_LIMIT;
+    const headLimitRaw = typeof args.head_limit === "number" ? Math.max(0, Math.floor(args.head_limit)) : GREP_RESULT_LIMIT;
+    const headLimit = headLimitRaw === 0 ? Number.MAX_SAFE_INTEGER : headLimitRaw;
     const offset = typeof args.offset === "number" ? Math.max(0, Math.floor(args.offset)) : 0;
 
-    const results: GrepMatch[] = [];
-    await walkForGrep(start, start, buildRegex(pattern, caseSensitive, multiline), glob, type, multiline, results);
+    let results: GrepMatch[] = [];
+    let truncated = false;
 
-    if (results.length === 0) return { content: "No matches found.", isError: false };
-    if (outputMode === "count") return { content: String(results.length), isError: false };
-
-    const sliced = results.slice(offset, offset + headLimit);
-    if (outputMode === "files_with_matches") {
-      const files = [...new Set(sliced.map((match) => match.file))];
-      const footer =
-        results.length > offset + sliced.length
-          ? `\n\n[showing ${files.length} of ${new Set(results.map((match) => match.file)).size} matching files]`
-          : "";
-      return { content: files.join("\n") + footer, isError: false };
+    const useRipgrep = await isRipgrepAvailable();
+    if (useRipgrep) {
+      try {
+        const rgResult = await grepWithRipgrep({
+          root: start,
+          pattern,
+          glob,
+          type,
+          outputMode: (outputMode === "count" ? "content" : outputMode) as "content" | "files_with_matches",
+          headLimit: outputMode === "files_with_matches" ? GLOB_RESULT_LIMIT : headLimit + offset,
+          offset: 0,
+          caseSensitive,
+          multiline,
+          maxResultBytes: 2_000_000,
+        });
+        results = rgResult.matches;
+        truncated = rgResult.truncated;
+      } catch {
+        results = [];
+      }
     }
 
+    if (results.length === 0 && !useRipgrep) {
+      const manualResults: GrepMatch[] = [];
+      await walkForGrep(start, start, buildRegex(pattern, caseSensitive, multiline), glob, type, multiline, manualResults);
+      results = manualResults;
+      truncated = results.length >= GREP_RESULT_LIMIT;
+      if (truncated) results = results.slice(0, GREP_RESULT_LIMIT);
+    }
+
+    if (results.length === 0) {
+      return {
+        content: "No matches found.",
+        isError: false,
+        metadata: { pattern, count: 0 },
+      };
+    }
+
+    if (outputMode === "count") {
+      return {
+        content: String(results.length),
+        isError: false,
+        metadata: { pattern, count: results.length },
+      };
+    }
+
+    if (outputMode === "files_with_matches") {
+      const files = [...new Set(results.map((match) => match.file))];
+      const sliced = files.slice(offset, offset + (headLimit === Number.MAX_SAFE_INTEGER ? files.length : headLimit));
+      const footer =
+        files.length > offset + sliced.length
+          ? `\n\n[showing ${sliced.length} of ${files.length} matching files]`
+          : "";
+      return {
+        content: sliced.join("\n") + footer,
+        isError: false,
+        metadata: {
+          pattern,
+          numFiles: sliced.length,
+          totalFiles: files.length,
+          truncated: files.length > offset + sliced.length,
+        },
+      };
+    }
+
+    const sliced = results.slice(offset, offset + (headLimit === Number.MAX_SAFE_INTEGER ? results.length : headLimit));
+    const capped = sliced.map((match) => {
+      const content = match.content.length > 500 ? match.content.slice(0, 500) + "..." : match.content;
+      return `${match.file}:${match.line}: ${content}`;
+    });
     const footer =
-      results.length > offset + sliced.length ? `\n\n[showing ${sliced.length} of ${results.length} matches]` : "";
+      results.length > offset + sliced.length
+        ? `\n\n[showing ${sliced.length} of ${results.length} matches]`
+        : "";
+
     return {
-      content: sliced.map((match) => `${match.file}:${match.line}: ${match.content}`).join("\n") + footer,
+      content: capped.join("\n") + footer,
       isError: false,
+      metadata: {
+        pattern,
+        count: sliced.length,
+        totalMatches: results.length,
+        truncated: results.length > offset + sliced.length,
+      },
     };
   }
 
   return null;
 }
+

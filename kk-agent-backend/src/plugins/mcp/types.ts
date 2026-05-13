@@ -15,4 +15,5 @@ export type {
 export interface ToolCallResult {
   content: string;
   isError: boolean;
+  metadata?: Record<string, unknown>;
 }

@@ -1,8 +1,0 @@
-{
-  "permissions": {
-    "allow": [
-      "WebFetch(domain:developers.openai.com)",
-      "WebFetch(domain:github.com)"
-    ]
-  }
-}

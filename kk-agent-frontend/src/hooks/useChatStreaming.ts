@@ -204,6 +204,7 @@ function updateIterationToolCall(previous: StreamingTurnState | null, event: Ext
     ...(event.detail ? { detail: event.detail } : {}),
     ...(event.summary ? { summary: event.summary } : {}),
     ...(event.result ? { result: getToolResult(event.result) } : {}),
+    ...(event.metadata ? { metadata: event.metadata } : {}),
   };
 
   const toolCalls = [...iteration.toolCalls];

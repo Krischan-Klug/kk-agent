@@ -150,6 +150,7 @@ export type StreamEvent =
       result?: TranscriptMessage;
       detail?: string;
       summary?: string;
+      metadata?: Record<string, unknown>;
     }
   | { type: "turn_state"; state: AgentLoopState }
   | { type: "system_notice"; level: "info" | "warning" | "error"; message: string }

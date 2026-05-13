@@ -324,8 +324,8 @@ export async function chatStream(
         onAssistantBlockDelta: (messageId, block) => emit({ type: "assistant_block_delta", messageId, block }),
         onAssistantMessage: (messageObject) => emit({ type: "assistant_message_complete", message: messageObject }),
         onSystemNotice: (level, messageText) => emit({ type: "system_notice", level, message: messageText }),
-        onToolExecutionUpdate: (toolUseId, toolName, status, resultMessage, detail, summary, input) =>
-          emit({ type: "tool_execution_update", toolUseId, toolName, input, status, result: resultMessage, detail, summary }),
+        onToolExecutionUpdate: (toolUseId, toolName, status, resultMessage, detail, summary, input, metadata) =>
+          emit({ type: "tool_execution_update", toolUseId, toolName, input, status, result: resultMessage, detail, summary, metadata }),
         onLoopState: (state) => {
           setLoopState(sessionId, state);
           emit({ type: "turn_state", state });

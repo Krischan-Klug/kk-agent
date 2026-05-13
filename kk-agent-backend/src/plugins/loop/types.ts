@@ -33,6 +33,12 @@ export interface ModeRuntimeRef {
   behavior: ModeBehavior;
 }
 
+export interface RuntimeToolDisplayMeta {
+  title?: string;
+  summaryInputKeys?: string[];
+  redactInputKeys?: string[];
+}
+
 export interface RuntimeToolDefinition extends UnifiedToolDefinition {
   source: RuntimeToolSource;
   capabilityId: string;
@@ -47,6 +53,10 @@ export interface RuntimeToolDefinition extends UnifiedToolDefinition {
     args: Record<string, unknown>,
     mode: ModeRuntimeRef,
   ) => Promise<RuntimeToolPermissionPolicy> | RuntimeToolPermissionPolicy;
+  category?: "filesystem" | "search" | "web" | "other";
+  operationKind?: "read" | "write" | "search" | "fetch";
+  display?: RuntimeToolDisplayMeta;
+  selfBoundedResult?: boolean;
 }
 
 export interface ToolExecutionResult {
@@ -55,6 +65,7 @@ export interface ToolExecutionResult {
   assistantBlocks?: import("../lib/transcript.js").TranscriptBlock[];
   additionalMessages?: TranscriptMessage[];
   contextModifier?: (context: ToolRuntimeContext) => ToolRuntimeContext;
+  metadata?: Record<string, unknown>;
 }
 
 export interface ModeRuntimeConfig {
@@ -127,6 +138,7 @@ export interface LoopOptions {
     detail?: string,
     summary?: string,
     input?: Record<string, unknown>,
+    metadata?: Record<string, unknown>,
   ) => void;
   resolveToolPermission?: (
     runtimeTool: RuntimeToolDefinition,

@@ -15,6 +15,7 @@ import type { ProviderAdapter } from "./lib/adapter.js";
 import { createLocalProviderAdapter } from "./lib/adapters/local.js";
 import { createLogger } from "../../lib/logger.js";
 import { NotFoundError } from "../../lib/errors.js";
+import { getErrorMessage } from "../../lib/error.js";
 
 const logger = createLogger("provider");
 import { loadState, saveState } from "../lib/state.js";
@@ -389,11 +390,6 @@ async function trackObservedSuccess(
   response: UnifiedResponse,
 ) {
   await markObservedCapabilities(providerId, modelId, collectObservedCapabilities(prepared, response));
-}
-
-function getErrorMessage(error: unknown): string {
-  if (error instanceof Error) return error.message;
-  return String(error);
 }
 
 function getHttpStatusFromError(error: unknown): number | undefined {

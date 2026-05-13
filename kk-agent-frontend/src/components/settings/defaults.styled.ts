@@ -1,4 +1,5 @@
 import styled from "styled-components";
+export { ModeTab, ModeTabs, Select } from "@/components/FormControls.styled";
 
 export const PageWrapper = styled.div`
   max-width: 920px;
@@ -28,21 +29,6 @@ export const PanelTitle = styled.h2`
 export const Hint = styled.div`
   font-size: var(--font-size-xs);
   color: var(--text-muted);
-`;
-
-export const Select = styled.select`
-  padding: 6px 10px;
-  background: var(--bg-elevated);
-  color: var(--text-primary);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  font-size: var(--font-size-sm);
-  font-family: inherit;
-  outline: none;
-
-  &:focus {
-    border-color: var(--accent);
-  }
 `;
 
 export const SaveMsg = styled.span`
@@ -83,20 +69,4 @@ export const SectionToggle = styled.button`
 export const SectionToggleMeta = styled.span`
   font-size: var(--font-size-xs);
   color: var(--text-muted);
-`;
-
-export const ModeTabs = styled.div`
-  display: flex;
-  gap: var(--space-xs);
-  flex-wrap: wrap;
-`;
-
-export const ModeTab = styled.button<{ $active: boolean }>`
-  padding: 6px 10px;
-  background: ${(p) => (p.$active ? "var(--accent)" : "var(--accent-muted)")};
-  color: ${(p) => (p.$active ? "var(--bg-base)" : "var(--accent)")};
-  border: 1px solid var(--accent);
-  border-radius: var(--radius-sm);
-  font-size: var(--font-size-sm);
-  cursor: pointer;
 `;

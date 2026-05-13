@@ -13,10 +13,12 @@ import type {
 } from "@/types/api";
 import { normalizeCanonicalReasoningEffort } from "@/lib/modelCapabilities";
 import { getAgentModelRef, getModelLabel, parseModelRef, toModelRef } from "@/lib/modelRefs";
+import { toggleId } from "@/lib/idLists";
 import Button from "@/components/Button";
 import Input from "@/components/Input";
 import TextArea from "@/components/TextArea";
 import KeyValueEditor from "@/components/KeyValueEditor";
+import AutonomousBudgetFields from "@/components/AutonomousBudgetFields";
 import {
   ActionsRow,
   EmptyHint,
@@ -28,41 +30,27 @@ import {
   SectionTitle,
 } from "@/components/PageForm";
 import {
-  CapabilityHeader,
   CapabilityRow,
   CheckboxRow,
-  ExpandButton,
   HeaderActions,
-  IconActionButton,
   InlineSelect,
   LabelRow,
   ModeStatusDot,
   ModeTab,
   ModeTabContent,
   ModeTabs,
-  NestedToolCard,
-  NestedToolList,
-  OverrideMark,
   ScopeRow,
   Select,
-  StatusDot,
-  ToolDescription,
-  ToolName,
 } from "./AgentEditor.styled";
 import {
-  getCapabilityToolNames,
-  getConcreteRuntimeTools,
-  hasAllowedToolForCapability,
   isScopeCapableTool,
-  isToolAllowed,
   MODE_BEHAVIORS,
-  normalizeAllowedToolNames,
-  OVERRIDE_EMOJI,
   PROMPT_SECTION_META,
-  RESET_EMOJI,
   setCapabilityInstruction,
   SKILL_EMOJI,
 } from "./AgentEditor.helpers";
+import { CapabilityInstructionEditor, CapabilityToggleHeader, OverrideActions } from "./CapabilitySection";
+import RuntimeToolCapabilitySection from "./RuntimeToolCapabilitySection";
 
 type SelectOption = {
   value: string | number;
@@ -371,20 +359,15 @@ export function PromptSectionsSection({
               <FieldLabel>{entry.label}</FieldLabel>
               {isCustomized && (
                 <HeaderActions>
-                  <OverrideMark title="Agent-Override">{OVERRIDE_EMOJI}</OverrideMark>
-                  <IconActionButton
-                    type="button"
-                    title="Reset to default"
-                    onClick={() => updateModeConfig({
+                  <OverrideActions
+                    onReset={() => updateModeConfig({
                       ...selectedModeConfig,
                       promptSections: {
                         ...selectedModeConfig.promptSections,
                         [entry.key]: getPromptSectionDefault(entry.key),
                       },
                     })}
-                  >
-                    {RESET_EMOJI}
-                  </IconActionButton>
+                  />
                 </HeaderActions>
               )}
             </LabelRow>
@@ -423,14 +406,9 @@ export function ModeInstructionSection({
         <SectionTitle>Mode Instruction</SectionTitle>
         {isCustomizedModeInstruction && (
           <HeaderActions>
-            <OverrideMark title="Agent-Override">{OVERRIDE_EMOJI}</OverrideMark>
-            <IconActionButton
-              type="button"
-              title="Reset to default"
-              onClick={() => updateModeConfig({ ...selectedModeConfig, modeInstruction: defaultModeInstruction })}
-            >
-              {RESET_EMOJI}
-            </IconActionButton>
+            <OverrideActions
+              onReset={() => updateModeConfig({ ...selectedModeConfig, modeInstruction: defaultModeInstruction })}
+            />
           </HeaderActions>
         )}
       </FormRow>
@@ -456,38 +434,10 @@ export function AutonomousBudgetSection({
   return (
     <Section>
       <SectionTitle>Autonomous Budget</SectionTitle>
-      <FormRow style={{ gap: "0.5rem", flexWrap: "wrap" }}>
-        <label style={{ display: "flex", flexDirection: "column", gap: "0.25rem" }}>
-          <span>Max input tokens</span>
-          <input
-            type="number"
-            min={0}
-            value={selectedModeConfig.autonomousBudget?.maxInputTokens ?? ""}
-            onChange={(e) => {
-              const value = e.target.value === "" ? undefined : Number(e.target.value);
-              updateModeConfig({
-                ...selectedModeConfig,
-                autonomousBudget: { ...selectedModeConfig.autonomousBudget, maxInputTokens: value },
-              });
-            }}
-          />
-        </label>
-        <label style={{ display: "flex", flexDirection: "column", gap: "0.25rem" }}>
-          <span>Max output tokens</span>
-          <input
-            type="number"
-            min={0}
-            value={selectedModeConfig.autonomousBudget?.maxOutputTokens ?? ""}
-            onChange={(e) => {
-              const value = e.target.value === "" ? undefined : Number(e.target.value);
-              updateModeConfig({
-                ...selectedModeConfig,
-                autonomousBudget: { ...selectedModeConfig.autonomousBudget, maxOutputTokens: value },
-              });
-            }}
-          />
-        </label>
-      </FormRow>
+      <AutonomousBudgetFields
+        value={selectedModeConfig.autonomousBudget}
+        onChange={(autonomousBudget) => updateModeConfig({ ...selectedModeConfig, autonomousBudget })}
+      />
     </Section>
   );
 }
@@ -522,188 +472,60 @@ export function InternalToolsSection({
   updateModeConfig,
 }: InternalToolsSectionProps) {
   return (
-    <Section>
-      <SectionTitle>Internal Tools</SectionTitle>
-      {internalTools.map((toolGroup) => {
-        const isActive = selectedModeConfig.toolIds.includes(toolGroup.id);
-        const capabilityToolNames = getCapabilityToolNames(toolGroup);
-        const isExpanded = expandedInternalTools[toolGroup.id] ?? false;
-        const showInstruction = visibleToolInstructions[toolGroup.id] ?? false;
-        const effectiveInstruction = getEffectiveToolInstruction(toolGroup.id, toolGroup.instruction);
-        const isCustomized = effectiveInstruction.trim() !== getToolInstructionFallback(toolGroup.id, toolGroup.instruction).trim();
-        const isScopeCapable = isScopeCapableTool(toolGroup.id);
-        const effectiveAccessScope = getEffectiveAccessScope(toolGroup.id);
-        const hasScopeOverride = selectedModeConfig.toolAccessScopes[toolGroup.id] !== undefined;
+    <RuntimeToolCapabilitySection
+      title="Internal Tools"
+      groups={internalTools}
+      idField="toolIds"
+      instructionField="toolInstructions"
+      selectedModeConfig={selectedModeConfig}
+      internalTools={internalTools}
+      mcps={mcps}
+      expanded={expandedInternalTools}
+      visibleInstructions={visibleToolInstructions}
+      setExpanded={setExpandedInternalTools}
+      setVisibleInstructions={setVisibleToolInstructions}
+      emojiFallback="T"
+      getEffectiveInstruction={(tool) => getEffectiveToolInstruction(tool.id, tool.instruction)}
+      getInstructionFallback={(tool) => getToolInstructionFallback(tool.id, tool.instruction)}
+      renderActiveControls={(tool) => {
+        if (!isScopeCapableTool(tool.id)) return null;
+        const effectiveAccessScope = getEffectiveAccessScope(tool.id);
+        const hasScopeOverride = selectedModeConfig.toolAccessScopes[tool.id] !== undefined;
 
         return (
-          <CapabilityRow key={toolGroup.id} $active={isActive}>
-            <CapabilityHeader>
-              <CheckboxRow>
-                <input
-                  type="checkbox"
-                  checked={isActive}
-                  onChange={() => {
-                    const nextToolIds = isActive
-                      ? selectedModeConfig.toolIds.filter((id) => id !== toolGroup.id)
-                      : [...selectedModeConfig.toolIds, toolGroup.id];
-                    const nextAllowedRaw = isActive
-                      ? selectedModeConfig.allowedToolNames.filter((name) => !capabilityToolNames.includes(name))
-                      : [...selectedModeConfig.allowedToolNames, ...capabilityToolNames];
-                    const nextModeConfig = { ...selectedModeConfig, toolIds: nextToolIds };
-                    const nextConcreteTools = getConcreteRuntimeTools(nextModeConfig, internalTools, mcps);
-                    updateModeConfig({
-                      ...nextModeConfig,
-                      allowedToolNames: normalizeAllowedToolNames(nextAllowedRaw, nextConcreteTools),
-                    });
-                  }}
+          <ScopeRow>
+            <CheckboxRow as="div">
+              <span>Access Scope</span>
+            </CheckboxRow>
+            <HeaderActions>
+              <InlineSelect
+                value={effectiveAccessScope}
+                onChange={(e) => {
+                  const nextScope = e.target.value as ToolAccessScope;
+                  const nextScopes = { ...selectedModeConfig.toolAccessScopes };
+                  if (nextScope === getDefaultAccessScope(tool.id)) delete nextScopes[tool.id];
+                  else nextScopes[tool.id] = nextScope;
+                  updateModeConfig({ ...selectedModeConfig, toolAccessScopes: nextScopes });
+                }}
+              >
+                <option value="user">user</option>
+                <option value="system">system</option>
+              </InlineSelect>
+              {hasScopeOverride && (
+                <OverrideActions
+                  onReset={() => {
+                      const nextScopes = { ...selectedModeConfig.toolAccessScopes };
+                      delete nextScopes[tool.id];
+                      updateModeConfig({ ...selectedModeConfig, toolAccessScopes: nextScopes });
+                    }}
                 />
-                <span style={{ fontSize: "1.1em" }}>{toolGroup.emoji || "T"}</span>
-                <span style={{ fontWeight: 500 }}>{toolGroup.name}</span>
-                <StatusDot $running={toolGroup.running} />
-              </CheckboxRow>
-              {isActive && (
-                <HeaderActions>
-                  <ExpandButton
-                    type="button"
-                    onClick={() => setExpandedInternalTools((previous) => ({
-                      ...previous,
-                      [toolGroup.id]: !isExpanded,
-                    }))}
-                  >
-                    {isExpanded ? "Less" : "Details"}
-                  </ExpandButton>
-                  <ExpandButton
-                    type="button"
-                    onClick={() => setVisibleToolInstructions((previous) => ({
-                      ...previous,
-                      [toolGroup.id]: !showInstruction,
-                    }))}
-                  >
-                    {showInstruction ? "Hide instruction" : "Show instruction"}
-                  </ExpandButton>
-                  {isCustomized && (
-                    <>
-                      <OverrideMark title="Agent-Override">{OVERRIDE_EMOJI}</OverrideMark>
-                      <IconActionButton
-                        type="button"
-                        title="Reset to default"
-                        onClick={() => updateModeConfig({
-                          ...selectedModeConfig,
-                          toolInstructions: setCapabilityInstruction(
-                            selectedModeConfig.toolInstructions,
-                            toolGroup.id,
-                            getToolInstructionFallback(toolGroup.id, toolGroup.instruction),
-                            getToolInstructionFallback(toolGroup.id, toolGroup.instruction),
-                          ),
-                        })}
-                      >
-                        {RESET_EMOJI}
-                      </IconActionButton>
-                    </>
-                  )}
-                </HeaderActions>
               )}
-            </CapabilityHeader>
-            {isActive && (
-              <>
-                {showInstruction && (
-                  <TextArea
-                    rows={4}
-                    value={effectiveInstruction}
-                    onChange={(e) => updateModeConfig({
-                      ...selectedModeConfig,
-                      toolInstructions: setCapabilityInstruction(
-                        selectedModeConfig.toolInstructions,
-                        toolGroup.id,
-                        e.target.value,
-                        getToolInstructionFallback(toolGroup.id, toolGroup.instruction),
-                      ),
-                    })}
-                  />
-                )}
-                {isScopeCapable && (
-                  <ScopeRow>
-                    <CheckboxRow as="div">
-                      <span>Access Scope</span>
-                    </CheckboxRow>
-                    <HeaderActions>
-                      <InlineSelect
-                        value={effectiveAccessScope}
-                        onChange={(e) => {
-                          const nextScope = e.target.value as ToolAccessScope;
-                          const nextScopes = { ...selectedModeConfig.toolAccessScopes };
-                          if (nextScope === getDefaultAccessScope(toolGroup.id)) {
-                            delete nextScopes[toolGroup.id];
-                          } else {
-                            nextScopes[toolGroup.id] = nextScope;
-                          }
-                          updateModeConfig({ ...selectedModeConfig, toolAccessScopes: nextScopes });
-                        }}
-                      >
-                        <option value="user">user</option>
-                        <option value="system">system</option>
-                      </InlineSelect>
-                      {hasScopeOverride && (
-                        <>
-                          <OverrideMark title="Agent-Override">{OVERRIDE_EMOJI}</OverrideMark>
-                          <IconActionButton
-                            type="button"
-                            title="Reset to default"
-                            onClick={() => {
-                              const nextScopes = { ...selectedModeConfig.toolAccessScopes };
-                              delete nextScopes[toolGroup.id];
-                              updateModeConfig({ ...selectedModeConfig, toolAccessScopes: nextScopes });
-                            }}
-                          >
-                            {RESET_EMOJI}
-                          </IconActionButton>
-                        </>
-                      )}
-                    </HeaderActions>
-                  </ScopeRow>
-                )}
-                {isExpanded && (
-                  <NestedToolList>
-                    {toolGroup.tools.map((tool) => {
-                      const allowed = isToolAllowed(selectedModeConfig, tool.name);
-                      return (
-                        <NestedToolCard key={tool.name} $active={allowed}>
-                          <CheckboxRow>
-                            <input
-                              type="checkbox"
-                              checked={allowed}
-                              onChange={() => {
-                                const deduped = [...new Set(selectedModeConfig.allowedToolNames)];
-                                const updated = allowed
-                                  ? deduped.filter((entry) => entry !== tool.name)
-                                  : [...deduped, tool.name];
-                                const nextToolIds = hasAllowedToolForCapability(updated, capabilityToolNames)
-                                  ? selectedModeConfig.toolIds
-                                  : selectedModeConfig.toolIds.filter((entry) => entry !== toolGroup.id);
-                                const nextModeConfig = { ...selectedModeConfig, toolIds: nextToolIds };
-                                updateModeConfig({
-                                  ...nextModeConfig,
-                                  allowedToolNames: normalizeAllowedToolNames(
-                                    updated,
-                                    getConcreteRuntimeTools(nextModeConfig, internalTools, mcps),
-                                  ),
-                                });
-                              }}
-                            />
-                            <ToolName>{tool.name}</ToolName>
-                          </CheckboxRow>
-                          <ToolDescription>{tool.description}</ToolDescription>
-                        </NestedToolCard>
-                      );
-                    })}
-                  </NestedToolList>
-                )}
-              </>
-            )}
-          </CapabilityRow>
+            </HeaderActions>
+          </ScopeRow>
         );
-      })}
-    </Section>
+      }}
+      updateModeConfig={updateModeConfig}
+    />
   );
 }
 
@@ -729,142 +551,24 @@ export function ExternalMcpsSection({
   updateModeConfig,
 }: ExternalMcpsSectionProps) {
   return (
-    <Section>
-      <SectionTitle>External MCPs</SectionTitle>
-      {mcps.map((mcp) => {
-        const isActive = selectedModeConfig.mcpIds.includes(mcp.id);
-        const capabilityToolNames = getCapabilityToolNames(mcp);
-        const isExpanded = expandedMcps[mcp.id] ?? false;
-        const showInstruction = visibleMcpInstructions[mcp.id] ?? false;
-        const effectiveInstruction = selectedModeConfig.mcpInstructions[mcp.id] ?? mcp.instruction ?? "";
-        const isCustomized = effectiveInstruction.trim() !== (mcp.instruction ?? "").trim();
-
-        return (
-          <CapabilityRow key={mcp.id} $active={isActive}>
-            <CapabilityHeader>
-              <CheckboxRow>
-                <input
-                  type="checkbox"
-                  checked={isActive}
-                  onChange={() => {
-                    const nextMcpIds = isActive
-                      ? selectedModeConfig.mcpIds.filter((id) => id !== mcp.id)
-                      : [...selectedModeConfig.mcpIds, mcp.id];
-                    const nextAllowedRaw = isActive
-                      ? selectedModeConfig.allowedToolNames.filter((name) => !capabilityToolNames.includes(name))
-                      : [...selectedModeConfig.allowedToolNames, ...capabilityToolNames];
-                    const nextModeConfig = { ...selectedModeConfig, mcpIds: nextMcpIds };
-                    updateModeConfig({
-                      ...nextModeConfig,
-                      allowedToolNames: normalizeAllowedToolNames(
-                        nextAllowedRaw,
-                        getConcreteRuntimeTools(nextModeConfig, internalTools, mcps),
-                      ),
-                    });
-                  }}
-                />
-                <span style={{ fontSize: "1.1em" }}>{mcp.emoji || "M"}</span>
-                <span>{mcp.name}</span>
-                <StatusDot $running={mcp.running} />
-              </CheckboxRow>
-              {isActive && (
-                <HeaderActions>
-                  <ExpandButton
-                    type="button"
-                    onClick={() => setExpandedMcps((previous) => ({
-                      ...previous,
-                      [mcp.id]: !isExpanded,
-                    }))}
-                  >
-                    {isExpanded ? "Weniger" : "Details"}
-                  </ExpandButton>
-                  <ExpandButton
-                    type="button"
-                    onClick={() => setVisibleMcpInstructions((previous) => ({
-                      ...previous,
-                      [mcp.id]: !showInstruction,
-                    }))}
-                  >
-                    {showInstruction ? "Hide instruction" : "Show instruction"}
-                  </ExpandButton>
-                  {isCustomized && (
-                    <>
-                      <OverrideMark title="Agent-Override">{OVERRIDE_EMOJI}</OverrideMark>
-                      <IconActionButton
-                        type="button"
-                        title="Reset to default"
-                        onClick={() => updateModeConfig({
-                          ...selectedModeConfig,
-                          mcpInstructions: setCapabilityInstruction(
-                            selectedModeConfig.mcpInstructions,
-                            mcp.id,
-                            mcp.instruction ?? "",
-                            mcp.instruction,
-                          ),
-                        })}
-                      >
-                        {RESET_EMOJI}
-                      </IconActionButton>
-                    </>
-                  )}
-                </HeaderActions>
-              )}
-            </CapabilityHeader>
-            {isActive && showInstruction && (
-              <TextArea
-                rows={4}
-                value={effectiveInstruction}
-                onChange={(e) => updateModeConfig({
-                  ...selectedModeConfig,
-                  mcpInstructions: setCapabilityInstruction(
-                    selectedModeConfig.mcpInstructions,
-                    mcp.id,
-                    e.target.value,
-                    mcp.instruction,
-                  ),
-                })}
-              />
-            )}
-            {isActive && isExpanded && (
-              <NestedToolList>
-                {mcp.tools.map((tool) => {
-                  const allowed = isToolAllowed(selectedModeConfig, tool.name);
-                  return (
-                    <NestedToolCard key={tool.name} $active={allowed}>
-                      <CheckboxRow>
-                        <input
-                          type="checkbox"
-                          checked={allowed}
-                          onChange={() => {
-                            const deduped = [...new Set(selectedModeConfig.allowedToolNames)];
-                            const updated = allowed
-                              ? deduped.filter((entry) => entry !== tool.name)
-                              : [...deduped, tool.name];
-                            const nextMcpIds = hasAllowedToolForCapability(updated, capabilityToolNames)
-                              ? selectedModeConfig.mcpIds
-                              : selectedModeConfig.mcpIds.filter((entry) => entry !== mcp.id);
-                            const nextModeConfig = { ...selectedModeConfig, mcpIds: nextMcpIds };
-                            updateModeConfig({
-                              ...nextModeConfig,
-                              allowedToolNames: normalizeAllowedToolNames(
-                                updated,
-                                getConcreteRuntimeTools(nextModeConfig, internalTools, mcps),
-                              ),
-                            });
-                          }}
-                        />
-                        <ToolName>{tool.name}</ToolName>
-                      </CheckboxRow>
-                      <ToolDescription>{tool.description}</ToolDescription>
-                    </NestedToolCard>
-                  );
-                })}
-              </NestedToolList>
-            )}
-          </CapabilityRow>
-        );
-      })}
-    </Section>
+    <RuntimeToolCapabilitySection
+      title="External MCPs"
+      groups={mcps}
+      idField="mcpIds"
+      instructionField="mcpInstructions"
+      selectedModeConfig={selectedModeConfig}
+      internalTools={internalTools}
+      mcps={mcps}
+      expanded={expandedMcps}
+      visibleInstructions={visibleMcpInstructions}
+      setExpanded={setExpandedMcps}
+      setVisibleInstructions={setVisibleMcpInstructions}
+      detailsOpenLabel="Weniger"
+      emojiFallback="M"
+      getEffectiveInstruction={(mcp) => selectedModeConfig.mcpInstructions[mcp.id] ?? mcp.instruction ?? ""}
+      getInstructionFallback={(mcp) => mcp.instruction ?? ""}
+      updateModeConfig={updateModeConfig}
+    />
   );
 }
 
@@ -904,58 +608,32 @@ export function SkillsSection({
 
         return (
           <CapabilityRow key={skill.id} $active={isActive}>
-            <CapabilityHeader>
-              <CheckboxRow>
-                <input
-                  type="checkbox"
-                  checked={isActive}
-                  onChange={() => {
-                    const nextSkillIds = isActive
-                      ? selectedModeConfig.skillIds.filter((id) => id !== skill.id)
-                      : [...selectedModeConfig.skillIds, skill.id];
-                    updateModeConfig({
-                      ...selectedModeConfig,
-                      skillIds: [...new Set(nextSkillIds)],
-                    });
-                  }}
-                />
-                <span style={{ fontSize: "1.1em" }}>{SKILL_EMOJI}</span>
-                <span style={{ fontWeight: 500 }}>{skill.name}</span>
-              </CheckboxRow>
-              {isActive && (
-                <HeaderActions>
-                  <ExpandButton
-                    type="button"
-                    onClick={() => setVisibleSkillInstructions((previous) => ({
-                      ...previous,
-                      [skill.id]: !showInstruction,
-                    }))}
-                  >
-                    {showInstruction ? "Hide instruction" : "Show instruction"}
-                  </ExpandButton>
-                  {isCustomized && (
-                    <>
-                      <OverrideMark title="Agent-Override">{OVERRIDE_EMOJI}</OverrideMark>
-                      <IconActionButton
-                        type="button"
-                        title="Reset to skill default"
-                        onClick={() => updateModeConfig({
-                          ...selectedModeConfig,
-                          skillInstructions: setCapabilityInstruction(
-                            selectedModeConfig.skillInstructions,
-                            skill.id,
-                            skill.instruction,
-                            skill.instruction,
-                          ),
-                        })}
-                      >
-                        {RESET_EMOJI}
-                      </IconActionButton>
-                    </>
-                  )}
-                </HeaderActions>
-              )}
-            </CapabilityHeader>
+            <CapabilityToggleHeader
+              active={isActive}
+              emoji={SKILL_EMOJI}
+              name={skill.name}
+              instructionOpen={showInstruction}
+              customized={isCustomized}
+              onToggle={() => {
+                updateModeConfig({
+                  ...selectedModeConfig,
+                  skillIds: toggleId(selectedModeConfig.skillIds, skill.id),
+                });
+              }}
+              onToggleInstruction={() => setVisibleSkillInstructions((previous) => ({
+                ...previous,
+                [skill.id]: !showInstruction,
+              }))}
+              onResetInstruction={() => updateModeConfig({
+                ...selectedModeConfig,
+                skillInstructions: setCapabilityInstruction(
+                  selectedModeConfig.skillInstructions,
+                  skill.id,
+                  skill.instruction,
+                  skill.instruction,
+                ),
+              })}
+            />
             <MutedText>{skill.description}</MutedText>
             {(linkedToolNames.length > 0 || linkedMcpNames.length > 0) && (
               <MutedText>
@@ -965,15 +643,15 @@ export function SkillsSection({
               </MutedText>
             )}
             {isActive && showInstruction && (
-              <TextArea
-                rows={6}
+              <CapabilityInstructionEditor
                 value={effectiveInstruction}
-                onChange={(e) => updateModeConfig({
+                rows={6}
+                onChange={(value) => updateModeConfig({
                   ...selectedModeConfig,
                   skillInstructions: setCapabilityInstruction(
                     selectedModeConfig.skillInstructions,
                     skill.id,
-                    e.target.value,
+                    value,
                     skill.instruction,
                   ),
                 })}

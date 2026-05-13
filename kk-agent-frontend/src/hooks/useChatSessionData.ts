@@ -17,6 +17,7 @@ import { clearActiveSessionId, getActiveSessionId } from "@/lib/sessionState";
 import { createAndActivateSession, resolveDefaultSessionAgentId } from "@/lib/sessionFactory";
 import { compactLlmRequestConfig, mergeLlmRequestConfigs } from "@/lib/llmRequestConfig";
 import { normalizeCanonicalReasoningEffort } from "@/lib/modelCapabilities";
+import { toggleId } from "@/lib/idLists";
 import { parseModelRef, toModelRef } from "@/lib/modelRefs";
 
 const logger = createLogger("chat-context");
@@ -192,6 +193,38 @@ export function useChatSessionData({ onDebugOpen, setDebugOpen }: Options) {
     await loadContextData(nextSession.id);
   }, [loadContextData, loadModels, session]);
 
+  const updateActiveCapabilityIds = useCallback(async (
+    field: "activeMcpIds" | "activeToolIds" | "activeSkillIds",
+    id: string,
+    enabled: boolean,
+    errorMessage: string,
+  ) => {
+    if (!session) return;
+    try {
+      await updateSessionAndSet({
+        [field]: toggleId(session[field], id, enabled),
+      });
+    } catch (err) {
+      logger.error(errorMessage, err);
+    }
+  }, [session, updateSessionAndSet]);
+
+  const updateCommonRequestConfig = useCallback(async (
+    patch: NonNullable<LlmRequestConfig["common"]>,
+    errorMessage: string,
+  ) => {
+    if (!session) return;
+    try {
+      await updateSessionAndSet({
+        llmRequestConfig: compactLlmRequestConfig(mergeLlmRequestConfigs(session.llmRequestConfig, {
+          common: patch,
+        })),
+      });
+    } catch (err) {
+      logger.error(errorMessage, err);
+    }
+  }, [session, updateSessionAndSet]);
+
   const handleModelSwitch = useCallback(async (modelRef: string) => {
     if (!session) return;
     const parsed = parseModelRef(modelRef);
@@ -205,73 +238,28 @@ export function useChatSessionData({ onDebugOpen, setDebugOpen }: Options) {
   }, [session, updateSessionAndSet]);
 
   const handleMcpToggle = useCallback(async (mcpId: string, enabled: boolean) => {
-    if (!session) return;
-    try {
-      await updateSessionAndSet({
-        activeMcpIds: enabled
-          ? [...session.activeMcpIds, mcpId]
-          : session.activeMcpIds.filter((id) => id !== mcpId),
-      });
-    } catch (err) {
-      logger.error("Failed to toggle MCP:", err);
-    }
-  }, [session, updateSessionAndSet]);
+    await updateActiveCapabilityIds("activeMcpIds", mcpId, enabled, "Failed to toggle MCP:");
+  }, [updateActiveCapabilityIds]);
 
   const handleToolToggle = useCallback(async (toolId: string, enabled: boolean) => {
-    if (!session) return;
-    try {
-      await updateSessionAndSet({
-        activeToolIds: enabled
-          ? [...session.activeToolIds, toolId]
-          : session.activeToolIds.filter((id) => id !== toolId),
-      });
-    } catch (err) {
-      logger.error("Failed to toggle tool:", err);
-    }
-  }, [session, updateSessionAndSet]);
+    await updateActiveCapabilityIds("activeToolIds", toolId, enabled, "Failed to toggle tool:");
+  }, [updateActiveCapabilityIds]);
 
   const handleSkillToggle = useCallback(async (skillId: string, enabled: boolean) => {
-    if (!session) return;
-    try {
-      await updateSessionAndSet({
-        activeSkillIds: enabled
-          ? [...session.activeSkillIds, skillId]
-          : session.activeSkillIds.filter((id) => id !== skillId),
-      });
-    } catch (err) {
-      logger.error("Failed to toggle skill:", err);
-    }
-  }, [session, updateSessionAndSet]);
+    await updateActiveCapabilityIds("activeSkillIds", skillId, enabled, "Failed to toggle skill:");
+  }, [updateActiveCapabilityIds]);
 
   const handleReasoningEffort = useCallback(async (value: string) => {
-    if (!session) return;
-    try {
-      await updateSessionAndSet({
-        llmRequestConfig: compactLlmRequestConfig(mergeLlmRequestConfigs(session.llmRequestConfig, {
-          common: {
-            reasoningEffort: normalizeCanonicalReasoningEffort(value),
-          },
-        })),
-      });
-    } catch (err) {
-      logger.error("Failed to set reasoning:", err);
-    }
-  }, [session, updateSessionAndSet]);
+    await updateCommonRequestConfig({
+      reasoningEffort: normalizeCanonicalReasoningEffort(value),
+    }, "Failed to set reasoning:");
+  }, [updateCommonRequestConfig]);
 
   const handleTemperature = useCallback(async (value: string) => {
-    if (!session) return;
-    try {
-      await updateSessionAndSet({
-        llmRequestConfig: compactLlmRequestConfig(mergeLlmRequestConfigs(session.llmRequestConfig, {
-          common: {
-            temperature: Number(value),
-          },
-        })),
-      });
-    } catch (err) {
-      logger.error("Failed to set temperature:", err);
-    }
-  }, [session, updateSessionAndSet]);
+    await updateCommonRequestConfig({
+      temperature: Number(value),
+    }, "Failed to set temperature:");
+  }, [updateCommonRequestConfig]);
 
   const handleLlmRequestConfig = useCallback(async (value: LlmRequestConfig | undefined) => {
     if (!session) return;

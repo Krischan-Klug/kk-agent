@@ -3,6 +3,7 @@ import { agent as agentApi, skills as skillsApi } from "@/lib/api";
 import type { Logger } from "@/lib/logger";
 import type { McpListItem, SkillDefinition, UpdateMcpBody } from "@/types/api";
 import { useToggleSet } from "@/hooks/useToggleSet";
+import { toggleId } from "@/lib/idLists";
 import { buildEditForm, type EditForm } from "@/components/mcp/types";
 
 type McpCardCollectionApi = {
@@ -10,6 +11,8 @@ type McpCardCollectionApi = {
   setInstruction: (id: string, instruction: string) => Promise<unknown>;
   update: (id: string, body: UpdateMcpBody) => Promise<unknown>;
 };
+
+export type McpCardCollection = ReturnType<typeof useMcpCardCollection>;
 
 export function useMcpCardCollection(api: McpCardCollectionApi, logger: Logger, label: string) {
   const [items, setItems] = useState<McpListItem[]>([]);
@@ -63,10 +66,7 @@ export function useMcpCardCollection(api: McpCardCollectionApi, logger: Logger, 
   }, [expandedEdit]);
 
   const handleSkillToggle = useCallback(async (item: McpListItem, skillId: string, linked: boolean) => {
-    const current = item.skillIds ?? [];
-    const next = linked
-      ? [...new Set([...current, skillId])]
-      : current.filter((id) => id !== skillId);
+    const next = toggleId(item.skillIds ?? [], skillId, linked);
     try {
       await api.update(item.id, { skillIds: next });
       await loadItems();

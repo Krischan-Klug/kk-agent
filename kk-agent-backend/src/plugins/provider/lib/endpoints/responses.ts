@@ -7,10 +7,10 @@ import type {
   ProviderTransportState,
   ResponsesConversationItem,
   ResponsesTransportState,
-  TokenStats,
   UnifiedRequest,
   UnifiedResponse,
 } from "../types.js";
+import { isPlainObject } from "../object-utils.js";
 import { readSSEStream } from "../sse.js";
 import {
   buildResponsesTools,
@@ -20,19 +20,19 @@ import {
   serializeUserMessageToResponsesInput,
 } from "../helpers.js";
 import { finalizeResponsesOutput, handleResponsesStreamingEvent, normalizeResponsesToolCalls } from "../transport.js";
-import { reasoningBlock, textBlock, toolUseBlock, type TranscriptMessage } from "../../../lib/transcript.js";
-
-type ResponsesUsage = {
-  input_tokens?: number;
-  output_tokens?: number;
-  reasoning_tokens?: number;
-  output_tokens_details?: { reasoning_tokens?: number };
-};
+import { reasoningBlock, textBlock, type TranscriptMessage } from "../../../lib/transcript.js";
+import {
+  consumeProviderStreamError,
+  emitFinalStreamChunks,
+  emitToolUseDeltas,
+  normalizeProviderUsage,
+  type ProviderTokenUsage,
+} from "../provider-common.js";
 
 type ResponsesApiResponse = {
   id?: string;
   output?: Array<Record<string, unknown>>;
-  usage?: ResponsesUsage;
+  usage?: ProviderTokenUsage;
 };
 
 type ContinuationFallback = {
@@ -40,10 +40,6 @@ type ContinuationFallback = {
   to: ContinuationMode;
   reason: string;
 };
-
-function isPlainObject(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
 
 function cloneConversationItem<T extends ResponsesConversationItem | AssembledOutputItem>(item: T): T {
   return structuredClone(item);
@@ -76,16 +72,6 @@ function cloneResponsesState(
     historyItems: state.historyItems.map((item) => cloneConversationItem(item)),
     callIdByToolUseId: { ...state.callIdByToolUseId },
     lastResponseId: state.lastResponseId,
-  };
-}
-
-function normalizeUsage(usage?: ResponsesUsage): TokenStats | undefined {
-  if (!usage) return undefined;
-  return {
-    inputTokens: usage.input_tokens ?? 0,
-    outputTokens: usage.output_tokens ?? 0,
-    reasoningTokens: usage.reasoning_tokens ?? usage.output_tokens_details?.reasoning_tokens ?? 0,
-    source: "provider",
   };
 }
 
@@ -316,7 +302,7 @@ export async function chat(
   const turn = finalizeResponsesOutput({
     messageId: randomUUID(),
     output,
-    usage: normalizeUsage(data.usage),
+    usage: normalizeProviderUsage(data.usage),
     tools: request.tools,
     supportsConcatenatedJsonSplit: request.transportProfile?.supportsConcatenatedJsonSplit ?? true,
   });
@@ -353,33 +339,15 @@ export async function chatStream(
   const messageId = randomUUID();
   const providerNotices: ProviderNotice[] = [...posted.notices];
   let output: Array<Record<string, unknown> & { type: string }> = [];
-  let usage: ResponsesUsage | undefined;
+  let usage: ProviderTokenUsage | undefined;
   let responseId: string | undefined;
   const emittedToolUseIds = new Set<string>();
   let fatalStreamError: string | undefined;
 
   await readSSEStream(posted.res, (parsed) => {
-    if (parsed.error && typeof parsed.error === "object") {
-      const message =
-        "message" in parsed.error && typeof parsed.error.message === "string"
-          ? parsed.error.message
-          : JSON.stringify(parsed.error);
-      const isToolCallWarning = message.includes("tool call");
-      providerNotices.push({
-        level: isToolCallWarning ? "warning" : "error",
-        message: `Provider stream stopped early: ${message}`,
-      });
-      if (!isToolCallWarning) fatalStreamError = message;
-      return true;
-    }
-
-    if (parsed.type === "error" && typeof parsed.message === "string") {
-      const isToolCallWarning = parsed.message.includes("tool call");
-      providerNotices.push({
-        level: isToolCallWarning ? "warning" : "error",
-        message: `Provider stream stopped early: ${parsed.message}`,
-      });
-      if (!isToolCallWarning) fatalStreamError = parsed.message;
+    const streamError = consumeProviderStreamError(parsed, providerNotices);
+    if (streamError.handled) {
+      fatalStreamError = streamError.fatalError ?? fatalStreamError;
       return true;
     }
 
@@ -401,15 +369,7 @@ export async function chatStream(
         tools: request.tools,
         supportsConcatenatedJsonSplit: request.transportProfile?.supportsConcatenatedJsonSplit ?? true,
       }).toolCalls;
-      for (const toolCall of normalizedToolCalls) {
-        if (emittedToolUseIds.has(toolCall.id)) continue;
-        emittedToolUseIds.add(toolCall.id);
-        onChunk({
-          type: "assistant_block_delta",
-          messageId,
-          block: toolUseBlock(toolCall.id, toolCall.name, toolCall.arguments),
-        });
-      }
+      emitToolUseDeltas(normalizedToolCalls, emittedToolUseIds, messageId, onChunk);
     }
 
     if (next.metadata?.error) {
@@ -422,7 +382,7 @@ export async function chatStream(
     }
 
     if (next.metadata?.usage) {
-      usage = next.metadata.usage as ResponsesUsage;
+      usage = next.metadata.usage as ProviderTokenUsage;
     }
     if (typeof next.metadata?.responseId === "string") {
       responseId = next.metadata.responseId;
@@ -438,7 +398,7 @@ export async function chatStream(
   const turn = finalizeResponsesOutput({
     messageId,
     output,
-    usage: normalizeUsage(usage),
+    usage: normalizeProviderUsage(usage),
     tools: request.tools,
     supportsConcatenatedJsonSplit: request.transportProfile?.supportsConcatenatedJsonSplit ?? true,
   });
@@ -460,8 +420,6 @@ export async function chatStream(
   if (prepared.notices.length > 0 || providerNotices.length > 0) {
     response.notices = [...prepared.notices, ...providerNotices, ...(response.notices ?? [])];
   }
-  onChunk({ type: "assistant_message", message: response.message, finishReason: response.finishReason });
-  if (response.stats) onChunk({ type: "stats", stats: response.stats });
-  onChunk({ type: "done", finishReason: response.finishReason });
+  emitFinalStreamChunks(response, onChunk);
   return response;
 }

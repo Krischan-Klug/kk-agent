@@ -20,6 +20,7 @@ import TextArea from "@/components/TextArea";
 import CapabilitySelect from "@/components/CapabilitySelect";
 import LlmRequestConfigEditor from "@/components/LlmRequestConfigEditor";
 import SelectMenu, { type SelectMenuOption } from "@/components/SelectMenu";
+import { InputLikeSelect } from "@/components/FormControls.styled";
 import { getSessionModelRef } from "@/lib/modelRefs";
 
 export type ChatDebugTab = "prompt" | "meta" | "tools" | "mcps" | "skills" | "session" | "messages" | "tasks" | "memory";
@@ -101,21 +102,6 @@ const TaskRow = styled.div`
   }
 `;
 
-const InlineSelect = styled.select`
-  width: 100%;
-  padding: 8px 12px;
-  background: var(--bg-elevated);
-  color: var(--text-primary);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
-  font-size: var(--font-size-base);
-  outline: none;
-
-  &:focus {
-    border-color: var(--border-focus);
-  }
-`;
-
 const RowActions = styled.div`
   display: flex;
   gap: var(--space-sm);
@@ -168,6 +154,15 @@ function parseFactsDraft(value: string): MemoryFact[] {
 
 function toFactDraft(facts: MemoryFact[]): string {
   return facts.map((fact) => fact.text).join("\n");
+}
+
+function renderToolParameters(inputSchema?: { properties?: unknown }): string {
+  const properties = inputSchema?.properties as Record<string, { type?: string; description?: string }> | undefined;
+  return properties
+    ? Object.entries(properties)
+        .map(([key, value]) => `    ${key}: ${value.type ?? "any"} - ${value.description ?? ""}`)
+        .join("\n")
+    : "    (no parameters)";
 }
 
 export default function ChatDebugPanel({
@@ -269,11 +264,7 @@ export default function ChatDebugPanel({
     if (tools.length === 0) return "No currently available runtime tools.";
     return tools
       .map((tool) => {
-        const params = tool.inputSchema?.properties
-          ? Object.entries(tool.inputSchema.properties as Record<string, { type?: string; description?: string }>)
-              .map(([key, value]) => `    ${key}: ${value.type ?? "any"} - ${value.description ?? ""}`)
-              .join("\n")
-          : "    (no parameters)";
+        const params = renderToolParameters(tool.inputSchema);
         return `-- ${tool.name} [${tool.source}:${tool.capabilityId}] --\n${tool.description}\n${params}`;
       })
       .join("\n\n");
@@ -288,11 +279,7 @@ export default function ChatDebugPanel({
         const tools = mcp.tools.length === 0
           ? "  (no tools)"
           : mcp.tools.map((tool) => {
-              const params = tool.inputSchema?.properties
-                ? Object.entries(tool.inputSchema.properties as Record<string, { type?: string; description?: string }>)
-                    .map(([key, value]) => `    ${key}: ${value.type ?? "any"} - ${value.description ?? ""}`)
-                    .join("\n")
-                : "    (no parameters)";
+              const params = renderToolParameters(tool.inputSchema);
               return `  ${tool.name}\n    ${tool.description ?? ""}\n${params}`;
             }).join("\n\n");
         return `${header}\nsource=${mcp.source ?? "custom"} active=${mcp.active} running=${mcp.running}\n${mcp.instruction}\n\n${tools}`;
@@ -474,14 +461,14 @@ export default function ChatDebugPanel({
                 onChange={(e) => updateTask(index, { title: e.target.value })}
                 placeholder="Task title"
               />
-              <InlineSelect
+              <InputLikeSelect
                 value={task.status}
                 onChange={(e) => updateTask(index, { status: e.target.value as TaskItem["status"] })}
               >
                 <option value="pending">pending</option>
                 <option value="in_progress">in_progress</option>
                 <option value="completed">completed</option>
-              </InlineSelect>
+              </InputLikeSelect>
               <Input
                 value={task.notes ?? ""}
                 onChange={(e) => updateTask(index, { notes: e.target.value })}

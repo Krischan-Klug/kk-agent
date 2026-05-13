@@ -37,7 +37,7 @@ export default function AgentList({ agents, mcps, selectedId, onSelect, onCreate
             <SidebarMeta>
               {capabilityIds.length > 0 && (
                 <Badge variant="success">
-                  {capabilityIds.map((id) => mcps.find((mcp) => mcp.id === id)?.emoji || "ðŸ› ï¸").join("")}
+                  {capabilityIds.map((id) => mcps.find((mcp) => mcp.id === id)?.emoji || "T").join("")}
                 </Badge>
               )}
             </SidebarMeta>

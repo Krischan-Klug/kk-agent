@@ -1,12 +1,11 @@
-import type { McpServerConfig } from "../../../mcp/types.js";
 import { getDefaultPathForScope } from "../access-paths.js";
+import { defineSystemMcp } from "../system-definition.js";
 
 const DEFAULT_FILESYSTEM_ROOT = getDefaultPathForScope("user");
 
-export const filesystemDefinition: McpServerConfig = {
+export const filesystemDefinition = defineSystemMcp({
   id: "filesystem",
   name: "Filesystem",
-  active: true,
   instruction:
     "Use Read, Edit, Write, Glob, and Grep for local filesystem work. " +
     "Always use Read before Edit or existing-file Write. " +
@@ -17,13 +16,9 @@ export const filesystemDefinition: McpServerConfig = {
     "When output is truncated, narrow the read with offset, limit, head_limit, or path. " +
     "Prefer absolute paths and always stay inside the allowed root.",
   emoji: "📁",
-  source: "system",
-  systemKey: "filesystem",
   systemConfig: {
     accessScope: "user",
     basePath: DEFAULT_FILESYSTEM_ROOT,
     resultPolicy: { previewThresholdChars: 16000, previewChars: 2400 },
   },
-  transport: "stdio",
-  server: { command: "internal", args: [] },
-};
+});

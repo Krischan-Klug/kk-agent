@@ -67,16 +67,63 @@ export function getSessionAttachmentUrl(sessionId: string, attachmentId: string)
   return API_TOKEN ? `${url}?apiToken=${encodeURIComponent(API_TOKEN)}` : url;
 }
 
+async function assertOk(res: Response): Promise<void> {
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`${res.status}: ${text}`);
+  }
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`${BASE}${path}`, {
     headers: authHeaders({ "Content-Type": "application/json", ...init?.headers }),
     ...init,
   });
-  if (!res.ok) {
-    const text = await res.text();
-    throw new Error(`${res.status}: ${text}`);
-  }
+  await assertOk(res);
   return res.json() as Promise<T>;
+}
+
+async function requestForm<T>(path: string, form: FormData): Promise<T> {
+  const res = await fetch(`${BASE}${path}`, {
+    method: "POST",
+    headers: authHeaders(),
+    body: form,
+  });
+  await assertOk(res);
+  return res.json() as Promise<T>;
+}
+
+async function readSseJsonStream<T>(
+  res: Response,
+  onEvent: (event: T) => void,
+  signal?: AbortSignal,
+): Promise<void> {
+  if (!res.body) return;
+
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+
+  while (true) {
+    if (signal?.aborted) break;
+    const { done, value } = await reader.read();
+    if (done) break;
+
+    buffer += decoder.decode(value, { stream: true });
+    const lines = buffer.split("\n");
+    buffer = lines.pop() ?? "";
+
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (!trimmed.startsWith("data: ")) continue;
+      try {
+        const event = JSON.parse(trimmed.slice(6)) as T;
+        onEvent(event);
+      } catch {
+        // skip malformed lines
+      }
+    }
+  }
 }
 
 export const provider = {
@@ -119,20 +166,32 @@ export const provider = {
     request<{ ok: boolean; error?: string }>(`/provider/providers/${id}/test`, { method: "POST" }),
 };
 
+function capabilityApi(basePath: "/mcp" | "/tools") {
+  return {
+    list: () => request<McpListItem[]>(basePath),
+
+    toggle: (id: string, active: boolean) =>
+      request<McpServerConfig>(`${basePath}/${id}/toggle`, {
+        method: "POST",
+        body: JSON.stringify({ active }),
+      }),
+
+    setInstruction: (id: string, instruction: string) =>
+      request<McpServerConfig>(`${basePath}/${id}/instruction`, {
+        method: "PUT",
+        body: JSON.stringify({ instruction }),
+      }),
+
+    update: (id: string, body: UpdateMcpBody) =>
+      request<McpServerConfig>(`${basePath}/${id}`, {
+        method: "PUT",
+        body: JSON.stringify(body),
+      }),
+  };
+}
+
 export const mcp = {
-  list: () => request<McpListItem[]>("/mcp"),
-
-  toggle: (id: string, active: boolean) =>
-    request<McpServerConfig>(`/mcp/${id}/toggle`, {
-      method: "POST",
-      body: JSON.stringify({ active }),
-    }),
-
-  setInstruction: (id: string, instruction: string) =>
-    request<McpServerConfig>(`/mcp/${id}/instruction`, {
-      method: "PUT",
-      body: JSON.stringify({ instruction }),
-    }),
+  ...capabilityApi("/mcp"),
 
   start: (id: string) =>
     request<{ status: string }>(`/mcp/${id}/start`, { method: "POST" }),
@@ -148,34 +207,11 @@ export const mcp = {
 
   remove: (id: string) =>
     request<{ deleted: boolean }>(`/mcp/${id}`, { method: "DELETE" }),
-
-  update: (id: string, body: UpdateMcpBody) =>
-    request<McpServerConfig>(`/mcp/${id}`, {
-      method: "PUT",
-      body: JSON.stringify(body),
-    }),
 };
 
 export const tools = {
-  list: () => request<McpListItem[]>("/tools"),
+  ...capabilityApi("/tools"),
 
-  toggle: (id: string, active: boolean) =>
-    request<McpServerConfig>(`/tools/${id}/toggle`, {
-      method: "POST",
-      body: JSON.stringify({ active }),
-    }),
-
-  setInstruction: (id: string, instruction: string) =>
-    request<McpServerConfig>(`/tools/${id}/instruction`, {
-      method: "PUT",
-      body: JSON.stringify({ instruction }),
-    }),
-
-  update: (id: string, body: UpdateMcpBody) =>
-    request<McpServerConfig>(`/tools/${id}`, {
-      method: "PUT",
-      body: JSON.stringify(body),
-    }),
   listTasks: (sessionId: string) =>
     request<{ tasks: TaskItem[] }>(`/tools/task/session/${sessionId}`),
 
@@ -240,30 +276,7 @@ export const agent = {
           signal: controller.signal,
         });
         if (!res.ok || !res.body) return;
-
-        const reader = res.body.getReader();
-        const decoder = new TextDecoder();
-        let buffer = "";
-
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-
-          buffer += decoder.decode(value, { stream: true });
-          const lines = buffer.split("\n");
-          buffer = lines.pop() ?? "";
-
-          for (const line of lines) {
-            const trimmed = line.trim();
-            if (!trimmed.startsWith("data: ")) continue;
-            try {
-              const state = JSON.parse(trimmed.slice(6)) as AgentLoopState;
-              onEvent(state);
-            } catch {
-              // skip
-            }
-          }
-        }
+        await readSseJsonStream(res, onEvent, controller.signal);
       } catch {
         // aborted or network error
       }
@@ -276,22 +289,13 @@ export const agent = {
 export const skills = {
   list: () => request<SkillDefinition[]>("/skills"),
 
-  importBundle: async (files: Array<{ file: File; path: string }>): Promise<ImportSkillResult> => {
+  importBundle: (files: Array<{ file: File; path: string }>): Promise<ImportSkillResult> => {
     const form = new FormData();
     for (const entry of files) {
       form.append("files", entry.file, entry.file.name);
       form.append("paths", entry.path);
     }
-    const res = await fetch(`${BASE}/skills/import`, {
-      method: "POST",
-      headers: authHeaders(),
-      body: form,
-    });
-    if (!res.ok) {
-      const text = await res.text();
-      throw new Error(`${res.status}: ${text}`);
-    }
-    return res.json() as Promise<ImportSkillResult>;
+    return requestForm("/skills/import", form);
   },
 
   create: (body: CreateSkillBody) =>
@@ -364,19 +368,10 @@ export const session = {
       body: JSON.stringify({ promptId, selectedKey }),
     }),
 
-  uploadAttachment: async (sessionId: string, file: File): Promise<AttachmentMeta> => {
+  uploadAttachment: (sessionId: string, file: File): Promise<AttachmentMeta> => {
     const form = new FormData();
     form.append("file", file);
-    const res = await fetch(`${BASE}/session/${sessionId}/attachments`, {
-      method: "POST",
-      headers: authHeaders(),
-      body: form,
-    });
-    if (!res.ok) {
-      const text = await res.text();
-      throw new Error(`${res.status}: ${text}`);
-    }
-    return res.json() as Promise<AttachmentMeta>;
+    return requestForm(`/session/${sessionId}/attachments`, form);
   },
 
   chatStream: async (
@@ -391,36 +386,9 @@ export const session = {
       body: JSON.stringify({ message, attachmentIds }),
     });
 
-    if (!res.ok) {
-      const text = await res.text();
-      throw new Error(`${res.status}: ${text}`);
-    }
-
+    await assertOk(res);
     if (!res.body) throw new Error("No response body");
-
-    const reader = res.body.getReader();
-    const decoder = new TextDecoder();
-    let buffer = "";
-
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-
-      buffer += decoder.decode(value, { stream: true });
-      const lines = buffer.split("\n");
-      buffer = lines.pop() ?? "";
-
-      for (const line of lines) {
-        const trimmed = line.trim();
-        if (!trimmed.startsWith("data: ")) continue;
-        try {
-          const event = JSON.parse(trimmed.slice(6)) as StreamEvent;
-          onEvent(event);
-        } catch {
-          // skip malformed lines
-        }
-      }
-    }
+    await readSseJsonStream(res, onEvent);
   },
 
   abort: async (id: string): Promise<{ ok: boolean }> => {

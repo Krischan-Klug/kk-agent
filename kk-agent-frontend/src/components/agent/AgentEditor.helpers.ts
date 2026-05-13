@@ -6,18 +6,9 @@ import type {
   McpListItem,
   ModeBehavior,
 } from "@/types/api";
+export { PROMPT_SECTION_META } from "@/lib/promptSections";
 
 export const MODE_BEHAVIORS: ModeBehavior[] = ["plan", "edit", "autonomous"];
-
-export const PROMPT_SECTION_META: Array<{ key: keyof AgentModeConfig["promptSections"]; label: string }> = [
-  { key: "identity", label: "\u{1FAAA} Identity" },
-  { key: "system", label: "\u{1F9E0} System" },
-  { key: "runtime", label: "\u2699\uFE0F Runtime" },
-  { key: "tasks", label: "\u{1F4DD} Tasks" },
-  { key: "security", label: "\u{1F512} Security" },
-  { key: "toolUsage", label: "\u{1F6E0}\uFE0F Tool Usage" },
-  { key: "communication", label: "\u{1F4AC} Communication" },
-];
 
 export const OVERRIDE_EMOJI = "\u270F\uFE0F";
 export const RESET_EMOJI = "\u21BA";

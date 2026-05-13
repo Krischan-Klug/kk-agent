@@ -11,6 +11,7 @@ export type {
   AgentModeConfig,
   AgentPromptSections,
   AppDefaults,
+  AutonomousBudget,
   AttachmentDisplayMeta,
   AttachmentMeta,
   ModeBehavior,

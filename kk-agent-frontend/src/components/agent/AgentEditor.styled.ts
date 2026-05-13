@@ -1,5 +1,6 @@
 import styled from "styled-components";
 import { FormRow } from "@/components/PageForm";
+export { InlineSelect, ModeTab, ModeTabs, Select } from "@/components/FormControls.styled";
 
 export const EditorArea = styled.div`
   flex: 1;
@@ -7,37 +8,6 @@ export const EditorArea = styled.div`
   display: flex;
   flex-direction: column;
   gap: var(--space-lg);
-`;
-
-export const Select = styled.select`
-  padding: 6px 10px;
-  background: var(--bg-elevated);
-  color: var(--text-primary);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  font-size: var(--font-size-sm);
-  font-family: inherit;
-  outline: none;
-
-  &:focus {
-    border-color: var(--border-focus);
-  }
-`;
-
-export const ModeTabs = styled.div`
-  display: flex;
-  gap: var(--space-xs);
-  flex-wrap: wrap;
-`;
-
-export const ModeTab = styled.button<{ $active: boolean }>`
-  padding: 6px 10px;
-  background: ${(p) => (p.$active ? "var(--accent)" : "var(--accent-muted)")};
-  color: ${(p) => (p.$active ? "var(--bg-base)" : "var(--accent)")};
-  border: 1px solid var(--accent);
-  border-radius: var(--radius-sm);
-  font-size: var(--font-size-sm);
-  cursor: pointer;
 `;
 
 export const ModeTabContent = styled.span`
@@ -165,21 +135,6 @@ export const IconActionButton = styled.button`
 
   &:hover {
     color: var(--accent);
-  }
-`;
-
-export const InlineSelect = styled.select`
-  padding: 4px 8px;
-  background: var(--bg-elevated);
-  color: var(--text-primary);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  font-size: var(--font-size-xs);
-  font-family: inherit;
-  outline: none;
-
-  &:focus {
-    border-color: var(--accent);
   }
 `;
 

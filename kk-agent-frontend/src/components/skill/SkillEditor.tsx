@@ -14,6 +14,7 @@ import {
   SectionTitle,
   SurfaceBox,
 } from "@/components/PageForm";
+import { toggleId } from "@/lib/idLists";
 import type { SkillUsage } from "./SkillList";
 
 const EditorArea = styled.div`
@@ -91,8 +92,42 @@ export function toUpdateBody(draft: SkillDraft): UpdateSkillBody {
   return toCreateBody(draft);
 }
 
-function toggleEntry(list: string[], value: string, enabled: boolean): string[] {
-  return enabled ? [...new Set([...list, value])] : list.filter((entry) => entry !== value);
+type LinkedCapabilitySectionProps = {
+  title: string;
+  items: Array<{ id: string; name: string }>;
+  selectedIds: string[];
+  emptyHint: string;
+  onChange: (ids: string[]) => void;
+};
+
+function LinkedCapabilitySection({
+  title,
+  items,
+  selectedIds,
+  emptyHint,
+  onChange,
+}: LinkedCapabilitySectionProps) {
+  return (
+    <Section>
+      <SectionTitle>{title}</SectionTitle>
+      {items.length > 0 ? (
+        <ToggleGrid>
+          {items.map((item) => (
+            <ToggleCard key={item.id}>
+              <input
+                type="checkbox"
+                checked={selectedIds.includes(item.id)}
+                onChange={(event) => onChange(toggleId(selectedIds, item.id, event.target.checked))}
+              />
+              <span>{item.name}</span>
+            </ToggleCard>
+          ))}
+        </ToggleGrid>
+      ) : (
+        <EmptyHint>{emptyHint}</EmptyHint>
+      )}
+    </Section>
+  );
 }
 
 type Props = {
@@ -179,51 +214,21 @@ export default function SkillEditor({
         </FormField>
       </Section>
 
-      <Section>
-        <SectionTitle>Linked internal tools</SectionTitle>
-        {internalTools.length > 0 ? (
-          <ToggleGrid>
-            {internalTools.map((tool) => (
-              <ToggleCard key={tool.id}>
-                <input
-                  type="checkbox"
-                  checked={draft.linkedToolIds.includes(tool.id)}
-                  onChange={(e) => onChange({
-                    ...draft,
-                    linkedToolIds: toggleEntry(draft.linkedToolIds, tool.id, e.target.checked),
-                  })}
-                />
-                <span>{tool.name}</span>
-              </ToggleCard>
-            ))}
-          </ToggleGrid>
-        ) : (
-          <EmptyHint>No internal tools present.</EmptyHint>
-        )}
-      </Section>
+      <LinkedCapabilitySection
+        title="Linked internal tools"
+        items={internalTools}
+        selectedIds={draft.linkedToolIds}
+        emptyHint="No internal tools present."
+        onChange={(linkedToolIds) => onChange({ ...draft, linkedToolIds })}
+      />
 
-      <Section>
-        <SectionTitle>Linked MCPs</SectionTitle>
-        {mcps.length > 0 ? (
-          <ToggleGrid>
-            {mcps.map((mcp) => (
-              <ToggleCard key={mcp.id}>
-                <input
-                  type="checkbox"
-                  checked={draft.linkedMcpIds.includes(mcp.id)}
-                  onChange={(e) => onChange({
-                    ...draft,
-                    linkedMcpIds: toggleEntry(draft.linkedMcpIds, mcp.id, e.target.checked),
-                  })}
-                />
-                <span>{mcp.name}</span>
-              </ToggleCard>
-            ))}
-          </ToggleGrid>
-        ) : (
-          <EmptyHint>No MCPs present.</EmptyHint>
-        )}
-      </Section>
+      <LinkedCapabilitySection
+        title="Linked MCPs"
+        items={mcps}
+        selectedIds={draft.linkedMcpIds}
+        emptyHint="No MCPs present."
+        onChange={(linkedMcpIds) => onChange({ ...draft, linkedMcpIds })}
+      />
 
       {!isCreateMode && (
         <Section>

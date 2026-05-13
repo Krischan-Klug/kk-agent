@@ -147,6 +147,11 @@ async function runModelPass(
   return response;
 }
 
+async function discardAndDrainTools(executor: StreamingToolExecutor, reason: string): Promise<void> {
+  executor.discardPending(reason);
+  await executor.getFinalResults().catch(() => []);
+}
+
 export async function runAgentLoop(opts: LoopOptions): Promise<LoopResult> {
   const messages: TranscriptMessage[] = [...opts.messages];
   const loopState = buildLoopState(opts);
@@ -248,23 +253,20 @@ export async function runAgentLoop(opts: LoopOptions): Promise<LoopResult> {
         break;
       } catch (error) {
         if (error instanceof AbortedError) {
-          executor.discardPending("Tool execution aborted by user.");
-          await executor.getFinalResults().catch(() => []);
+          await discardAndDrainTools(executor, "Tool execution aborted by user.");
           throw error;
         }
         const classified = classifyProviderError(error);
         if (classified.kind === "prompt_too_long") {
           if (ptlRetries >= PTL_RETRY_BUDGET) {
-            executor.discardPending("Provider stream failed after repeated prompt_too_long.");
-            await executor.getFinalResults().catch(() => []);
+            await discardAndDrainTools(executor, "Provider stream failed after repeated prompt_too_long.");
             throw error;
           }
           const before = estimateTranscriptChars(messages);
           const target = Math.max(2000, Math.floor(before * PTL_SNIP_TARGET_RATIO));
           const snipped = snipOldestToolCycles(messages, target);
           if (snipped.removed === 0) {
-            executor.discardPending("Provider context length exceeded and transcript cannot be trimmed further.");
-            await executor.getFinalResults().catch(() => []);
+            await discardAndDrainTools(executor, "Provider context length exceeded and transcript cannot be trimmed further.");
             throw error;
           }
           ptlRetries++;
@@ -281,8 +283,7 @@ export async function runAgentLoop(opts: LoopOptions): Promise<LoopResult> {
         }
         if (classified.kind === "rate_limit" || classified.kind === "transient") {
           if (transientRetries >= TRANSIENT_RETRY_BUDGET) {
-            executor.discardPending("Tool execution was discarded because the provider stream failed.");
-            await executor.getFinalResults().catch(() => []);
+            await discardAndDrainTools(executor, "Tool execution was discarded because the provider stream failed.");
             throw error;
           }
           transientRetries++;
@@ -295,8 +296,7 @@ export async function runAgentLoop(opts: LoopOptions): Promise<LoopResult> {
           streamedToolUseIds.clear();
           continue;
         }
-        executor.discardPending("Tool execution was discarded because the provider stream failed.");
-        await executor.getFinalResults().catch(() => []);
+        await discardAndDrainTools(executor, "Tool execution was discarded because the provider stream failed.");
         throw error;
       }
     }

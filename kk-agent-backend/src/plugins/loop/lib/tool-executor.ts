@@ -105,15 +105,7 @@ export class StreamingToolExecutor {
 
     if (!runtimeTool) {
       const message = `Tool "${toolUse.name}" is not available in the current runtime configuration.`;
-      tracked.result = { content: message, isError: true };
-      tracked.streamedResult = toSyntheticErrorMessage(toolUse, message);
-      tracked.finalResult = tracked.streamedResult;
-      this.emitUpdate(tracked, {
-        status: "invalid",
-        result: tracked.streamedResult,
-        detail: message,
-      });
-      this.flushReadyResults();
+      this.finishWithSyntheticError(tracked, "invalid", message);
       return;
     }
 
@@ -130,15 +122,7 @@ export class StreamingToolExecutor {
       if (tracked.yielded || tracked.status === "completed" || tracked.status === "error" || tracked.status === "invalid") {
         continue;
       }
-      tracked.status = "discarded";
-      tracked.result = { content: reason, isError: true };
-      tracked.streamedResult = toSyntheticErrorMessage(tracked.toolUse, reason);
-      tracked.finalResult = tracked.streamedResult;
-      this.emitUpdate(tracked, {
-        status: "discarded",
-        result: tracked.streamedResult,
-        detail: reason,
-      });
+      this.finishWithSyntheticError(tracked, "discarded", reason, { flush: false });
     }
   }
 
@@ -207,6 +191,28 @@ export class StreamingToolExecutor {
     });
   }
 
+  private finishWithSyntheticError(
+    tracked: TrackedTool,
+    status: Extract<ToolExecutionStatus, "discarded" | "error" | "invalid">,
+    message: string,
+    options: { emit?: boolean; flush?: boolean } = {},
+  ): void {
+    const emit = options.emit ?? true;
+    const flush = options.flush ?? true;
+    tracked.status = status;
+    tracked.result = { content: message, isError: true };
+    tracked.streamedResult = toSyntheticErrorMessage(tracked.toolUse, message);
+    tracked.finalResult = tracked.streamedResult;
+    if (emit) {
+      this.emitUpdate(tracked, {
+        status,
+        result: tracked.streamedResult,
+        detail: message,
+      });
+    }
+    if (flush) this.flushReadyResults();
+  }
+
   private async processQueue(): Promise<void> {
     while (true) {
       const executing = this.tools.filter((entry) => entry.status === "executing");
@@ -227,10 +233,10 @@ export class StreamingToolExecutor {
 
     tracked.promise = (async () => {
       if (this.discarded) {
-        const message = "Tool execution was discarded before start.";
-        tracked.status = "discarded";
-        tracked.result = { content: message, isError: true };
-        tracked.streamedResult = toSyntheticErrorMessage(tracked.toolUse, message);
+        this.finishWithSyntheticError(tracked, "discarded", "Tool execution was discarded before start.", {
+          emit: false,
+          flush: false,
+        });
         return;
       }
 
@@ -242,15 +248,7 @@ export class StreamingToolExecutor {
       const permission = await this.resolveToolPermission(runtimeTool, tracked.toolUse.name, executionInput, this.mode);
       if (!permission.allowed) {
         const message = permission.reason ?? `Tool "${tracked.toolUse.name}" was blocked by runtime permissions.`;
-        tracked.status = "error";
-        tracked.result = { content: message, isError: true };
-        tracked.streamedResult = toSyntheticErrorMessage(tracked.toolUse, message);
-        this.emitUpdate(tracked, {
-          status: "error",
-          result: tracked.streamedResult,
-          detail: message,
-        });
-        this.flushReadyResults();
+        this.finishWithSyntheticError(tracked, "error", message);
         return;
       }
 
@@ -262,16 +260,7 @@ export class StreamingToolExecutor {
           this.runtimeContext,
         );
         if (this.discarded) {
-          const message = "Tool execution was discarded after completion.";
-          tracked.status = "discarded";
-          tracked.result = { content: message, isError: true };
-          tracked.streamedResult = toSyntheticErrorMessage(tracked.toolUse, message);
-          this.emitUpdate(tracked, {
-            status: "discarded",
-            result: tracked.streamedResult,
-            detail: message,
-          });
-          this.flushReadyResults();
+          this.finishWithSyntheticError(tracked, "discarded", "Tool execution was discarded after completion.");
           return;
         }
 
@@ -300,16 +289,7 @@ export class StreamingToolExecutor {
         });
         this.flushReadyResults();
       } catch (error) {
-        const message = getErrorMessage(error);
-        tracked.status = "error";
-        tracked.result = { content: message, isError: true };
-        tracked.streamedResult = toSyntheticErrorMessage(tracked.toolUse, message);
-        this.emitUpdate(tracked, {
-          status: "error",
-          result: tracked.streamedResult,
-          detail: message,
-        });
-        this.flushReadyResults();
+        this.finishWithSyntheticError(tracked, "error", getErrorMessage(error));
       } finally {
         void this.processQueue();
       }

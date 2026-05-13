@@ -1,10 +1,9 @@
-import type { McpServerConfig } from "../../../mcp/types.js";
+import { defineSystemMcp } from "../system-definition.js";
 
-export const skillDefinition: McpServerConfig = {
+export const skillDefinition = defineSystemMcp({
   id: "skill",
   name: "Skill",
   emoji: "📚",
-  active: true,
   instruction: [
     "Use Skill to load a listed skill before following its workflow.",
     "Use CreateSkill when the user wants a reusable local skill created or rewritten.",
@@ -16,8 +15,4 @@ export const skillDefinition: McpServerConfig = {
     "With CreateSkill, provide only name, description, and instruction. The tool writes the bundle format for you.",
     "CreateSkill only writes the bundle. Load the new skill separately with Skill if you want to use it immediately.",
   ].join(" "),
-  source: "system",
-  systemKey: "skill",
-  transport: "stdio",
-  server: { command: "internal", args: [] },
-};
+});

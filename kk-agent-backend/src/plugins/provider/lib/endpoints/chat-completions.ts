@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import type { OnChunkFn, TokenStats, UnifiedRequest, UnifiedResponse } from "../types.js";
+import type { OnChunkFn, ProviderNotice, UnifiedRequest, UnifiedResponse } from "../types.js";
 import { readSSEStream } from "../sse.js";
 import {
   buildChatCompletionsBody,
@@ -7,28 +7,15 @@ import {
   mapFinishReason,
 } from "../helpers.js";
 import { finalizeChatCompletionsTurn, normalizeChatCompletionsToolCalls } from "../transport.js";
-import { reasoningBlock, textBlock, toolUseBlock } from "../../../lib/transcript.js";
-
-type ChatCompletionUsage = {
-  prompt_tokens?: number;
-  completion_tokens?: number;
-  reasoning_tokens?: number;
-  completion_tokens_details?: { reasoning_tokens?: number };
-};
-
-function isChatCompletionUsage(value: unknown): value is ChatCompletionUsage {
-  return value !== null && typeof value === "object" && ("prompt_tokens" in value || "completion_tokens" in value);
-}
-
-function normalizeUsage(usage?: ChatCompletionUsage): TokenStats | undefined {
-  if (!usage) return undefined;
-  return {
-    inputTokens: usage.prompt_tokens ?? 0,
-    outputTokens: usage.completion_tokens ?? 0,
-    reasoningTokens: usage.reasoning_tokens ?? usage.completion_tokens_details?.reasoning_tokens ?? 0,
-    source: "provider",
-  };
-}
+import { reasoningBlock, textBlock } from "../../../lib/transcript.js";
+import {
+  consumeProviderStreamError,
+  emitFinalStreamChunks,
+  emitToolUseDeltas,
+  isProviderTokenUsage,
+  normalizeProviderUsage,
+  type ProviderTokenUsage,
+} from "../provider-common.js";
 
 export async function chat(
   request: UnifiedRequest,
@@ -55,7 +42,7 @@ export async function chat(
       };
       finish_reason?: string | null;
     }>;
-    usage?: ChatCompletionUsage;
+    usage?: ProviderTokenUsage;
   };
 
   const choice = data.choices[0];
@@ -70,7 +57,7 @@ export async function chat(
       index,
     })),
     finishReason: mapFinishReason(choice?.finish_reason),
-    usage: normalizeUsage(data.usage),
+    usage: normalizeProviderUsage(data.usage),
     tools: request.tools,
     supportsConcatenatedJsonSplit: true,
   });
@@ -105,35 +92,17 @@ export async function chatStream(
   const messageId = randomUUID();
   const rawToolCalls = new Map<number, { id?: string; name?: string; rawArguments?: string; index: number }>();
   const emittedToolUseIds = new Set<string>();
-  const providerNotices: Array<{ level: "info" | "warning" | "error"; message: string }> = [];
+  const providerNotices: ProviderNotice[] = [];
   let text = "";
   let reasoning = "";
   let finishReason: UnifiedResponse["finishReason"] = "stop";
-  let usage: ChatCompletionUsage | undefined;
+  let usage: ProviderTokenUsage | undefined;
   let fatalStreamError: string | undefined;
 
   await readSSEStream(res, (parsed) => {
-    if (parsed.error && typeof parsed.error === "object") {
-      const message =
-        "message" in parsed.error && typeof parsed.error.message === "string"
-          ? parsed.error.message
-          : JSON.stringify(parsed.error);
-      const isToolCallWarning = message.includes("tool call");
-      providerNotices.push({
-        level: isToolCallWarning ? "warning" : "error",
-        message: `Provider stream stopped early: ${message}`,
-      });
-      if (!isToolCallWarning) fatalStreamError = message;
-      return true;
-    }
-
-    if (parsed.type === "error" && typeof parsed.message === "string") {
-      const isToolCallWarning = parsed.message.includes("tool call");
-      providerNotices.push({
-        level: isToolCallWarning ? "warning" : "error",
-        message: `Provider stream stopped early: ${parsed.message}`,
-      });
-      if (!isToolCallWarning) fatalStreamError = parsed.message;
+    const streamError = consumeProviderStreamError(parsed, providerNotices);
+    if (streamError.handled) {
+      fatalStreamError = streamError.fatalError ?? fatalStreamError;
       return true;
     }
 
@@ -149,12 +118,12 @@ export async function chatStream(
       | undefined;
     const choice = choices?.[0];
     if (!choice) {
-      if (isChatCompletionUsage(parsed.usage)) usage = parsed.usage;
+      if (isProviderTokenUsage(parsed.usage)) usage = parsed.usage;
       return false;
     }
 
     const delta = choice.delta;
-    if (isChatCompletionUsage(parsed.usage)) usage = parsed.usage;
+    if (isProviderTokenUsage(parsed.usage)) usage = parsed.usage;
     finishReason = mapFinishReason(choice.finish_reason);
 
     if (typeof delta?.reasoning_content === "string" && delta.reasoning_content.length > 0) {
@@ -183,15 +152,7 @@ export async function chatStream(
         tools: request.tools,
         supportsConcatenatedJsonSplit: true,
       }).toolCalls;
-      for (const toolCall of normalizedToolCalls) {
-        if (emittedToolUseIds.has(toolCall.id)) continue;
-        emittedToolUseIds.add(toolCall.id);
-        onChunk({
-          type: "assistant_block_delta",
-          messageId,
-          block: toolUseBlock(toolCall.id, toolCall.name, toolCall.arguments),
-        });
-      }
+      emitToolUseDeltas(normalizedToolCalls, emittedToolUseIds, messageId, onChunk);
     }
 
     return false;
@@ -208,7 +169,7 @@ export async function chatStream(
     reasoning,
     rawToolCalls: [...rawToolCalls.values()].sort((left, right) => left.index - right.index),
     finishReason,
-    usage: normalizeUsage(usage),
+    usage: normalizeProviderUsage(usage),
     tools: request.tools,
     supportsConcatenatedJsonSplit: true,
   });
@@ -223,8 +184,6 @@ export async function chatStream(
   if (providerNotices.length > 0) {
     response.notices = [...(response.notices ?? []), ...providerNotices];
   }
-  onChunk({ type: "assistant_message", message: response.message, finishReason: response.finishReason });
-  if (response.stats) onChunk({ type: "stats", stats: response.stats });
-  onChunk({ type: "done", finishReason: response.finishReason });
+  emitFinalStreamChunks(response, onChunk);
   return response;
 }

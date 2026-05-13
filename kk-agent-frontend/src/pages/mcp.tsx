@@ -13,6 +13,8 @@ import McpCardList from "@/components/mcp/McpCardList";
 import CreateMcpModal from "@/components/mcp/CreateMcpModal";
 import { ActionsRow, EmptyHint, MutedText } from "@/components/PageForm";
 import { EMPTY_MCP_FORM } from "@/components/mcp/types";
+import { buildMcpCardBaseProps } from "@/components/mcp/cardProps";
+import { buildCustomMcpUpdateBody } from "@/components/mcp/updateBody";
 
 const logger = createLogger("mcp");
 
@@ -76,20 +78,7 @@ export default function McpPage() {
 
     try {
       await Promise.all([
-        mcpApi.update(mcp.id, {
-          name: form.name,
-          emoji: form.emoji || undefined,
-          ...(mcp.source === "system"
-            ? {
-                systemConfig: {
-                  ...(mcp.systemKey === "filesystem" ? { basePath: form.basePath } : {}),
-                  ...(mcp.systemKey === "terminal" ? { workingDirectory: form.workingDirectory } : {}),
-                },
-              }
-            : mcp.transport === "stdio"
-              ? { command: form.command, args: form.args.split("\n").filter(Boolean), env: {} }
-              : { url: form.url }),
-        }),
+        mcpApi.update(mcp.id, buildCustomMcpUpdateBody(mcp, form)),
         mcpApi.setInstruction(mcp.id, collection.instructions[mcp.id] ?? ""),
       ]);
 
@@ -121,11 +110,7 @@ export default function McpPage() {
           <McpCard
             key={mcp.id}
             mcp={mcp}
-            instruction={collection.instructions[mcp.id] ?? ""}
-            editForm={collection.editForms[mcp.id]}
-            editOpen={collection.expandedEdit.has(mcp.id)}
-            toolsOpen={collection.expandedTools.has(mcp.id)}
-            instructionsOpen={collection.expandedInstructions.has(mcp.id)}
+            {...buildMcpCardBaseProps(mcp, collection)}
             hideMcpMetadata
             showConfigDetail={false}
             compactHeader
@@ -134,19 +119,9 @@ export default function McpPage() {
             showInstructionControls={false}
             showToolsControls={false}
             showInstructionInEdit
-            systemVariables={collection.systemVariables}
             onStateToggle={() => void handleStartStop(mcp)}
-            onEditToggle={() => collection.expandedEdit.toggle(mcp.id)}
             onDelete={() => setDeleteTarget(mcp.id)}
-            onInstructionToggle={() => collection.expandedInstructions.toggle(mcp.id)}
-            onInstructionChange={(value) => collection.setInstructions((prev) => ({ ...prev, [mcp.id]: value }))}
-            onInstructionSave={() => void collection.handleSaveInstruction(mcp.id)}
-            onToolsToggle={() => collection.expandedTools.toggle(mcp.id)}
-            onOpenEdit={() => collection.openEdit(mcp)}
-            onEditFormChange={(form) => collection.setEditForms((prev) => ({ ...prev, [mcp.id]: form }))}
             onSaveEdit={(restart) => void handleSaveEdit(mcp, restart)}
-            availableSkills={collection.skillOptions}
-            onSkillToggle={(skillId, linked) => void collection.handleSkillToggle(mcp, skillId, linked)}
           />
         ))}
         {collection.items.length === 0 && <EmptyHint>No external MCP servers configured.</EmptyHint>}

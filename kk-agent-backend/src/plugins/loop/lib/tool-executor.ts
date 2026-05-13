@@ -15,6 +15,7 @@ import type {
 } from "../types.js";
 import { getErrorMessage } from "../../../lib/error.js";
 import { fitToolResultsToBudget, persistLargeToolResult } from "./tool-result-storage.js";
+import { stripDisplayOnlyInputKeys } from "../../session/lib/tool-call-description.js";
 
 interface ToolExecutionUpdate {
   toolUseId: string;
@@ -90,11 +91,14 @@ export class StreamingToolExecutor {
     if (this.tools.some((entry) => entry.toolUse.id === toolUse.id)) return;
 
     const runtimeTool = this.runtimeToolsByName[toolUse.name];
+    const executionInput = runtimeTool
+      ? stripDisplayOnlyInputKeys(toolUse.input, runtimeTool.display?.displayOnlyInputKeys)
+      : toolUse.input;
     const tracked: TrackedTool = {
       toolUse,
       runtimeTool,
       status: runtimeTool ? "queued" : "invalid",
-      isConcurrencySafe: runtimeTool ? runtimeTool.isConcurrencySafe(toolUse.input) : false,
+      isConcurrencySafe: runtimeTool ? runtimeTool.isConcurrencySafe(executionInput) : false,
       yielded: false,
     };
     this.tools.push(tracked);
@@ -231,7 +235,11 @@ export class StreamingToolExecutor {
       }
 
       const runtimeTool = tracked.runtimeTool!;
-      const permission = await this.resolveToolPermission(runtimeTool, tracked.toolUse.name, tracked.toolUse.input, this.mode);
+      const executionInput = stripDisplayOnlyInputKeys(
+        tracked.toolUse.input,
+        runtimeTool.display?.displayOnlyInputKeys,
+      );
+      const permission = await this.resolveToolPermission(runtimeTool, tracked.toolUse.name, executionInput, this.mode);
       if (!permission.allowed) {
         const message = permission.reason ?? `Tool "${tracked.toolUse.name}" was blocked by runtime permissions.`;
         tracked.status = "error";
@@ -249,7 +257,7 @@ export class StreamingToolExecutor {
       try {
         const execution = await this.executeTool(
           tracked.toolUse.name,
-          tracked.toolUse.input,
+          executionInput,
           this.mode,
           this.runtimeContext,
         );

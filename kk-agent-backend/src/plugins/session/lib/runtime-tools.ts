@@ -3,6 +3,10 @@ import { executeToolForMcp } from "../../mcp/service.js";
 import type { RuntimeToolDefinition, ToolExecutionResult } from "../../loop/types.js";
 import type { UnifiedToolDefinition } from "../../provider/lib/types.js";
 import { executeSystemToolForId, type ResolvedSystemToolRuntime } from "../../tools/service.js";
+import {
+  withToolCallDescriptionSchema,
+  stripDisplayOnlyInputKeys,
+} from "./tool-call-description.js";
 
 type RuntimeToolCollection = {
   allTools: UnifiedToolDefinition[];
@@ -17,30 +21,52 @@ type RuntimeToolBucket = {
 };
 
 function buildSystemRuntimeBuckets(systemRuntime: ResolvedSystemToolRuntime): RuntimeToolBucket[] {
-  return Object.values(systemRuntime.runtimeToolsByName).map((tool) => ({
-    tool,
-    description: tool.description,
-    parameters: tool.parameters,
-  }));
+  return Object.values(systemRuntime.runtimeToolsByName).map((tool) => {
+    const augmented = withToolCallDescriptionSchema(tool.inputSchema);
+    return {
+      tool: {
+        ...tool,
+        parameters: augmented.schema,
+        inputSchema: augmented.schema,
+        display: {
+          ...tool.display,
+          descriptionInputKey: "tool_call_description",
+          displayOnlyInputKeys: [
+            ...(tool.display?.displayOnlyInputKeys ?? []),
+            ...augmented.displayOnlyInputKeys,
+          ],
+        },
+      },
+      description: tool.description,
+      parameters: augmented.schema,
+    };
+  });
 }
 
 function buildMcpRuntimeBuckets(activeMcpIds: string[]): RuntimeToolBucket[] {
-  return getAllMcpTools(activeMcpIds).map((tool) => ({
-    tool: {
-      name: tool.name,
+  return getAllMcpTools(activeMcpIds).map((tool) => {
+    const augmented = withToolCallDescriptionSchema(tool.inputSchema);
+    return {
+      tool: {
+        name: tool.name,
+        description: tool.description,
+        parameters: augmented.schema,
+        inputSchema: augmented.schema,
+        source: "mcp",
+        capabilityId: tool.mcpId,
+        isConcurrencySafe: () => false,
+        interruptBehavior: "block",
+        resultPolicy: {},
+        permissionPolicy: { kind: "allow" },
+        display: {
+          descriptionInputKey: "tool_call_description",
+          displayOnlyInputKeys: augmented.displayOnlyInputKeys,
+        },
+      },
       description: tool.description,
-      parameters: tool.inputSchema,
-      inputSchema: tool.inputSchema,
-      source: "mcp",
-      capabilityId: tool.mcpId,
-      isConcurrencySafe: () => false,
-      interruptBehavior: "block",
-      resultPolicy: {},
-      permissionPolicy: { kind: "allow" },
-    },
-    description: tool.description,
-    parameters: tool.inputSchema,
-  }));
+      parameters: augmented.schema,
+    };
+  });
 }
 
 function bucketRuntimeTools(
@@ -131,17 +157,22 @@ export async function executeRuntimeTool(
   args: Record<string, unknown>,
   context?: import("../../loop/types.js").ToolRuntimeContext,
 ): Promise<ToolExecutionResult> {
+  const executionArgs = stripDisplayOnlyInputKeys(
+    args,
+    runtimeTool.display?.displayOnlyInputKeys,
+  );
+
   if (runtimeTool.source === "system") {
     return (
       await executeSystemToolForId(
         runtimeTool.capabilityId,
         toolName,
-        args,
+        executionArgs,
         runtimeTool.accessScope,
         context,
       )
     ) ?? { content: `Tool "${toolName}" is not available.`, isError: true };
   }
 
-  return executeToolForMcp(runtimeTool.capabilityId, toolName, args);
+  return executeToolForMcp(runtimeTool.capabilityId, toolName, executionArgs);
 }

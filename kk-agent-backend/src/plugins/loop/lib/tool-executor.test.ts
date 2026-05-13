@@ -11,7 +11,7 @@ function toolUse(id: string, name: string, input: Record<string, unknown>): Tran
   return { type: "tool_use", id, name, input };
 }
 
-function runtimeTool(name: string, concurrencySafe: boolean) {
+function runtimeTool(name: string, concurrencySafe: boolean, display?: { displayOnlyInputKeys?: string[] }) {
   return {
     [name]: {
       name,
@@ -24,6 +24,7 @@ function runtimeTool(name: string, concurrencySafe: boolean) {
       interruptBehavior: "block" as const,
       resultPolicy: {},
       permissionPolicy: { kind: "allow" as const },
+      display,
     },
   };
 }
@@ -226,4 +227,93 @@ test("StreamingToolExecutor exposes assistant blocks produced by tools in tool o
   assert.ok(assistantBlocks[1] && assistantBlocks[1].type === "attachment_ref");
   assert.equal(assistantBlocks[0]?.type === "attachment_ref" ? assistantBlocks[0].filename : "", "First.md");
   assert.equal(assistantBlocks[1]?.type === "attachment_ref" ? assistantBlocks[1].filename : "", "Second.md");
+});
+
+test("StreamingToolExecutor strips display-only keys before executeTool but preserves them in updates", async () => {
+  let receivedArgs: Record<string, unknown> | undefined;
+  const updates: { input?: Record<string, unknown>; status: string }[] = [];
+
+  const executor = new StreamingToolExecutor(
+    async (_toolName, args) => {
+      receivedArgs = args;
+      return { content: "ok" };
+    },
+    EDIT_MODE,
+    {
+      ...runtimeTool("Read", true, { displayOnlyInputKeys: ["tool_call_description"] }),
+    },
+    async () => ({ allowed: true }),
+    (update) => {
+      updates.push({ input: update.input, status: update.status });
+    },
+  );
+
+  executor.addTool(toolUse("1", "Read", { file_path: "a", tool_call_description: "Read the file." }));
+  await executor.getFinalResults();
+
+  assert.ok(receivedArgs);
+  assert.equal("file_path" in receivedArgs!, true);
+  assert.equal("tool_call_description" in receivedArgs!, false);
+
+  const queuedUpdate = updates.find((u) => u.status === "queued");
+  assert.ok(queuedUpdate);
+  assert.equal("tool_call_description" in (queuedUpdate!.input ?? {}), true);
+});
+
+test("StreamingToolExecutor strips display-only keys before resolveToolPermission", async () => {
+  let permissionArgs: Record<string, unknown> | undefined;
+
+  const executor = new StreamingToolExecutor(
+    async () => ({ content: "ok" }),
+    EDIT_MODE,
+    {
+      ...runtimeTool("Read", true, { displayOnlyInputKeys: ["tool_call_description"] }),
+    },
+    async (_runtimeTool, _toolName, args) => {
+      permissionArgs = args;
+      return { allowed: true };
+    },
+  );
+
+  executor.addTool(toolUse("1", "Read", { file_path: "a", tool_call_description: "Read the file." }));
+  await executor.getFinalResults();
+
+  assert.ok(permissionArgs);
+  assert.equal("file_path" in permissionArgs!, true);
+  assert.equal("tool_call_description" in permissionArgs!, false);
+});
+
+test("StreamingToolExecutor strips display-only keys before isConcurrencySafe check", async () => {
+  let concurrencyArgs: Record<string, unknown> | undefined;
+
+  const executor = new StreamingToolExecutor(
+    async () => ({ content: "ok" }),
+    EDIT_MODE,
+    {
+      Read: {
+        name: "Read",
+        description: "Read",
+        parameters: {},
+        inputSchema: {},
+        source: "system" as const,
+        capabilityId: "capability",
+        isConcurrencySafe: (input: Record<string, unknown>) => {
+          concurrencyArgs = input;
+          return true;
+        },
+        interruptBehavior: "block" as const,
+        resultPolicy: {},
+        permissionPolicy: { kind: "allow" as const },
+        display: { displayOnlyInputKeys: ["tool_call_description"] },
+      },
+    },
+    async () => ({ allowed: true }),
+  );
+
+  executor.addTool(toolUse("1", "Read", { file_path: "a", tool_call_description: "Read the file." }));
+  await executor.getFinalResults();
+
+  assert.ok(concurrencyArgs);
+  assert.equal("file_path" in concurrencyArgs!, true);
+  assert.equal("tool_call_description" in concurrencyArgs!, false);
 });

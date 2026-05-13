@@ -37,6 +37,8 @@ export interface RuntimeToolDisplayMeta {
   title?: string;
   summaryInputKeys?: string[];
   redactInputKeys?: string[];
+  descriptionInputKey?: "tool_call_description";
+  displayOnlyInputKeys?: string[];
 }
 
 export interface RuntimeToolDefinition extends UnifiedToolDefinition {

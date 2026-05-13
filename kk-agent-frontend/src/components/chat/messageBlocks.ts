@@ -10,10 +10,9 @@ export {
 } from "@krischan-klug/kk-agent-contract";
 
 export function getToolCallDisplayText(input: Record<string, unknown>): string | undefined {
-  const description = input.description;
-  if (typeof description !== "string") return undefined;
-  const trimmed = description.trim();
-  return trimmed.length > 0 ? trimmed : undefined;
+  const value = input.tool_call_description;
+  if (typeof value === "string" && value.trim().length > 0) return value.trim();
+  return undefined;
 }
 
 export function buildToolCards(

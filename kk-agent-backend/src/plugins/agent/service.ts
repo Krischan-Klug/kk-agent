@@ -32,29 +32,6 @@ function normalizeAgent(agent: AgentDefinition): AgentDefinition {
   };
 }
 
-function buildPersistedAgent(input: AgentDefinition): AgentDefinition {
-  const normalized = normalizeAgent(input);
-  return {
-    ...normalized,
-    modes: normalized.modes.map((mode) => ({
-      ...mode,
-      config: {
-        ...mode.config,
-        promptSections: { ...mode.config.promptSections },
-        toolIds: [...mode.config.toolIds],
-        mcpIds: [...mode.config.mcpIds],
-        skillIds: [...mode.config.skillIds],
-        toolAccessScopes: { ...mode.config.toolAccessScopes },
-        toolInstructions: { ...mode.config.toolInstructions },
-        mcpInstructions: { ...mode.config.mcpInstructions },
-        skillInstructions: { ...mode.config.skillInstructions },
-        allowedToolNames: [...mode.config.allowedToolNames],
-        autonomousBudget: mode.config.autonomousBudget ? { ...mode.config.autonomousBudget } : undefined,
-      },
-    })),
-  };
-}
-
 export async function initAgentService(): Promise<void> {
   await store.initStore();
 }
@@ -93,7 +70,7 @@ export async function createAgent(body: CreateAgentBody): Promise<AgentDefinitio
     updatedAt: now,
   };
 
-  return normalizeAgent(await store.createAgent(buildPersistedAgent(agent)));
+  return normalizeAgent(await store.createAgent(agent));
 }
 
 export async function updateAgent(id: string, body: UpdateAgentBody): Promise<AgentDefinition> {
@@ -112,10 +89,10 @@ export async function updateAgent(id: string, body: UpdateAgentBody): Promise<Ag
       : existing.llmRequestConfig,
   };
 
-  return normalizeAgent(await store.updateAgent(id, buildPersistedAgent({
+  return normalizeAgent(await store.updateAgent(id, {
     ...existing,
     ...patch,
-  })));
+  }));
 }
 
 export async function deleteAgent(id: string): Promise<void> {
@@ -200,12 +177,7 @@ async function removeFromAllAgents(id: string, kind: "tool" | "mcp" | "skill"): 
     });
 
     if (changed) {
-      await store.updateAgent(agent.id, {
-        modes: buildPersistedAgent({
-          ...agent,
-          modes: nextModes,
-        }).modes,
-      });
+      await store.updateAgent(agent.id, { modes: nextModes });
     }
   });
   await Promise.all(updates);

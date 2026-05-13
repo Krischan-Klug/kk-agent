@@ -8,10 +8,6 @@ export const terminalTools: McpToolDefinition[] = [
       type: "object",
       properties: {
         command: { type: "string", description: "Shell command to execute." },
-        description: {
-          type: "string",
-          description: "Short active-voice description of what the command does.",
-        },
         cwd: { type: "string", description: "Optional working directory override." },
         timeoutMs: { type: "number", description: "Timeout in milliseconds (default: 30000)." },
         run_in_background: {

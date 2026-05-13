@@ -1,7 +1,7 @@
-import { deepMerge } from "./deepMerge.js";
 import { loadState, saveState } from "./state.js";
 import type { AppDefaults } from "@krischan-klug/kk-agent-contract";
 import { getBuiltInModeMeta, getDefaultAllowedToolNames, getDefaultToolIds } from "../agent/lib/modes.js";
+import { applyOverrides, diffOverrides } from "./overrides.js";
 
 const STATE_FILE = "defaults.json";
 
@@ -59,6 +59,7 @@ const CODE_DEFAULTS: AppDefaults = {
         "Use only skills listed in <skills_catalog>. Do not guess skill ids and do not imply that a skill is loaded when it is not.",
         "If several independent read, search, fetch, or lookup calls can happen in parallel, make them in parallel. If later calls depend on earlier results, do them sequentially.",
         "Always respect the tools, MCPs, skills, and access scope active in the current mode and session.",
+        "When a tool schema offers tool_call_description, include a short active-voice description of the immediate action so the user can see what the tool call is doing.",
       ].join("\n"),
       communication: [
         "Respond in the user's language unless the user explicitly asks for another one.",
@@ -218,15 +219,15 @@ const CODE_DEFAULTS: AppDefaults = {
   },
 };
 
-let cache: AppDefaults = { ...CODE_DEFAULTS };
-
-function mergeDefaults(target: AppDefaults, source: Partial<AppDefaults>): AppDefaults {
-  return deepMerge(target as unknown as Record<string, unknown>, source as unknown as Record<string, unknown>) as unknown as AppDefaults;
+interface DefaultsState {
+  overrides: Partial<AppDefaults>;
 }
 
+let cache: AppDefaults = applyOverrides(CODE_DEFAULTS, {});
+
 export async function initDefaults(): Promise<void> {
-  const stored = await loadState<Partial<AppDefaults>>(STATE_FILE, CODE_DEFAULTS);
-  cache = mergeDefaults(CODE_DEFAULTS, stored);
+  const state = await loadState<DefaultsState>(STATE_FILE, { overrides: {} });
+  cache = applyOverrides(CODE_DEFAULTS, state.overrides);
 }
 
 export function getDefaults(): AppDefaults {
@@ -234,7 +235,9 @@ export function getDefaults(): AppDefaults {
 }
 
 export async function updateDefaults(partial: Partial<AppDefaults>): Promise<AppDefaults> {
-  cache = mergeDefaults(cache, partial);
-  await saveState(STATE_FILE, cache);
+  const effective = applyOverrides(cache, partial);
+  const overrides = diffOverrides(CODE_DEFAULTS, effective);
+  cache = applyOverrides(CODE_DEFAULTS, overrides);
+  await saveState<DefaultsState>(STATE_FILE, { overrides });
   return cache;
 }

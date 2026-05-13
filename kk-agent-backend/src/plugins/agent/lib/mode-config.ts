@@ -1,4 +1,5 @@
 import { getDefaults } from "../../lib/defaults.js";
+import { applyOverrides, diffOverrides } from "../../lib/overrides.js";
 import { createSlugId, dedupeIds, filterToKnownIds } from "../../lib/ids.js";
 import { getKnownSkillIds } from "../../skills/service.js";
 import type {
@@ -9,6 +10,7 @@ import type {
   ModeBehavior,
   ToolAccessScope,
 } from "../types.js";
+import type { PersistedAgentModeDefinition } from "./persisted-types.js";
 import { getBuiltInModeBehaviors, getBuiltInModeMeta, isModeBehavior } from "./modes.js";
 
 const REQUIRED_TOOL_IDS = ["attachment"];
@@ -50,7 +52,7 @@ function buildUniqueModeId(seed: string, used: Set<string>): string {
   return next;
 }
 
-function buildDefaultModeConfig(behavior: ModeBehavior): AgentModeConfig {
+export function buildDefaultModeConfig(behavior: ModeBehavior): AgentModeConfig {
   const defaults = getDefaults();
   const template = defaults.agent.modeTemplates[behavior];
   return {
@@ -66,6 +68,20 @@ function buildDefaultModeConfig(behavior: ModeBehavior): AgentModeConfig {
     allowedToolNames: [...template.allowedToolNames],
     autonomousBudget: template.autonomousBudget ? { ...template.autonomousBudget } : undefined,
   };
+}
+
+export function expandModeConfig(
+  behavior: ModeBehavior,
+  overrides?: Partial<AgentModeConfig>,
+): AgentModeConfig {
+  return applyOverrides(buildDefaultModeConfig(behavior), overrides);
+}
+
+export function compactModeConfig(
+  behavior: ModeBehavior,
+  effective: AgentModeConfig,
+): Partial<AgentModeConfig> {
+  return diffOverrides(buildDefaultModeConfig(behavior), effective);
 }
 
 function normalizeModeConfig(
@@ -85,6 +101,28 @@ function normalizeModeConfig(
     skillInstructions: { ...defaults.skillInstructions, ...current?.skillInstructions },
     allowedToolNames: [...new Set(current?.allowedToolNames ?? defaults.allowedToolNames)],
     autonomousBudget: current?.autonomousBudget ?? defaults.autonomousBudget,
+  };
+}
+
+export function expandPersistedMode(mode: PersistedAgentModeDefinition): AgentModeDefinition {
+  return {
+    id: mode.id,
+    label: mode.label,
+    behavior: mode.behavior,
+    source: mode.source,
+    enabled: mode.enabled,
+    config: expandModeConfig(mode.behavior, mode.configOverrides),
+  };
+}
+
+export function compactEffectiveMode(mode: AgentModeDefinition): PersistedAgentModeDefinition {
+  return {
+    id: mode.id,
+    label: mode.label,
+    behavior: mode.behavior,
+    source: mode.source,
+    enabled: mode.enabled,
+    configOverrides: compactModeConfig(mode.behavior, mode.config),
   };
 }
 

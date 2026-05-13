@@ -126,6 +126,7 @@ export interface LoopOptions {
     result?: TranscriptMessage,
     detail?: string,
     summary?: string,
+    input?: Record<string, unknown>,
   ) => void;
   resolveToolPermission?: (
     runtimeTool: RuntimeToolDefinition,

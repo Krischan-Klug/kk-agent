@@ -19,6 +19,7 @@ import { fitToolResultsToBudget, persistLargeToolResult } from "./tool-result-st
 interface ToolExecutionUpdate {
   toolUseId: string;
   toolName: string;
+  input?: Record<string, unknown>;
   status: ToolExecutionStatus;
   result?: TranscriptMessage;
   detail?: string;
@@ -101,9 +102,7 @@ export class StreamingToolExecutor {
       tracked.result = { content: message, isError: true };
       tracked.streamedResult = toSyntheticErrorMessage(toolUse, message);
       tracked.finalResult = tracked.streamedResult;
-      this.onUpdate?.({
-        toolUseId: toolUse.id,
-        toolName: toolUse.name,
+      this.emitUpdate(tracked, {
         status: "invalid",
         result: tracked.streamedResult,
         detail: message,
@@ -112,9 +111,7 @@ export class StreamingToolExecutor {
       return;
     }
 
-    this.onUpdate?.({
-      toolUseId: toolUse.id,
-      toolName: toolUse.name,
+    this.emitUpdate(tracked, {
       status: "queued",
       detail: `Queued ${toolUse.name}`,
     });
@@ -131,9 +128,7 @@ export class StreamingToolExecutor {
       tracked.result = { content: reason, isError: true };
       tracked.streamedResult = toSyntheticErrorMessage(tracked.toolUse, reason);
       tracked.finalResult = tracked.streamedResult;
-      this.onUpdate?.({
-        toolUseId: tracked.toolUse.id,
-        toolName: tracked.toolUse.name,
+      this.emitUpdate(tracked, {
         status: "discarded",
         result: tracked.streamedResult,
         detail: reason,
@@ -197,6 +192,15 @@ export class StreamingToolExecutor {
     return blocks;
   }
 
+  private emitUpdate(tracked: TrackedTool, update: Omit<ToolExecutionUpdate, "toolUseId" | "toolName" | "input">): void {
+    this.onUpdate?.({
+      toolUseId: tracked.toolUse.id,
+      toolName: tracked.toolUse.name,
+      input: tracked.toolUse.input,
+      ...update,
+    });
+  }
+
   private async processQueue(): Promise<void> {
     while (true) {
       const executing = this.tools.filter((entry) => entry.status === "executing");
@@ -210,9 +214,7 @@ export class StreamingToolExecutor {
 
   private async executeTrackedTool(tracked: TrackedTool): Promise<void> {
     tracked.status = "executing";
-    this.onUpdate?.({
-      toolUseId: tracked.toolUse.id,
-      toolName: tracked.toolUse.name,
+    this.emitUpdate(tracked, {
       status: "executing",
       detail: `Executing ${tracked.toolUse.name}`,
     });
@@ -233,9 +235,7 @@ export class StreamingToolExecutor {
         tracked.status = "error";
         tracked.result = { content: message, isError: true };
         tracked.streamedResult = toSyntheticErrorMessage(tracked.toolUse, message);
-        this.onUpdate?.({
-          toolUseId: tracked.toolUse.id,
-          toolName: tracked.toolUse.name,
+        this.emitUpdate(tracked, {
           status: "error",
           result: tracked.streamedResult,
           detail: message,
@@ -256,9 +256,7 @@ export class StreamingToolExecutor {
           tracked.status = "discarded";
           tracked.result = { content: message, isError: true };
           tracked.streamedResult = toSyntheticErrorMessage(tracked.toolUse, message);
-          this.onUpdate?.({
-            toolUseId: tracked.toolUse.id,
-            toolName: tracked.toolUse.name,
+          this.emitUpdate(tracked, {
             status: "discarded",
             result: tracked.streamedResult,
             detail: message,
@@ -282,9 +280,7 @@ export class StreamingToolExecutor {
 
         tracked.contextModifier = execution.contextModifier;
 
-        this.onUpdate?.({
-          toolUseId: tracked.toolUse.id,
-          toolName: tracked.toolUse.name,
+        this.emitUpdate(tracked, {
           status: tracked.result.isError ? "error" : "completed",
           result: tracked.streamedResult,
           detail: tracked.result.isError ? `${tracked.toolUse.name} failed` : `${tracked.toolUse.name} completed`,
@@ -296,9 +292,7 @@ export class StreamingToolExecutor {
         tracked.status = "error";
         tracked.result = { content: message, isError: true };
         tracked.streamedResult = toSyntheticErrorMessage(tracked.toolUse, message);
-        this.onUpdate?.({
-          toolUseId: tracked.toolUse.id,
-          toolName: tracked.toolUse.name,
+        this.emitUpdate(tracked, {
           status: "error",
           result: tracked.streamedResult,
           detail: message,
@@ -320,9 +314,7 @@ export class StreamingToolExecutor {
       if (tracked.contextModifier) {
         this.runtimeContext = tracked.contextModifier(this.runtimeContext);
       }
-      this.onUpdate?.({
-        toolUseId: tracked.toolUse.id,
-        toolName: tracked.toolUse.name,
+      this.emitUpdate(tracked, {
         status: tracked.result?.isError ? "error" : "yielded",
         result: tracked.streamedResult,
         detail: tracked.result?.isError ? `${tracked.toolUse.name} failed` : `${tracked.toolUse.name} yielded`,

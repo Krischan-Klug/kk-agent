@@ -7,6 +7,7 @@ import {
   CardSummary,
   ToolBlockLabel,
   ToolCard,
+  ToolDisplayText,
   ToolEmoji,
   ToolLabel,
   ToolResultBlock,
@@ -30,6 +31,7 @@ export default function ToolCallCards({ mcps, toolCalls }: Props) {
       <CardSummary>
         <ToolEmoji>{getToolEmoji(mcps, toolCall.name)}</ToolEmoji>
         <ToolLabel>{toolCall.name}</ToolLabel>
+        {toolCall.displayText && <ToolDisplayText>{toolCall.displayText}</ToolDisplayText>}
         {toolCall.status === "queued" || toolCall.status === "executing" || toolCall.status === "yielded" ? (
           <>
             <Spinner size={12} />
@@ -46,6 +48,12 @@ export default function ToolCallCards({ mcps, toolCalls }: Props) {
         )}
       </CardSummary>
       <CardContent>
+        {toolCall.displayText && (
+          <>
+            <ToolBlockLabel>Action:</ToolBlockLabel>
+            {toolCall.displayText}
+          </>
+        )}
         {toolCall.summary && (
           <>
             <ToolBlockLabel>Summary:</ToolBlockLabel>

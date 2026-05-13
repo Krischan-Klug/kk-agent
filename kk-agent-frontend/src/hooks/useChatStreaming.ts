@@ -19,6 +19,7 @@ import type {
 } from "@/types/api";
 import type { PendingAttachment } from "@/hooks/useAttachments";
 import type { ActiveToolCall, StreamingTurnState } from "@/components/chat/types";
+import { getToolCallDisplayText } from "@/components/chat/messageBlocks";
 
 const logger = createLogger("chat-stream");
 
@@ -74,18 +75,21 @@ function syncIterationToolCalls(assistant: SessionMessage, existingToolCalls: Ac
 
   const synced = toolUses.map((toolUse) => {
     const existing = existingById.get(toolUse.id);
+    const displayText = getToolCallDisplayText(toolUse.input);
     return existing
       ? {
           ...existing,
           id: toolUse.id,
           name: toolUse.name,
           input: toolUse.input,
+          ...(displayText ? { displayText } : {}),
         }
       : {
           id: toolUse.id,
           name: toolUse.name,
           input: toolUse.input,
           status: "queued" as const,
+          ...(displayText ? { displayText } : {}),
         };
   });
 
@@ -186,13 +190,17 @@ function updateIterationToolCall(previous: StreamingTurnState | null, event: Ext
   const toolCallIndex = iteration.toolCalls.findIndex((toolCall) => toolCall.id === event.toolUseId);
   const currentToolCall: ActiveToolCall = toolCallIndex >= 0
     ? iteration.toolCalls[toolCallIndex]!
-    : { id: event.toolUseId, name: event.toolName, input: {}, status: event.status };
+    : { id: event.toolUseId, name: event.toolName, input: event.input ?? {}, status: event.status };
+  const input = event.input ?? currentToolCall.input;
+  const displayText = getToolCallDisplayText(input);
 
   const updatedToolCall: ActiveToolCall = {
     ...currentToolCall,
     id: event.toolUseId,
     name: event.toolName,
+    input,
     status: event.status,
+    ...(displayText ? { displayText } : {}),
     ...(event.detail ? { detail: event.detail } : {}),
     ...(event.summary ? { summary: event.summary } : {}),
     ...(event.result ? { result: getToolResult(event.result) } : {}),

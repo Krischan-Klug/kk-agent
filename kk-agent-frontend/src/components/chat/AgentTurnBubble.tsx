@@ -74,6 +74,7 @@ function buildToolCallSignature(toolCalls: ActiveToolCall[]): string {
       name: toolCall.name,
       status: toolCall.status,
       input: toolCall.input,
+      displayText: toolCall.displayText,
       detail: toolCall.detail,
       summary: toolCall.summary,
       result: toolCall.result,

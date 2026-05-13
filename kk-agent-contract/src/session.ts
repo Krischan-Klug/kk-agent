@@ -145,6 +145,7 @@ export type StreamEvent =
       type: "tool_execution_update";
       toolUseId: string;
       toolName: string;
+      input?: Record<string, unknown>;
       status: ToolExecutionStatus;
       result?: TranscriptMessage;
       detail?: string;

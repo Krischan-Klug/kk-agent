@@ -6,6 +6,7 @@ export interface ActiveToolCall {
   input: Record<string, unknown>;
   status: ToolExecutionStatus;
   result?: { content: string; isError: boolean };
+  displayText?: string;
   detail?: string;
   summary?: string;
 }

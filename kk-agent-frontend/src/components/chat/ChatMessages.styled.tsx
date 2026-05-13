@@ -178,6 +178,16 @@ export const ToolLabel = styled.span`
   font-family: var(--font-mono);
   color: var(--text-primary);
   font-weight: 500;
+  flex-shrink: 0;
+`;
+
+export const ToolDisplayText = styled.span`
+  color: var(--text-secondary);
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 `;
 
 export const ToolBlockLabel = styled.div`

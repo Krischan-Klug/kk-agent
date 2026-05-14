@@ -1,8 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdtemp, mkdir, writeFile } from "node:fs/promises";
+import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { tmpdir } from "node:os";
+import { createTempDir } from "../../../test-helpers.js";
 import { loadSkillFromPath } from "./loader.js";
 
 async function createSkillBundle(root: string, name: string, body = "Do the thing.") {
@@ -24,8 +24,8 @@ async function createSkillBundle(root: string, name: string, body = "Do the thin
   return dir;
 }
 
-test("loadSkillFromPath loads valid SKILL.md metadata", async () => {
-  const root = await mkdtemp(join(tmpdir(), "kk-agent-skill-loader-"));
+test("loadSkillFromPath loads valid SKILL.md metadata", async (t) => {
+  const root = await createTempDir(t, "kk-agent-skill-loader-");
   await createSkillBundle(root, "demo-skill", "Use this skill carefully.");
 
   const loaded = await loadSkillFromPath(root, "demo-skill");
@@ -37,8 +37,8 @@ test("loadSkillFromPath loads valid SKILL.md metadata", async () => {
   assert.ok(loaded.skillFilePath.endsWith("SKILL.md"));
 });
 
-test("loadSkillFromPath loads kk-agent tool and mcp links from overlay metadata", async () => {
-  const root = await mkdtemp(join(tmpdir(), "kk-agent-skill-loader-"));
+test("loadSkillFromPath loads kk-agent tool and mcp links from overlay metadata", async (t) => {
+  const root = await createTempDir(t, "kk-agent-skill-loader-");
   const skillDir = await createSkillBundle(root, "linked-skill", "Use linked capabilities.");
   await mkdir(join(skillDir, "agents"), { recursive: true });
   await writeFile(
@@ -55,8 +55,8 @@ test("loadSkillFromPath loads kk-agent tool and mcp links from overlay metadata"
   });
 });
 
-test("loadSkillFromPath rejects missing description frontmatter", async () => {
-  const root = await mkdtemp(join(tmpdir(), "kk-agent-skill-loader-"));
+test("loadSkillFromPath rejects missing description frontmatter", async (t) => {
+  const root = await createTempDir(t, "kk-agent-skill-loader-");
   const dir = join(root, "broken-skill");
   await mkdir(dir, { recursive: true });
   await writeFile(
@@ -71,8 +71,8 @@ test("loadSkillFromPath rejects missing description frontmatter", async () => {
   );
 });
 
-test("loadSkillFromPath rejects multiple SKILL.md files in one bundle", async () => {
-  const root = await mkdtemp(join(tmpdir(), "kk-agent-skill-loader-"));
+test("loadSkillFromPath rejects multiple SKILL.md files in one bundle", async (t) => {
+  const root = await createTempDir(t, "kk-agent-skill-loader-");
   const dir = await createSkillBundle(root, "duplicate-skill");
   const nested = join(dir, "nested");
   await mkdir(nested, { recursive: true });
@@ -88,9 +88,8 @@ test("loadSkillFromPath rejects multiple SKILL.md files in one bundle", async ()
   );
 });
 
-test("loadSkillFromPath rejects paths outside the configured root", async () => {
-  const root = await mkdtemp(join(tmpdir(), "kk-agent-skill-loader-"));
-
+test("loadSkillFromPath rejects paths outside the configured root", async (t) => {
+  const root = await createTempDir(t, "kk-agent-skill-loader-");
   await assert.rejects(
     () => loadSkillFromPath(root, ".."),
     /within root directory/i,

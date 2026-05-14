@@ -18,81 +18,41 @@ function readDefaultsFile(): unknown | null {
 }
 
 test("initDefaults without defaults.json uses CODE_DEFAULTS", async () => {
-  const backup = existsSync(STATE_FILE) ? readFileSync(STATE_FILE, "utf-8") : null;
-  try {
-    if (existsSync(STATE_FILE)) unlinkSync(STATE_FILE);
-    await initDefaults();
-    const defaults = getDefaults();
-    assert.equal(defaults.agent.defaultModeBehavior, "edit");
-    assert.ok(defaults.agent.promptSections.toolUsage.includes("tool_call_description"));
-  } finally {
-    if (backup !== null) {
-      writeDefaultsFile(backup);
-    } else if (existsSync(STATE_FILE)) {
-      unlinkSync(STATE_FILE);
-    }
-    await initDefaults();
-  }
+  if (existsSync(STATE_FILE)) unlinkSync(STATE_FILE);
+  await initDefaults();
+  const defaults = getDefaults();
+  assert.equal(defaults.agent.defaultModeBehavior, "edit");
+  assert.ok(defaults.agent.promptSections.toolUsage.includes("tool_call_description"));
 });
 
 test("initDefaults with { overrides: {} } uses CODE_DEFAULTS", async () => {
-  const backup = existsSync(STATE_FILE) ? readFileSync(STATE_FILE, "utf-8") : null;
-  try {
-    writeDefaultsFile(JSON.stringify({ overrides: {} }));
-    await initDefaults();
-    const defaults = getDefaults();
-    assert.ok(typeof defaults.agent.promptSections.communication === "string");
-    assert.ok(defaults.agent.promptSections.toolUsage.includes("tool_call_description"));
-  } finally {
-    if (backup !== null) {
-      writeDefaultsFile(backup);
-    } else if (existsSync(STATE_FILE)) {
-      unlinkSync(STATE_FILE);
-    }
-    await initDefaults();
-  }
+  writeDefaultsFile(JSON.stringify({ overrides: {} }));
+  await initDefaults();
+  const defaults = getDefaults();
+  assert.ok(typeof defaults.agent.promptSections.communication === "string");
+  assert.ok(defaults.agent.promptSections.toolUsage.includes("tool_call_description"));
 });
 
 test("updateDefaults stores only diff against CODE_DEFAULTS", async () => {
-  const backup = existsSync(STATE_FILE) ? readFileSync(STATE_FILE, "utf-8") : null;
-  try {
-    if (existsSync(STATE_FILE)) unlinkSync(STATE_FILE);
-    await initDefaults();
-    await updateDefaults({
-      agent: {
-        promptSections: {
-          communication: "Custom communication default",
-        },
+  if (existsSync(STATE_FILE)) unlinkSync(STATE_FILE);
+  await initDefaults();
+  await updateDefaults({
+    agent: {
+      promptSections: {
+        communication: "Custom communication default",
       },
-    } as Partial<import("kk-agent-contract").AppDefaults>);
-    const raw = readDefaultsFile() as { overrides: { agent?: { promptSections?: { communication?: string } } } };
-    assert.equal(raw.overrides.agent?.promptSections?.communication, "Custom communication default");
-    assert.equal((raw.overrides.agent?.promptSections as Record<string, unknown> | undefined)?.identity, undefined);
-  } finally {
-    if (backup !== null) {
-      writeDefaultsFile(backup);
-    } else if (existsSync(STATE_FILE)) {
-      unlinkSync(STATE_FILE);
-    }
-    await initDefaults();
-  }
+    },
+  } as Partial<import("kk-agent-contract").AppDefaults>);
+  const raw = readDefaultsFile() as { overrides: { agent?: { promptSections?: { communication?: string } } } };
+  assert.equal(raw.overrides.agent?.promptSections?.communication, "Custom communication default");
+  assert.equal((raw.overrides.agent?.promptSections as Record<string, unknown> | undefined)?.identity, undefined);
 });
 
 test("updateDefaults with full effective same as code saves { overrides: {} }", async () => {
-  const backup = existsSync(STATE_FILE) ? readFileSync(STATE_FILE, "utf-8") : null;
-  try {
-    if (existsSync(STATE_FILE)) unlinkSync(STATE_FILE);
-    await initDefaults();
-    const defaults = getDefaults();
-    await updateDefaults(defaults);
-    const raw = readDefaultsFile();
-    assert.deepEqual(raw, { overrides: {} });
-  } finally {
-    if (backup !== null) {
-      writeDefaultsFile(backup);
-    } else if (existsSync(STATE_FILE)) {
-      unlinkSync(STATE_FILE);
-    }
-    await initDefaults();
-  }
+  if (existsSync(STATE_FILE)) unlinkSync(STATE_FILE);
+  await initDefaults();
+  const defaults = getDefaults();
+  await updateDefaults(defaults);
+  const raw = readDefaultsFile();
+  assert.deepEqual(raw, { overrides: {} });
 });

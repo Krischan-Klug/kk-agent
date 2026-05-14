@@ -1,9 +1,9 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdir, mkdtemp, readFile, rm, writeFile, utimes } from "node:fs/promises";
+import { mkdir, readFile, writeFile, utimes } from "node:fs/promises";
 import { join } from "node:path";
-import { tmpdir } from "node:os";
 import type { McpServerConfig } from "../../../mcp/types.js";
+import { createTempDir } from "../../../../test-helpers.js";
 import { runWithSessionId } from "../user-interaction/interaction-store.js";
 import { clearFilesystemReadState, getReadStateForSession } from "./read-state.js";
 import { executeFilesystemTool } from "./runtime.js";
@@ -26,8 +26,8 @@ function makeConfig(basePath: string): McpServerConfig {
   };
 }
 
-test("Edit requires a prior Read in the same session", async () => {
-  const root = await mkdtemp(join(tmpdir(), "kk-agent-fs-"));
+test("Edit requires a prior Read in the same session", async (t) => {
+  const root = await createTempDir(t, "kk-agent-fs-");
   const filePath = join(root, "sample.txt");
   await writeFile(filePath, "before", "utf-8");
 
@@ -43,12 +43,11 @@ test("Edit requires a prior Read in the same session", async () => {
     assert.ok(result?.content.match(/Use Read|has changed|has not been read/i));
   } finally {
     clearFilesystemReadState("fs-edit-no-read");
-    await rm(root, { recursive: true, force: true });
   }
 });
 
-test("Read enables Edit and Write for existing files", async () => {
-  const root = await mkdtemp(join(tmpdir(), "kk-agent-fs-"));
+test("Read enables Edit and Write for existing files", async (t) => {
+  const root = await createTempDir(t, "kk-agent-fs-");
   const filePath = join(root, "sample.txt");
   await writeFile(filePath, "alpha\nbeta\n", "utf-8");
 
@@ -74,12 +73,11 @@ test("Read enables Edit and Write for existing files", async () => {
     assert.equal(await readFile(filePath, "utf-8"), "rewritten\n");
   } finally {
     clearFilesystemReadState("fs-read-edit");
-    await rm(root, { recursive: true, force: true });
   }
 });
 
-test("Glob and Grep expose Claude-style search semantics", async () => {
-  const root = await mkdtemp(join(tmpdir(), "kk-agent-fs-"));
+test("Glob and Grep expose Claude-style search semantics", async (t) => {
+  const root = await createTempDir(t, "kk-agent-fs-");
   const srcDir = join(root, "src");
   const testDir = join(root, "tests");
   await mkdir(srcDir, { recursive: true });
@@ -110,12 +108,11 @@ test("Glob and Grep expose Claude-style search semantics", async () => {
     });
   } finally {
     clearFilesystemReadState("fs-search");
-    await rm(root, { recursive: true, force: true });
   }
 });
 
-test("Read returns line ranges and truncation info", async () => {
-  const root = await mkdtemp(join(tmpdir(), "kk-agent-fs-"));
+test("Read returns line ranges and truncation info", async (t) => {
+  const root = await createTempDir(t, "kk-agent-fs-");
   const filePath = join(root, "lines.txt");
   const lines = Array.from({ length: 50 }, (_, i) => `line ${i + 1}`);
   await writeFile(filePath, lines.join("\n"), "utf-8");
@@ -137,12 +134,11 @@ test("Read returns line ranges and truncation info", async () => {
     });
   } finally {
     clearFilesystemReadState("fs-read-range");
-    await rm(root, { recursive: true, force: true });
   }
 });
 
-test("Read beyond EOF returns a reminder with total line count", async () => {
-  const root = await mkdtemp(join(tmpdir(), "kk-agent-fs-"));
+test("Read beyond EOF returns a reminder with total line count", async (t) => {
+  const root = await createTempDir(t, "kk-agent-fs-");
   const filePath = join(root, "short.txt");
   await writeFile(filePath, "one\ntwo", "utf-8");
 
@@ -158,12 +154,11 @@ test("Read beyond EOF returns a reminder with total line count", async () => {
     });
   } finally {
     clearFilesystemReadState("fs-read-eof");
-    await rm(root, { recursive: true, force: true });
   }
 });
 
-test("Read binary file returns helpful error", async () => {
-  const root = await mkdtemp(join(tmpdir(), "kk-agent-fs-"));
+test("Read binary file returns helpful error", async (t) => {
+  const root = await createTempDir(t, "kk-agent-fs-");
   const filePath = join(root, "image.png");
   await writeFile(filePath, Buffer.from([0x89, 0x50, 0x4e, 0x47]), "utf-8");
 
@@ -177,12 +172,11 @@ test("Read binary file returns helpful error", async () => {
     });
   } finally {
     clearFilesystemReadState("fs-read-bin");
-    await rm(root, { recursive: true, force: true });
   }
 });
 
-test("Read records full and partial read state", async () => {
-  const root = await mkdtemp(join(tmpdir(), "kk-agent-fs-"));
+test("Read records full and partial read state", async (t) => {
+  const root = await createTempDir(t, "kk-agent-fs-");
   const filePath = join(root, "state.txt");
   await writeFile(filePath, "a\nb\nc\n", "utf-8");
 
@@ -200,12 +194,11 @@ test("Read records full and partial read state", async () => {
     });
   } finally {
     clearFilesystemReadState("fs-read-state");
-    await rm(root, { recursive: true, force: true });
   }
 });
 
-test("Edit requires prior full read, not partial", async () => {
-  const root = await mkdtemp(join(tmpdir(), "kk-agent-fs-"));
+test("Edit requires prior full read, not partial", async (t) => {
+  const root = await createTempDir(t, "kk-agent-fs-");
   const filePath = join(root, "edit.txt");
   await writeFile(filePath, "alpha\nbeta\ngamma\n", "utf-8");
 
@@ -226,12 +219,11 @@ test("Edit requires prior full read, not partial", async () => {
     });
   } finally {
     clearFilesystemReadState("fs-edit-partial");
-    await rm(root, { recursive: true, force: true });
   }
 });
 
-test("Edit fails on stale file", async () => {
-  const root = await mkdtemp(join(tmpdir(), "kk-agent-fs-"));
+test("Edit fails on stale file", async (t) => {
+  const root = await createTempDir(t, "kk-agent-fs-");
   const filePath = join(root, "stale.txt");
   await writeFile(filePath, "original\n", "utf-8");
 
@@ -250,12 +242,11 @@ test("Edit fails on stale file", async () => {
     });
   } finally {
     clearFilesystemReadState("fs-edit-stale");
-    await rm(root, { recursive: true, force: true });
   }
 });
 
-test("Edit allows mtime-only change if content hash matches", async () => {
-  const root = await mkdtemp(join(tmpdir(), "kk-agent-fs-"));
+test("Edit allows mtime-only change if content hash matches", async (t) => {
+  const root = await createTempDir(t, "kk-agent-fs-");
   const filePath = join(root, "mtime.txt");
   await writeFile(filePath, "content\n", "utf-8");
 
@@ -275,12 +266,11 @@ test("Edit allows mtime-only change if content hash matches", async () => {
     });
   } finally {
     clearFilesystemReadState("fs-edit-mtime");
-    await rm(root, { recursive: true, force: true });
   }
 });
 
-test("Edit fails on zero or multiple matches", async () => {
-  const root = await mkdtemp(join(tmpdir(), "kk-agent-fs-"));
+test("Edit fails on zero or multiple matches", async (t) => {
+  const root = await createTempDir(t, "kk-agent-fs-");
   const filePath = join(root, "multi.txt");
   await writeFile(filePath, "aaa\naaa\n", "utf-8");
 
@@ -306,12 +296,11 @@ test("Edit fails on zero or multiple matches", async () => {
     });
   } finally {
     clearFilesystemReadState("fs-edit-multi");
-    await rm(root, { recursive: true, force: true });
   }
 });
 
-test("Edit replace_all changes all occurrences", async () => {
-  const root = await mkdtemp(join(tmpdir(), "kk-agent-fs-"));
+test("Edit replace_all changes all occurrences", async (t) => {
+  const root = await createTempDir(t, "kk-agent-fs-");
   const filePath = join(root, "replace.txt");
   await writeFile(filePath, "foo bar foo\n", "utf-8");
 
@@ -330,12 +319,11 @@ test("Edit replace_all changes all occurrences", async () => {
     });
   } finally {
     clearFilesystemReadState("fs-edit-all");
-    await rm(root, { recursive: true, force: true });
   }
 });
 
-test("Edit diff contains expected hunks", async () => {
-  const root = await mkdtemp(join(tmpdir(), "kk-agent-fs-"));
+test("Edit diff contains expected hunks", async (t) => {
+  const root = await createTempDir(t, "kk-agent-fs-");
   const filePath = join(root, "diff.txt");
   await writeFile(filePath, "old line\n", "utf-8");
 
@@ -355,12 +343,11 @@ test("Edit diff contains expected hunks", async () => {
     });
   } finally {
     clearFilesystemReadState("fs-edit-diff");
-    await rm(root, { recursive: true, force: true });
   }
 });
 
-test("Write creates new file without prior read", async () => {
-  const root = await mkdtemp(join(tmpdir(), "kk-agent-fs-"));
+test("Write creates new file without prior read", async (t) => {
+  const root = await createTempDir(t, "kk-agent-fs-");
   const filePath = join(root, "new.txt");
 
   try {
@@ -375,12 +362,11 @@ test("Write creates new file without prior read", async () => {
     });
   } finally {
     clearFilesystemReadState("fs-write-new");
-    await rm(root, { recursive: true, force: true });
   }
 });
 
-test("Write to existing file requires read and returns diff", async () => {
-  const root = await mkdtemp(join(tmpdir(), "kk-agent-fs-"));
+test("Write to existing file requires read and returns diff", async (t) => {
+  const root = await createTempDir(t, "kk-agent-fs-");
   const filePath = join(root, "existing.txt");
   await writeFile(filePath, "original\n", "utf-8");
 
@@ -405,12 +391,11 @@ test("Write to existing file requires read and returns diff", async () => {
     });
   } finally {
     clearFilesystemReadState("fs-write-existing");
-    await rm(root, { recursive: true, force: true });
   }
 });
 
-test("Write rejects stale existing file", async () => {
-  const root = await mkdtemp(join(tmpdir(), "kk-agent-fs-"));
+test("Write rejects stale existing file", async (t) => {
+  const root = await createTempDir(t, "kk-agent-fs-");
   const filePath = join(root, "stale-write.txt");
   await writeFile(filePath, "v1\n", "utf-8");
 
@@ -427,12 +412,11 @@ test("Write rejects stale existing file", async () => {
     });
   } finally {
     clearFilesystemReadState("fs-write-stale");
-    await rm(root, { recursive: true, force: true });
   }
 });
 
-test("Glob finds expected files and respects limit", async () => {
-  const root = await mkdtemp(join(tmpdir(), "kk-agent-fs-"));
+test("Glob finds expected files and respects limit", async (t) => {
+  const root = await createTempDir(t, "kk-agent-fs-");
   await writeFile(join(root, "a.ts"), "", "utf-8");
   await writeFile(join(root, "b.ts"), "", "utf-8");
   await writeFile(join(root, "c.js"), "", "utf-8");
@@ -450,12 +434,11 @@ test("Glob finds expected files and respects limit", async () => {
     });
   } finally {
     clearFilesystemReadState("fs-glob");
-    await rm(root, { recursive: true, force: true });
   }
 });
 
-test("Grep files/content/count modes", async () => {
-  const root = await mkdtemp(join(tmpdir(), "kk-agent-fs-"));
+test("Grep files/content/count modes", async (t) => {
+  const root = await createTempDir(t, "kk-agent-fs-");
   await writeFile(join(root, "a.ts"), "const x = 1;\n", "utf-8");
   await writeFile(join(root, "b.ts"), "const y = 2;\n", "utf-8");
 
@@ -483,12 +466,11 @@ test("Grep files/content/count modes", async () => {
     });
   } finally {
     clearFilesystemReadState("fs-grep-modes");
-    await rm(root, { recursive: true, force: true });
   }
 });
 
-test("Grep offset and head_limit", async () => {
-  const root = await mkdtemp(join(tmpdir(), "kk-agent-fs-"));
+test("Grep offset and head_limit", async (t) => {
+  const root = await createTempDir(t, "kk-agent-fs-");
   await writeFile(join(root, "lines.ts"), "alpha\nbeta\ngamma\ndelta\n", "utf-8");
 
   try {
@@ -506,12 +488,11 @@ test("Grep offset and head_limit", async () => {
     });
   } finally {
     clearFilesystemReadState("fs-grep-limit");
-    await rm(root, { recursive: true, force: true });
   }
 });
 
-test("Grep type and glob filters", async () => {
-  const root = await mkdtemp(join(tmpdir(), "kk-agent-fs-"));
+test("Grep type and glob filters", async (t) => {
+  const root = await createTempDir(t, "kk-agent-fs-");
   await writeFile(join(root, "a.ts"), "target\n", "utf-8");
   await writeFile(join(root, "b.js"), "target\n", "utf-8");
 
@@ -535,6 +516,5 @@ test("Grep type and glob filters", async () => {
     });
   } finally {
     clearFilesystemReadState("fs-grep-filter");
-    await rm(root, { recursive: true, force: true });
   }
 });

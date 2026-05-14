@@ -104,5 +104,3 @@ export async function listPersistedSessionIds(): Promise<string[]> {
     return [];
   }
 }
-
-export { STATE_DIR };

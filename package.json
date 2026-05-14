@@ -11,10 +11,11 @@
     "node": "^20.19.0 || ^22.13.0 || >=24"
   },
   "devDependencies": {
-    "typescript": "^5.8.0",
     "@types/node": "^20.17.0",
+    "knip": "^6.13.1",
     "tsup": "^8.5.1",
-    "tsx": "^4.20.5"
+    "tsx": "^4.20.5",
+    "typescript": "^5.8.0"
   },
   "scripts": {
     "dev:backend": "npm --workspace kk-agent-backend run dev",
@@ -24,6 +25,9 @@
     "check": "npm --workspace kk-agent-contract run build && npm --workspace kk-agent-contract run lint && npm --workspace kk-agent-backend run lint && npm --workspace kk-agent-frontend run lint && npm --workspace kk-agent-desktop run lint",
     "test": "npm --workspace kk-agent-contract run build && npm --workspace kk-agent-backend run test",
     "build": "npm --workspace kk-agent-contract run build && npm --workspace kk-agent-backend run build && npm --workspace kk-agent-frontend run build",
+    "deadcode": "knip --reporter compact --no-progress",
+    "ci:quality": "npm run check && npm test && npm run build && npm run deadcode",
+    "ci:desktop": "npm run desktop:build",
     "desktop:build": "npm --workspace kk-agent-contract run build && npm --workspace kk-agent-backend run build:desktop && npm --workspace kk-agent-frontend run build:desktop && npm --workspace kk-agent-desktop run build",
     "desktop:dist": "npm run desktop:build && npm --workspace kk-agent-desktop run dist"
   }

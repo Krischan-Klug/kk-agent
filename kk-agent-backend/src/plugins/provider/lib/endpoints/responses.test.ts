@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { mockFetch } from "../../../../test-helpers.js";
 import { createTranscriptMessage, textBlock, toolResultBlock } from "../../../lib/transcript.js";
 import type { UnifiedRequest } from "../types.js";
 import { chat, commitResponsesTransportState, prepareResponsesRequest } from "./responses.js";
@@ -167,11 +168,10 @@ test("commitResponsesTransportState keeps call_id mapping and the last response 
   assert.equal(state.lastResponseId, "resp_2");
 });
 
-test("chat falls back from previous_response_id to raw replay exactly once when the server rejects stateful continuation", async () => {
-  const originalFetch = globalThis.fetch;
+test("chat falls back from previous_response_id to raw replay exactly once when the server rejects stateful continuation", async (t) => {
   const bodies: Record<string, unknown>[] = [];
 
-  globalThis.fetch = (async (_input, init) => {
+  mockFetch(t, async (_input, init) => {
     const body = JSON.parse(String(init?.body)) as Record<string, unknown>;
     bodies.push(body);
     if (body.previous_response_id) {
@@ -192,45 +192,41 @@ test("chat falls back from previous_response_id to raw replay exactly once when 
         content: [{ type: "output_text", text: "fallback ok" }],
       }],
     });
-  }) as typeof fetch;
+  });
 
-  try {
-    const userMessage = createTranscriptMessage({ role: "user", id: "user-1", content: [textBlock("USER")] });
-    const assistantMessage = createTranscriptMessage({ role: "assistant", id: "assistant-1", content: [] });
-    const toolMessage = createTranscriptMessage({ role: "tool", content: [toolResultBlock("call_1", "[dir] src/")] });
-    const response = await chat(buildRequest({
-      messages: [
-        createTranscriptMessage({ role: "system", content: [textBlock("SYSTEM")] }),
-        userMessage,
-        assistantMessage,
-        toolMessage,
+  const userMessage = createTranscriptMessage({ role: "user", id: "user-1", content: [textBlock("USER")] });
+  const assistantMessage = createTranscriptMessage({ role: "assistant", id: "assistant-1", content: [] });
+  const toolMessage = createTranscriptMessage({ role: "tool", content: [toolResultBlock("call_1", "[dir] src/")] });
+  const response = await chat(buildRequest({
+    messages: [
+      createTranscriptMessage({ role: "system", content: [textBlock("SYSTEM")] }),
+      userMessage,
+      assistantMessage,
+      toolMessage,
+    ],
+    transportState: {
+      endpoint: "responses",
+      continuationMode: "previous-response-id",
+      syncedMessageIds: ["user-1", "assistant-1"],
+      historyItems: [
+        { type: "message", role: "user", content: "USER" },
+        { type: "function_call", id: "fc_1", call_id: "call_1", name: "Read", arguments: "{}" },
       ],
-      transportState: {
-        endpoint: "responses",
-        continuationMode: "previous-response-id",
-        syncedMessageIds: ["user-1", "assistant-1"],
-        historyItems: [
-          { type: "message", role: "user", content: "USER" },
-          { type: "function_call", id: "fc_1", call_id: "call_1", name: "Read", arguments: "{}" },
-        ],
-        callIdByToolUseId: { call_1: "call_1" },
-        lastResponseId: "resp_1",
-      },
-    }), "http://provider.test");
+      callIdByToolUseId: { call_1: "call_1" },
+      lastResponseId: "resp_1",
+    },
+  }), "http://provider.test");
 
-    assert.equal(bodies.length, 2);
-    assert.equal(bodies[0]?.previous_response_id, "resp_1");
-    assert.equal(bodies[1]?.previous_response_id, undefined);
-    assert.deepEqual(bodies[1]?.input, [
-      { type: "message", role: "user", content: "USER" },
-      { type: "function_call", id: "fc_1", call_id: "call_1", name: "Read", arguments: "{}" },
-      { type: "function_call_output", call_id: "call_1", output: "[dir] src/" },
-    ]);
-    assert.equal(response.debug?.continuationMode, "raw-output-replay");
-    assert.equal(response.debug?.continuationFallback?.from, "previous-response-id");
-    assert.equal(response.debug?.continuationFallback?.to, "raw-output-replay");
-    assert.equal(response.notices?.[0]?.code, "response_statefulness_fallback");
-  } finally {
-    globalThis.fetch = originalFetch;
-  }
+  assert.equal(bodies.length, 2);
+  assert.equal(bodies[0]?.previous_response_id, "resp_1");
+  assert.equal(bodies[1]?.previous_response_id, undefined);
+  assert.deepEqual(bodies[1]?.input, [
+    { type: "message", role: "user", content: "USER" },
+    { type: "function_call", id: "fc_1", call_id: "call_1", name: "Read", arguments: "{}" },
+    { type: "function_call_output", call_id: "call_1", output: "[dir] src/" },
+  ]);
+  assert.equal(response.debug?.continuationMode, "raw-output-replay");
+  assert.equal(response.debug?.continuationFallback?.from, "previous-response-id");
+  assert.equal(response.debug?.continuationFallback?.to, "raw-output-replay");
+  assert.equal(response.notices?.[0]?.code, "response_statefulness_fallback");
 });

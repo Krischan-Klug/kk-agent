@@ -136,12 +136,16 @@ Open `http://localhost:3000`.
 
 ## Testing
 
-Run checks from the root workspace:
+Run the same quality gate as GitHub Actions:
 
 ```bash
-npm run check
-npm test
-npm run build
+npm run ci:quality
+```
+
+Run the desktop CI build locally:
+
+```bash
+npm run ci:desktop
 ```
 
 ## License

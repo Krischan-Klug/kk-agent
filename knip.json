@@ -1,0 +1,23 @@
+{
+  "$schema": "https://unpkg.com/knip@6/schema.json",
+  "entry": ["scripts/*.mjs"],
+  "project": ["scripts/*.mjs"],
+  "workspaces": {
+    "kk-agent-backend": {
+      "entry": ["index.ts", "src/**/*.test.ts"],
+      "project": ["index.ts", "src/**/*.ts", "tsup*.ts"]
+    },
+    "kk-agent-contract": {
+      "entry": ["src/index.ts"],
+      "project": ["src/**/*.ts"]
+    },
+    "kk-agent-frontend": {
+      "entry": ["next.config.ts", "src/pages/**/*.{ts,tsx}"],
+      "project": ["src/**/*.{ts,tsx}", "next.config.ts", "eslint.config.mjs"]
+    },
+    "kk-agent-desktop": {
+      "entry": ["src/main.ts", "src/preload.ts", "scripts/*.mjs"],
+      "project": ["src/**/*.ts", "scripts/*.mjs", "tsup.config.ts"]
+    }
+  }
+}

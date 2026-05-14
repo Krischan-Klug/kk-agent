@@ -1,8 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdtemp, readFile, writeFile } from "node:fs/promises";
+import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { tmpdir } from "node:os";
+import { createTempDir } from "../../test-helpers.js";
 import { initToolsService } from "../tools/service.js";
 import type { SkillDefinition } from "./types.js";
 import { DEFAULT_CREATE_SKILL_BODY } from "./lib/default-create-skill.js";
@@ -30,8 +30,8 @@ test("buildSkillsCatalogSection emits XML without proprietary metadata", () => {
   assert.ok(!xml.includes("recommended_mcps"));
 });
 
-test("createSkill writes a standard SKILL.md bundle and updateSkill rewrites it", async () => {
-  const root = await mkdtemp(join(tmpdir(), "kk-agent-skill-service-"));
+test("createSkill writes a standard SKILL.md bundle and updateSkill rewrites it", async (t) => {
+  const root = await createTempDir(t, "kk-agent-skill-service-");
   await initToolsService();
   await initSkillService(root);
 
@@ -63,8 +63,8 @@ test("createSkill writes a standard SKILL.md bundle and updateSkill rewrites it"
   assert.ok(updatedMarkdown.includes("Use Glob and Grep too."));
 });
 
-test("updateSkillLinks writes sanitized kk-agent link metadata", async () => {
-  const root = await mkdtemp(join(tmpdir(), "kk-agent-skill-service-"));
+test("updateSkillLinks writes sanitized kk-agent link metadata", async (t) => {
+  const root = await createTempDir(t, "kk-agent-skill-service-");
   await initToolsService();
   await initSkillService(root);
 
@@ -86,8 +86,8 @@ test("updateSkillLinks writes sanitized kk-agent link metadata", async () => {
   assert.equal(skillLinks, ["{", '  "toolIds": [', '    "filesystem"', "  ],", '  "mcpIds": []', "}"].join("\n"));
 });
 
-test("importSkill installs a standard skill bundle from uploaded files", async () => {
-  const root = await mkdtemp(join(tmpdir(), "kk-agent-skill-service-"));
+test("importSkill installs a standard skill bundle from uploaded files", async (t) => {
+  const root = await createTempDir(t, "kk-agent-skill-service-");
   await initToolsService();
   await initSkillService(root);
 
@@ -124,8 +124,8 @@ test("importSkill installs a standard skill bundle from uploaded files", async (
   assert.equal(importedLinks, ["{", '  "toolIds": [],', '  "mcpIds": []', "}"].join("\n"));
 });
 
-test("initSkillService seeds only the current default create-skill and preserves custom edits", async () => {
-  const root = await mkdtemp(join(tmpdir(), "kk-agent-skill-service-"));
+test("initSkillService seeds only the current default create-skill and preserves custom edits", async (t) => {
+  const root = await createTempDir(t, "kk-agent-skill-service-");
   await initToolsService();
   await initSkillService(root);
 
@@ -135,7 +135,11 @@ test("initSkillService seeds only the current default create-skill and preserves
   assert.equal(seeded?.instruction, DEFAULT_CREATE_SKILL_BODY.instruction);
 
   const seedPath = join(root, "create-skill", "SKILL.md");
-  await writeFile(seedPath, "---\nname: Create Skill\ndescription: Custom seeded description.\n---\n\nKeep this custom body.\n", "utf-8");
+  await writeFile(
+    seedPath,
+    "---\nname: Create Skill\ndescription: Custom seeded description.\n---\n\nKeep this custom body.\n",
+    "utf-8",
+  );
 
   await initSkillService(root);
 

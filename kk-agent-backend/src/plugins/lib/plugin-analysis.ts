@@ -1,6 +1,5 @@
 import semver from "semver";
 import type {
-  PluginConfigMap,
   PluginDependency,
   PluginPlan,
   PluginSummary,
@@ -87,11 +86,10 @@ function satisfyDependency(
   return { ok: true };
 }
 
-export function analysePlugins(plugins: LoadedPlugin[], config: PluginConfigMap): PluginAnalysis {
+export function analysePlugins(plugins: LoadedPlugin[]): PluginAnalysis {
   const registry = createRegistry(plugins);
   const planMap = new Map<string, PluginPlan>();
   const entries: PluginAnalysis["entries"] = [];
-  const staleConfigEntries = Object.keys(config).filter((name) => !plugins.some((plugin) => plugin.name === name));
 
   let order: string[];
   try {
@@ -105,7 +103,7 @@ export function analysePlugins(plugins: LoadedPlugin[], config: PluginConfigMap)
     planMap.set(plugin.name, {
       name: plugin.name,
       version: plugin.mod.version ?? "0.0.0",
-      status: "disabled",
+      status: "skipped",
       issues: [],
       resolvedDependencies: [],
     });
@@ -118,11 +116,6 @@ export function analysePlugins(plugins: LoadedPlugin[], config: PluginConfigMap)
 
     const issues: string[] = [];
     const resolvedDependencies: string[] = [];
-
-    if (plugin.config.enabled !== true) {
-      entries.push({ info: plugin, plan });
-      continue;
-    }
 
     for (const dependency of plugin.mod.deps ?? []) {
       if (!dependency?.name) continue;
@@ -140,5 +133,5 @@ export function analysePlugins(plugins: LoadedPlugin[], config: PluginConfigMap)
     entries.push({ info: plugin, plan });
   }
 
-  return { entries, registry, staleConfigEntries };
+  return { entries, registry };
 }

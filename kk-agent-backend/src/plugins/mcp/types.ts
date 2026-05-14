@@ -1,4 +1,4 @@
-export { SYSTEM_MCP_KEYS } from "@krischan-klug/kk-agent-contract";
+export { SYSTEM_MCP_KEYS } from "kk-agent-contract";
 export type {
   AccessScope,
   CreateMcpBody,
@@ -10,7 +10,7 @@ export type {
   SystemMcpKey,
   ToolResultPolicy,
   UpdateMcpBody,
-} from "@krischan-klug/kk-agent-contract";
+} from "kk-agent-contract";
 
 export interface ToolCallResult {
   content: string;

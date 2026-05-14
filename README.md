@@ -40,12 +40,17 @@ kk-agent/
 |-- kk-agent-frontend/  Next.js frontend
 |-- kk-agent-contract/  Shared types and request/capability helpers
 |-- scripts/            Root workspace scripts
-|-- AGENTS.md
-`-- CRITICAL_RULES.md
+`-- AGENTS.md
 ```
 
 - [Backend README](kk-agent-backend/README.md)
 - [Frontend README](kk-agent-frontend/README.md)
+
+Contract and desktop notes:
+
+- `kk-agent-contract` is a private local workspace package. It is not published or installed from an external registry.
+- `kk-agent-desktop` embeds `kk-agent-frontend/out` and `kk-agent-backend/desktop-dist` for packaged builds.
+- Desktop runtime data is written under Electron `userData`, not the installation directory.
 
 ## Monorepo Commands
 
@@ -79,6 +84,12 @@ Create the Windows desktop installer:
 npm run desktop:dist
 ```
 
+Run the Electron shell against the local dev backend/frontend:
+
+```bash
+npm run dev:desktop
+```
+
 Run a workspace-specific command from the root:
 
 ```bash
@@ -90,23 +101,19 @@ npm --workspace kk-agent-frontend run build
 
 Requirements:
 
-- Node.js 18+
+- Node.js 22.13.0, Node.js 20.19.0+, or Node.js 24+
 - A local or self-hosted OpenAI-compatible provider
 
-Backend only:
+Backend only from the root workspace:
 
 ```bash
-cd kk-agent-backend
-npm install
-npm run dev
+npm run dev:backend
 ```
 
-Frontend only:
+Frontend only from the root workspace:
 
 ```bash
-cd kk-agent-frontend
-npm install
-npm run dev
+npm run dev:frontend
 ```
 
 Open `http://localhost:3000`.
@@ -132,9 +139,9 @@ Open `http://localhost:3000`.
 Run checks from the root workspace:
 
 ```bash
-npm --workspace kk-agent-contract run lint
-npm --workspace kk-agent-backend run test
-npm --workspace kk-agent-frontend run build
+npm run check
+npm test
+npm run build
 ```
 
 ## License

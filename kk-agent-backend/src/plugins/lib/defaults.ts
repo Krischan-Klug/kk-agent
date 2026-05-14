@@ -1,5 +1,5 @@
 import { loadState, saveState } from "./state.js";
-import type { AppDefaults } from "@krischan-klug/kk-agent-contract";
+import type { AppDefaults } from "kk-agent-contract";
 import { getBuiltInModeMeta, getDefaultAllowedToolNames, getDefaultToolIds } from "../agent/lib/modes.js";
 import { applyOverrides, diffOverrides } from "./overrides.js";
 

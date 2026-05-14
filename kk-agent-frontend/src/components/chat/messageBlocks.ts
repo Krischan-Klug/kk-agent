@@ -7,7 +7,7 @@ export {
   collectText,
   collectToolResults,
   collectToolUses,
-} from "@krischan-klug/kk-agent-contract";
+} from "kk-agent-contract";
 
 export function getToolCallDisplayText(input: Record<string, unknown>): string | undefined {
   const value = input.tool_call_description;

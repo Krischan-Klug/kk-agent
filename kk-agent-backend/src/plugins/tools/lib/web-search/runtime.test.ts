@@ -1,6 +1,24 @@
-import test from "node:test";
+import test, { afterEach } from "node:test";
 import assert from "node:assert/strict";
 import { executeWebSearchTool } from "./runtime.js";
+
+const originalFetch = globalThis.fetch;
+
+afterEach(() => {
+  globalThis.fetch = originalFetch;
+});
+
+function htmlResponse(url: string, html: string): Response {
+  const response = new Response(html, {
+    headers: { "content-type": "text/html; charset=utf-8" },
+  });
+  Object.defineProperty(response, "url", { value: url });
+  return response;
+}
+
+function mockFetch(handler: (url: string) => Response | Promise<Response>): void {
+  globalThis.fetch = (async (input: RequestInfo | URL) => handler(String(input))) as typeof fetch;
+}
 
 function makeConfig(): import("../../../mcp/types.js").McpServerConfig {
   return {
@@ -27,7 +45,13 @@ test("WebSearch rejects both allowed and blocked domains", async () => {
 });
 
 test("WebSearch filters allowed domains", async () => {
-  // This test is a lightweight smoke; real DuckDuckGo results depend on network.
+  mockFetch((url) => htmlResponse(url, `
+    <a class="result__a" href="https://github.com/example/repo">GitHub Repo</a>
+    <a class="result__snippet">Repository snippet</a>
+    <a class="result__a" href="https://example.com/ignored">Other Result</a>
+    <a class="result__snippet">Other snippet</a>
+  `));
+
   const result = await executeWebSearchTool(makeConfig(), "WebSearch", {
     query: "github",
     allowed_domains: ["github.com"],
@@ -43,13 +67,15 @@ test("WebSearch filters allowed domains", async () => {
 
 test("WebFetch rejects invalid URL", async () => {
   const result = await executeWebSearchTool(makeConfig(), "WebFetch", {
-    url: "not-a-valid-url",
+    url: "http://[::1",
   });
   assert.equal(result?.isError, true);
   assert.ok(result?.content.includes("Invalid URL"));
 });
 
 test("WebFetch upgrades http to https", async () => {
+  mockFetch((url) => htmlResponse(url, "<title>Example</title><p>Hello</p>"));
+
   const result = await executeWebSearchTool(makeConfig(), "WebFetch", {
     url: "http://example.com",
   });
@@ -60,6 +86,13 @@ test("WebFetch upgrades http to https", async () => {
 });
 
 test("WebFetch strips scripts and styles from HTML", async () => {
+  mockFetch((url) => htmlResponse(url, `
+    <title>Example</title>
+    <style>body { color: red; }</style>
+    <script>alert("x")</script>
+    <p>Visible text</p>
+  `));
+
   const result = await executeWebSearchTool(makeConfig(), "WebFetch", {
     url: "https://example.com",
   });
@@ -69,6 +102,8 @@ test("WebFetch strips scripts and styles from HTML", async () => {
 });
 
 test("WebFetch truncates large pages with clear note", async () => {
+  mockFetch((url) => htmlResponse(url, "<title>Example</title><p>Small page</p>"));
+
   const result = await executeWebSearchTool(makeConfig(), "WebFetch", {
     url: "https://example.com",
   });

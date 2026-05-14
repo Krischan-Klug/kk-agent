@@ -1,6 +1,6 @@
-import type { AttachmentCategory, AttachmentSource } from "@krischan-klug/kk-agent-contract";
+import type { AttachmentCategory, AttachmentSource } from "kk-agent-contract";
 
-export type { AttachmentSource } from "@krischan-klug/kk-agent-contract";
+export type { AttachmentSource } from "kk-agent-contract";
 
 export interface StoredAttachment {
   id: string;

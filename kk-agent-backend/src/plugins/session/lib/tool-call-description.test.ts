@@ -1,7 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
-  TOOL_CALL_DESCRIPTION_KEY,
   withToolCallDescriptionSchema,
   stripDisplayOnlyInputKeys,
 } from "./tool-call-description.js";

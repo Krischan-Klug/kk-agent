@@ -19,7 +19,7 @@ export function removeProviderVerification(id: string): void {
   inflightProviderVerifications.delete(id);
 }
 
-export async function verifyProvider(
+async function verifyProvider(
   id: string,
   testProvider: (id: string) => Promise<ProviderVerificationResult>,
 ): Promise<ProviderVerificationResult> {

@@ -1,5 +1,4 @@
 import { app, BrowserWindow, Menu, net, protocol } from "electron";
-import { createLogger } from "./logger";
 import { spawn, type ChildProcess } from "node:child_process";
 import { randomBytes } from "node:crypto";
 import { createInterface } from "node:readline";
@@ -8,7 +7,10 @@ import { mkdir } from "node:fs/promises";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 
-const logger = createLogger("desktop");
+const logger = {
+  info: (...args: unknown[]) => console.info("[desktop]", ...args),
+  error: (...args: unknown[]) => console.error("[desktop]", ...args),
+};
 
 // Use app:// instead of file:// so packaged builds keep a standard origin for fetch/stream/CORS.
 protocol.registerSchemesAsPrivileged([
@@ -155,7 +157,6 @@ async function startBackend(apiToken: string): Promise<string> {
   const backendEntry = getBackendEntry();
   const userDataRoot = path.join(app.getPath("userData"), "kk-agent");
   const stateDir = path.join(userDataRoot, "state");
-  const pluginConfigFile = path.join(userDataRoot, "plugins.config.json");
 
   await mkdir(stateDir, { recursive: true });
 
@@ -169,7 +170,6 @@ async function startBackend(apiToken: string): Promise<string> {
       PORT: "0",
       KK_AGENT_API_TOKEN: apiToken,
       KK_AGENT_STATE_DIR: stateDir,
-      KK_AGENT_PLUGIN_CONFIG_FILE: pluginConfigFile,
     },
     stdio: ["ignore", "pipe", "pipe"],
     windowsHide: true,

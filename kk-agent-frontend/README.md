@@ -7,8 +7,7 @@ The frontend is the control surface for chats, agents, providers, tools, MCPs, s
 ## Quickstart
 
 ```bash
-npm install
-npm run dev
+npm --workspace kk-agent-frontend run dev
 ```
 
 Other common commands:
@@ -99,4 +98,4 @@ The frontend consumes the backend through the shared contract package and typed 
 
 Package dependency:
 
-- `@krischan-klug/kk-agent-contract` from GitHub Packages
+- `kk-agent-contract` from the local workspace

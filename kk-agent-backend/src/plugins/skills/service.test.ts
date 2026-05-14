@@ -6,7 +6,8 @@ import { tmpdir } from "node:os";
 import { initToolsService } from "../tools/service.js";
 import type { SkillDefinition } from "./types.js";
 import { DEFAULT_CREATE_SKILL_BODY } from "./lib/default-create-skill.js";
-import { buildSkillCatalogSection, createSkill, importSkill, initSkillService, listSkills, updateSkill, updateSkillLinks } from "./service.js";
+import { buildSkillsCatalogSection } from "./lib/xml.js";
+import { createSkill, importSkill, initSkillService, listSkills, updateSkill, updateSkillLinks } from "./service.js";
 
 const BASE_SKILL: SkillDefinition = {
   id: "repo-analysis",
@@ -19,8 +20,8 @@ const BASE_SKILL: SkillDefinition = {
   linkedMcpIds: [],
 };
 
-test("buildSkillCatalogSection emits XML without proprietary metadata", () => {
-  const xml = buildSkillCatalogSection([BASE_SKILL]);
+test("buildSkillsCatalogSection emits XML without proprietary metadata", () => {
+  const xml = buildSkillsCatalogSection([BASE_SKILL]);
 
   assert.ok(xml.includes("<skills_catalog>"));
   assert.ok(xml.includes('<skill id="repo-analysis"'));

@@ -228,18 +228,6 @@ function isUnsupportedVisionError(error: unknown): boolean {
     && (message.includes("unsupported") || message.includes("not support") || message.includes("invalid"));
 }
 
-export function configure(settings: { baseUrl?: string }): void {
-  if (state.providers.length > 0 || !settings.baseUrl) return;
-
-  const provider: ProviderConfig = {
-    id: randomUUID(),
-    name: "Local LLM",
-    baseUrl: settings.baseUrl,
-  };
-
-  state.providers.push(provider);
-}
-
 export async function initState(): Promise<void> {
   const loaded = await loadState<ProvidersState>(STATE_FILE, DEFAULT_STATE);
   state = normalizeStoredProvidersState(loaded);

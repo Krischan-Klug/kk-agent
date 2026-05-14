@@ -3,4 +3,4 @@ export {
   mergeLlmRequestConfigs,
   stringifyJsonValue,
   tryParseJsonObject,
-} from "@krischan-klug/kk-agent-contract";
+} from "kk-agent-contract";

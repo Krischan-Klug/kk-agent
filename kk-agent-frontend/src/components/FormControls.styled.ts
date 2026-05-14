@@ -1,6 +1,6 @@
 import styled, { css } from "styled-components";
 
-export const compactSelectStyles = css`
+const compactSelectStyles = css`
   padding: 6px 10px;
   background: var(--bg-elevated);
   color: var(--text-primary);

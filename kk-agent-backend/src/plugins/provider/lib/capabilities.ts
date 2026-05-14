@@ -8,4 +8,4 @@ export {
   getPreferredEndpoint,
   normalizeCanonicalReasoningLevel,
   resolveMaxOutputRange,
-} from "@krischan-klug/kk-agent-contract";
+} from "kk-agent-contract";

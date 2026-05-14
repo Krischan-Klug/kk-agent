@@ -58,15 +58,15 @@ export function detectImagePdf(filePath: string): "image" | "pdf" | "binary" | n
   return null;
 }
 
-export function getFilesystemBasePath(config: McpServerConfig): string {
+function getFilesystemBasePath(config: McpServerConfig): string {
   return resolveFilesystemSystemConfig(config.systemConfig).basePath ?? resolve("/");
 }
 
-export function getFilesystemAllowedRoot(config: McpServerConfig): string {
+function getFilesystemAllowedRoot(config: McpServerConfig): string {
   return getDefaultPathForScope(resolveAccessScope(config.systemConfig?.accessScope));
 }
 
-export function normalizeRequestedPath(target: string): string {
+function normalizeRequestedPath(target: string): string {
   const trimmed = target.trim();
   if (/^[\\/][A-Za-z]:[\\/]/.test(trimmed)) {
     return trimmed.slice(1);
@@ -74,7 +74,7 @@ export function normalizeRequestedPath(target: string): string {
   return trimmed;
 }
 
-export function resolveWithinRoot(allowedRoot: string, basePath: string, target?: unknown): string {
+function resolveWithinRoot(allowedRoot: string, basePath: string, target?: unknown): string {
   const base = resolve(basePath);
   const allowedBase = resolve(allowedRoot);
   const normalizedTarget = typeof target === "string" ? normalizeRequestedPath(target) : target;

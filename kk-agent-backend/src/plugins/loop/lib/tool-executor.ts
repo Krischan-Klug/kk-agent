@@ -6,7 +6,7 @@ import {
   type TranscriptMessage,
   type TranscriptToolUseBlock,
 } from "../../lib/transcript.js";
-import type { ToolExecutionStatus } from "@krischan-klug/kk-agent-contract";
+import type { ToolExecutionStatus } from "kk-agent-contract";
 import type {
   ModeRuntimeRef,
   RuntimeToolDefinition,

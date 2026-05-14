@@ -9,7 +9,11 @@
   "scripts": {
     "build": "tsup --config tsup.config.ts",
     "start:dev": "npm run build && node scripts/start-dev.mjs",
+    "lint": "tsc --noEmit",
     "dist": "npm run build && electron-builder --win nsis"
+  },
+  "engines": {
+    "node": "^20.19.0 || ^22.13.0 || >=24"
   },
   "build": {
     "appId": "com.krikra.kk-agent",

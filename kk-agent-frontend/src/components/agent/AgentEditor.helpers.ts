@@ -116,10 +116,6 @@ export function normalizeAllowedToolNames(nextAllowed: string[], concreteTools: 
   return [...new Set(nextAllowed)].filter((name) => activeToolNames.has(name));
 }
 
-export function isToolAllowed(modeConfig: AgentModeConfig, toolName: string): boolean {
-  return modeConfig.allowedToolNames.includes(toolName);
-}
-
 export function hasAllowedToolForCapability(allowedToolNames: string[], capabilityToolNames: string[]): boolean {
   return capabilityToolNames.some((toolName) => allowedToolNames.includes(toolName));
 }

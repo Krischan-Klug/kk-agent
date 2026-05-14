@@ -5,12 +5,21 @@ yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
 .pnpm-store/
+.pnp
+.pnp.*
+.yarn/*
+!.yarn/patches
+!.yarn/plugins
+!.yarn/releases
+!.yarn/versions
 
 .env
 .env.*
 !.env.example
+**/.npmrc
 
 **/.next/
+**/.vercel/
 **/out/
 **/dist/
 **/desktop-dist/
@@ -19,14 +28,27 @@ pnpm-debug.log*
 **/coverage/
 **/.nyc_output/
 **/*.tsbuildinfo
+**/next-env.d.ts
 
+state/
+plugins.config.json
+**/plugins.config.json
 kk-agent-backend/state/
 
+.claude/
 .vscode/
 .idea/
 Thumbs.db
 Desktop.ini
 .DS_Store
+
+logs/
+*.log
+*.pid
+pids/
+*.seed
+*.pid.lock
+*.pem
 
 .tmp/
 tmp/

@@ -1,14 +1,12 @@
 import type { ModulePlugin } from "../types.js";
 import routes from "./routes.js";
-import { configure, initState } from "./service.js";
+import { initState } from "./service.js";
 
 const ProviderPlugin: ModulePlugin = {
   name: "provider",
   version: "0.3.0",
   description: "Provider registry with unified model capabilities and endpoint mapping.",
-  async init(app, context) {
-    const settings = context.settings as { baseUrl?: string };
-    configure(settings);
+  async init(app) {
     await initState();
     app.use("/provider", routes);
   },

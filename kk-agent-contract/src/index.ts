@@ -14,16 +14,6 @@ export type {
 
 export type { ReasoningEffort } from "./common.js";
 
-export {
-  createScopedLogger,
-  readLogLevel,
-} from "./logger.js";
-
-export type {
-  Logger,
-  LogLevel,
-} from "./logger.js";
-
 export type {
   CommonLlmRequestConfig,
   ContinuationMode,

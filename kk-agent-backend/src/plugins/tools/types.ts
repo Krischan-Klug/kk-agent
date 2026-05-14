@@ -1,4 +1,4 @@
-export type { MemoryFact, TaskItem } from "@krischan-klug/kk-agent-contract";
+export type { MemoryFact, TaskItem } from "kk-agent-contract";
 
 export interface TaskDraft {
   title: string;

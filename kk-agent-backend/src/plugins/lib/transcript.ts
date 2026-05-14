@@ -12,7 +12,7 @@ export {
   textBlock,
   toolResultBlock,
   toolUseBlock,
-} from "@krischan-klug/kk-agent-contract";
+} from "kk-agent-contract";
 
 export type {
   TranscriptAttachmentRefBlock,
@@ -20,4 +20,4 @@ export type {
   TranscriptMessage,
   TranscriptStopReason,
   TranscriptToolUseBlock,
-} from "@krischan-klug/kk-agent-contract";
+} from "kk-agent-contract";

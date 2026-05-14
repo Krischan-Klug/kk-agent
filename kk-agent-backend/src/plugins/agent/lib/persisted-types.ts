@@ -3,7 +3,7 @@ import type {
   AgentModeConfig,
   ModeBehavior,
 } from "../types.js";
-import type { AgentModeSource } from "@krischan-klug/kk-agent-contract";
+import type { AgentModeSource } from "kk-agent-contract";
 
 export interface PersistedAgentsState {
   agents: PersistedAgentDefinition[];

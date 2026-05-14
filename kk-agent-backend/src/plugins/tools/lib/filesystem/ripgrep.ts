@@ -123,7 +123,7 @@ export interface GrepRipgrepOptions {
   maxResultBytes: number;
 }
 
-export interface GrepMatch {
+interface GrepMatch {
   file: string;
   line: number;
   content: string;

@@ -1,4 +1,4 @@
-import type { RuntimeToolSource, ToolExecutionStatus, TranscriptMessage } from "@krischan-klug/kk-agent-contract";
+import type { RuntimeToolSource, ToolExecutionStatus, TranscriptMessage } from "kk-agent-contract";
 import type { ProviderTransportState, ProviderTurnDebug, TokenStats, UnifiedToolDefinition } from "../provider/lib/types.js";
 import type { ModeBehavior, AgentPromptSections } from "../agent/types.js";
 import type { LlmRequestConfig } from "../provider/types.js";
@@ -33,7 +33,7 @@ export interface ModeRuntimeRef {
   behavior: ModeBehavior;
 }
 
-export interface RuntimeToolDisplayMeta {
+interface RuntimeToolDisplayMeta {
   title?: string;
   summaryInputKeys?: string[];
   redactInputKeys?: string[];

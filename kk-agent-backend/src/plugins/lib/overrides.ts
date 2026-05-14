@@ -1,5 +1,3 @@
-export type JsonObject = Record<string, unknown>;
-
 export function deepClone<T>(value: T): T {
   if (value === null || value === undefined) return value;
   if (typeof value !== "object") return value;

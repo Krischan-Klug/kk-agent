@@ -17,8 +17,3 @@ export function resolveStateDir(): string {
   const configured = process.env.KK_AGENT_STATE_DIR?.trim();
   return resolve(configured || "state");
 }
-
-export function resolvePluginConfigFile(): string {
-  const configured = process.env.KK_AGENT_PLUGIN_CONFIG_FILE?.trim();
-  return resolve(configured || "plugins.config.json");
-}

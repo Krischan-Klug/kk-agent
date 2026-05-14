@@ -64,7 +64,7 @@ export function buildRegex(pattern: string, caseSensitive = false, multiline = f
   }
 }
 
-export async function walkDirectory(
+async function walkDirectory(
   root: string,
   onEntry: (fullPath: string, entry: { isDirectory(): boolean; isFile(): boolean; name: string }) => Promise<boolean | void>,
 ): Promise<void> {

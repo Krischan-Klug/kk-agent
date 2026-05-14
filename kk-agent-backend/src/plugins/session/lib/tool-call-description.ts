@@ -1,4 +1,4 @@
-export const TOOL_CALL_DESCRIPTION_KEY = "tool_call_description";
+const TOOL_CALL_DESCRIPTION_KEY = "tool_call_description";
 
 const SCHEMA_DESCRIPTION =
   "Short active-voice description of the immediate tool action shown to the user.";

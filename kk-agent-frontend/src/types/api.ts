@@ -2,7 +2,7 @@ import type {
   McpServerConfig,
   McpToolDefinition,
   TranscriptMessage,
-} from "@krischan-klug/kk-agent-contract";
+} from "kk-agent-contract";
 
 export type {
   AgentDefinition,
@@ -51,7 +51,7 @@ export type {
   UpdateSessionBody,
   UpdateSkillLinksBody,
   UpdateSkillBody,
-} from "@krischan-klug/kk-agent-contract";
+} from "kk-agent-contract";
 
 export type SessionMessage = TranscriptMessage;
 

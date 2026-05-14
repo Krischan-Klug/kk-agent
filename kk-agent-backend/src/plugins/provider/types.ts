@@ -18,4 +18,4 @@ export type {
   ResolvedLlmRequestConfig,
   UpdateProviderBody,
   VisionSupport,
-} from "@krischan-klug/kk-agent-contract";
+} from "kk-agent-contract";

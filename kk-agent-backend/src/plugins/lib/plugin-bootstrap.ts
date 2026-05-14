@@ -18,7 +18,6 @@ function buildContext(analysis: PluginAnalysis, entry: PluginAnalysisEntry): Plu
   }
 
   return {
-    settings: { ...entry.info.config.settings },
     registry: analysis.registry,
     resolvedDependencies: resolved,
   };
@@ -30,11 +29,9 @@ function getCoreEntry(analysis: PluginAnalysis): PluginAnalysisEntry {
     throw new Error(`Required plugin '${CORE_PLUGIN_NAME}' was not registered during analysis.`);
   }
   if (coreEntry.plan.status !== "enabled") {
-    const reason = coreEntry.plan.status === "disabled"
-      ? "it is disabled in plugins.config.json"
-      : coreEntry.plan.issues.length > 0
-        ? coreEntry.plan.issues.join("; ")
-        : "unresolved issues";
+    const reason = coreEntry.plan.issues.length > 0
+      ? coreEntry.plan.issues.join("; ")
+      : "unresolved issues";
     throw new Error(`Required plugin '${CORE_PLUGIN_NAME}' must be enabled before the server can start: ${reason}.`);
   }
   return coreEntry;
@@ -49,19 +46,10 @@ export async function initializePlannedPlugins(app: Express, analysis: PluginAna
   getCoreEntry(analysis);
 
   const enabled: string[] = [];
-  const disabled: string[] = [];
   const skipped: PluginAnalysisEntry[] = [];
-
-  if (analysis.staleConfigEntries.length > 0) {
-    logger.warn("Found configuration entries for unknown plugins:", analysis.staleConfigEntries.join(", "));
-  }
 
   for (const entry of analysis.entries) {
     const { plan, info } = entry;
-    if (plan.status === "disabled") {
-      disabled.push(plan.name);
-      continue;
-    }
     if (plan.status === "skipped") {
       skipped.push(entry);
       continue;
@@ -89,10 +77,6 @@ export async function initializePlannedPlugins(app: Express, analysis: PluginAna
       })
       .join(", ");
     logger.info("Plugins enabled:", formatted);
-  }
-
-  if (disabled.length > 0) {
-    logger.info("Plugins disabled:", disabled.join(", "));
   }
 
   if (skipped.length > 0) {

@@ -1,6 +1,5 @@
 import type {
   ModulePlugin,
-  PluginConfigEntry,
   PluginPlan,
   PluginSummary,
 } from "../types.js";
@@ -9,7 +8,6 @@ export interface LoadedPlugin {
   name: string;
   directory: string;
   mod: ModulePlugin;
-  config: PluginConfigEntry;
 }
 
 export interface PluginAnalysisEntry {
@@ -20,5 +18,4 @@ export interface PluginAnalysisEntry {
 export interface PluginAnalysis {
   entries: PluginAnalysisEntry[];
   registry: Record<string, PluginSummary>;
-  staleConfigEntries: string[];
 }

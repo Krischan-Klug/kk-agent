@@ -12,7 +12,6 @@ export interface PluginSummary {
 }
 
 export interface PluginLifecycleContext {
-  settings: Record<string, unknown>;
   registry: Readonly<Record<string, PluginSummary>>;
   resolvedDependencies: Readonly<Record<string, PluginSummary>>;
 }
@@ -27,7 +26,7 @@ export interface ModulePlugin {
   afterInit?(app: Express, context: PluginLifecycleContext): void | Promise<void>;
 }
 
-type PluginStatus = "enabled" | "disabled" | "skipped";
+type PluginStatus = "enabled" | "skipped";
 
 export interface PluginPlan {
   name: string;
@@ -36,10 +35,3 @@ export interface PluginPlan {
   issues: string[];
   resolvedDependencies: string[];
 }
-
-export interface PluginConfigEntry {
-  enabled?: boolean;
-  settings?: Record<string, unknown>;
-}
-
-export type PluginConfigMap = Record<string, PluginConfigEntry>;

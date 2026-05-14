@@ -4,4 +4,4 @@ export {
   compactModelSettings,
   mergeLlmRequestConfigs,
   sanitizeEndpointExtraBody,
-} from "@krischan-klug/kk-agent-contract";
+} from "kk-agent-contract";

@@ -127,7 +127,7 @@ type LinkedSkillsPickerProps = {
   onSkillToggle?: (skillId: string, linked: boolean) => void;
 };
 
-export function LinkedSkillsPicker({ mcp, availableSkills, onSkillToggle }: LinkedSkillsPickerProps) {
+function LinkedSkillsPicker({ mcp, availableSkills, onSkillToggle }: LinkedSkillsPickerProps) {
   const skillDropdown = useDropdown<HTMLDivElement>();
   if (!availableSkills || availableSkills.length === 0 || !onSkillToggle) return null;
 
@@ -183,7 +183,7 @@ type SystemVariablesToggleProps = {
   systemVariables: string[];
 };
 
-export function SystemVariablesToggle({ systemVariables }: SystemVariablesToggleProps) {
+function SystemVariablesToggle({ systemVariables }: SystemVariablesToggleProps) {
   const [showSystemVariables, setShowSystemVariables] = useState(false);
   if (systemVariables.length === 0) return null;
 

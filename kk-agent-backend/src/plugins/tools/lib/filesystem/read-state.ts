@@ -56,40 +56,8 @@ export async function recordReadForSession(
   });
 }
 
-export async function refreshReadStateForSession(
-  sessionId: string,
-  path: string,
-  mtimeMs: number,
-  size: number,
-): Promise<void> {
-  const bucket = getSessionBucket(sessionId);
-  const key = normalizeKey(path);
-  const existing = bucket.get(key);
-  if (!existing) return;
-  let contentHash: string | undefined;
-  try {
-    const content = await readFile(path, "utf-8");
-    contentHash = computeContentHash(content);
-  } catch {
-    // ignore
-  }
-  bucket.set(key, {
-    ...existing,
-    mtimeMs,
-    size,
-    contentHash,
-  });
-}
-
 export function getReadStateForSession(sessionId: string, path: string): ReadStateEntry | undefined {
   return getSessionBucket(sessionId).get(normalizeKey(path));
-}
-
-export function hasCurrentReadForSession(sessionId: string, path: string, mtimeMs: number, size: number): boolean {
-  const entry = getSessionBucket(sessionId).get(normalizeKey(path));
-  if (!entry) return false;
-  if (entry.mtimeMs === mtimeMs && entry.size === size) return true;
-  return false;
 }
 
 export async function verifyReadStateForSession(

@@ -160,16 +160,12 @@ export function getKnownSkillIds(): string[] {
   return cachedSkills.map((skill) => skill.id);
 }
 
-export function buildSkillCatalogSection(skills: SkillDefinition[]): string {
-  return buildSkillsCatalogSection(skills);
-}
-
 export function buildActiveSkillCatalogSection(activeSkillIds: string[]): string {
   const activeSkills = activeSkillIds
     .map((id) => cachedSkills.find((skill) => skill.id === id))
     .filter((skill): skill is SkillDefinition => Boolean(skill));
 
-  return buildSkillCatalogSection(activeSkills);
+  return buildSkillsCatalogSection(activeSkills);
 }
 
 export async function createSkill(body: CreateSkillBody): Promise<SkillDefinition> {
@@ -200,7 +196,7 @@ export async function updateSkill(id: string, body: UpdateSkillBody): Promise<Sk
 }
 
 export async function updateSkillLinks(id: string, body: UpdateSkillLinksBody): Promise<SkillDefinition> {
-  const current = getSkillOrThrow(id);
+  getSkillOrThrow(id);
   const links = sanitizeLinks(body);
   await writeSkillLinks(join(skillsRootDir, id), links);
   await reloadSkills();

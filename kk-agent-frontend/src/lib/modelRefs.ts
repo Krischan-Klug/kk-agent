@@ -6,7 +6,7 @@ export function toModelRef(model: Pick<ModelInfo, "providerId" | "id">): string 
   return `${model.providerId}${MODEL_REF_SEPARATOR}${model.id}`;
 }
 
-export function makeModelRef(providerId: string, modelId: string): string {
+function makeModelRef(providerId: string, modelId: string): string {
   return `${providerId}${MODEL_REF_SEPARATOR}${modelId}`;
 }
 

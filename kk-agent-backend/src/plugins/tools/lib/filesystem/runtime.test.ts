@@ -17,7 +17,7 @@ function makeConfig(basePath: string): McpServerConfig {
     source: "system",
     systemKey: "filesystem",
     systemConfig: {
-      accessScope: "user",
+      accessScope: "system",
       basePath,
       resultPolicy: {},
     },
@@ -402,7 +402,7 @@ test("Write rejects stale existing file", async (t) => {
   try {
     await runWithSessionId("fs-write-stale", async () => {
       await executeFilesystemTool(makeConfig(root), "Read", { file_path: filePath });
-      await writeFile(filePath, "v2\n", "utf-8");
+      await writeFile(filePath, "changed externally\n", "utf-8");
       const result = await executeFilesystemTool(makeConfig(root), "Write", {
         file_path: filePath,
         content: "v3\n",

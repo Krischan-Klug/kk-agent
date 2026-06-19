@@ -13,7 +13,11 @@ import {
   resolveProviderModel,
   updateProvider,
 } from "./service.js";
-import { createTranscriptMessage, reasoningBlock, textBlock } from "../lib/transcript.js";
+import {
+  createTranscriptMessage,
+  reasoningBlock,
+  textBlock,
+} from "../lib/transcript.js";
 
 function createOpenAiCompatibleModel(): ModelInfo {
   return {
@@ -72,7 +76,10 @@ function createOpenAiCompatibleModel(): ModelInfo {
   };
 }
 
-function createResponse(request: UnifiedRequest, content = "ok"): UnifiedResponse {
+function createResponse(
+  request: UnifiedRequest,
+  content = "ok",
+): UnifiedResponse {
   return {
     message: createTranscriptMessage({
       role: "assistant",
@@ -92,47 +99,54 @@ function createAdapter(
   return {
     type: "test",
     chat: handlers.chat,
-    chatStream: handlers.chatStream ?? (async (request) => createResponse(request, "stream")),
-    listModels: handlers.listModels ?? (async () => [createOpenAiCompatibleModel()]),
+    chatStream:
+      handlers.chatStream ??
+      (async (request) => createResponse(request, "stream")),
+    listModels:
+      handlers.listModels ?? (async () => [createOpenAiCompatibleModel()]),
     testConnection: handlers.testConnection ?? (async () => ({ ok: true })),
   };
 }
 
 test.beforeEach(() => {
   __resetProviderServiceForTests({
-    providers: [{
-      id: "provider-1",
-      name: "Local",
-      baseUrl: "http://provider.test",
-    }],
+    providers: [
+      {
+        id: "provider-1",
+        name: "Local",
+        baseUrl: "http://provider.test",
+      },
+    ],
   });
 });
 
 test("callProvider falls back from responses to chat-completions and persists the observation", async () => {
   const attemptedEndpoints: string[] = [];
 
-  __setProviderAdapterFactoryForTests(() => createAdapter({
-    async chat(request) {
-      attemptedEndpoints.push(request.endpoint ?? "chat-completions");
-      if (request.endpoint === "responses") {
-        throw new Error("404 unsupported endpoint /v1/responses");
-      }
-      return {
-        message: createTranscriptMessage({
-          role: "assistant",
-          content: [reasoningBlock("brief chain"), textBlock("fallback ok")],
-          stopReason: "stop",
-        }),
-        finishReason: "stop",
-        stats: {
-          inputTokens: 10,
-          outputTokens: 5,
-          reasoningTokens: 3,
-          source: "provider",
-        },
-      };
-    },
-  }));
+  __setProviderAdapterFactoryForTests(() =>
+    createAdapter({
+      async chat(request) {
+        attemptedEndpoints.push(request.endpoint ?? "chat-completions");
+        if (request.endpoint === "responses") {
+          throw new Error("404 unsupported endpoint /responses");
+        }
+        return {
+          message: createTranscriptMessage({
+            role: "assistant",
+            content: [reasoningBlock("brief chain"), textBlock("fallback ok")],
+            stopReason: "stop",
+          }),
+          finishReason: "stop",
+          stats: {
+            inputTokens: 10,
+            outputTokens: 5,
+            reasoningTokens: 3,
+            source: "provider",
+          },
+        };
+      },
+    }),
+  );
 
   const response = await callProvider({
     providerId: "provider-1",
@@ -142,24 +156,36 @@ test("callProvider falls back from responses to chat-completions and persists th
 
   assert.deepEqual(attemptedEndpoints, ["responses", "chat-completions"]);
   assert.equal(response.notices?.[0]?.code, "endpoint_fallback");
-  assert.deepEqual(response.debug?.attemptedEndpoints, ["responses", "chat-completions"]);
+  assert.deepEqual(response.debug?.attemptedEndpoints, [
+    "responses",
+    "chat-completions",
+  ]);
   assert.equal(response.debug?.endpointSelection, "implicit");
   assert.equal(response.debug?.fallback?.from, "responses");
   assert.equal(response.debug?.fallback?.to, "chat-completions");
-  assert.match(response.debug?.fallback?.reason ?? "", /responses failed with HTTP 404/i);
-  assert.equal(response.debug?.resolvedRequestConfig?.common.endpoint, "chat-completions");
+  assert.match(
+    response.debug?.fallback?.reason ?? "",
+    /responses failed with HTTP 404/i,
+  );
+  assert.equal(
+    response.debug?.resolvedRequestConfig?.common.endpoint,
+    "chat-completions",
+  );
 
   const observedState = __getProviderStateForTests();
   assert.equal(
-    observedState.observedCapabilities["provider-1::model-a"]?.endpointSupport?.responses,
+    observedState.observedCapabilities["provider-1::model-a"]?.endpointSupport
+      ?.responses,
     "unsupported",
   );
   assert.equal(
-    observedState.observedCapabilities["provider-1::model-a"]?.endpointSupport?.["chat-completions"],
+    observedState.observedCapabilities["provider-1::model-a"]
+      ?.endpointSupport?.["chat-completions"],
     "supported",
   );
   assert.equal(
-    observedState.observedCapabilities["provider-1::model-a"]?.reasoningSupport?.["chat-completions"],
+    observedState.observedCapabilities["provider-1::model-a"]
+      ?.reasoningSupport?.["chat-completions"],
     "supported",
   );
 });
@@ -167,12 +193,14 @@ test("callProvider falls back from responses to chat-completions and persists th
 test("callProvider does not auto-fallback when the endpoint was explicitly overridden", async () => {
   const attemptedEndpoints: string[] = [];
 
-  __setProviderAdapterFactoryForTests(() => createAdapter({
-    async chat(request) {
-      attemptedEndpoints.push(request.endpoint ?? "chat-completions");
-      throw new Error("405 unsupported endpoint /v1/responses");
-    },
-  }));
+  __setProviderAdapterFactoryForTests(() =>
+    createAdapter({
+      async chat(request) {
+        attemptedEndpoints.push(request.endpoint ?? "chat-completions");
+        throw new Error("405 unsupported endpoint /responses");
+      },
+    }),
+  );
 
   await assert.rejects(
     callProvider({
@@ -190,28 +218,31 @@ test("callProvider does not auto-fallback when the endpoint was explicitly overr
 
   assert.deepEqual(attemptedEndpoints, ["responses"]);
   assert.equal(
-    __getProviderStateForTests().observedCapabilities["provider-1::model-a"]?.endpointSupport?.responses,
+    __getProviderStateForTests().observedCapabilities["provider-1::model-a"]
+      ?.endpointSupport?.responses,
     "unsupported",
   );
 });
 
 test("callProvider persists response_statefulness unsupported when the adapter fell back to raw replay", async () => {
-  __setProviderAdapterFactoryForTests(() => createAdapter({
-    async chat(request) {
-      return {
-        ...createResponse(request, "fallback replay"),
-        debug: {
-          endpoint: "responses",
-          continuationMode: "raw-output-replay",
-          continuationFallback: {
-            from: "previous-response-id",
-            to: "raw-output-replay",
-            reason: "previous_response_id failed with HTTP 400: unsupported",
+  __setProviderAdapterFactoryForTests(() =>
+    createAdapter({
+      async chat(request) {
+        return {
+          ...createResponse(request, "fallback replay"),
+          debug: {
+            endpoint: "responses",
+            continuationMode: "raw-output-replay",
+            continuationFallback: {
+              from: "previous-response-id",
+              to: "raw-output-replay",
+              reason: "previous_response_id failed with HTTP 400: unsupported",
+            },
           },
-        },
-      };
-    },
-  }));
+        };
+      },
+    }),
+  );
 
   await callProvider({
     providerId: "provider-1",
@@ -220,49 +251,59 @@ test("callProvider persists response_statefulness unsupported when the adapter f
   });
 
   assert.equal(
-    __getProviderStateForTests().observedCapabilities["provider-1::model-a"]?.responsesStatefulness,
+    __getProviderStateForTests().observedCapabilities["provider-1::model-a"]
+      ?.responsesStatefulness,
     "unsupported",
   );
 });
 
 test("callProvider marks vision support as observed when an image input succeeds", async () => {
-  __setProviderAdapterFactoryForTests(() => createAdapter({
-    async chat(request) {
-      return createResponse(request, "image ok");
-    },
-  }));
+  __setProviderAdapterFactoryForTests(() =>
+    createAdapter({
+      async chat(request) {
+        return createResponse(request, "image ok");
+      },
+    }),
+  );
 
   await callProvider({
     providerId: "provider-1",
     model: "model-a",
-    messages: [createTranscriptMessage({
-      role: "user",
-      content: [{
-        type: "attachment_ref",
-        filename: "image.png",
-        mimeType: "image/png",
-        category: "image",
-        source: "user",
-        size: 123,
-        previewDataUrl: "data:image/png;base64,AAA",
-      }],
-    })],
+    messages: [
+      createTranscriptMessage({
+        role: "user",
+        content: [
+          {
+            type: "attachment_ref",
+            filename: "image.png",
+            mimeType: "image/png",
+            category: "image",
+            source: "user",
+            size: 123,
+            previewDataUrl: "data:image/png;base64,AAA",
+          },
+        ],
+      }),
+    ],
   });
 
   assert.equal(
-    __getProviderStateForTests().observedCapabilities["provider-1::model-a"]?.visionSupport,
+    __getProviderStateForTests().observedCapabilities["provider-1::model-a"]
+      ?.visionSupport,
     "supported",
   );
 });
 
 test("updateProvider clears observed capabilities when connection credentials change", async () => {
   __resetProviderServiceForTests({
-    providers: [{
-      id: "provider-1",
-      name: "Local",
-      baseUrl: "http://provider.test",
-      apiKey: "before",
-    }],
+    providers: [
+      {
+        id: "provider-1",
+        name: "Local",
+        baseUrl: "http://provider.test",
+        apiKey: "before",
+      },
+    ],
     observedCapabilities: {
       "provider-1::model-a": {
         endpointSupport: {
@@ -273,18 +314,23 @@ test("updateProvider clears observed capabilities when connection credentials ch
     },
   });
 
-  await updateProvider("provider-1", { baseUrl: "http://provider-2.test", apiKey: "after" });
+  await updateProvider("provider-1", {
+    baseUrl: "http://provider-2.test",
+    apiKey: "after",
+  });
 
   assert.deepEqual(__getProviderStateForTests().observedCapabilities, {});
 });
 
 test("getModelSettings returns only the supported model settings shape", () => {
   __resetProviderServiceForTests({
-    providers: [{
-      id: "provider-1",
-      name: "Local",
-      baseUrl: "http://provider.test",
-    }],
+    providers: [
+      {
+        id: "provider-1",
+        name: "Local",
+        baseUrl: "http://provider.test",
+      },
+    ],
     modelSettings: {
       "provider-1::model-a": {
         llmRequestConfig: {
@@ -333,11 +379,13 @@ test("getModelSettings returns only the supported model settings shape", () => {
 
 test("observed reasoning restores canonical efforts for on-off declared models", async () => {
   __resetProviderServiceForTests({
-    providers: [{
-      id: "provider-1",
-      name: "Local",
-      baseUrl: "http://provider.test",
-    }],
+    providers: [
+      {
+        id: "provider-1",
+        name: "Local",
+        baseUrl: "http://provider.test",
+      },
+    ],
     observedCapabilities: {
       "provider-1::model-a": {
         reasoningSupport: {
@@ -348,30 +396,44 @@ test("observed reasoning restores canonical efforts for on-off declared models",
     },
   });
 
-  __setProviderAdapterFactoryForTests(() => createAdapter({
-    async listModels() {
-      return [{
-        ...createOpenAiCompatibleModel(),
-        capabilities: {
-          ...createOpenAiCompatibleModel().capabilities,
-          supportsReasoning: false,
-          reasoningControl: "on-off",
-          reasoningLevels: [],
-          reasoning: {
-            allowedEfforts: [],
+  __setProviderAdapterFactoryForTests(() =>
+    createAdapter({
+      async listModels() {
+        return [
+          {
+            ...createOpenAiCompatibleModel(),
+            capabilities: {
+              ...createOpenAiCompatibleModel().capabilities,
+              supportsReasoning: false,
+              reasoningControl: "on-off",
+              reasoningLevels: [],
+              reasoning: {
+                allowedEfforts: [],
+              },
+            },
           },
-        },
-      }];
-    },
-    async chat(request) {
-      return createResponse(request);
-    },
-  }));
+        ];
+      },
+      async chat(request) {
+        return createResponse(request);
+      },
+    }),
+  );
 
   const [model] = await getModels("provider-1");
   assert.equal(model?.capabilities.supportsReasoning, true);
-  assert.deepEqual(model?.capabilities.reasoningLevels, ["minimal", "low", "medium", "high"]);
-  assert.deepEqual(model?.capabilities.reasoning?.allowedEfforts, ["minimal", "low", "medium", "high"]);
+  assert.deepEqual(model?.capabilities.reasoningLevels, [
+    "minimal",
+    "low",
+    "medium",
+    "high",
+  ]);
+  assert.deepEqual(model?.capabilities.reasoning?.allowedEfforts, [
+    "minimal",
+    "low",
+    "medium",
+    "high",
+  ]);
 });
 
 test("getModels without provider aggregates models from all providers", async () => {
@@ -390,24 +452,28 @@ test("getModels without provider aggregates models from all providers", async ()
     },
   });
 
-  __setProviderAdapterFactoryForTests((provider) => createAdapter({
-    async listModels() {
-      return [{
-        ...createOpenAiCompatibleModel(),
-        id: "shared-model",
-        providerId: provider.id,
-      }];
-    },
-    async chat(request) {
-      return createResponse(request);
-    },
-  }));
+  __setProviderAdapterFactoryForTests((provider) =>
+    createAdapter({
+      async listModels() {
+        return [
+          {
+            ...createOpenAiCompatibleModel(),
+            id: "shared-model",
+            providerId: provider.id,
+          },
+        ];
+      },
+      async chat(request) {
+        return createResponse(request);
+      },
+    }),
+  );
 
   const models = await getModels();
-  assert.deepEqual(models.map((model) => `${model.providerId}::${model.id}`), [
-    "provider-1::shared-model",
-    "provider-2::shared-model",
-  ]);
+  assert.deepEqual(
+    models.map((model) => `${model.providerId}::${model.id}`),
+    ["provider-1::shared-model", "provider-2::shared-model"],
+  );
 });
 
 test("resolveProviderModel accepts a global model ref without active provider state", async () => {
@@ -418,21 +484,97 @@ test("resolveProviderModel accepts a global model ref without active provider st
     ],
   });
 
-  __setProviderAdapterFactoryForTests((provider) => createAdapter({
-    async listModels() {
-      return [{
-        ...createOpenAiCompatibleModel(),
-        id: "model-a",
-        providerId: provider.id,
-      }];
-    },
-    async chat(request) {
-      return createResponse(request);
-    },
-  }));
+  __setProviderAdapterFactoryForTests((provider) =>
+    createAdapter({
+      async listModels() {
+        return [
+          {
+            ...createOpenAiCompatibleModel(),
+            id: "model-a",
+            providerId: provider.id,
+          },
+        ];
+      },
+      async chat(request) {
+        return createResponse(request);
+      },
+    }),
+  );
 
-  assert.deepEqual(await resolveProviderModel(undefined, "provider-2::model-a"), {
-    providerId: "provider-2",
-    model: "model-a",
+  assert.deepEqual(
+    await resolveProviderModel(undefined, "provider-2::model-a"),
+    {
+      providerId: "provider-2",
+      model: "model-a",
+    },
+  );
+});
+
+test("getModels returns manual models when adapter fetch fails", async () => {
+  __resetProviderServiceForTests({
+    providers: [
+      {
+        id: "provider-1",
+        name: "GLM",
+        baseUrl: "https://api.z.ai/api/coding/paas/v4",
+        apiKey: "test-key",
+        models: ["glm-4.6", "glm-4.5"],
+      },
+    ],
   });
+
+  __setProviderAdapterFactoryForTests(() =>
+    createAdapter({
+      async listModels() {
+        throw new Error("Failed to fetch models: 404");
+      },
+      async chat(request) {
+        return createResponse(request);
+      },
+    }),
+  );
+
+  const models = await getModels("provider-1");
+  assert.equal(models.length, 2);
+  assert.deepEqual(
+    models.map((m) => m.id),
+    ["glm-4.6", "glm-4.5"],
+  );
+  assert.equal(models[0]?.providerId, "provider-1");
+  assert.deepEqual(models[0]?.capabilities.supportedEndpoints, [
+    "responses",
+    "chat-completions",
+  ]);
+});
+
+test("getModels merges fetched and manual models with deduplication", async () => {
+  __resetProviderServiceForTests({
+    providers: [
+      {
+        id: "provider-1",
+        name: "Hybrid",
+        baseUrl: "http://provider.test/v1",
+        models: ["manual-model", "shared-model"],
+      },
+    ],
+  });
+
+  __setProviderAdapterFactoryForTests(() =>
+    createAdapter({
+      async listModels() {
+        return [
+          { ...createOpenAiCompatibleModel(), id: "fetched-model" },
+          { ...createOpenAiCompatibleModel(), id: "shared-model" },
+        ];
+      },
+      async chat(request) {
+        return createResponse(request);
+      },
+    }),
+  );
+
+  const models = await getModels("provider-1");
+  const modelIds = models.map((m) => m.id);
+  assert.deepEqual(modelIds, ["fetched-model", "shared-model", "manual-model"]);
+  assert.equal(models.length, 3);
 });

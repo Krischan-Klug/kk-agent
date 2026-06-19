@@ -1,5 +1,10 @@
 import { randomUUID } from "node:crypto";
-import type { UnifiedRequest, UnifiedResponse, OnChunkFn, ProviderNotice } from "./lib/types.js";
+import type {
+  UnifiedRequest,
+  UnifiedResponse,
+  OnChunkFn,
+  ProviderNotice,
+} from "./lib/types.js";
 import type {
   CreateProviderBody,
   EndpointType,
@@ -12,7 +17,10 @@ import type {
   UpdateProviderBody,
 } from "./types.js";
 import type { ProviderAdapter } from "./lib/adapter.js";
-import { createLocalProviderAdapter } from "./lib/adapters/local.js";
+import {
+  createLocalProviderAdapter,
+  createManualModel,
+} from "./lib/adapters/local.js";
 import { createLogger } from "../../lib/logger.js";
 import { NotFoundError } from "../../lib/errors.js";
 import { getErrorMessage } from "../../lib/error.js";
@@ -20,7 +28,10 @@ import { getErrorMessage } from "../../lib/error.js";
 const logger = createLogger("provider");
 import { loadState, saveState } from "../lib/state.js";
 import { getMessageReasoning } from "../lib/transcript.js";
-import { getModelSettingsKey, normalizeStoredModelSettings } from "./lib/model-settings.js";
+import {
+  getModelSettingsKey,
+  normalizeStoredModelSettings,
+} from "./lib/model-settings.js";
 import { normalizeRequestOptions } from "./lib/request-options.js";
 import {
   applyEndpointSupport,
@@ -47,7 +58,8 @@ const DEFAULT_STATE: ProvidersState = {
 
 let state: ProvidersState = structuredClone(DEFAULT_STATE);
 
-let adapterFactory: (config: ProviderConfig) => ProviderAdapter = createLocalProviderAdapter;
+let adapterFactory: (config: ProviderConfig) => ProviderAdapter =
+  createLocalProviderAdapter;
 let persistOverride: (() => Promise<void>) | undefined;
 
 const adapterCache = new Map<string, ProviderAdapter>();
@@ -75,14 +87,21 @@ function resolveProvider(providerId?: string): ProviderConfig {
   throw new NotFoundError("Provider");
 }
 
-function normalizeStoredProvidersState(nextState: ProvidersState): ProvidersState {
+function normalizeStoredProvidersState(
+  nextState: ProvidersState,
+): ProvidersState {
   return {
     providers: nextState.providers ?? [],
     modelSettings: Object.fromEntries(
-      Object.entries(nextState.modelSettings ?? {}).map(([key, value]) => [key, normalizeStoredModelSettings(value)]),
+      Object.entries(nextState.modelSettings ?? {}).map(([key, value]) => [
+        key,
+        normalizeStoredModelSettings(value),
+      ]),
     ),
     observedCapabilities: Object.fromEntries(
-      Object.entries(nextState.observedCapabilities ?? {}).map(([key, value]) => [key, normalizeObservation(value)]),
+      Object.entries(nextState.observedCapabilities ?? {}).map(
+        ([key, value]) => [key, normalizeObservation(value)],
+      ),
     ),
   };
 }
@@ -99,7 +118,9 @@ function resolveRequestProvider(providerId?: string): ProviderConfig {
   return resolveProvider(providerId ?? getSingleProviderId());
 }
 
-function normalizeProviderStateForTests(overrides: Partial<ProvidersState>): ProvidersState {
+function normalizeProviderStateForTests(
+  overrides: Partial<ProvidersState>,
+): ProvidersState {
   return normalizeStoredProvidersState({
     providers: structuredClone(overrides.providers ?? []),
     modelSettings: structuredClone(overrides.modelSettings ?? {}),
@@ -126,7 +147,9 @@ function invalidateProvider(providerId: string): void {
 
 function clearObservedCapabilities(providerId: string): void {
   state.observedCapabilities = Object.fromEntries(
-    Object.entries(state.observedCapabilities).filter(([key]) => !key.startsWith(`${providerId}::`)),
+    Object.entries(state.observedCapabilities).filter(
+      ([key]) => !key.startsWith(`${providerId}::`),
+    ),
   );
   modelsCache.delete(providerId);
 }
@@ -147,7 +170,9 @@ function getModelRef(providerId: string, modelId: string): string {
   return `${providerId}${MODEL_REF_SEPARATOR}${modelId}`;
 }
 
-function parseModelRef(value: string): { providerId: string; modelId: string } | undefined {
+function parseModelRef(
+  value: string,
+): { providerId: string; modelId: string } | undefined {
   const separatorIndex = value.indexOf(MODEL_REF_SEPARATOR);
   if (separatorIndex <= 0) return undefined;
   const providerId = value.slice(0, separatorIndex);
@@ -155,36 +180,47 @@ function parseModelRef(value: string): { providerId: string; modelId: string } |
   return providerId && modelId ? { providerId, modelId } : undefined;
 }
 
-function mergeObservedCapabilities(provider: ProviderConfig, model: ModelInfo): ModelInfo {
-  const observation = state.observedCapabilities[getObservationKey(provider.id, model.id)];
+function mergeObservedCapabilities(
+  provider: ProviderConfig,
+  model: ModelInfo,
+): ModelInfo {
+  const observation =
+    state.observedCapabilities[getObservationKey(provider.id, model.id)];
   let capabilities = model.capabilities;
 
   if (observation) {
-    for (const [endpoint, support] of Object.entries(observation.endpointSupport ?? {}) as Array<
-      [EndpointType, ObservationSupportState]
-    >) {
+    for (const [endpoint, support] of Object.entries(
+      observation.endpointSupport ?? {},
+    ) as Array<[EndpointType, ObservationSupportState]>) {
       capabilities = applyEndpointSupport(capabilities, endpoint, support);
     }
 
-    for (const [endpoint, support] of Object.entries(observation.reasoningSupport ?? {}) as Array<
-      [EndpointType, ObservationSupportState]
-    >) {
+    for (const [endpoint, support] of Object.entries(
+      observation.reasoningSupport ?? {},
+    ) as Array<[EndpointType, ObservationSupportState]>) {
       capabilities = applyReasoningSupport(capabilities, endpoint, support);
     }
 
     if (observation.responsesStatefulness) {
-      capabilities = applyResponsesStatefulness(capabilities, observation.responsesStatefulness);
+      capabilities = applyResponsesStatefulness(
+        capabilities,
+        observation.responsesStatefulness,
+      );
     }
 
     if (observation.visionSupport) {
-      capabilities = applyVisionSupport(capabilities, observation.visionSupport);
+      capabilities = applyVisionSupport(
+        capabilities,
+        observation.visionSupport,
+      );
     }
   }
 
   const nextCapabilities: ModelCapabilities = {
     ...capabilities,
     reasoning: {
-      allowedEfforts: capabilities.reasoning?.allowedEfforts ?? capabilities.reasoningLevels,
+      allowedEfforts:
+        capabilities.reasoning?.allowedEfforts ?? capabilities.reasoningLevels,
     },
   };
 
@@ -204,7 +240,9 @@ async function markObservedCapabilities(
   const key = getObservationKey(providerId, modelId);
   const existing = state.observedCapabilities[key];
   const merged = mergeObservation(existing, update);
-  const before = JSON.stringify(normalizeObservation(existing ?? { lastObservedAt: "" }));
+  const before = JSON.stringify(
+    normalizeObservation(existing ?? { lastObservedAt: "" }),
+  );
   const after = JSON.stringify(normalizeObservation(merged));
   if (before === after) return;
 
@@ -214,18 +252,30 @@ async function markObservedCapabilities(
 }
 
 function hasObservedReasoning(response: UnifiedResponse): boolean {
-  return getMessageReasoning(response.message).trim().length > 0 || (response.stats?.reasoningTokens ?? 0) > 0;
+  return (
+    getMessageReasoning(response.message).trim().length > 0 ||
+    (response.stats?.reasoningTokens ?? 0) > 0
+  );
 }
 
 function requestContainsImageInputs(request: UnifiedRequest): boolean {
   return request.messages.some((message) =>
-    message.content.some((block) => block.type === "attachment_ref" && block.category === "image"));
+    message.content.some(
+      (block) => block.type === "attachment_ref" && block.category === "image",
+    ),
+  );
 }
 
 function isUnsupportedVisionError(error: unknown): boolean {
   const message = getErrorMessage(error).toLowerCase();
-  return (message.includes("image") || message.includes("vision") || message.includes("multimodal"))
-    && (message.includes("unsupported") || message.includes("not support") || message.includes("invalid"));
+  return (
+    (message.includes("image") ||
+      message.includes("vision") ||
+      message.includes("multimodal")) &&
+    (message.includes("unsupported") ||
+      message.includes("not support") ||
+      message.includes("invalid"))
+  );
 }
 
 export async function initState(): Promise<void> {
@@ -241,7 +291,9 @@ export function listProviders(): ProviderConfig[] {
   return state.providers;
 }
 
-export async function addProvider(config: CreateProviderBody): Promise<ProviderConfig> {
+export async function addProvider(
+  config: CreateProviderBody,
+): Promise<ProviderConfig> {
   const provider: ProviderConfig = { ...config, id: randomUUID() };
   state.providers.push(provider);
   await persist();
@@ -252,11 +304,16 @@ function credentialsChanged(
   current: ProviderConfig,
   updates: UpdateProviderBody,
 ): boolean {
-  return (updates.baseUrl !== undefined && updates.baseUrl !== current.baseUrl)
-    || (updates.apiKey !== undefined && updates.apiKey !== current.apiKey);
+  return (
+    (updates.baseUrl !== undefined && updates.baseUrl !== current.baseUrl) ||
+    (updates.apiKey !== undefined && updates.apiKey !== current.apiKey)
+  );
 }
 
-export async function updateProvider(id: string, updates: UpdateProviderBody): Promise<ProviderConfig> {
+export async function updateProvider(
+  id: string,
+  updates: UpdateProviderBody,
+): Promise<ProviderConfig> {
   const index = state.providers.findIndex((provider) => provider.id === id);
   if (index === -1) throw new NotFoundError("Provider", id);
 
@@ -277,25 +334,64 @@ export async function removeProvider(id: string): Promise<void> {
   await persist();
 }
 
-export async function testProvider(id: string): Promise<{ ok: boolean; error?: string }> {
+export async function testProvider(
+  id: string,
+): Promise<{ ok: boolean; error?: string }> {
   return getAdapter(id).testConnection();
 }
 
-async function getProviderModels(provider: ProviderConfig): Promise<ModelInfo[]> {
-  const models = (await getAdapter(provider.id).listModels()).map((model) => mergeObservedCapabilities(provider, model));
-  modelsCache.set(provider.id, models);
-  return models;
+function getManualModels(provider: ProviderConfig): ModelInfo[] {
+  return (provider.models ?? []).map((modelId) =>
+    createManualModel(provider.id, modelId),
+  );
+}
+
+async function getProviderModels(
+  provider: ProviderConfig,
+): Promise<ModelInfo[]> {
+  const manualModels = getManualModels(provider);
+
+  let fetchedModels: ModelInfo[] = [];
+  try {
+    fetchedModels = await getAdapter(provider.id).listModels();
+  } catch {
+    // Adapter fetch failed — fall back to manual models only
+  }
+
+  const seenIds = new Set<string>();
+  const merged: ModelInfo[] = [];
+
+  for (const model of fetchedModels) {
+    if (seenIds.has(model.id)) continue;
+    seenIds.add(model.id);
+    merged.push(mergeObservedCapabilities(provider, model));
+  }
+
+  for (const model of manualModels) {
+    if (seenIds.has(model.id)) continue;
+    seenIds.add(model.id);
+    merged.push(mergeObservedCapabilities(provider, model));
+  }
+
+  modelsCache.set(provider.id, merged);
+  return merged;
 }
 
 export async function getModels(providerId?: string): Promise<ModelInfo[]> {
   if (!providerId) {
     if (state.providers.length === 0) throw new NotFoundError("Provider");
 
-    const settled = await Promise.allSettled(state.providers.map((provider) => getProviderModels(provider)));
-    const models = settled.flatMap((result) => result.status === "fulfilled" ? result.value : []);
+    const settled = await Promise.allSettled(
+      state.providers.map((provider) => getProviderModels(provider)),
+    );
+    const models = settled.flatMap((result) =>
+      result.status === "fulfilled" ? result.value : [],
+    );
     if (models.length > 0) return models;
 
-    const firstRejection = settled.find((result): result is PromiseRejectedResult => result.status === "rejected");
+    const firstRejection = settled.find(
+      (result): result is PromiseRejectedResult => result.status === "rejected",
+    );
     if (firstRejection) throw firstRejection.reason;
     return [];
   }
@@ -320,48 +416,71 @@ export async function resolveProviderModel(
     }
 
     const models = await getModels();
-    if (models.length === 0) throw new Error("No models available from configured providers");
+    if (models.length === 0)
+      throw new Error("No models available from configured providers");
     const resolvedModel = preferredModel
-      ? models.find((model) => model.id === preferredModel) ?? models[0]!
+      ? (models.find((model) => model.id === preferredModel) ?? models[0]!)
       : models[0]!;
     return { providerId: resolvedModel.providerId, model: resolvedModel.id };
   }
 
   const provider = resolveRequestProvider(providerId);
   const models = await getModels(provider.id);
-  if (models.length === 0) throw new Error("No models available for the provider");
+  if (models.length === 0)
+    throw new Error("No models available for the provider");
 
-  const resolvedModel = preferredModel && models.some((model) => model.id === preferredModel)
-    ? preferredModel
-    : models[0].id;
+  const resolvedModel =
+    preferredModel && models.some((model) => model.id === preferredModel)
+      ? preferredModel
+      : models[0].id;
 
   return { providerId: provider.id, model: resolvedModel };
 }
 
-async function prepareRequest(request: UnifiedRequest, forcedEndpoint?: EndpointType) {
+async function prepareRequest(
+  request: UnifiedRequest,
+  forcedEndpoint?: EndpointType,
+) {
   const provider = resolveRequestProvider(request.providerId);
   const models = await getModels(provider.id);
   const model = models.find((entry) => entry.id === request.model);
   const settings = getModelSettings(provider.id, request.model);
-  const normalized = normalizeRequestOptions(model, settings, request, forcedEndpoint);
+  const normalized = normalizeRequestOptions(
+    model,
+    settings,
+    request,
+    forcedEndpoint,
+  );
   const prepared = { ...request, providerId: provider.id, ...normalized };
-  return { provider, model, prepared, explicitEndpointSelection: normalized.explicitEndpointSelection };
+  return {
+    provider,
+    model,
+    prepared,
+    explicitEndpointSelection: normalized.explicitEndpointSelection,
+  };
 }
 
 function collectObservedCapabilities(
   prepared: UnifiedRequest,
   response: UnifiedResponse,
 ): ObservationUpdate {
-  const endpoint = response.debug?.endpoint ?? prepared.endpoint ?? "chat-completions";
+  const endpoint =
+    response.debug?.endpoint ?? prepared.endpoint ?? "chat-completions";
   let update = setObservedEndpointSupport({}, endpoint, "supported");
 
   if (hasObservedReasoning(response)) {
     update = setObservedReasoningSupport(update, endpoint, "supported");
   }
-  if (endpoint === "responses" && response.debug?.continuationMode === "previous-response-id") {
+  if (
+    endpoint === "responses" &&
+    response.debug?.continuationMode === "previous-response-id"
+  ) {
     update = setObservedResponsesStatefulness(update, "supported");
   }
-  if (endpoint === "responses" && response.debug?.continuationFallback?.from === "previous-response-id") {
+  if (
+    endpoint === "responses" &&
+    response.debug?.continuationFallback?.from === "previous-response-id"
+  ) {
     update = setObservedResponsesStatefulness(update, "unsupported");
   }
   if (requestContainsImageInputs(prepared)) {
@@ -377,7 +496,11 @@ async function trackObservedSuccess(
   prepared: UnifiedRequest,
   response: UnifiedResponse,
 ) {
-  await markObservedCapabilities(providerId, modelId, collectObservedCapabilities(prepared, response));
+  await markObservedCapabilities(
+    providerId,
+    modelId,
+    collectObservedCapabilities(prepared, response),
+  );
 }
 
 function getHttpStatusFromError(error: unknown): number | undefined {
@@ -390,11 +513,13 @@ function isUnsupportedEndpointError(error: unknown): boolean {
   if (status === 404 || status === 405 || status === 501) return true;
 
   const message = getErrorMessage(error).toLowerCase();
-  return message.includes("unsupported endpoint")
-    || message.includes("unknown endpoint")
-    || message.includes("not implemented")
-    || message.includes("no route")
-    || message.includes("not found");
+  return (
+    message.includes("unsupported endpoint") ||
+    message.includes("unknown endpoint") ||
+    message.includes("not implemented") ||
+    message.includes("no route") ||
+    message.includes("not found")
+  );
 }
 
 function buildFallbackReason(error: unknown, endpoint: EndpointType): string {
@@ -419,7 +544,9 @@ function attachProviderDebug(
   },
 ): void {
   response.debug = {
-    ...(response.debug ?? { endpoint: prepared.endpoint ?? "chat-completions" }),
+    ...(response.debug ?? {
+      endpoint: prepared.endpoint ?? "chat-completions",
+    }),
     resolvedRequestConfig: prepared.resolvedLlmRequestConfig,
     attemptedEndpoints: input.attemptedEndpoints,
     endpointSelection: input.endpointSelection,
@@ -429,21 +556,38 @@ function attachProviderDebug(
 
 async function executeWithEndpointFallback(
   request: UnifiedRequest,
-  invoke: (prepared: UnifiedRequest, provider: ProviderConfig) => Promise<UnifiedResponse>,
+  invoke: (
+    prepared: UnifiedRequest,
+    provider: ProviderConfig,
+  ) => Promise<UnifiedResponse>,
 ): Promise<UnifiedResponse> {
   const primary = await prepareRequest(request);
-  const attemptedEndpoints: EndpointType[] = [primary.prepared.endpoint ?? "chat-completions"];
-  const endpointSelection = primary.explicitEndpointSelection ? "explicit" : "implicit";
+  const attemptedEndpoints: EndpointType[] = [
+    primary.prepared.endpoint ?? "chat-completions",
+  ];
+  const endpointSelection = primary.explicitEndpointSelection
+    ? "explicit"
+    : "implicit";
 
   try {
     const response = await invoke(primary.prepared, primary.provider);
-    attachProviderDebug(response, primary.prepared, { attemptedEndpoints, endpointSelection });
-    await trackObservedSuccess(primary.provider.id, request.model, primary.prepared, response);
+    attachProviderDebug(response, primary.prepared, {
+      attemptedEndpoints,
+      endpointSelection,
+    });
+    await trackObservedSuccess(
+      primary.provider.id,
+      request.model,
+      primary.prepared,
+      response,
+    );
     return response;
   } catch (error) {
     const primaryEndpoint = primary.prepared.endpoint ?? "chat-completions";
     const unsupportedEndpoint = isUnsupportedEndpointError(error);
-    const unsupportedVision = requestContainsImageInputs(primary.prepared) && isUnsupportedVisionError(error);
+    const unsupportedVision =
+      requestContainsImageInputs(primary.prepared) &&
+      isUnsupportedVisionError(error);
 
     if (unsupportedEndpoint) {
       await markObservedCapabilities(primary.provider.id, request.model, {
@@ -456,7 +600,11 @@ async function executeWithEndpointFallback(
       });
     }
 
-    if (primary.explicitEndpointSelection || primaryEndpoint !== "responses" || !unsupportedEndpoint) {
+    if (
+      primary.explicitEndpointSelection ||
+      primaryEndpoint !== "responses" ||
+      !unsupportedEndpoint
+    ) {
       throw error;
     }
 
@@ -469,7 +617,7 @@ async function executeWithEndpointFallback(
     const fallbackNotice: ProviderNotice = {
       level: "warning",
       code: "endpoint_fallback",
-      message: `Provider rejected /v1/responses. Retried with /v1/chat/completions.`,
+      message: `Provider rejected /responses. Retried with /chat/completions.`,
     };
     response.notices = [fallbackNotice, ...(response.notices ?? [])];
     attachProviderDebug(response, fallback.prepared, {
@@ -481,45 +629,76 @@ async function executeWithEndpointFallback(
         reason: fallbackReason,
       },
     });
-    await trackObservedSuccess(fallback.provider.id, request.model, fallback.prepared, response);
+    await trackObservedSuccess(
+      fallback.provider.id,
+      request.model,
+      fallback.prepared,
+      response,
+    );
     return response;
   }
 }
 
-export async function callProvider(request: UnifiedRequest): Promise<UnifiedResponse> {
-  return executeWithEndpointFallback(request, async (prepared, provider) => getAdapter(provider.id).chat(prepared));
+export async function callProvider(
+  request: UnifiedRequest,
+): Promise<UnifiedResponse> {
+  return executeWithEndpointFallback(request, async (prepared, provider) =>
+    getAdapter(provider.id).chat(prepared),
+  );
 }
 
-export async function callProviderStream(request: UnifiedRequest, onChunk: OnChunkFn): Promise<UnifiedResponse> {
-  return executeWithEndpointFallback(request, async (prepared, provider) => getAdapter(provider.id).chatStream(prepared, onChunk));
+export async function callProviderStream(
+  request: UnifiedRequest,
+  onChunk: OnChunkFn,
+): Promise<UnifiedResponse> {
+  return executeWithEndpointFallback(request, async (prepared, provider) =>
+    getAdapter(provider.id).chatStream(prepared, onChunk),
+  );
 }
 
-export function getModelCapabilities(providerId: string, modelId: string): ModelCapabilities | undefined {
+export function getModelCapabilities(
+  providerId: string,
+  modelId: string,
+): ModelCapabilities | undefined {
   const models = modelsCache.get(providerId);
   return models?.find((m) => m.id === modelId)?.capabilities;
 }
 
-export function getModelSettings(providerId: string, modelId: string): ModelSettings {
-  return normalizeStoredModelSettings(state.modelSettings[getModelSettingsKey(providerId, modelId)]);
-}
-
-export function getAllModelSettings(providerId?: string): Record<string, ModelSettings> {
-  return Object.fromEntries(
-    Object.entries(state.modelSettings)
-      .filter(([key]) => !providerId || key.startsWith(`${providerId}${MODEL_REF_SEPARATOR}`))
-      .map(([key, value]) => [
-        key,
-        normalizeStoredModelSettings(value),
-      ]),
+export function getModelSettings(
+  providerId: string,
+  modelId: string,
+): ModelSettings {
+  return normalizeStoredModelSettings(
+    state.modelSettings[getModelSettingsKey(providerId, modelId)],
   );
 }
 
-export async function setModelSettings(providerId: string, modelId: string, settings: ModelSettings): Promise<void> {
-  state.modelSettings[getModelSettingsKey(providerId, modelId)] = normalizeStoredModelSettings(settings);
+export function getAllModelSettings(
+  providerId?: string,
+): Record<string, ModelSettings> {
+  return Object.fromEntries(
+    Object.entries(state.modelSettings)
+      .filter(
+        ([key]) =>
+          !providerId || key.startsWith(`${providerId}${MODEL_REF_SEPARATOR}`),
+      )
+      .map(([key, value]) => [key, normalizeStoredModelSettings(value)]),
+  );
+}
+
+export async function setModelSettings(
+  providerId: string,
+  modelId: string,
+  settings: ModelSettings,
+): Promise<void> {
+  state.modelSettings[getModelSettingsKey(providerId, modelId)] =
+    normalizeStoredModelSettings(settings);
   await persist();
 }
 
-export function __resetProviderServiceForTests(overrides: Partial<ProvidersState> = {}): void {
+export function __resetProviderServiceForTests(
+  overrides: Partial<ProvidersState> = {},
+): void {
   state = normalizeProviderStateForTests(overrides);
   adapterFactory = createLocalProviderAdapter;
   persistOverride = async () => {};
@@ -527,7 +706,9 @@ export function __resetProviderServiceForTests(overrides: Partial<ProvidersState
   modelsCache.clear();
 }
 
-export function __setProviderAdapterFactoryForTests(factory?: (config: ProviderConfig) => ProviderAdapter): void {
+export function __setProviderAdapterFactoryForTests(
+  factory?: (config: ProviderConfig) => ProviderAdapter,
+): void {
   adapterFactory = factory ?? createLocalProviderAdapter;
   adapterCache.clear();
   modelsCache.clear();

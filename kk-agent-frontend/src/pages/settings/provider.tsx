@@ -2,12 +2,12 @@ import { useCallback, useEffect, useState } from "react";
 import styled from "styled-components";
 import { provider as providerApi } from "@/lib/api";
 import { createLogger } from "@/lib/logger";
-import { getProviderVerificationSnapshot, removeProviderVerification, verifyProviders } from "@/lib/providerVerification";
-import type {
-  ModelInfo,
-  ModelSettings,
-  ProviderConfig,
-} from "@/types/api";
+import {
+  getProviderVerificationSnapshot,
+  removeProviderVerification,
+  verifyProviders,
+} from "@/lib/providerVerification";
+import type { ModelInfo, ModelSettings, ProviderConfig } from "@/types/api";
 import { useToggleSet } from "@/hooks/useToggleSet";
 import Card from "@/components/Card";
 import Button from "@/components/Button";
@@ -29,43 +29,72 @@ const HeaderActions = styled.div`
   margin-bottom: var(--space-md);
 `;
 
+function parseModelsText(text: string): string[] {
+  return text
+    .split("\n")
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0);
+}
+
 export default function SettingsProviderPage() {
   const [providers, setProviders] = useState<ProviderConfig[]>([]);
   const [models, setModels] = useState<ModelInfo[]>([]);
-  const [modelSettings, setModelSettings] = useState<Record<string, ModelSettings>>({});
+  const [modelSettings, setModelSettings] = useState<
+    Record<string, ModelSettings>
+  >({});
   const [loading, setLoading] = useState(true);
   const expanded = useToggleSet();
   const testing = useToggleSet();
-  const { add: markTesting, remove: clearTesting, setValues: setTestingValues, has: isTestingProvider } = testing;
+  const {
+    add: markTesting,
+    remove: clearTesting,
+    setValues: setTestingValues,
+    has: isTestingProvider,
+  } = testing;
   const [showCreate, setShowCreate] = useState(false);
-  const [testResults, setTestResults] = useState<Record<string, { ok: boolean; error?: string }>>(getProviderVerificationSnapshot);
+  const [testResults, setTestResults] = useState<
+    Record<string, { ok: boolean; error?: string }>
+  >(getProviderVerificationSnapshot);
   const [newName, setNewName] = useState("");
   const [newBaseUrl, setNewBaseUrl] = useState(DEFAULT_PROVIDER_BASE_URL);
   const [newApiKey, setNewApiKey] = useState("");
+  const [newModels, setNewModels] = useState("");
 
-  const runProviderVerification = useCallback(async (providerIds: string[]) => {
-    if (providerIds.length === 0) {
-      setTestingValues(new Set());
-      return;
-    }
+  const runProviderVerification = useCallback(
+    async (providerIds: string[]) => {
+      if (providerIds.length === 0) {
+        setTestingValues(new Set());
+        return;
+      }
 
-    setTestingValues(new Set(providerIds));
-    await verifyProviders(providerIds, providerApi.testProvider, (id, result) => {
-      setTestResults((prev) => ({ ...prev, [id]: result }));
-      clearTesting(id);
-    });
-  }, [clearTesting, setTestingValues]);
+      setTestingValues(new Set(providerIds));
+      await verifyProviders(
+        providerIds,
+        providerApi.testProvider,
+        (id, result) => {
+          setTestResults((prev) => ({ ...prev, [id]: result }));
+          clearTesting(id);
+        },
+      );
+    },
+    [clearTesting, setTestingValues],
+  );
 
   const loadData = useCallback(async () => {
     try {
       const providerList = await providerApi.listProviders();
       setProviders(providerList);
-      setTestResults((prev) => ({ ...prev, ...getProviderVerificationSnapshot() }));
+      setTestResults((prev) => ({
+        ...prev,
+        ...getProviderVerificationSnapshot(),
+      }));
       if (providerList.length > 0) {
         const modelsData = await providerApi.getModels();
         setModels(modelsData.models);
         setModelSettings(modelsData.modelSettings ?? {});
-        void runProviderVerification(providerList.map((provider) => provider.id));
+        void runProviderVerification(
+          providerList.map((provider) => provider.id),
+        );
       } else {
         setModels([]);
         setModelSettings({});
@@ -86,15 +115,18 @@ export default function SettingsProviderPage() {
     setNewName("");
     setNewBaseUrl(DEFAULT_PROVIDER_BASE_URL);
     setNewApiKey("");
+    setNewModels("");
   }
 
   async function handleCreate() {
     if (!newName.trim() || !newBaseUrl.trim()) return;
     try {
+      const parsedModels = parseModelsText(newModels);
       const created = await providerApi.addProvider({
         name: newName.trim(),
         baseUrl: newBaseUrl.trim(),
         apiKey: newApiKey || undefined,
+        models: parsedModels.length > 0 ? parsedModels : undefined,
       });
       setProviders((prev) => [...prev, created]);
       void loadData();
@@ -111,8 +143,14 @@ export default function SettingsProviderPage() {
       const nextProviders = providers.filter((provider) => provider.id !== id);
       setProviders(nextProviders);
       setModels((prev) => prev.filter((model) => model.providerId !== id));
-      setModelSettings((prev) => Object.fromEntries(Object.entries(prev).filter(([key]) => !key.startsWith(`${id}::`))));
-      setTestResults((prev) => Object.fromEntries(Object.entries(prev).filter(([key]) => key !== id)));
+      setModelSettings((prev) =>
+        Object.fromEntries(
+          Object.entries(prev).filter(([key]) => !key.startsWith(`${id}::`)),
+        ),
+      );
+      setTestResults((prev) =>
+        Object.fromEntries(Object.entries(prev).filter(([key]) => key !== id)),
+      );
       clearTesting(id);
       removeProviderVerification(id);
     } catch (err) {
@@ -123,28 +161,47 @@ export default function SettingsProviderPage() {
   async function handleTest(id: string) {
     markTesting(id);
     try {
-      const [result] = Object.values(await verifyProviders([id], providerApi.testProvider));
+      const [result] = Object.values(
+        await verifyProviders([id], providerApi.testProvider),
+      );
       setTestResults((prev) => ({ ...prev, [id]: result }));
     } catch (err) {
-      setTestResults((prev) => ({ ...prev, [id]: { ok: false, error: err instanceof Error ? err.message : String(err) } }));
+      setTestResults((prev) => ({
+        ...prev,
+        [id]: {
+          ok: false,
+          error: err instanceof Error ? err.message : String(err),
+        },
+      }));
     } finally {
       clearTesting(id);
     }
   }
 
-  async function handleProviderFieldChange(id: string, field: keyof ProviderConfig, value: string) {
+  async function handleProviderFieldChange(
+    id: string,
+    field: keyof ProviderConfig,
+    value: string,
+  ) {
     try {
-      const updated = await providerApi.updateProvider(id, {
-        [field]: value || undefined,
-      });
-      setProviders((prev) => prev.map((provider) => (provider.id === id ? updated : provider)));
+      const body: Record<string, unknown> = { [field]: value || undefined };
+      if (field === "models") {
+        body.models = parseModelsText(value);
+      }
+      const updated = await providerApi.updateProvider(id, body);
+      setProviders((prev) =>
+        prev.map((provider) => (provider.id === id ? updated : provider)),
+      );
       if (field === "baseUrl" || field === "apiKey") void loadData();
     } catch (err) {
       logger.error("Failed to update provider:", err);
     }
   }
 
-  async function handleModelSettingsSave(model: ModelInfo, settings: ModelSettings) {
+  async function handleModelSettingsSave(
+    model: ModelInfo,
+    settings: ModelSettings,
+  ) {
     const modelRef = toModelRef(model);
     setModelSettings((prev) => ({ ...prev, [modelRef]: settings }));
     try {
@@ -169,7 +226,9 @@ export default function SettingsProviderPage() {
         <Grid>
           {providers.length === 0 ? (
             <Card>
-              <span style={{ color: "var(--text-muted)" }}>No local providers configured. Add one.</span>
+              <span style={{ color: "var(--text-muted)" }}>
+                No local providers configured. Add one.
+              </span>
             </Card>
           ) : (
             providers.map((provider) => (
@@ -184,7 +243,9 @@ export default function SettingsProviderPage() {
                 onToggleExpand={() => expanded.toggle(provider.id)}
                 onTest={() => void handleTest(provider.id)}
                 onDelete={() => void handleDelete(provider.id)}
-                onFieldChange={(field, value) => void handleProviderFieldChange(provider.id, field, value)}
+                onFieldChange={(field, value) =>
+                  void handleProviderFieldChange(provider.id, field, value)
+                }
                 onModelSettingsSave={handleModelSettingsSave}
               />
             ))
@@ -195,9 +256,11 @@ export default function SettingsProviderPage() {
           name={newName}
           baseUrl={newBaseUrl}
           apiKey={newApiKey}
+          models={newModels}
           onNameChange={setNewName}
           onBaseUrlChange={setNewBaseUrl}
           onApiKeyChange={setNewApiKey}
+          onModelsChange={setNewModels}
           onCreate={handleCreate}
           onClose={() => {
             setShowCreate(false);

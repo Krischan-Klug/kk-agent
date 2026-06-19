@@ -19,8 +19,16 @@ import {
   serializeToolMessageToResponsesInput,
   serializeUserMessageToResponsesInput,
 } from "../helpers.js";
-import { finalizeResponsesOutput, handleResponsesStreamingEvent, normalizeResponsesToolCalls } from "../transport.js";
-import { reasoningBlock, textBlock, type TranscriptMessage } from "../../../lib/transcript.js";
+import {
+  finalizeResponsesOutput,
+  handleResponsesStreamingEvent,
+  normalizeResponsesToolCalls,
+} from "../transport.js";
+import {
+  reasoningBlock,
+  textBlock,
+  type TranscriptMessage,
+} from "../../../lib/transcript.js";
 import {
   consumeProviderStreamError,
   emitFinalStreamChunks,
@@ -41,15 +49,21 @@ type ContinuationFallback = {
   reason: string;
 };
 
-function cloneConversationItem<T extends ResponsesConversationItem | AssembledOutputItem>(item: T): T {
+function cloneConversationItem<
+  T extends ResponsesConversationItem | AssembledOutputItem,
+>(item: T): T {
   return structuredClone(item);
 }
 
-function isResponsesTransportState(state: ProviderTransportState | undefined): state is ResponsesTransportState {
+function isResponsesTransportState(
+  state: ProviderTransportState | undefined,
+): state is ResponsesTransportState {
   return state?.endpoint === "responses";
 }
 
-function createResponsesState(continuationMode: ContinuationMode): ResponsesTransportState {
+function createResponsesState(
+  continuationMode: ContinuationMode,
+): ResponsesTransportState {
   return {
     endpoint: "responses",
     continuationMode,
@@ -75,18 +89,36 @@ function cloneResponsesState(
   };
 }
 
-function emitDeltaBlocks(parsed: Record<string, unknown>, messageId: string, onChunk: OnChunkFn): void {
+function emitDeltaBlocks(
+  parsed: Record<string, unknown>,
+  messageId: string,
+  onChunk: OnChunkFn,
+): void {
   const eventType = typeof parsed.type === "string" ? parsed.type : "";
   const delta = typeof parsed.delta === "string" ? parsed.delta : undefined;
   if (!delta || delta.length === 0) return;
 
-  if (eventType === "response.output_text.delta" || eventType === "response.text.delta") {
-    onChunk({ type: "assistant_block_delta", messageId, block: textBlock(delta) });
+  if (
+    eventType === "response.output_text.delta" ||
+    eventType === "response.text.delta"
+  ) {
+    onChunk({
+      type: "assistant_block_delta",
+      messageId,
+      block: textBlock(delta),
+    });
     return;
   }
 
-  if (eventType === "response.reasoning_text.delta" || eventType === "response.reasoning_summary_text.delta") {
-    onChunk({ type: "assistant_block_delta", messageId, block: reasoningBlock(delta) });
+  if (
+    eventType === "response.reasoning_text.delta" ||
+    eventType === "response.reasoning_summary_text.delta"
+  ) {
+    onChunk({
+      type: "assistant_block_delta",
+      messageId,
+      block: reasoningBlock(delta),
+    });
   }
 }
 
@@ -100,7 +132,11 @@ type PreparedResponsesRequest = {
 function appendUnsyncedConversationItems(
   state: ResponsesTransportState,
   messages: TranscriptMessage[],
-): { transportState: ResponsesTransportState; notices: ProviderNotice[]; appendedItems: ResponsesConversationItem[] } {
+): {
+  transportState: ResponsesTransportState;
+  notices: ProviderNotice[];
+  appendedItems: ResponsesConversationItem[];
+} {
   const syncedMessageIds = new Set(state.syncedMessageIds);
   const notices: ProviderNotice[] = [];
   const appendedItems: ResponsesConversationItem[] = [];
@@ -119,9 +155,13 @@ function appendUnsyncedConversationItems(
       continue;
     }
 
-    const serialized = message.role === "user"
-      ? serializeUserMessageToResponsesInput(message)
-      : serializeToolMessageToResponsesInput(message, state.callIdByToolUseId);
+    const serialized =
+      message.role === "user"
+        ? serializeUserMessageToResponsesInput(message)
+        : serializeToolMessageToResponsesInput(
+            message,
+            state.callIdByToolUseId,
+          );
 
     const cloned = serialized.map((item) => cloneConversationItem(item));
     state.historyItems.push(...cloned);
@@ -133,18 +173,26 @@ function appendUnsyncedConversationItems(
   return { transportState: state, notices, appendedItems };
 }
 
-export function prepareResponsesRequest(request: UnifiedRequest): PreparedResponsesRequest {
-  const requestedContinuationMode = request.transportProfile?.continuationMode ?? "previous-response-id";
+export function prepareResponsesRequest(
+  request: UnifiedRequest,
+): PreparedResponsesRequest {
+  const requestedContinuationMode =
+    request.transportProfile?.continuationMode ?? "previous-response-id";
   const baseState = isResponsesTransportState(request.transportState)
     ? request.transportState
     : undefined;
-  const continuationMode = requestedContinuationMode === "previous-response-id" && baseState?.lastResponseId
-    ? "previous-response-id"
-    : requestedContinuationMode === "none"
-      ? "none"
-      : "raw-output-replay";
+  const continuationMode =
+    requestedContinuationMode === "previous-response-id" &&
+    baseState?.lastResponseId
+      ? "previous-response-id"
+      : requestedContinuationMode === "none"
+        ? "none"
+        : "raw-output-replay";
   const transportState = cloneResponsesState(baseState, continuationMode);
-  const { notices, appendedItems } = appendUnsyncedConversationItems(transportState, request.messages);
+  const { notices, appendedItems } = appendUnsyncedConversationItems(
+    transportState,
+    request.messages,
+  );
   const body: Record<string, unknown> = {
     model: request.model,
     stream: request.stream === true,
@@ -153,7 +201,10 @@ export function prepareResponsesRequest(request: UnifiedRequest): PreparedRespon
   const common = resolved?.common;
 
   const instructions = extractResponsesInstructions(request.messages);
-  const tools = buildResponsesTools(request.tools, request.transportProfile?.supportsStrictTools === true);
+  const tools = buildResponsesTools(
+    request.tools,
+    request.transportProfile?.supportsStrictTools === true,
+  );
 
   if (resolved?.extraBody) {
     Object.assign(body, resolved.extraBody);
@@ -172,7 +223,10 @@ export function prepareResponsesRequest(request: UnifiedRequest): PreparedRespon
   if (common?.maxOutputTokens !== undefined && common.maxOutputTokens > 0) {
     body.max_output_tokens = common.maxOutputTokens;
   }
-  if (continuationMode === "previous-response-id" && transportState.lastResponseId) {
+  if (
+    continuationMode === "previous-response-id" &&
+    transportState.lastResponseId
+  ) {
     body.previous_response_id = transportState.lastResponseId;
     if (appendedItems.length > 0) {
       body.input = appendedItems;
@@ -190,8 +244,13 @@ export function commitResponsesTransportState(input: {
   output: AssembledOutputItem[];
   responseId?: string;
 }): ResponsesTransportState {
-  const next = cloneResponsesState(input.transportState, input.transportState.continuationMode);
-  next.historyItems.push(...input.output.map((item) => cloneConversationItem(item)));
+  const next = cloneResponsesState(
+    input.transportState,
+    input.transportState.continuationMode,
+  );
+  next.historyItems.push(
+    ...input.output.map((item) => cloneConversationItem(item)),
+  );
   next.lastResponseId = input.responseId ?? next.lastResponseId;
   if (!next.syncedMessageIds.includes(input.assistantMessageId)) {
     next.syncedMessageIds.push(input.assistantMessageId);
@@ -199,7 +258,12 @@ export function commitResponsesTransportState(input: {
 
   for (const item of input.output) {
     if (item.type !== "function_call") continue;
-    const callId = typeof item.call_id === "string" ? item.call_id : typeof item.id === "string" ? item.id : undefined;
+    const callId =
+      typeof item.call_id === "string"
+        ? item.call_id
+        : typeof item.id === "string"
+          ? item.id
+          : undefined;
     if (callId) {
       next.callIdByToolUseId[callId] = callId;
     }
@@ -208,18 +272,29 @@ export function commitResponsesTransportState(input: {
   return next;
 }
 
-function isUnsupportedPreviousResponseIdResponse(status: number, text: string): boolean {
-  if (status !== 400 && status !== 404 && status !== 405 && status !== 422 && status !== 501) {
+function isUnsupportedPreviousResponseIdResponse(
+  status: number,
+  text: string,
+): boolean {
+  if (
+    status !== 400 &&
+    status !== 404 &&
+    status !== 405 &&
+    status !== 422 &&
+    status !== 501
+  ) {
     return false;
   }
 
   const lowered = text.toLowerCase();
-  return lowered.includes("previous_response_id")
-    || lowered.includes("previous response")
-    || lowered.includes("conversation")
-    || lowered.includes("unsupported")
-    || lowered.includes("not implemented")
-    || lowered.includes("unknown");
+  return (
+    lowered.includes("previous_response_id") ||
+    lowered.includes("previous response") ||
+    lowered.includes("conversation") ||
+    lowered.includes("unsupported") ||
+    lowered.includes("not implemented") ||
+    lowered.includes("unknown")
+  );
 }
 
 function buildContinuationFallbackReason(status: number, text: string): string {
@@ -238,7 +313,7 @@ async function postResponses(
   continuationFallback?: ContinuationFallback;
 }> {
   const prepared = prepareResponsesRequest({ ...request, stream });
-  let res = await fetch(`${baseUrl}/v1/responses`, {
+  let res = await fetch(`${baseUrl}/responses`, {
     method: "POST",
     headers: { "Content-Type": "application/json", ...headers },
     body: JSON.stringify(prepared.body),
@@ -250,7 +325,10 @@ async function postResponses(
 
   const text = await res.text();
   const status = res.status;
-  if (prepared.continuationMode === "previous-response-id" && isUnsupportedPreviousResponseIdResponse(res.status, text)) {
+  if (
+    prepared.continuationMode === "previous-response-id" &&
+    isUnsupportedPreviousResponseIdResponse(res.status, text)
+  ) {
     const fallbackPrepared = prepareResponsesRequest({
       ...request,
       stream,
@@ -258,7 +336,7 @@ async function postResponses(
         ? { ...request.transportProfile, continuationMode: "raw-output-replay" }
         : request.transportProfile,
     });
-    res = await fetch(`${baseUrl}/v1/responses`, {
+    res = await fetch(`${baseUrl}/responses`, {
       method: "POST",
       headers: { "Content-Type": "application/json", ...headers },
       body: JSON.stringify(fallbackPrepared.body),
@@ -272,11 +350,14 @@ async function postResponses(
     return {
       res,
       prepared: fallbackPrepared,
-      notices: [{
-        level: "warning",
-        code: "response_statefulness_fallback",
-        message: "Provider rejected previous_response_id. Retried with raw output replay.",
-      }],
+      notices: [
+        {
+          level: "warning",
+          code: "response_statefulness_fallback",
+          message:
+            "Provider rejected previous_response_id. Retried with raw output replay.",
+        },
+      ],
       continuationFallback: {
         from: "previous-response-id",
         to: "raw-output-replay",
@@ -296,15 +377,19 @@ export async function chat(
   const posted = await postResponses(request, baseUrl, headers, false);
   const prepared = posted.prepared;
   const data = (await posted.res.json()) as ResponsesApiResponse;
-  const output = (data.output ?? []).filter((item): item is Record<string, unknown> & { type: string } =>
-    typeof item === "object" && item !== null && typeof item.type === "string"
+  const output = (data.output ?? []).filter(
+    (item): item is Record<string, unknown> & { type: string } =>
+      typeof item === "object" &&
+      item !== null &&
+      typeof item.type === "string",
   );
   const turn = finalizeResponsesOutput({
     messageId: randomUUID(),
     output,
     usage: normalizeProviderUsage(data.usage),
     tools: request.tools,
-    supportsConcatenatedJsonSplit: request.transportProfile?.supportsConcatenatedJsonSplit ?? true,
+    supportsConcatenatedJsonSplit:
+      request.transportProfile?.supportsConcatenatedJsonSplit ?? true,
   });
 
   const response = buildUnifiedResponseFromTurn(turn);
@@ -320,10 +405,16 @@ export async function chat(
     continuationMode: prepared.continuationMode,
     responseId,
     outputCount: output.length,
-    ...(posted.continuationFallback ? { continuationFallback: posted.continuationFallback } : {}),
+    ...(posted.continuationFallback
+      ? { continuationFallback: posted.continuationFallback }
+      : {}),
   };
   if (prepared.notices.length > 0 || posted.notices.length > 0) {
-    response.notices = [...prepared.notices, ...posted.notices, ...(response.notices ?? [])];
+    response.notices = [
+      ...prepared.notices,
+      ...posted.notices,
+      ...(response.notices ?? []),
+    ];
   }
   return response;
 }
@@ -344,52 +435,62 @@ export async function chatStream(
   const emittedToolUseIds = new Set<string>();
   let fatalStreamError: string | undefined;
 
-  await readSSEStream(posted.res, (parsed) => {
-    const streamError = consumeProviderStreamError(parsed, providerNotices);
-    if (streamError.handled) {
-      fatalStreamError = streamError.fatalError ?? fatalStreamError;
-      return true;
-    }
+  await readSSEStream(
+    posted.res,
+    (parsed) => {
+      const streamError = consumeProviderStreamError(parsed, providerNotices);
+      if (streamError.handled) {
+        fatalStreamError = streamError.fatalError ?? fatalStreamError;
+        return true;
+      }
 
-    emitDeltaBlocks(parsed, messageId, onChunk);
-    const next = handleResponsesStreamingEvent(parsed, output);
-    output = next.output;
-    const eventType = typeof parsed.type === "string" ? parsed.type : "";
-    const shouldEmitToolUses = eventType === "response.completed" || (
-      eventType === "response.output_item.done"
-      && typeof parsed.item === "object"
-      && parsed.item !== null
-      && "type" in parsed.item
-      && parsed.item.type === "function_call"
-    );
+      emitDeltaBlocks(parsed, messageId, onChunk);
+      const next = handleResponsesStreamingEvent(parsed, output);
+      output = next.output;
+      const eventType = typeof parsed.type === "string" ? parsed.type : "";
+      const shouldEmitToolUses =
+        eventType === "response.completed" ||
+        (eventType === "response.output_item.done" &&
+          typeof parsed.item === "object" &&
+          parsed.item !== null &&
+          "type" in parsed.item &&
+          parsed.item.type === "function_call");
 
-    if (shouldEmitToolUses) {
-      const normalizedToolCalls = normalizeResponsesToolCalls({
-        output,
-        tools: request.tools,
-        supportsConcatenatedJsonSplit: request.transportProfile?.supportsConcatenatedJsonSplit ?? true,
-      }).toolCalls;
-      emitToolUseDeltas(normalizedToolCalls, emittedToolUseIds, messageId, onChunk);
-    }
+      if (shouldEmitToolUses) {
+        const normalizedToolCalls = normalizeResponsesToolCalls({
+          output,
+          tools: request.tools,
+          supportsConcatenatedJsonSplit:
+            request.transportProfile?.supportsConcatenatedJsonSplit ?? true,
+        }).toolCalls;
+        emitToolUseDeltas(
+          normalizedToolCalls,
+          emittedToolUseIds,
+          messageId,
+          onChunk,
+        );
+      }
 
-    if (next.metadata?.error) {
-      providerNotices.push({
-        level: "error",
-        message: next.metadata.error,
-      });
-      fatalStreamError = next.metadata.error;
-      return true;
-    }
+      if (next.metadata?.error) {
+        providerNotices.push({
+          level: "error",
+          message: next.metadata.error,
+        });
+        fatalStreamError = next.metadata.error;
+        return true;
+      }
 
-    if (next.metadata?.usage) {
-      usage = next.metadata.usage as ProviderTokenUsage;
-    }
-    if (typeof next.metadata?.responseId === "string") {
-      responseId = next.metadata.responseId;
-    }
+      if (next.metadata?.usage) {
+        usage = next.metadata.usage as ProviderTokenUsage;
+      }
+      if (typeof next.metadata?.responseId === "string") {
+        responseId = next.metadata.responseId;
+      }
 
-    return false;
-  }, { throwOnProviderError: false });
+      return false;
+    },
+    { throwOnProviderError: false },
+  );
 
   if (fatalStreamError && output.length === 0) {
     throw new Error(fatalStreamError);
@@ -400,7 +501,8 @@ export async function chatStream(
     output,
     usage: normalizeProviderUsage(usage),
     tools: request.tools,
-    supportsConcatenatedJsonSplit: request.transportProfile?.supportsConcatenatedJsonSplit ?? true,
+    supportsConcatenatedJsonSplit:
+      request.transportProfile?.supportsConcatenatedJsonSplit ?? true,
   });
 
   const response = buildUnifiedResponseFromTurn(turn);
@@ -415,10 +517,16 @@ export async function chatStream(
     continuationMode: prepared.continuationMode,
     responseId,
     outputCount: output.length,
-    ...(posted.continuationFallback ? { continuationFallback: posted.continuationFallback } : {}),
+    ...(posted.continuationFallback
+      ? { continuationFallback: posted.continuationFallback }
+      : {}),
   };
   if (prepared.notices.length > 0 || providerNotices.length > 0) {
-    response.notices = [...prepared.notices, ...providerNotices, ...(response.notices ?? [])];
+    response.notices = [
+      ...prepared.notices,
+      ...providerNotices,
+      ...(response.notices ?? []),
+    ];
   }
   emitFinalStreamChunks(response, onChunk);
   return response;

@@ -3,11 +3,20 @@ import type { ReasoningEffort } from "./common.js";
 export type EndpointType = "chat-completions" | "responses";
 export type ReasoningControl = "none" | "effort" | "on-off";
 export type ReasoningSource = "none" | "declared" | "observed" | "inferred";
-export type ReasoningTransport = "none" | "chat-completions-effort" | "chat-completions-on-off" | "responses-effort";
+export type ReasoningTransport =
+  | "none"
+  | "chat-completions-effort"
+  | "chat-completions-on-off"
+  | "responses-effort";
 export type ToolSchemaTransport = "chat-completions-tools" | "responses-tools";
 export type StreamGrammar = "openai-chat-completions" | "openai-responses";
-export type ToolCallAssemblyMode = "chat-completions-indexed" | "responses-output-state";
-export type ContinuationMode = "none" | "raw-output-replay" | "previous-response-id";
+export type ToolCallAssemblyMode =
+  | "chat-completions-indexed"
+  | "responses-output-state";
+export type ContinuationMode =
+  | "none"
+  | "raw-output-replay"
+  | "previous-response-id";
 export type ObservationSupportState = "supported" | "unsupported";
 export type VisionSupport = "supported" | "unsupported" | "unknown";
 
@@ -40,18 +49,21 @@ export interface ProviderConfig {
   name: string;
   baseUrl: string;
   apiKey?: string;
+  models?: string[];
 }
 
 export interface CreateProviderBody {
   name: string;
   baseUrl: string;
   apiKey?: string;
+  models?: string[];
 }
 
 export interface UpdateProviderBody {
   name?: string;
   baseUrl?: string;
   apiKey?: string;
+  models?: string[];
 }
 
 export interface ModelObservation {

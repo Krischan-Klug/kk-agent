@@ -52,13 +52,24 @@ function getErrorMessage(error: unknown): string {
   return String(error);
 }
 
+function parseModelsText(text: string): string[] {
+  return text
+    .split("\n")
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0);
+}
+
 export default function ProviderOnboardingWizard({ onComplete }: Props) {
   const [name, setName] = useState("Local LLM");
   const [baseUrl, setBaseUrl] = useState(DEFAULT_PROVIDER_BASE_URL);
   const [apiKey, setApiKey] = useState("");
+  const [models, setModels] = useState("");
   const [state, setState] = useState<StepState>({ kind: "idle" });
 
-  const canSubmit = name.trim().length > 0 && baseUrl.trim().length > 0 && state.kind !== "saving";
+  const canSubmit =
+    name.trim().length > 0 &&
+    baseUrl.trim().length > 0 &&
+    state.kind !== "saving";
 
   async function cleanupProvider(providerId: string) {
     try {
@@ -74,10 +85,12 @@ export default function ProviderOnboardingWizard({ onComplete }: Props) {
     let created: ProviderConfig | undefined;
     setState({ kind: "saving" });
     try {
+      const parsedModels = parseModelsText(models);
       created = await providerApi.addProvider({
         name: name.trim(),
         baseUrl: baseUrl.trim(),
         apiKey: apiKey.trim() || undefined,
+        models: parsedModels.length > 0 ? parsedModels : undefined,
       });
 
       const testResult = await providerApi.testProvider(created.id);
@@ -100,7 +113,10 @@ export default function ProviderOnboardingWizard({ onComplete }: Props) {
         return;
       }
 
-      setState({ kind: "success", message: `${modelsResult.models.length} model(s) found.` });
+      setState({
+        kind: "success",
+        message: `${modelsResult.models.length} model(s) found.`,
+      });
       onComplete(created);
     } catch (error) {
       if (created) {
@@ -122,13 +138,19 @@ export default function ProviderOnboardingWizard({ onComplete }: Props) {
           name={name}
           baseUrl={baseUrl}
           apiKey={apiKey}
+          models={models}
           onNameChange={setName}
           onBaseUrlChange={setBaseUrl}
           onApiKeyChange={setApiKey}
+          onModelsChange={setModels}
           autoFocus
         />
-        {state.kind === "error" ? <StatusBox $tone="error">{state.message}</StatusBox> : null}
-        {state.kind === "success" ? <StatusBox $tone="success">{state.message}</StatusBox> : null}
+        {state.kind === "error" ? (
+          <StatusBox $tone="error">{state.message}</StatusBox>
+        ) : null}
+        {state.kind === "success" ? (
+          <StatusBox $tone="success">{state.message}</StatusBox>
+        ) : null}
         <ActionsRow>
           <Button onClick={() => void handleSubmit()} disabled={!canSubmit}>
             {state.kind === "saving" ? <Spinner size={14} /> : "Save & test"}

@@ -6,9 +6,11 @@ type Props = {
   name: string;
   baseUrl: string;
   apiKey: string;
+  models: string;
   onNameChange: (value: string) => void;
   onBaseUrlChange: (value: string) => void;
   onApiKeyChange: (value: string) => void;
+  onModelsChange: (value: string) => void;
   onCreate: () => void;
   onClose: () => void;
 };
@@ -27,9 +29,11 @@ export default function CreateProviderModal(props: Props) {
         name={props.name}
         baseUrl={props.baseUrl}
         apiKey={props.apiKey}
+        models={props.models}
         onNameChange={props.onNameChange}
         onBaseUrlChange={props.onBaseUrlChange}
         onApiKeyChange={props.onApiKeyChange}
+        onModelsChange={props.onModelsChange}
         autoFocus
       />
     </FormModal>

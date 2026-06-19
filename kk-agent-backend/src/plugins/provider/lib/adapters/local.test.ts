@@ -12,20 +12,12 @@ function jsonResponse(body: unknown, ok = true): Response {
   } as Response;
 }
 
-test("LM Studio discovery keeps a generic OpenAI-compatible capability profile", async (t) => {
+test("detectModels fetches OpenAI-compatible /models and maps to generic capabilities", async (t) => {
   mockFetch(t, async (input) => {
     const url = String(input);
-    if (url.endsWith("/api/v1/models")) {
+    if (url.endsWith("/models")) {
       return jsonResponse({
-        models: [{
-          key: "qwen3",
-          max_context_length: 32768,
-          loaded_instances: [{ config: { context_length: 16384 } }],
-          capabilities: {
-            reasoning: { allowed_options: ["low", "medium", "high"] },
-            vision: {},
-          },
-        }],
+        data: [{ id: "qwen3" }, { id: "llama-3" }],
       });
     }
     throw new Error(`unexpected fetch: ${url}`);
@@ -33,69 +25,69 @@ test("LM Studio discovery keeps a generic OpenAI-compatible capability profile",
 
   const adapter = createLocalProviderAdapter({
     id: "provider-1",
-    name: "LM Studio",
-    baseUrl: "http://localhost:1234",
+    name: "OpenAI-compatible",
+    baseUrl: "http://localhost:1234/v1",
   });
 
-  const [model] = await adapter.listModels();
-  assert.equal(model?.id, "qwen3");
-  assert.deepEqual(model?.capabilities.supportedEndpoints, ["responses", "chat-completions"]);
-  assert.equal(model?.capabilities.transportProfiles?.responses?.supported, true);
-  assert.equal(model?.capabilities.transportProfiles?.["chat-completions"]?.supported, true);
-  assert.equal(model?.capabilities.reasoningSource, "declared");
-  assert.equal(model?.capabilities.visionSupport, "supported");
+  const models = await adapter.listModels();
+  assert.equal(models.length, 2);
+  assert.equal(models[0]?.id, "qwen3");
+  assert.equal(models[0]?.providerId, "provider-1");
+  assert.deepEqual(models[0]?.capabilities.supportedEndpoints, [
+    "responses",
+    "chat-completions",
+  ]);
+  assert.equal(
+    models[0]?.capabilities.transportProfiles?.responses?.supported,
+    true,
+  );
+  assert.equal(
+    models[0]?.capabilities.transportProfiles?.["chat-completions"]?.supported,
+    true,
+  );
 });
 
-test("Ollama discovery exposes the same generic endpoint surface", async (t) => {
-  mockFetch(t, async (input) => {
-    const url = String(input);
-    if (url.endsWith("/api/v1/models")) return jsonResponse({}, false);
-    if (url.endsWith("/api/tags")) {
-      return jsonResponse({
-        models: [{ name: "qwen3:8b" }],
-      });
-    }
-    throw new Error(`unexpected fetch: ${url}`);
-  });
+test("detectModels throws when /models is unreachable", async (t) => {
+  mockFetch(t, async () => jsonResponse({ error: "not found" }, false));
 
   const adapter = createLocalProviderAdapter({
     id: "provider-1",
-    name: "Ollama",
-    baseUrl: "http://localhost:11434",
+    name: "Broken",
+    baseUrl: "http://localhost:9999/v1",
   });
 
-  const [model] = await adapter.listModels();
-  assert.equal(model?.id, "qwen3:8b");
-  assert.deepEqual(model?.capabilities.supportedEndpoints, ["responses", "chat-completions"]);
-  assert.equal(model?.capabilities.transportProfiles?.responses?.supported, true);
-  assert.equal(model?.capabilities.transportProfiles?.["chat-completions"]?.supported, true);
-  assert.equal(model?.capabilities.transportProfiles?.responses?.continuationMode, "previous-response-id");
-  assert.equal(model?.capabilities.visionSupport, "unknown");
+  await assert.rejects(adapter.listModels(), /Failed to fetch models/);
 });
 
-test("llama.cpp discovery no longer hardcodes chat-completions-only behavior", async (t) => {
+test("testConnection returns ok:false with error message when fetch fails", async (t) => {
+  mockFetch(t, async () => jsonResponse({ error: "not found" }, false));
+
+  const adapter = createLocalProviderAdapter({
+    id: "provider-1",
+    name: "Broken",
+    baseUrl: "http://localhost:9999/v1",
+  });
+
+  const result = await adapter.testConnection();
+  assert.equal(result.ok, false);
+  assert.match(result.error ?? "", /Failed to fetch models/);
+});
+
+test("testConnection returns ok:true when fetch succeeds", async (t) => {
   mockFetch(t, async (input) => {
     const url = String(input);
-    if (url.endsWith("/api/v1/models")) return jsonResponse({}, false);
-    if (url.endsWith("/api/tags")) return jsonResponse({}, false);
-    if (url.endsWith("/props")) {
-      return jsonResponse({
-        model_path: "/models/Qwen3-8B-Q4_K_M.gguf",
-        default_generation_settings: { n_ctx: 8192 },
-      });
+    if (url.endsWith("/models")) {
+      return jsonResponse({ data: [{ id: "model-a" }] });
     }
     throw new Error(`unexpected fetch: ${url}`);
   });
 
   const adapter = createLocalProviderAdapter({
     id: "provider-1",
-    name: "llama.cpp",
-    baseUrl: "http://localhost:8080",
+    name: "OK",
+    baseUrl: "http://localhost:1234/v1",
   });
 
-  const [model] = await adapter.listModels();
-  assert.equal(model?.id, "Qwen3-8B-Q4_K_M.gguf");
-  assert.deepEqual(model?.capabilities.supportedEndpoints, ["responses", "chat-completions"]);
-  assert.equal(model?.capabilities.transportProfiles?.responses?.supported, true);
-  assert.equal(model?.capabilities.transportProfiles?.["chat-completions"]?.supported, true);
+  const result = await adapter.testConnection();
+  assert.equal(result.ok, true);
 });

@@ -1,12 +1,20 @@
 import { randomUUID } from "node:crypto";
-import type { OnChunkFn, ProviderNotice, UnifiedRequest, UnifiedResponse } from "../types.js";
+import type {
+  OnChunkFn,
+  ProviderNotice,
+  UnifiedRequest,
+  UnifiedResponse,
+} from "../types.js";
 import { readSSEStream } from "../sse.js";
 import {
   buildChatCompletionsBody,
   buildUnifiedResponseFromTurn,
   mapFinishReason,
 } from "../helpers.js";
-import { finalizeChatCompletionsTurn, normalizeChatCompletionsToolCalls } from "../transport.js";
+import {
+  finalizeChatCompletionsTurn,
+  normalizeChatCompletionsToolCalls,
+} from "../transport.js";
 import { reasoningBlock, textBlock } from "../../../lib/transcript.js";
 import {
   consumeProviderStreamError,
@@ -22,7 +30,7 @@ export async function chat(
   baseUrl: string,
   headers: Record<string, string> = {},
 ): Promise<UnifiedResponse> {
-  const res = await fetch(`${baseUrl}/v1/chat/completions`, {
+  const res = await fetch(`${baseUrl}/chat/completions`, {
     method: "POST",
     headers: { "Content-Type": "application/json", ...headers },
     body: JSON.stringify(buildChatCompletionsBody(request, false)),
@@ -38,7 +46,10 @@ export async function chat(
       message: {
         content?: string | null;
         reasoning_content?: string | null;
-        tool_calls?: Array<{ id?: string; function?: { name?: string; arguments?: string } }>;
+        tool_calls?: Array<{
+          id?: string;
+          function?: { name?: string; arguments?: string };
+        }>;
       };
       finish_reason?: string | null;
     }>;
@@ -78,7 +89,7 @@ export async function chatStream(
   onChunk: OnChunkFn,
   headers: Record<string, string> = {},
 ): Promise<UnifiedResponse> {
-  const res = await fetch(`${baseUrl}/v1/chat/completions`, {
+  const res = await fetch(`${baseUrl}/chat/completions`, {
     method: "POST",
     headers: { "Content-Type": "application/json", ...headers },
     body: JSON.stringify(buildChatCompletionsBody(request, true)),
@@ -90,7 +101,10 @@ export async function chatStream(
   }
 
   const messageId = randomUUID();
-  const rawToolCalls = new Map<number, { id?: string; name?: string; rawArguments?: string; index: number }>();
+  const rawToolCalls = new Map<
+    number,
+    { id?: string; name?: string; rawArguments?: string; index: number }
+  >();
   const emittedToolUseIds = new Set<string>();
   const providerNotices: ProviderNotice[] = [];
   let text = "";
@@ -99,64 +113,90 @@ export async function chatStream(
   let usage: ProviderTokenUsage | undefined;
   let fatalStreamError: string | undefined;
 
-  await readSSEStream(res, (parsed) => {
-    const streamError = consumeProviderStreamError(parsed, providerNotices);
-    if (streamError.handled) {
-      fatalStreamError = streamError.fatalError ?? fatalStreamError;
-      return true;
-    }
+  await readSSEStream(
+    res,
+    (parsed) => {
+      const streamError = consumeProviderStreamError(parsed, providerNotices);
+      if (streamError.handled) {
+        fatalStreamError = streamError.fatalError ?? fatalStreamError;
+        return true;
+      }
 
-    const choices = parsed.choices as
-      | Array<{
-          delta?: {
-            content?: string | null;
-            reasoning_content?: string | null;
-            tool_calls?: Array<{ index: number; id?: string; function?: { name?: string; arguments?: string } }>;
-          };
-          finish_reason?: string | null;
-        }>
-      | undefined;
-    const choice = choices?.[0];
-    if (!choice) {
+      const choices = parsed.choices as
+        | Array<{
+            delta?: {
+              content?: string | null;
+              reasoning_content?: string | null;
+              tool_calls?: Array<{
+                index: number;
+                id?: string;
+                function?: { name?: string; arguments?: string };
+              }>;
+            };
+            finish_reason?: string | null;
+          }>
+        | undefined;
+      const choice = choices?.[0];
+      if (!choice) {
+        if (isProviderTokenUsage(parsed.usage)) usage = parsed.usage;
+        return false;
+      }
+
+      const delta = choice.delta;
       if (isProviderTokenUsage(parsed.usage)) usage = parsed.usage;
+      finishReason = mapFinishReason(choice.finish_reason);
+
+      if (
+        typeof delta?.reasoning_content === "string" &&
+        delta.reasoning_content.length > 0
+      ) {
+        reasoning += delta.reasoning_content;
+        onChunk({
+          type: "assistant_block_delta",
+          messageId,
+          block: reasoningBlock(delta.reasoning_content),
+        });
+      }
+
+      if (typeof delta?.content === "string" && delta.content.length > 0) {
+        text += delta.content;
+        onChunk({
+          type: "assistant_block_delta",
+          messageId,
+          block: textBlock(delta.content),
+        });
+      }
+
+      for (const toolCall of delta?.tool_calls ?? []) {
+        const existing = rawToolCalls.get(toolCall.index) ?? {
+          index: toolCall.index,
+        };
+        rawToolCalls.set(toolCall.index, {
+          index: toolCall.index,
+          id: toolCall.id ?? existing.id,
+          name: `${existing.name ?? ""}${toolCall.function?.name ?? ""}`,
+          rawArguments: `${existing.rawArguments ?? ""}${toolCall.function?.arguments ?? ""}`,
+        });
+      }
+
+      if (choice.finish_reason) {
+        const normalizedToolCalls = normalizeChatCompletionsToolCalls({
+          rawToolCalls: [...rawToolCalls.values()],
+          tools: request.tools,
+          supportsConcatenatedJsonSplit: true,
+        }).toolCalls;
+        emitToolUseDeltas(
+          normalizedToolCalls,
+          emittedToolUseIds,
+          messageId,
+          onChunk,
+        );
+      }
+
       return false;
-    }
-
-    const delta = choice.delta;
-    if (isProviderTokenUsage(parsed.usage)) usage = parsed.usage;
-    finishReason = mapFinishReason(choice.finish_reason);
-
-    if (typeof delta?.reasoning_content === "string" && delta.reasoning_content.length > 0) {
-      reasoning += delta.reasoning_content;
-      onChunk({ type: "assistant_block_delta", messageId, block: reasoningBlock(delta.reasoning_content) });
-    }
-
-    if (typeof delta?.content === "string" && delta.content.length > 0) {
-      text += delta.content;
-      onChunk({ type: "assistant_block_delta", messageId, block: textBlock(delta.content) });
-    }
-
-    for (const toolCall of delta?.tool_calls ?? []) {
-      const existing = rawToolCalls.get(toolCall.index) ?? { index: toolCall.index };
-      rawToolCalls.set(toolCall.index, {
-        index: toolCall.index,
-        id: toolCall.id ?? existing.id,
-        name: `${existing.name ?? ""}${toolCall.function?.name ?? ""}`,
-        rawArguments: `${existing.rawArguments ?? ""}${toolCall.function?.arguments ?? ""}`,
-      });
-    }
-
-    if (choice.finish_reason) {
-      const normalizedToolCalls = normalizeChatCompletionsToolCalls({
-        rawToolCalls: [...rawToolCalls.values()],
-        tools: request.tools,
-        supportsConcatenatedJsonSplit: true,
-      }).toolCalls;
-      emitToolUseDeltas(normalizedToolCalls, emittedToolUseIds, messageId, onChunk);
-    }
-
-    return false;
-  }, { throwOnProviderError: false });
+    },
+    { throwOnProviderError: false },
+  );
 
   const hasToolCallContent = rawToolCalls.size > 0;
   if (fatalStreamError && !text && !reasoning && !hasToolCallContent) {
@@ -167,7 +207,9 @@ export async function chatStream(
     messageId,
     text,
     reasoning,
-    rawToolCalls: [...rawToolCalls.values()].sort((left, right) => left.index - right.index),
+    rawToolCalls: [...rawToolCalls.values()].sort(
+      (left, right) => left.index - right.index,
+    ),
     finishReason,
     usage: normalizeProviderUsage(usage),
     tools: request.tools,

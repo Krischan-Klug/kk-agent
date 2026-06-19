@@ -1,17 +1,10 @@
 import styled from "styled-components";
-import type {
-  ModelInfo,
-  ModelSettings,
-  ProviderConfig,
-} from "@/types/api";
+import type { ModelInfo, ModelSettings, ProviderConfig } from "@/types/api";
 import Card from "@/components/Card";
 import Button from "@/components/Button";
 import Input from "@/components/Input";
-import {
-  ActionsRow,
-  FormField,
-  FormRow,
-} from "@/components/PageForm";
+import TextArea from "@/components/TextArea";
+import { ActionsRow, FormField, FormRow } from "@/components/PageForm";
 import ModelSettingsSection from "./ModelSettingsSection";
 
 const Header = styled.div<{ $withBody: boolean }>`
@@ -92,6 +85,10 @@ const TestResult = styled.span<{ $ok: boolean }>`
   color: ${(p) => (p.$ok ? "var(--success)" : "var(--danger)")};
 `;
 
+function modelsToString(models?: string[]): string {
+  return (models ?? []).join("\n");
+}
+
 type Props = {
   provider: ProviderConfig;
   isExpanded: boolean;
@@ -123,7 +120,9 @@ export default function ProviderCard({
   const statusTitle = isTesting
     ? "Testing"
     : testResult
-      ? (testResult.ok ? "Verified" : "Test failed")
+      ? testResult.ok
+        ? "Verified"
+        : "Test failed"
       : "Not tested yet";
 
   return (
@@ -148,11 +147,17 @@ export default function ProviderCard({
           <FormRow>
             <FormField>
               <Label>Name</Label>
-              <Input value={provider.name} onChange={(e) => onFieldChange("name", e.target.value)} />
+              <Input
+                value={provider.name}
+                onChange={(e) => onFieldChange("name", e.target.value)}
+              />
             </FormField>
             <FormField $flex={1}>
               <Label>Base URL</Label>
-              <Input value={provider.baseUrl} onChange={(e) => onFieldChange("baseUrl", e.target.value)} />
+              <Input
+                value={provider.baseUrl}
+                onChange={(e) => onFieldChange("baseUrl", e.target.value)}
+              />
             </FormField>
           </FormRow>
 
@@ -168,6 +173,18 @@ export default function ProviderCard({
             </FormField>
           </FormRow>
 
+          <FormRow>
+            <FormField $flex={1}>
+              <Label>Models (optional, eine ID pro Zeile)</Label>
+              <TextArea
+                value={modelsToString(provider.models)}
+                onChange={(e) => onFieldChange("models", e.target.value)}
+                placeholder={"e.g. glm-4.6\nglm-4.5"}
+                rows={3}
+              />
+            </FormField>
+          </FormRow>
+
           <ModelSettingsSection
             models={models}
             modelSettings={modelSettings}
@@ -175,10 +192,19 @@ export default function ProviderCard({
           />
 
           <ActionsRow>
-            <Button size="sm" variant="secondary" onClick={onTest} disabled={isTesting}>
+            <Button
+              size="sm"
+              variant="secondary"
+              onClick={onTest}
+              disabled={isTesting}
+            >
               {isTesting ? "..." : "Test"}
             </Button>
-            {testResult && <TestResult $ok={testResult.ok}>{testResult.ok ? "OK" : testResult.error ?? "Error"}</TestResult>}
+            {testResult && (
+              <TestResult $ok={testResult.ok}>
+                {testResult.ok ? "OK" : (testResult.error ?? "Error")}
+              </TestResult>
+            )}
             <Button size="sm" variant="danger" onClick={onDelete}>
               Delete provider
             </Button>

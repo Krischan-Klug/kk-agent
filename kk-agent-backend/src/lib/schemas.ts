@@ -14,18 +14,26 @@ const JsonValueSchema: z.ZodType<unknown> = z.lazy(() =>
 const NonEmptyStringSchema = z.string().trim().min(1);
 const OptionalTrimmedStringSchema = z.string().trim().optional();
 
-const LlmRequestConfigSchema = z.object({
-  common: z.object({
-    endpoint: z.enum(["chat-completions", "responses"]).optional(),
-    reasoningEffort: z.enum(["minimal", "low", "medium", "high"]).optional(),
-    temperature: z.number().optional(),
-    maxOutputTokens: z.number().int().positive().optional(),
-  }).optional(),
-  extraBody: z.object({
-    "chat-completions": z.record(JsonValueSchema).optional(),
-    responses: z.record(JsonValueSchema).optional(),
-  }).optional(),
-}).optional();
+const LlmRequestConfigSchema = z
+  .object({
+    common: z
+      .object({
+        endpoint: z.enum(["chat-completions", "responses"]).optional(),
+        reasoningEffort: z
+          .enum(["minimal", "low", "medium", "high"])
+          .optional(),
+        temperature: z.number().optional(),
+        maxOutputTokens: z.number().int().positive().optional(),
+      })
+      .optional(),
+    extraBody: z
+      .object({
+        "chat-completions": z.record(JsonValueSchema).optional(),
+        responses: z.record(JsonValueSchema).optional(),
+      })
+      .optional(),
+  })
+  .optional();
 
 const ToolResultPolicySchema = z.object({
   previewThresholdChars: z.number().int().positive().optional(),
@@ -125,24 +133,34 @@ export const UpdateSessionBodySchema = z.object({
 
 /* MCP */
 
-export const CreateMcpBodySchema = z.object({
-  name: NonEmptyStringSchema,
-  transport: z.enum(["stdio", "sse"]),
-  command: OptionalTrimmedStringSchema,
-  args: z.array(z.string()).optional(),
-  env: z.record(z.string()).optional(),
-  url: OptionalTrimmedStringSchema,
-  instruction: z.string().optional(),
-  emoji: z.string().optional(),
-  skillIds: z.array(NonEmptyStringSchema).optional(),
-}).superRefine((body, ctx) => {
-  if (body.transport === "stdio" && !body.command) {
-    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["command"], message: "command is required for stdio MCPs" });
-  }
-  if (body.transport === "sse" && !body.url) {
-    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["url"], message: "url is required for SSE MCPs" });
-  }
-});
+export const CreateMcpBodySchema = z
+  .object({
+    name: NonEmptyStringSchema,
+    transport: z.enum(["stdio", "sse"]),
+    command: OptionalTrimmedStringSchema,
+    args: z.array(z.string()).optional(),
+    env: z.record(z.string()).optional(),
+    url: OptionalTrimmedStringSchema,
+    instruction: z.string().optional(),
+    emoji: z.string().optional(),
+    skillIds: z.array(NonEmptyStringSchema).optional(),
+  })
+  .superRefine((body, ctx) => {
+    if (body.transport === "stdio" && !body.command) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["command"],
+        message: "command is required for stdio MCPs",
+      });
+    }
+    if (body.transport === "sse" && !body.url) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["url"],
+        message: "url is required for SSE MCPs",
+      });
+    }
+  });
 
 export const UpdateMcpBodySchema = z.object({
   name: OptionalTrimmedStringSchema,
@@ -207,12 +225,14 @@ export const CreateProviderBodySchema = z.object({
   name: NonEmptyStringSchema,
   baseUrl: NonEmptyStringSchema,
   apiKey: z.string().optional(),
+  models: z.array(NonEmptyStringSchema).optional(),
 });
 
 export const UpdateProviderBodySchema = z.object({
   name: OptionalTrimmedStringSchema,
   baseUrl: OptionalTrimmedStringSchema,
   apiKey: z.string().optional(),
+  models: z.array(NonEmptyStringSchema).optional(),
 });
 
 export const ModelSettingsBodySchema = z.object({

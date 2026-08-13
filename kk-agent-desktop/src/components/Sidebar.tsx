@@ -19,7 +19,6 @@ import {
   SidebarWrapper,
   LogoRow,
   Logo,
-  CompactLogo,
   SidebarToggle,
   NavItem,
   NavEmoji,
@@ -144,8 +143,7 @@ export default function Sidebar() {
   return (
     <SidebarWrapper $collapsed={collapsed} onClick={() => collapsed && updateSidebarCollapsed(false)}>
       <LogoRow $collapsed={collapsed}>
-        <CompactLogo $collapsed={collapsed}>^^</CompactLogo>
-        <Logo $collapsed={collapsed}>^^</Logo>
+        <Logo $collapsed={collapsed} role="img" aria-label="KK-Agent" />
         <SidebarToggle
           $collapsed={collapsed}
           type="button"

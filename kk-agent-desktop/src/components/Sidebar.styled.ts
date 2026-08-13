@@ -22,28 +22,13 @@ export const LogoRow = styled.div<{ $collapsed: boolean }>`
 `;
 
 export const Logo = styled.div<{ $collapsed: boolean }>`
-  font-size: var(--font-size-lg);
-  font-weight: 700;
-  color: var(--accent);
-  letter-spacing: -0.5px;
-  opacity: ${(p) => (p.$collapsed ? 0 : 1)};
-  transform: ${(p) => (p.$collapsed ? "translateX(-8px) scale(0.96)" : "translateX(0) scale(1)")};
-  overflow: hidden;
-  transition: opacity 0.18s ease, transform 0.18s ease;
-`;
-
-export const CompactLogo = styled.div<{ $collapsed: boolean }>`
-  position: absolute;
-  left: 50%;
-  top: 50%;
-  transform: translate(-50%, -50%);
-  font-size: var(--font-size-lg);
-  font-weight: 700;
-  color: var(--accent);
-  letter-spacing: -0.5px;
-  opacity: ${(p) => (p.$collapsed ? 1 : 0)};
-  transition: opacity 0.12s ease;
-  pointer-events: none;
+  width: ${(p) => (p.$collapsed ? "34px" : "48px")};
+  height: ${(p) => (p.$collapsed ? "17px" : "24px")};
+  flex: 0 0 auto;
+  background: var(--accent);
+  mask: url("/brand/logo-kk.svg") center / contain no-repeat;
+  -webkit-mask: url("/brand/logo-kk.svg") center / contain no-repeat;
+  transition: width 0.18s ease, height 0.18s ease;
 `;
 
 export const SidebarToggle = styled.button<{ $collapsed: boolean }>`

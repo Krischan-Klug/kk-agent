@@ -4,7 +4,7 @@
   "version": "0.1.0",
   "private": true,
   "description": "KK-Agent desktop application with Electron and a Next.js renderer.",
-  "author": "KK-Agent",
+  "author": "KK Studios",
   "main": "dist/main.js",
   "scripts": {
     "dev:renderer": "next dev --port 3000",
@@ -24,6 +24,8 @@
   },
   "build": {
     "appId": "com.krikra.kk-agent",
+    "copyright": "Copyright © 2026 KK Studios",
+    "artifactName": "${productName}-Setup-${version}.${ext}",
     "directories": {
       "output": "release"
     },
@@ -39,11 +41,16 @@
       {
         "from": "out",
         "to": "renderer"
+      },
+      {
+        "from": "build/icon.ico",
+        "to": "icon.ico"
       }
     ],
     "asar": true,
     "win": {
-      "signAndEditExecutable": false,
+      "icon": "build/icon.ico",
+      "signExecutable": false,
       "target": [
         "nsis"
       ]
@@ -51,7 +58,12 @@
     "nsis": {
       "packElevateHelper": false,
       "oneClick": false,
-      "allowToChangeInstallationDirectory": true
+      "allowToChangeInstallationDirectory": true,
+      "installerIcon": "build/icon.ico",
+      "uninstallerIcon": "build/icon.ico",
+      "installerSidebar": "build/installerSidebar.bmp",
+      "uninstallerSidebar": "build/installerSidebar.bmp",
+      "shortcutName": "KK-Agent"
     }
   },
   "devDependencies": {

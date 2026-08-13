@@ -25,6 +25,12 @@ pnpm-debug.log*
 **/desktop-dist/
 **/release/
 **/build/
+!kk-agent-desktop/build/
+!kk-agent-desktop/build/icon.svg
+!kk-agent-desktop/build/icon.png
+!kk-agent-desktop/build/icon.ico
+!kk-agent-desktop/build/installerSidebar.svg
+!kk-agent-desktop/build/installerSidebar.bmp
 **/coverage/
 **/.nyc_output/
 **/*.tsbuildinfo

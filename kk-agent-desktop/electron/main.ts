@@ -13,6 +13,7 @@ const logger = {
 };
 
 const APP_NAME = "KK-Agent";
+const APP_ID = "com.krikra.kk-agent";
 const canonicalUserDataDir = path.join(app.getPath("appData"), APP_NAME);
 app.setName(APP_NAME);
 app.setPath("userData", canonicalUserDataDir);
@@ -61,6 +62,12 @@ function getBackendEntry(): string {
   return app.isPackaged
     ? path.join(process.resourcesPath, "backend", "index.cjs")
     : path.resolve(getDesktopRoot(), "..", "kk-agent-backend", "desktop-dist", "index.cjs");
+}
+
+function getWindowIconPath(): string {
+  return app.isPackaged
+    ? path.join(process.resourcesPath, "icon.ico")
+    : path.join(getDesktopRoot(), "build", "icon.ico");
 }
 
 async function waitForHttp(url: string, timeoutMs = 30000): Promise<void> {
@@ -190,6 +197,7 @@ async function createMainWindow(apiBaseUrl: string, apiToken?: string): Promise<
   const appTitle = app.getName();
   mainWindow = new BrowserWindow({
     title: appTitle,
+    icon: getWindowIconPath(),
     show: false,
     width: 1440,
     height: 960,
@@ -264,6 +272,7 @@ app.on("before-quit", () => {
 
 app.whenReady().then(async () => {
   try {
+    if (process.platform === "win32") app.setAppUserModelId(APP_ID);
     Menu.setApplicationMenu(null);
     if (!isDev) {
       await registerRendererProtocol();

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import Sidebar from "./Sidebar";
-import { LayoutWrapper, MainContent } from "./Layout.styled";
+import TitleBar from "./TitleBar";
+import { LayoutBody, LayoutWrapper, MainContent } from "./Layout.styled";
 import ProviderOnboardingWizard from "./onboarding/ProviderOnboardingWizard";
 import Spinner from "./Spinner";
 import { provider as providerApi } from "@/lib/api";
@@ -17,6 +18,7 @@ interface LayoutProps {
 export default function Layout({ children }: LayoutProps) {
   const [providers, setProviders] = useState<ProviderConfig[] | null>(null);
   const [contentKey, setContentKey] = useState(0);
+  const [isDesktop, setIsDesktop] = useState(false);
 
   const loadProviders = useCallback(async () => {
     try {
@@ -35,6 +37,10 @@ export default function Layout({ children }: LayoutProps) {
     void loadProviders();
   }, [loadProviders]);
 
+  useEffect(() => {
+    setIsDesktop(window.kkAgentDesktop?.isDesktop === true);
+  }, []);
+
   function handleOnboardingComplete(created: ProviderConfig) {
     setProviders([created]);
     setContentKey((key) => key + 1);
@@ -42,10 +48,13 @@ export default function Layout({ children }: LayoutProps) {
 
   return (
     <LayoutWrapper>
-      <Sidebar />
-      <MainContent key={contentKey}>
-        {providers === null ? <Spinner /> : children}
-      </MainContent>
+      {isDesktop ? <TitleBar /> : null}
+      <LayoutBody>
+        <Sidebar />
+        <MainContent key={contentKey}>
+          {providers === null ? <Spinner /> : children}
+        </MainContent>
+      </LayoutBody>
       {providers !== null && providers.length === 0 ? (
         <ProviderOnboardingWizard onComplete={handleOnboardingComplete} />
       ) : null}

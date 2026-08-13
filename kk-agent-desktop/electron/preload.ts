@@ -1,4 +1,4 @@
-import { contextBridge } from "electron";
+import { contextBridge, ipcRenderer } from "electron";
 
 function getArgument(prefix: string): string | undefined {
   const arg = process.argv.find((entry) => entry.startsWith(prefix));
@@ -18,4 +18,17 @@ contextBridge.exposeInMainWorld("kkAgentDesktop", {
   apiToken,
   appVersion,
   platform: process.platform,
+  windowControls: {
+    minimize: () => ipcRenderer.invoke("kk-agent:window:minimize"),
+    toggleMaximize: () => ipcRenderer.invoke("kk-agent:window:toggle-maximize"),
+    isMaximized: () => ipcRenderer.invoke("kk-agent:window:is-maximized"),
+    close: () => ipcRenderer.invoke("kk-agent:window:close"),
+    onMaximizedChange: (callback: (maximized: boolean) => void) => {
+      const listener = (_event: Electron.IpcRendererEvent, maximized: boolean) => {
+        callback(maximized);
+      };
+      ipcRenderer.on("kk-agent:window:maximized-change", listener);
+      return () => ipcRenderer.off("kk-agent:window:maximized-change", listener);
+    },
+  },
 });

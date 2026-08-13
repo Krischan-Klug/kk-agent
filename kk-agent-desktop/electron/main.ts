@@ -1,4 +1,4 @@
-import { app, BrowserWindow, Menu, net, protocol } from "electron";
+import { app, BrowserWindow, ipcMain, Menu, net, protocol } from "electron";
 import { spawn, type ChildProcess } from "node:child_process";
 import { randomBytes } from "node:crypto";
 import { createInterface } from "node:readline";
@@ -39,6 +39,33 @@ const isDev = !app.isPackaged || process.env.KK_AGENT_ELECTRON_DEV === "1";
 
 let mainWindow: BrowserWindow | null = null;
 let backendProcess: ChildProcess | null = null;
+
+function registerWindowControlHandlers(): void {
+  ipcMain.handle("kk-agent:window:minimize", (event) => {
+    BrowserWindow.fromWebContents(event.sender)?.minimize();
+  });
+
+  ipcMain.handle("kk-agent:window:toggle-maximize", (event) => {
+    const window = BrowserWindow.fromWebContents(event.sender);
+    if (!window) return false;
+
+    if (window.isMaximized()) {
+      window.unmaximize();
+    } else {
+      window.maximize();
+    }
+
+    return window.isMaximized();
+  });
+
+  ipcMain.handle("kk-agent:window:is-maximized", (event) => {
+    return BrowserWindow.fromWebContents(event.sender)?.isMaximized() ?? false;
+  });
+
+  ipcMain.handle("kk-agent:window:close", (event) => {
+    BrowserWindow.fromWebContents(event.sender)?.close();
+  });
+}
 
 function createApiToken(): string {
   const configured = process.env.KK_AGENT_API_TOKEN?.trim();
@@ -198,6 +225,7 @@ async function createMainWindow(apiBaseUrl: string, apiToken?: string): Promise<
   mainWindow = new BrowserWindow({
     title: appTitle,
     icon: getWindowIconPath(),
+    frame: false,
     show: false,
     width: 1440,
     height: 960,
@@ -220,6 +248,14 @@ async function createMainWindow(apiBaseUrl: string, apiToken?: string): Promise<
   mainWindow.once("ready-to-show", () => {
     mainWindow?.show();
   });
+
+  const sendMaximizedState = () => {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send("kk-agent:window:maximized-change", mainWindow.isMaximized());
+    }
+  };
+  mainWindow.on("maximize", sendMaximizedState);
+  mainWindow.on("unmaximize", sendMaximizedState);
 
   // Keep the native window title sourced from Electron metadata instead of page HTML.
   mainWindow.on("page-title-updated", (event) => {
@@ -274,6 +310,7 @@ app.whenReady().then(async () => {
   try {
     if (process.platform === "win32") app.setAppUserModelId(APP_ID);
     Menu.setApplicationMenu(null);
+    registerWindowControlHandlers();
     if (!isDev) {
       await registerRendererProtocol();
     }

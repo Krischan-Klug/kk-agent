@@ -2,7 +2,14 @@ import styled from "styled-components";
 
 export const LayoutWrapper = styled.div`
   display: flex;
+  flex-direction: column;
   height: 100%;
+  min-height: 0;
+`;
+
+export const LayoutBody = styled.div`
+  display: flex;
+  flex: 1;
   min-height: 0;
 `;
 

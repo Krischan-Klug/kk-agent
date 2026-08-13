@@ -97,21 +97,6 @@ export interface LoopOptions {
   llmRequestConfig?: LlmRequestConfig;
   providerState?: ProviderTransportState;
   modelContentByMessageId?: Record<string, ModelContentPart[]>;
-  modelPassRunner?: (
-    opts: LoopOptions,
-    messages: TranscriptMessage[],
-    providerState: LoopOptions["providerState"],
-    retryInstruction?: string,
-    runtimeContext?: string,
-  ) => Promise<{
-    message: TranscriptMessage;
-    finishReason: import("kk-agent-contract").TranscriptStopReason;
-    stats?: TokenStats;
-    notices?: import("../provider/lib/types.js").ProviderNotice[];
-    parseIssues?: import("../provider/lib/types.js").ToolCallParseIssue[];
-    transportState?: ProviderTransportState;
-    debug?: ProviderTurnDebug;
-  }>;
   onAssistantBlockDelta?: (messageId: string, block: import("kk-agent-contract").TranscriptBlock) => void;
   onAssistantMessage?: (message: TranscriptMessage) => void;
   onAssistantAttemptDiscarded?: (messageIds: string[]) => void;
@@ -139,11 +124,7 @@ export interface LoopOptions {
 }
 
 export interface LoopResult {
-  messages: TranscriptMessage[];
   finalResponse: string;
-  status: "completed" | "stopped" | "failed" | "aborted";
-  step: number;
-  attempt: number;
 }
 
 export interface LoopCheckpoint {

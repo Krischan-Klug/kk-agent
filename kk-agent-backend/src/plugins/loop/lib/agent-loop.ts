@@ -238,7 +238,7 @@ export async function runAgentLoop(opts: LoopOptions): Promise<LoopResult> {
   let toolContext = cloneToolContext(opts.toolContext ?? { values: {} });
   const defaults = getDefaults();
 
-  let status: LoopResult["status"] = "completed";
+  let status: Exclude<LoopCheckpoint["status"], "running"> = "completed";
 
   try {
     // Each cycle asks for one committed assistant step. Retries only advance attempt.
@@ -277,7 +277,7 @@ export async function runAgentLoop(opts: LoopOptions): Promise<LoopResult> {
 
       let response;
       try {
-        response = await (opts.modelPassRunner ?? runModelPass)(
+        response = await runModelPass(
           opts,
           contextMessages,
           providerState,
@@ -505,10 +505,6 @@ export async function runAgentLoop(opts: LoopOptions): Promise<LoopResult> {
   }));
 
   return {
-    messages: repaired,
     finalResponse,
-    status,
-    step: state.step,
-    attempt: state.attempt,
   };
 }

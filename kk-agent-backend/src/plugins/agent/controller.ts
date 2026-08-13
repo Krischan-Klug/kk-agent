@@ -6,7 +6,6 @@ import {
 } from "../../lib/schemas.js";
 import {
   listAgents,
-  getAgent,
   createAgent,
   updateAgent,
   deleteAgent,
@@ -15,10 +14,6 @@ import {
 
 export async function doList(_req: Request, res: Response): Promise<Response> {
   return res.json(listAgents());
-}
-
-export async function doGet(req: Request, res: Response): Promise<Response> {
-  return res.json(getAgent(requireParam(req, "id")));
 }
 
 export async function doListSystemVariables(_req: Request, res: Response): Promise<Response> {

@@ -47,14 +47,7 @@ export default function SettingsToolsPage() {
             key={tool.id}
             mcp={tool}
             {...buildMcpCardBaseProps(tool, collection)}
-            hideMcpMetadata
-            showConfigDetail={false}
-            compactHeader
-            showInstructionControls={false}
-            showToolsControls={false}
-            showInstructionInEdit
             onStateToggle={() => void handleStateToggle(tool)}
-            onDelete={() => undefined}
             onSaveEdit={() => void handleSaveEdit(tool)}
           />
         ))}

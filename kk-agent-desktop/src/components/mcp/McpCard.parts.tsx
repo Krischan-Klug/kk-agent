@@ -8,7 +8,7 @@ import { Select } from "@/components/FormControls.styled";
 import { ActionsRow, FieldLabel, FormField, MutedText, SectionTitle } from "@/components/PageForm";
 import type { EditForm } from "./types";
 
-export const ConfigDetail = styled.div`
+const ConfigDetail = styled.div`
   margin-top: var(--space-sm);
   padding: var(--space-sm) var(--space-md);
   background: var(--bg-elevated);

@@ -1,7 +1,6 @@
 import { Router } from "express";
 import {
   listTools,
-  listToolDefinitions,
   doUpdateTool,
   listTaskState,
   replaceTaskState,
@@ -20,7 +19,6 @@ router.get("/memory/user", listUserMemoryState);
 router.put("/memory/user", replaceUserMemoryState);
 router.get("/memory/session/:sessionId", listSessionMemoryState);
 router.put("/memory/session/:sessionId", replaceSessionMemoryState);
-router.get("/:id/tools", listToolDefinitions);
 router.put("/:id", doUpdateTool);
 
 export default router;

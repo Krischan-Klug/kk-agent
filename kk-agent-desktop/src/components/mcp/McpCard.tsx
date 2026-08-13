@@ -1,18 +1,12 @@
 import styled from "styled-components";
 import type { McpListItem } from "@/types/api";
 import Card from "@/components/Card";
-import Badge from "@/components/Badge";
 import Button from "@/components/Button";
 import Input from "@/components/Input";
-import {
-  ActionsRow,
-  Section,
-  SectionTitle,
-} from "@/components/PageForm";
+import { ActionsRow, Section } from "@/components/PageForm";
 import { StatusDot } from "@/components/agent/AgentEditor.styled";
 import type { EditForm } from "./types";
-import { getConfigSummary } from "./types";
-import { ConfigDetail, InstructionEditorBlock, McpEditFields } from "./McpCard.parts";
+import { InstructionEditorBlock, McpEditFields } from "./McpCard.parts";
 
 const Header = styled.div<{ $withBody: boolean }>`
   display: flex;
@@ -21,9 +15,9 @@ const Header = styled.div<{ $withBody: boolean }>`
   margin-bottom: ${(p) => (p.$withBody ? "var(--space-md)" : "0")};
 `;
 
-const HeaderTop = styled.div<{ $compact?: boolean }>`
+const HeaderTop = styled.div`
   display: flex;
-  align-items: ${(p) => (p.$compact ? "center" : "flex-start")};
+  align-items: center;
   justify-content: space-between;
   gap: var(--space-md);
   flex-wrap: nowrap;
@@ -78,43 +72,16 @@ const NameText = styled.span`
   font-weight: 600;
 `;
 
-const ToolItem = styled.div`
-  padding: var(--space-sm) var(--space-md);
-  background: var(--bg-elevated);
-  border-radius: var(--radius-sm);
-  font-family: var(--font-mono);
-  font-size: var(--font-size-sm);
-
-  span {
-    color: var(--text-secondary);
-    font-family: var(--font-sans);
-    margin-left: var(--space-sm);
-  }
-`;
-
 type Props = {
   mcp: McpListItem;
   instruction: string;
   editForm?: EditForm;
   editOpen: boolean;
-  toolsOpen: boolean;
-  instructionsOpen: boolean;
-  hideMcpMetadata?: boolean;
-  showConfigDetail?: boolean;
-  compactHeader?: boolean;
-  showDeleteButton?: boolean;
-  showDeleteInEdit?: boolean;
-  showInstructionControls?: boolean;
-  showToolsControls?: boolean;
-  showInstructionInEdit?: boolean;
   systemVariables?: string[];
   onStateToggle: () => void;
   onEditToggle: () => void;
-  onDelete: () => void;
-  onInstructionToggle: () => void;
+  onDelete?: () => void;
   onInstructionChange: (value: string) => void;
-  onInstructionSave: () => void;
-  onToolsToggle: () => void;
   onOpenEdit: () => void;
   onEditFormChange: (form: EditForm) => void;
   onSaveEdit: () => void;
@@ -127,66 +94,27 @@ export default function McpCard({
   instruction,
   editForm,
   editOpen,
-  toolsOpen,
-  instructionsOpen,
-  hideMcpMetadata = false,
-  showConfigDetail = true,
-  compactHeader = false,
-  showDeleteButton = true,
-  showDeleteInEdit = false,
-  showInstructionControls = true,
-  showToolsControls = true,
-  showInstructionInEdit = false,
   systemVariables = [],
   onStateToggle,
   onEditToggle,
   onDelete,
-  onInstructionToggle,
   onInstructionChange,
-  onInstructionSave,
-  onToolsToggle,
   onOpenEdit,
   onEditFormChange,
   onSaveEdit,
 }: Props) {
   const handleEditToggle = editOpen ? onEditToggle : onOpenEdit;
-  const configSummary = getConfigSummary(mcp);
-  const showInstructionEditor = showInstructionInEdit ? editOpen : instructionsOpen;
-  const isRunning = mcp.runtime.status === "running";
-  const isActive = mcp.source === "system" ? mcp.active !== false : isRunning;
+  const isActive = mcp.source === "system" ? mcp.active : mcp.runtime.status === "running";
   const statusTitle = mcp.runtime.status === "unavailable"
     ? `Unavailable${mcp.runtime.error ? `: ${mcp.runtime.error}` : ""}`
     : isActive ? "Active" : "Inactive";
-  const hasBody =
-    (!editOpen && showConfigDetail && Boolean(configSummary))
-    || (editOpen && Boolean(editForm))
-    || ((showInstructionControls || showToolsControls) && !showInstructionInEdit)
-    || (showInstructionEditor && !showInstructionInEdit)
-    || toolsOpen;
+  const hasBody = editOpen && Boolean(editForm);
 
   return (
     <Card>
       <Header $withBody={hasBody}>
-        <HeaderTop $compact={compactHeader}>
+        <HeaderTop>
           <Name>
-            {!compactHeader && (
-              <>
-                <StatusToggle
-                  type="button"
-                  onClick={onStateToggle}
-                  aria-label={isRunning ? "Stop" : "Start"}
-                  title={statusTitle}
-                >
-                  <Badge variant={isRunning ? "success" : "danger"}>{mcp.runtime.status}</Badge>
-                </StatusToggle>
-                {!hideMcpMetadata && (
-                  <>
-                    <Badge>{mcp.source === "system" ? "system" : "custom"}</Badge>
-                    <Badge>{mcp.transport}</Badge>
-                  </>
-                )}
-              </>
-            )}
             {editOpen && editForm ? (
               <>
                 <HeaderEmojiInput
@@ -205,33 +133,22 @@ export default function McpCard({
                 <NameText title={mcp.name}>{mcp.name}</NameText>
               </>
             )}
-            {compactHeader && (
-              <StatusToggle
-                type="button"
-                onClick={onStateToggle}
-                aria-label={isActive ? "Disable" : "Enable"}
-                title={statusTitle}
-              >
-                <StatusDot $running={isActive} />
-              </StatusToggle>
-            )}
+            <StatusToggle
+              type="button"
+              onClick={onStateToggle}
+              aria-label={mcp.active ? "Disable" : "Enable"}
+              title={statusTitle}
+            >
+              <StatusDot $running={isActive} />
+            </StatusToggle>
           </Name>
           <Controls>
             <Button size="sm" variant="secondary" onClick={handleEditToggle}>
               {editOpen ? "Close" : "Edit"}
             </Button>
-            {showDeleteButton && mcp.source !== "system" && (
-              <Button size="sm" variant="danger" onClick={onDelete}>
-                Delete
-              </Button>
-            )}
           </Controls>
         </HeaderTop>
       </Header>
-
-      {!editOpen && showConfigDetail && configSummary && (
-        <ConfigDetail>{configSummary}</ConfigDetail>
-      )}
 
       {editOpen && editForm && (
         <Section>
@@ -241,7 +158,7 @@ export default function McpCard({
             <Button size="sm" onClick={onSaveEdit}>
               Save
             </Button>
-            {showDeleteInEdit && mcp.source !== "system" && (
+            {mcp.source === "custom" && onDelete && (
               <Button size="sm" variant="danger" onClick={onDelete}>
                 Delete
               </Button>
@@ -251,56 +168,12 @@ export default function McpCard({
             </Button>
           </ActionsRow>
 
-          {showInstructionInEdit && (
-            <InstructionEditorBlock
-              instruction={instruction}
-              systemVariables={systemVariables}
-              title="Instruction"
-              onInstructionChange={onInstructionChange}
-            />
-          )}
-        </Section>
-      )}
-
-      {(showInstructionControls || showToolsControls) && (
-        <ActionsRow style={{ marginTop: "var(--space-md)" }}>
-          {showInstructionControls && (
-            <>
-              <SectionTitle as="span">Instruction</SectionTitle>
-              <Button size="sm" variant="secondary" onClick={onInstructionToggle}>
-                {instructionsOpen ? "Close" : "Edit"}
-              </Button>
-              {instructionsOpen && (
-                <Button size="sm" variant="secondary" onClick={onInstructionSave}>
-                  Save
-                </Button>
-              )}
-            </>
-          )}
-          {showToolsControls && (
-            <Button size="sm" variant="secondary" onClick={onToolsToggle}>
-              {toolsOpen ? "Hide tools" : `Tools (${mcp.tools.length})`}
-            </Button>
-          )}
-        </ActionsRow>
-      )}
-
-      {showInstructionEditor && !showInstructionInEdit && (
-        <InstructionEditorBlock
-          instruction={instruction}
-          systemVariables={systemVariables}
-          onInstructionChange={onInstructionChange}
-        />
-      )}
-
-      {toolsOpen && (
-        <Section style={{ marginTop: "var(--space-md)" }}>
-          {mcp.tools.map((tool) => (
-            <ToolItem key={tool.name}>
-              {tool.name}
-              <span>{tool.description}</span>
-            </ToolItem>
-          ))}
+          <InstructionEditorBlock
+            instruction={instruction}
+            systemVariables={systemVariables}
+            title="Instruction"
+            onInstructionChange={onInstructionChange}
+          />
         </Section>
       )}
     </Card>

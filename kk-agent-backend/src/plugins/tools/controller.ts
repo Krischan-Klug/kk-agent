@@ -26,10 +26,6 @@ export async function listTools(_req: Request, res: Response): Promise<Response>
   return res.json(tools);
 }
 
-export async function listToolDefinitions(req: Request, res: Response): Promise<Response> {
-  return res.json(getSystemToolsForMcp(requireParam(req, "id")));
-}
-
 export async function doUpdateTool(req: Request, res: Response): Promise<Response> {
   const body = UpdateMcpBodySchema.parse(req.body);
   return res.json(await updateInternalToolConfig(requireParam(req, "id"), body));

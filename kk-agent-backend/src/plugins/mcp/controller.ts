@@ -25,10 +25,6 @@ export async function listMcps(_req: Request, res: Response): Promise<Response> 
   return res.json(result);
 }
 
-export async function listMcpTools(req: Request, res: Response): Promise<Response> {
-  return res.json(getMcpTools(requireParam(req, "id")));
-}
-
 export async function doCreate(req: Request, res: Response): Promise<Response> {
   const body = CreateMcpBodySchema.parse(req.body);
   const mcp = await createMcp(body);

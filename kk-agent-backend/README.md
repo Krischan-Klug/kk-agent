@@ -88,7 +88,6 @@ Agent:
 
 - `GET /agent`
 - `POST /agent`
-- `GET /agent/:id`
 - `PUT /agent/:id`
 - `DELETE /agent/:id`
 - `GET /agent/system-variables`
@@ -112,7 +111,6 @@ Session:
 Tools:
 
 - `GET /tools`
-- `GET /tools/:id/tools`
 - `PUT /tools/:id`
 - `GET /tools/task/session/:sessionId`
 - `PUT /tools/task/session/:sessionId`
@@ -127,7 +125,6 @@ MCP:
 - `POST /mcp`
 - `PUT /mcp/:id`
 - `DELETE /mcp/:id`
-- `GET /mcp/:id/tools`
 
 Skills:
 

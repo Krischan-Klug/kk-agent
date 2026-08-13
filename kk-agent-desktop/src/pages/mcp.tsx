@@ -100,14 +100,6 @@ export default function McpPage() {
             key={mcp.id}
             mcp={mcp}
             {...buildMcpCardBaseProps(mcp, collection)}
-            hideMcpMetadata
-            showConfigDetail={false}
-            compactHeader
-            showDeleteButton={false}
-            showDeleteInEdit
-            showInstructionControls={false}
-            showToolsControls={false}
-            showInstructionInEdit
             onStateToggle={() => void handleStateToggle(mcp)}
             onDelete={() => setDeleteTarget(mcp.id)}
             onSaveEdit={() => void handleSaveEdit(mcp)}

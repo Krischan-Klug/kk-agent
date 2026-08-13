@@ -32,7 +32,7 @@ export function buildCustomMcpUpdateBody(mcp: McpListItem, form: EditForm): Upda
   return {
     ...buildBaseUpdate(form),
     ...(mcp.transport === "stdio"
-      ? { command: form.command, args: form.args.split("\n").filter(Boolean), env: {} }
+      ? { command: form.command, args: form.args.split("\n").filter(Boolean) }
       : { url: form.url }),
   };
 }

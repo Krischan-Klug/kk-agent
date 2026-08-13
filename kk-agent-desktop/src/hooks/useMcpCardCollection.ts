@@ -1,13 +1,12 @@
 import { useCallback, useEffect, useState } from "react";
 import { agent as agentApi } from "@/lib/api";
 import type { Logger } from "@/lib/logger";
-import type { McpListItem, UpdateMcpBody } from "@/types/api";
+import type { McpListItem } from "@/types/api";
 import { useToggleSet } from "@/hooks/useToggleSet";
 import { buildEditForm, type EditForm } from "@/components/mcp/types";
 
 type McpCardCollectionApi = {
   list: () => Promise<McpListItem[]>;
-  update: (id: string, body: UpdateMcpBody) => Promise<unknown>;
 };
 
 export type McpCardCollection = ReturnType<typeof useMcpCardCollection>;
@@ -18,8 +17,6 @@ export function useMcpCardCollection(api: McpCardCollectionApi, logger: Logger, 
   const [instructions, setInstructions] = useState<Record<string, string>>({});
   const [editForms, setEditForms] = useState<Record<string, EditForm>>({});
   const [systemVariables, setSystemVariables] = useState<string[]>([]);
-  const expandedTools = useToggleSet();
-  const expandedInstructions = useToggleSet();
   const expandedEdit = useToggleSet();
 
   const loadItems = useCallback(async () => {
@@ -53,15 +50,6 @@ export function useMcpCardCollection(api: McpCardCollectionApi, logger: Logger, 
     expandedEdit.add(item.id);
   }, [expandedEdit]);
 
-  const handleSaveInstruction = useCallback(async (id: string) => {
-    try {
-      await api.update(id, { instruction: instructions[id] ?? "" });
-      await loadItems();
-    } catch (err) {
-      logger.error("Failed to save instruction:", err);
-    }
-  }, [api, instructions, loadItems, logger]);
-
   return {
     items,
     loading,
@@ -70,11 +58,8 @@ export function useMcpCardCollection(api: McpCardCollectionApi, logger: Logger, 
     editForms,
     setEditForms,
     systemVariables,
-    expandedTools,
-    expandedInstructions,
     expandedEdit,
     loadItems,
     openEdit,
-    handleSaveInstruction,
   };
 }

@@ -42,33 +42,3 @@ export function buildEditForm(mcp: McpListItem): EditForm {
       : "",
   };
 }
-
-export function getConfigSummary(mcp: McpListItem): string {
-  const resultPolicy = mcp.systemConfig?.resultPolicy;
-  const resultPolicySummary = resultPolicy
-    ? `threshold ${resultPolicy.previewThresholdChars ?? "-"} / preview ${resultPolicy.previewChars ?? "-"}`
-    : "";
-
-  if (mcp.source === "system") {
-    if (mcp.systemKey === "filesystem") {
-      return [
-        mcp.systemConfig?.accessScope ?? "user",
-        mcp.systemConfig?.basePath ?? "-",
-        resultPolicySummary,
-      ].filter(Boolean).join("\n");
-    }
-    if (mcp.systemKey === "terminal") {
-      return [
-        mcp.systemConfig?.accessScope ?? "user",
-        mcp.systemConfig?.workingDirectory ?? "-",
-        resultPolicySummary,
-      ].filter(Boolean).join("\n");
-    }
-    if (mcp.systemKey === "web-search") return resultPolicySummary;
-    return "";
-  }
-
-  return mcp.transport === "stdio"
-    ? `${(mcp.server as McpStdioConfig).command} ${((mcp.server as McpStdioConfig).args ?? []).join(" ")}`
-    : (mcp.server as { url: string }).url;
-}

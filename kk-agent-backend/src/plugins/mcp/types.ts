@@ -2,6 +2,7 @@ export { SYSTEM_MCP_KEYS } from "kk-agent-contract";
 export type {
   AccessScope,
   CreateMcpBody,
+  McpRuntimeState,
   McpServerConfig,
   McpSseConfig,
   McpStdioConfig,

@@ -33,10 +33,15 @@ export function registerSession(
 export function unregisterSession(sessionId: string): void {
   const entry = store.get(sessionId);
   if (!entry) return;
-  for (const [, p] of entry.pending) {
-    p.reject(new Error("Session ended while waiting for user response"));
-  }
+  cancelPendingPrompts(sessionId, "Session ended while waiting for user response");
   store.delete(sessionId);
+}
+
+export function cancelPendingPrompts(sessionId: string, reason: string): void {
+  const entry = store.get(sessionId);
+  if (!entry) return;
+  for (const pending of entry.pending.values()) pending.reject(new Error(reason));
+  entry.pending.clear();
 }
 
 export function emitPrompt(sessionId: string, payload: UserPromptPayload): void {

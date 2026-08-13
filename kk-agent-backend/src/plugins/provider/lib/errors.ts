@@ -1,6 +1,5 @@
 type ProviderErrorKind =
   | "prompt_too_long"
-  | "max_output_tokens"
   | "rate_limit"
   | "transient"
   | "fatal";
@@ -36,10 +35,6 @@ export function classifyProviderError(error: unknown): ClassifiedProviderError {
     lower.includes("too many tokens")
   ) {
     return { kind: "prompt_too_long", status, message, cause: error };
-  }
-
-  if (lower.includes("max_tokens") && lower.includes("exceed")) {
-    return { kind: "max_output_tokens", status, message, cause: error };
   }
 
   if (status === 429 || lower.includes("rate limit") || lower.includes("rate_limit")) {

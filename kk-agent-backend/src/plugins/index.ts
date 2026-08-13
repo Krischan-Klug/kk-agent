@@ -1,22 +1,15 @@
 import type { Express } from "express";
-import { analysePlugins } from "./lib/plugin-analysis.js";
-import { initializePlannedPlugins } from "./lib/plugin-bootstrap.js";
-import { internalPluginEntries } from "./internal-registry.js";
+import initTools from "./tools/index.js";
+import initMcp from "./mcp/index.js";
+import initSkills from "./skills/index.js";
+import initProvider from "./provider/index.js";
+import initAgent from "./agent/index.js";
+import initSession from "./session/index.js";
 
-async function preparePlugins() {
-  const plugins = internalPluginEntries.map(({ directory, plugin }) => {
-    const pluginName = plugin.name ?? directory;
-    return {
-      name: pluginName,
-      directory,
-      mod: plugin,
-    };
-  });
-
-  return analysePlugins(plugins);
-}
+const initializers = [initTools, initMcp, initSkills, initProvider, initAgent, initSession];
 
 export default async function initPlugins(app: Express): Promise<void> {
-  const analysis = await preparePlugins();
-  await initializePlannedPlugins(app, analysis);
+  for (const initialize of initializers) {
+    await initialize(app);
+  }
 }

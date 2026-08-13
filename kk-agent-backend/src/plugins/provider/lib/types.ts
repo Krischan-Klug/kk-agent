@@ -1,4 +1,4 @@
-import type { TranscriptBlock, TranscriptMessage, TranscriptStopReason } from "../../lib/transcript.js";
+import type { TranscriptBlock, TranscriptMessage, TranscriptStopReason } from "kk-agent-contract";
 import type {
   ContinuationMode,
   EndpointTransportProfile,
@@ -10,17 +10,22 @@ import type {
 
 export type { ProviderTurnDebug } from "../types.js";
 
+export type ModelContentPart =
+  | { type: "text"; text: string }
+  | { type: "image"; dataUrl: string; detail?: "auto" | "low" | "high" };
+
 export interface UnifiedRequest {
   providerId?: string;
   model: string;
+  instructions: string;
   messages: TranscriptMessage[];
   tools?: UnifiedToolDefinition[];
-  stream?: boolean;
   endpoint?: EndpointType;
   llmRequestConfig?: LlmRequestConfig;
   resolvedLlmRequestConfig?: ResolvedLlmRequestConfig;
   transportProfile?: EndpointTransportProfile;
   transportState?: ProviderTransportState;
+  modelContentByMessageId?: Record<string, ModelContentPart[]>;
 }
 
 export interface UnifiedToolDefinition {
@@ -103,7 +108,6 @@ export interface ResponsesTransportState {
   endpoint: "responses";
   continuationMode: ContinuationMode;
   syncedMessageIds: string[];
-  historyItems: ResponsesConversationItem[];
   callIdByToolUseId: Record<string, string>;
   lastResponseId?: string;
 }

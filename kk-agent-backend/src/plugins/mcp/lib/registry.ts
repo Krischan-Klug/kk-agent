@@ -7,15 +7,30 @@ const REGISTRY_PATH = getStatePath("mcps.json");
 const SYSTEM_IDS = new Set<string>(SYSTEM_MCP_KEYS);
 const DEFAULT_REGISTRY: { mcps: McpServerConfig[] } = { mcps: [] };
 
+function normalizeStoredMcp(mcp: McpServerConfig): McpServerConfig {
+  return {
+    id: mcp.id,
+    name: mcp.name,
+    active: mcp.active,
+    instruction: mcp.instruction,
+    ...(mcp.emoji ? { emoji: mcp.emoji } : {}),
+    source: "custom",
+    transport: mcp.transport,
+    server: mcp.server,
+  };
+}
+
 async function loadRegistry(): Promise<McpServerConfig[]> {
   if (!existsSync(REGISTRY_PATH)) {
     await writeJsonFile(REGISTRY_PATH, DEFAULT_REGISTRY);
     return DEFAULT_REGISTRY.mcps;
   }
-  const data = await readJsonFile<{ mcps: McpServerConfig[] }>(REGISTRY_PATH);
-  return (data?.mcps ?? [])
+  const data = await readJsonFile<{ mcps?: McpServerConfig[] }>(REGISTRY_PATH);
+  const mcps = (data?.mcps ?? [])
     .filter((mcp) => !SYSTEM_IDS.has(mcp.id))
-    .map((mcp) => ({ ...mcp, source: "custom" as const }));
+    .map(normalizeStoredMcp);
+  await saveRegistry(mcps);
+  return mcps;
 }
 
 async function saveRegistry(mcps: McpServerConfig[]): Promise<void> {

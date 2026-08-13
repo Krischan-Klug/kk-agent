@@ -1,4 +1,4 @@
-import type { McpServerConfig, McpStdioConfig, McpSseConfig, McpToolDefinition, CreateMcpBody, UpdateMcpBody } from "./types.js";
+import type { McpServerConfig, McpSseConfig, McpStdioConfig, McpToolDefinition, CreateMcpBody, UpdateMcpBody } from "./types.js";
 import { getSystemMcpById } from "../tools/service.js";
 import { createSlugId } from "../lib/ids.js";
 import { NotFoundError, ConflictError } from "../../lib/errors.js";
@@ -8,6 +8,7 @@ import {
   stopMcp,
   getToolsForMcp,
   executeToolForMcp as executeMcpTool,
+  forgetMcpRuntimeState,
   getRunningMcps,
 } from "./lib/process-manager.js";
 
@@ -24,18 +25,6 @@ export async function getAllMcps(): Promise<McpServerConfig[]> {
 
 export function getAllMcpsCached(): McpServerConfig[] {
   return cachedCustomMcps;
-}
-
-export async function toggleMcp(id: string, active: boolean): Promise<McpServerConfig> {
-  return withRegistryUpdate(id, async (mcp) => {
-    mcp.active = active;
-    if (active) await startMcp(mcp);
-    else await stopMcp(id);
-  });
-}
-
-export async function updateInstruction(id: string, instruction: string): Promise<McpServerConfig> {
-  return updateMcpConfig(id, { instruction });
 }
 
 export function getActiveInstructions(): { id: string; name: string; instruction: string }[] {
@@ -60,20 +49,6 @@ export function getMcpTools(id: string): McpToolDefinition[] {
   return getToolsForMcp(id);
 }
 
-export async function startMcpServer(id: string): Promise<void> {
-  await withRegistryUpdate(id, async (mcp) => {
-    await startMcp(mcp);
-    mcp.active = true;
-  });
-}
-
-export async function stopMcpServer(id: string): Promise<void> {
-  await stopMcp(id);
-  await withRegistryUpdate(id, (mcp) => {
-    mcp.active = false;
-  });
-}
-
 export async function createMcp(body: CreateMcpBody): Promise<McpServerConfig> {
   const id = createSlugId(body.name);
 
@@ -88,7 +63,6 @@ export async function createMcp(body: CreateMcpBody): Promise<McpServerConfig> {
     instruction: body.instruction ?? "",
     emoji: body.emoji,
     source: "custom",
-    skillIds: body.skillIds ?? [],
     transport: body.transport,
     server:
       body.transport === "stdio"
@@ -109,36 +83,53 @@ export async function deleteMcp(id: string): Promise<void> {
   }
   const removed = await removeMcp(id);
   if (!removed) throw new NotFoundError("MCP", id);
+  forgetMcpRuntimeState(id);
   cachedCustomMcps = await getRegistry();
 }
 
 export async function updateMcpConfig(id: string, body: UpdateMcpBody): Promise<McpServerConfig> {
-  return withRegistryUpdate(id, (mcp) => {
-    if (body.active !== undefined) mcp.active = body.active;
-    if (body.name !== undefined) mcp.name = body.name;
-    if (body.instruction !== undefined) mcp.instruction = body.instruction;
-    if (body.emoji !== undefined) mcp.emoji = body.emoji;
-    if (body.skillIds !== undefined) mcp.skillIds = body.skillIds;
+  const mcps = await getRegistry();
+  const current = getMcpById(mcps, id);
+  if (!current) throw new NotFoundError("MCP", id);
 
-    if (body.transport !== undefined) {
-      mcp.transport = body.transport;
-      mcp.server = body.transport === "stdio"
-        ? { command: body.command ?? "", args: body.args ?? [], ...(body.env && { env: body.env }) }
-        : { url: body.url ?? "" };
-      return;
-    }
+  const next: McpServerConfig = {
+    ...current,
+    server: structuredClone(current.server),
+    active: body.active ?? current.active,
+    name: body.name ?? current.name,
+    instruction: body.instruction ?? current.instruction,
+  };
+  if (body.emoji !== undefined) next.emoji = body.emoji;
 
-    if (mcp.transport === "stdio") {
-      const server = mcp.server;
-      if (body.command !== undefined) (server as McpStdioConfig).command = body.command;
-      if (body.args !== undefined) (server as McpStdioConfig).args = body.args;
-      if (body.env !== undefined) (server as McpStdioConfig).env = Object.keys(body.env).length > 0 ? body.env : undefined;
-      return;
-    }
+  if (body.transport !== undefined) {
+    next.transport = body.transport;
+    next.server = body.transport === "stdio"
+      ? { command: body.command ?? "", args: body.args ?? [], ...(body.env && { env: body.env }) }
+      : { url: body.url ?? "" };
+  } else if (next.transport === "stdio") {
+    const server = next.server as McpStdioConfig;
+    if (body.command !== undefined) server.command = body.command;
+    if (body.args !== undefined) server.args = body.args;
+    if (body.env !== undefined) server.env = Object.keys(body.env).length > 0 ? body.env : undefined;
+  } else if (body.url !== undefined) {
+    (next.server as McpSseConfig).url = body.url;
+  }
 
-    const server = mcp.server;
-    if (body.url !== undefined) (server as McpSseConfig).url = body.url;
-  });
+  const connectionChanged = current.transport !== next.transport
+    || JSON.stringify(current.server) !== JSON.stringify(next.server);
+  const index = mcps.findIndex((mcp) => mcp.id === id);
+  mcps[index] = next;
+  await updateRegistry(mcps);
+  cachedCustomMcps = mcps;
+
+  if (!next.active) {
+    await stopMcp(id);
+  } else if (!current.active || connectionChanged) {
+    if (connectionChanged) await stopMcp(id);
+    await startMcp(next);
+  }
+
+  return next;
 }
 
 export async function executeToolForMcp(
@@ -147,17 +138,4 @@ export async function executeToolForMcp(
   args: Record<string, unknown>,
 ): Promise<{ content: string; isError: boolean }> {
   return executeMcpTool(mcpId, toolName, args);
-}
-
-async function withRegistryUpdate(
-  id: string,
-  updater: (mcp: McpServerConfig, mcps: McpServerConfig[]) => Promise<void> | void,
-): Promise<McpServerConfig> {
-  const mcps = await getRegistry();
-  const mcp = getMcpById(mcps, id);
-  if (!mcp) throw new NotFoundError("MCP", id);
-  await updater(mcp, mcps);
-  await updateRegistry(mcps);
-  cachedCustomMcps = mcps;
-  return mcp;
 }

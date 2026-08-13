@@ -6,13 +6,8 @@ import {
   getEndpointCapabilities,
   getEndpointTransportProfile,
   getPreferredEndpoint,
-  resolveMaxOutputRange,
-} from "./capabilities.js";
-import {
-  buildResolvedLlmRequestConfig,
   mergeLlmRequestConfigs,
-  sanitizeEndpointExtraBody,
-} from "./request-config.js";
+} from "kk-agent-contract";
 
 export function normalizeRequestOptions(
   model: ModelInfo | undefined,
@@ -36,30 +31,20 @@ export function normalizeRequestOptions(
         continuationMode,
       }
     : getEndpointTransportProfile(model?.capabilities, endpoint);
-  const maxOutputRange = resolveMaxOutputRange(model, endpoint);
-  const omittedUnsupportedKeys: string[] = [];
   const rawReasoningSelection = mergedConfig?.common?.reasoningEffort;
   const reasoningEffort = coerceReasoningSelection(model?.capabilities, endpoint, rawReasoningSelection);
   const temperature = endpointCapabilities.temperatureSupported
     ? clampNumber(mergedConfig?.common?.temperature, endpointCapabilities.temperatureRange)
     : undefined;
-  const maxOutputTokens = endpointCapabilities.maxOutputTokensSupported
-    ? clampNumber(mergedConfig?.common?.maxOutputTokens, maxOutputRange)
-    : undefined;
-
-  const sanitizedExtraBody = sanitizeEndpointExtraBody(endpoint, mergedConfig?.extraBody?.[endpoint]);
-  omittedUnsupportedKeys.push(...sanitizedExtraBody.omittedKeys.map((key) => `extraBody.${endpoint}.${key}`));
-  const resolvedLlmRequestConfig = buildResolvedLlmRequestConfig({
-    endpoint,
+  const topP = clampNumber(mergedConfig?.common?.topP, { min: 0, max: 1 });
+  const resolvedLlmRequestConfig = {
     common: {
       endpoint,
       reasoningEffort,
       temperature,
-      maxOutputTokens,
+      topP,
     },
-    extraBody: sanitizedExtraBody.value,
-    omittedUnsupportedKeys,
-  });
+  };
 
   return {
     endpoint,

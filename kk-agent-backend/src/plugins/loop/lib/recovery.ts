@@ -1,4 +1,4 @@
-import type { TranscriptMessage } from "../../lib/transcript.js";
+import type { TranscriptMessage } from "kk-agent-contract";
 
 function estimateMessageChars(message: TranscriptMessage): number {
   try {

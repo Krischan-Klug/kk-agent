@@ -33,7 +33,7 @@ function isLikelyIncompleteJson(raw: string): boolean {
   return inString || depth > 0;
 }
 
-export function splitConcatenatedJson(raw: string): string[] {
+function splitConcatenatedJson(raw: string): string[] {
   const trimmed = raw.trim();
   if (!trimmed) return [""];
 

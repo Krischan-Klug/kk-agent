@@ -1,6 +1,6 @@
 import type { SessionRecord, SessionState } from "../types.js";
 import * as store from "./store.js";
-import { compactLlmRequestConfig } from "../../provider/lib/request-config.js";
+import { compactLlmRequestConfig } from "kk-agent-contract";
 import { NotFoundError } from "../../../lib/errors.js";
 
 export function normalizeSessionRequestConfig<T extends { llmRequestConfig?: unknown }>(session: T): T {
@@ -12,7 +12,12 @@ export function normalizeSessionRequestConfig<T extends { llmRequestConfig?: unk
 
 export function toPublicSession(session: SessionRecord): SessionState {
   const normalized = normalizeSessionRequestConfig(session);
-  const { providerState: _providerState, ...publicSession } = normalized;
+  const {
+    schemaVersion: _schemaVersion,
+    providerState: _providerState,
+    loadedSkillIds: _loadedSkillIds,
+    ...publicSession
+  } = normalized;
   return publicSession;
 }
 

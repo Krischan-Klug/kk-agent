@@ -1,50 +1,25 @@
-import { getStateDirPath } from "../../../lib/state.js";
 import type { ToolExecutionResult, ToolRuntimeContext } from "../../../loop/types.js";
 import type { McpServerConfig } from "../../../mcp/types.js";
-import { loadSkillFromPath } from "../../../skills/lib/loader.js";
-import { createSkillContextMessage } from "../../../skills/lib/xml.js";
-import type { SkillDefinition } from "../../../skills/types.js";
+import { loadSkillContext } from "../../../skills/service.js";
 import { getErrorMessage } from "../../../../lib/error.js";
-import { BadRequestError } from "../../../../lib/errors.js";
-
-type CreateSkillHandler = (body: { name: string; description: string; instruction: string }) => Promise<SkillDefinition>;
-
-let createSkillHandler: CreateSkillHandler | undefined;
-
-export function setCreateSkillHandler(handler: CreateSkillHandler): void {
-  createSkillHandler = handler;
-}
 
 function readStringArray(value: unknown): string[] {
-  return Array.isArray(value) ? value.filter((entry): entry is string => typeof entry === "string" && entry.trim().length > 0) : [];
+  return Array.isArray(value)
+    ? value.filter((entry): entry is string => typeof entry === "string" && entry.trim().length > 0)
+    : [];
 }
 
-function readInstructionOverrides(value: unknown): Record<string, string> {
-  if (!value || typeof value !== "object") return {};
-  const obj = value as Record<string, unknown>;
-  return Object.fromEntries(
-    Object.entries(obj)
-      .filter((entry): entry is [string, string] => typeof entry[1] === "string" && entry[1].trim().length > 0),
-  );
-}
-
-function buildLoadedSkillSummary(skill: SkillDefinition): string {
-  return `Loaded skill "${skill.id}" (${skill.name}).`;
-}
-
-function addLoadedSkillId(context: ToolRuntimeContext, skillId: string): ToolRuntimeContext {
+function addLoadedSkill(context: ToolRuntimeContext, skillId: string, skillContext: string): ToolRuntimeContext {
   const loadedSkillIds = readStringArray(context.values.loadedSkillIds);
   if (loadedSkillIds.includes(skillId)) return context;
+  const loadedSkillContexts = readStringArray(context.values.loadedSkillContexts);
   return {
     values: {
       ...context.values,
       loadedSkillIds: [...loadedSkillIds, skillId],
+      loadedSkillContexts: [...loadedSkillContexts, skillContext],
     },
   };
-}
-
-function buildCreatedSkillSummary(skill: SkillDefinition): string {
-  return [`Created skill "${skill.id}" (${skill.name}).`, `Path: ${skill.path}`].join("\n");
 }
 
 export async function executeSkillTool(
@@ -53,80 +28,30 @@ export async function executeSkillTool(
   args: Record<string, unknown>,
   context: ToolRuntimeContext = { values: {} },
 ): Promise<ToolExecutionResult | null> {
-  if (toolName === "CreateSkill") {
-    try {
-      if (!createSkillHandler) {
-        throw new BadRequestError("CreateSkill is not available before the skills service is initialized.");
-      }
-      const created = await createSkillHandler({
-        name: String(args.name ?? ""),
-        description: String(args.description ?? ""),
-        instruction: String(args.instruction ?? ""),
-      });
-      return {
-        content: buildCreatedSkillSummary(created),
-      };
-    } catch (error) {
-      return {
-        content: getErrorMessage(error),
-        isError: true,
-      };
-    }
-  }
-
   if (toolName !== "Skill") return null;
 
-  const skillId = String(args.skill ?? "").trim();
+  const skillId = String(args.name ?? "").trim();
   if (!skillId) {
-    return {
-      content: "Skill requires a non-empty skill id from <skills_catalog>.",
-      isError: true,
-    };
+    return { content: "Skill requires an exact name from <available_skills>.", isError: true };
   }
 
   const availableSkillIds = readStringArray(context.values.availableSkillIds);
   if (!availableSkillIds.includes(skillId)) {
-    return {
-      content: `Skill "${skillId}" is not available in the current mode or session skills catalog.`,
-      isError: true,
-    };
+    return { content: `Skill "${skillId}" is not available in this session.`, isError: true };
   }
 
   const loadedSkillIds = readStringArray(context.values.loadedSkillIds);
   if (loadedSkillIds.includes(skillId)) {
-    return {
-      content: `Skill "${skillId}" is already loaded in this conversation.`,
-    };
+    return { content: `Skill "${skillId}" is already loaded.` };
   }
 
-  const skillsRootDir = typeof context.values.skillsRootDir === "string"
-    ? context.values.skillsRootDir
-    : getStateDirPath("skills");
-
   try {
-    const loaded = await loadSkillFromPath(skillsRootDir, skillId);
-    const skill: SkillDefinition = {
-      id: skillId,
-      path: loaded.resolvedPath,
-      name: loaded.name,
-      description: loaded.description,
-      instruction: loaded.instruction,
-      source: "custom",
-      linkedToolIds: [...loaded.links.linkedToolIds],
-      linkedMcpIds: [...loaded.links.linkedMcpIds],
-    };
-    const instructionOverrides = readInstructionOverrides(context.values.skillInstructionsById);
-    const instruction = instructionOverrides[skillId] ?? skill.instruction;
-
+    const loaded = loadSkillContext(skillId);
     return {
-      content: buildLoadedSkillSummary(skill),
-      additionalMessages: [createSkillContextMessage(skill, instruction)],
-      contextModifier: (previous) => addLoadedSkillId(previous, skillId),
+      content: `Loaded skill "${loaded.skill.name}" from ${loaded.skill.path}.`,
+      contextModifier: (previous) => addLoadedSkill(previous, skillId, loaded.context),
     };
   } catch (error) {
-    return {
-      content: getErrorMessage(error),
-      isError: true,
-    };
+    return { content: getErrorMessage(error), isError: true };
   }
 }

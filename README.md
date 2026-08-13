@@ -2,14 +2,14 @@
 
 Monorepo for the KK-Agent desktop and web stack.
 
-`kk-agent` is the canonical repository for the project. It keeps the desktop shell, frontend, backend, and shared contract package in one workspace so changes across the app can be versioned and released together.
+`kk-agent` is the canonical repository for the project. It keeps the desktop application, reusable backend, and shared contract package in one workspace so changes across the app can be versioned and released together.
 
-The platform connects a Next.js frontend to a plugin-based backend and routes model calls to local or self-hosted OpenAI-compatible providers such as LM Studio, Ollama, llama.cpp, or vLLM. Electron packages the frontend and backend into a local desktop app.
+The Electron application uses a Next.js renderer and connects to the plugin-based backend, which routes model calls to local or self-hosted OpenAI-compatible providers such as LM Studio, Ollama, llama.cpp, or vLLM.
 
 ## What It Does
 
 - Runs chat, edit, and autonomous agent loops against local models
-- Separates internal tools, external MCPs, and curated skills
+- Separates internal tools, external MCPs, and standard Agent Skills
 - Streams assistant text, reasoning, tool activity, and loop state live
 - Persists lightweight JSON state without a database
 
@@ -25,9 +25,9 @@ Per model, kk-agent keeps only request-level defaults:
 
 - endpoint: `chat-completions` or `responses`
 - reasoning effort
-- temperature
-- max output tokens
-- `Additional Request JSON` for rare provider-specific request fields
+- two optional OpenAI sampling overrides: `temperature` and `top_p`
+
+`null` means provider default. Only actual overrides are persisted.
 
 Runtime topics such as context window, KV cache, quantization, and backend load settings stay in LM Studio, Ollama, or the serving backend itself.
 
@@ -36,21 +36,20 @@ Runtime topics such as context window, KV cache, quantization, and backend load 
 ```text
 kk-agent/
 |-- kk-agent-backend/   Plugin-based Node.js backend
-|-- kk-agent-desktop/   Electron desktop shell and packaging
-|-- kk-agent-frontend/  Next.js frontend
+|-- kk-agent-desktop/   Electron host and Next.js renderer
 |-- kk-agent-contract/  Shared types and request/capability helpers
 |-- scripts/            Root workspace scripts
 `-- AGENTS.md
 ```
 
 - [Backend README](kk-agent-backend/README.md)
-- [Frontend README](kk-agent-frontend/README.md)
+- [Desktop README](kk-agent-desktop/README.md)
 
 Contract and desktop notes:
 
 - `kk-agent-contract` is a private local workspace package. It is not published or installed from an external registry.
-- `kk-agent-desktop` embeds `kk-agent-frontend/out` and `kk-agent-backend/desktop-dist` for packaged builds.
-- Desktop runtime data is written under Electron `userData`, not the installation directory.
+- `kk-agent-desktop` owns both the Electron host and renderer and embeds its generated `out` directory plus `kk-agent-backend/desktop-dist` for packaged builds.
+- Desktop and workspace development share one runtime state under the OS app-data `KK-Agent/state` directory. The repository contains no live state.
 
 ## Monorepo Commands
 
@@ -60,13 +59,13 @@ Install all workspace dependencies once from the root:
 npm install
 ```
 
-Start the backend and frontend together:
+Start backend, renderer, and Electron together:
 
 ```bash
 npm run dev
 ```
 
-Build the contract, backend, and frontend:
+Build the contract, backend, and renderer:
 
 ```bash
 npm run build
@@ -84,7 +83,7 @@ Create the Windows desktop installer:
 npm run desktop:dist
 ```
 
-Run the Electron shell against the local dev backend/frontend:
+Run Electron against an already running local backend and renderer:
 
 ```bash
 npm run dev:desktop
@@ -93,8 +92,8 @@ npm run dev:desktop
 Run a workspace-specific command from the root:
 
 ```bash
-npm --workspace kk-agent-backend run test
-npm --workspace kk-agent-frontend run build
+npm --workspace kk-agent-backend run lint
+npm --workspace kk-agent-desktop run build:renderer
 ```
 
 ## Quickstart
@@ -110,10 +109,10 @@ Backend only from the root workspace:
 npm run dev:backend
 ```
 
-Frontend only from the root workspace:
+Renderer only from the root workspace:
 
 ```bash
-npm run dev:frontend
+npm run dev:renderer
 ```
 
 Open `http://localhost:3000`.
@@ -123,29 +122,31 @@ Open `http://localhost:3000`.
 1. Open `Settings -> Provider`.
 2. Add a provider with `name` and `baseUrl` and optional `apiKey`.
 3. Pick a discovered model and set only the defaults you want the wrapper to own.
-4. Put rare provider-specific request fields into `Additional Request JSON` if needed.
+4. Override `temperature` or `top_p` only when the inference provider default is not suitable.
 
 ## Tech Stack
 
 - Backend: Node.js, Express 5, TypeScript
-- Frontend: Next.js 16, React 19, styled-components
-- Desktop: Electron, electron-builder
+- Desktop renderer: Next.js 16, React 19, styled-components
+- Desktop host: Electron, electron-builder
 - Contracts: shared TypeScript package
 - Streaming: Server-Sent Events
 - State: JSON files under `state/`
 
-## Testing
+## Validation
 
-Run the same quality gate as GitHub Actions:
+Run the local checks directly:
 
 ```bash
-npm run ci:quality
+npm run check
+npm run build
+npm run deadcode
 ```
 
-Run the desktop CI build locally:
+Build the complete desktop runtime:
 
 ```bash
-npm run ci:desktop
+npm run desktop:build
 ```
 
 ## License

@@ -10,12 +10,12 @@ import type {
   UnifiedRequest,
   UnifiedResponse,
 } from "../types.js";
-import { isPlainObject } from "../object-utils.js";
 import { readSSEStream } from "../sse.js";
+import { buildRequestConfigBody } from "../request-body.js";
 import {
   buildResponsesTools,
   buildUnifiedResponseFromTurn,
-  extractResponsesInstructions,
+  serializeAssistantMessageToResponsesInput,
   serializeToolMessageToResponsesInput,
   serializeUserMessageToResponsesInput,
 } from "../helpers.js";
@@ -25,10 +25,11 @@ import {
   normalizeResponsesToolCalls,
 } from "../transport.js";
 import {
+  getToolUses,
   reasoningBlock,
   textBlock,
   type TranscriptMessage,
-} from "../../../lib/transcript.js";
+} from "kk-agent-contract";
 import {
   consumeProviderStreamError,
   emitFinalStreamChunks,
@@ -36,12 +37,6 @@ import {
   normalizeProviderUsage,
   type ProviderTokenUsage,
 } from "../provider-common.js";
-
-type ResponsesApiResponse = {
-  id?: string;
-  output?: Array<Record<string, unknown>>;
-  usage?: ProviderTokenUsage;
-};
 
 type ContinuationFallback = {
   from: ContinuationMode;
@@ -68,7 +63,6 @@ function createResponsesState(
     endpoint: "responses",
     continuationMode,
     syncedMessageIds: [],
-    historyItems: [],
     callIdByToolUseId: {},
     lastResponseId: undefined,
   };
@@ -83,10 +77,17 @@ function cloneResponsesState(
     endpoint: "responses",
     continuationMode,
     syncedMessageIds: [...state.syncedMessageIds],
-    historyItems: state.historyItems.map((item) => cloneConversationItem(item)),
     callIdByToolUseId: { ...state.callIdByToolUseId },
     lastResponseId: state.lastResponseId,
   };
+}
+
+function isStateCompatibleWithTranscript(
+  state: ResponsesTransportState,
+  messages: TranscriptMessage[],
+): boolean {
+  const messageIds = new Set(messages.map((message) => message.id));
+  return state.syncedMessageIds.every((messageId) => messageIds.has(messageId));
 }
 
 function emitDeltaBlocks(
@@ -132,24 +133,26 @@ type PreparedResponsesRequest = {
 function appendUnsyncedConversationItems(
   state: ResponsesTransportState,
   messages: TranscriptMessage[],
+  modelContentByMessageId: UnifiedRequest["modelContentByMessageId"],
 ): {
   transportState: ResponsesTransportState;
-  notices: ProviderNotice[];
   appendedItems: ResponsesConversationItem[];
 } {
   const syncedMessageIds = new Set(state.syncedMessageIds);
-  const notices: ProviderNotice[] = [];
   const appendedItems: ResponsesConversationItem[] = [];
 
   for (const message of messages) {
-    if (message.role === "system" || syncedMessageIds.has(message.id)) continue;
+    if (syncedMessageIds.has(message.id)) continue;
+
+    if (message.role === "system") {
+      throw new Error("Responses conversation input must not contain system messages; use request.instructions.");
+    }
 
     if (message.role === "assistant") {
-      notices.push({
-        level: "warning",
-        code: "responses_missing_native_output",
-        message: `Responses transport skipped transcript-only assistant message ${message.id}; native output replay is required.`,
-      });
+      const serialized = serializeAssistantMessageToResponsesInput(message);
+      const cloned = serialized.map((item) => cloneConversationItem(item));
+      appendedItems.push(...cloned);
+      for (const toolUse of getToolUses(message)) state.callIdByToolUseId[toolUse.id] = toolUse.id;
       syncedMessageIds.add(message.id);
       state.syncedMessageIds.push(message.id);
       continue;
@@ -157,30 +160,33 @@ function appendUnsyncedConversationItems(
 
     const serialized =
       message.role === "user"
-        ? serializeUserMessageToResponsesInput(message)
+        ? serializeUserMessageToResponsesInput(message, modelContentByMessageId?.[message.id])
         : serializeToolMessageToResponsesInput(
             message,
             state.callIdByToolUseId,
           );
 
     const cloned = serialized.map((item) => cloneConversationItem(item));
-    state.historyItems.push(...cloned);
     appendedItems.push(...cloned);
     syncedMessageIds.add(message.id);
     state.syncedMessageIds.push(message.id);
   }
 
-  return { transportState: state, notices, appendedItems };
+  return { transportState: state, appendedItems };
 }
 
-export function prepareResponsesRequest(
+function prepareResponsesRequest(
   request: UnifiedRequest,
 ): PreparedResponsesRequest {
   const requestedContinuationMode =
     request.transportProfile?.continuationMode ?? "previous-response-id";
-  const baseState = isResponsesTransportState(request.transportState)
+  const candidateState = isResponsesTransportState(request.transportState)
     ? request.transportState
     : undefined;
+  const stateWasInvalidated = Boolean(
+    candidateState && !isStateCompatibleWithTranscript(candidateState, request.messages),
+  );
+  const baseState = candidateState && !stateWasInvalidated ? candidateState : undefined;
   const continuationMode =
     requestedContinuationMode === "previous-response-id" &&
     baseState?.lastResponseId
@@ -189,40 +195,35 @@ export function prepareResponsesRequest(
         ? "none"
         : "raw-output-replay";
   const transportState = cloneResponsesState(baseState, continuationMode);
-  const { notices, appendedItems } = appendUnsyncedConversationItems(
+  if (continuationMode !== "previous-response-id") {
+    transportState.syncedMessageIds = [];
+    transportState.callIdByToolUseId = {};
+  }
+  const { appendedItems } = appendUnsyncedConversationItems(
     transportState,
     request.messages,
+    request.modelContentByMessageId,
   );
+  const notices: ProviderNotice[] = [
+    ...(stateWasInvalidated ? [{
+      level: "warning" as const,
+      code: "responses_transport_state_reset",
+      message: "Responses continuation cache did not match the canonical transcript and was rebuilt.",
+    }] : []),
+  ];
   const body: Record<string, unknown> = {
+    ...buildRequestConfigBody(request.resolvedLlmRequestConfig),
     model: request.model,
-    stream: request.stream === true,
+    stream: true,
   };
-  const resolved = request.resolvedLlmRequestConfig;
-  const common = resolved?.common;
 
-  const instructions = extractResponsesInstructions(request.messages);
   const tools = buildResponsesTools(
     request.tools,
     request.transportProfile?.supportsStrictTools === true,
   );
 
-  if (resolved?.extraBody) {
-    Object.assign(body, resolved.extraBody);
-  }
-  if (instructions) body.instructions = instructions;
+  if (request.instructions.trim()) body.instructions = request.instructions;
   if (tools?.length) body.tools = tools;
-  if (common?.reasoningEffort || isPlainObject(body.reasoning)) {
-    body.reasoning = {
-      ...(isPlainObject(body.reasoning) ? body.reasoning : {}),
-      ...(common?.reasoningEffort ? { effort: common.reasoningEffort } : {}),
-    };
-  }
-  if (common?.temperature !== undefined) {
-    body.temperature = common.temperature;
-  }
-  if (common?.maxOutputTokens !== undefined && common.maxOutputTokens > 0) {
-    body.max_output_tokens = common.maxOutputTokens;
-  }
   if (
     continuationMode === "previous-response-id" &&
     transportState.lastResponseId
@@ -232,13 +233,13 @@ export function prepareResponsesRequest(
       body.input = appendedItems;
     }
   } else {
-    body.input = transportState.historyItems;
+    body.input = appendedItems;
   }
 
   return { body, transportState, notices, continuationMode };
 }
 
-export function commitResponsesTransportState(input: {
+function commitResponsesTransportState(input: {
   transportState: ResponsesTransportState;
   assistantMessageId: string;
   output: AssembledOutputItem[];
@@ -247,9 +248,6 @@ export function commitResponsesTransportState(input: {
   const next = cloneResponsesState(
     input.transportState,
     input.transportState.continuationMode,
-  );
-  next.historyItems.push(
-    ...input.output.map((item) => cloneConversationItem(item)),
   );
   next.lastResponseId = input.responseId ?? next.lastResponseId;
   if (!next.syncedMessageIds.includes(input.assistantMessageId)) {
@@ -305,14 +303,13 @@ async function postResponses(
   request: UnifiedRequest,
   baseUrl: string,
   headers: Record<string, string>,
-  stream: boolean,
 ): Promise<{
   res: Response;
   prepared: PreparedResponsesRequest;
   notices: ProviderNotice[];
   continuationFallback?: ContinuationFallback;
 }> {
-  const prepared = prepareResponsesRequest({ ...request, stream });
+  const prepared = prepareResponsesRequest(request);
   let res = await fetch(`${baseUrl}/responses`, {
     method: "POST",
     headers: { "Content-Type": "application/json", ...headers },
@@ -331,7 +328,6 @@ async function postResponses(
   ) {
     const fallbackPrepared = prepareResponsesRequest({
       ...request,
-      stream,
       transportProfile: request.transportProfile
         ? { ...request.transportProfile, continuationMode: "raw-output-replay" }
         : request.transportProfile,
@@ -369,63 +365,13 @@ async function postResponses(
   throw new Error(`Responses API error ${res.status}: ${text}`);
 }
 
-export async function chat(
-  request: UnifiedRequest,
-  baseUrl: string,
-  headers: Record<string, string> = {},
-): Promise<UnifiedResponse> {
-  const posted = await postResponses(request, baseUrl, headers, false);
-  const prepared = posted.prepared;
-  const data = (await posted.res.json()) as ResponsesApiResponse;
-  const output = (data.output ?? []).filter(
-    (item): item is Record<string, unknown> & { type: string } =>
-      typeof item === "object" &&
-      item !== null &&
-      typeof item.type === "string",
-  );
-  const turn = finalizeResponsesOutput({
-    messageId: randomUUID(),
-    output,
-    usage: normalizeProviderUsage(data.usage),
-    tools: request.tools,
-    supportsConcatenatedJsonSplit:
-      request.transportProfile?.supportsConcatenatedJsonSplit ?? true,
-  });
-
-  const response = buildUnifiedResponseFromTurn(turn);
-  const responseId = typeof data.id === "string" ? data.id : undefined;
-  response.transportState = commitResponsesTransportState({
-    transportState: prepared.transportState,
-    assistantMessageId: response.message.id,
-    output,
-    responseId,
-  });
-  response.debug = {
-    endpoint: "responses",
-    continuationMode: prepared.continuationMode,
-    responseId,
-    outputCount: output.length,
-    ...(posted.continuationFallback
-      ? { continuationFallback: posted.continuationFallback }
-      : {}),
-  };
-  if (prepared.notices.length > 0 || posted.notices.length > 0) {
-    response.notices = [
-      ...prepared.notices,
-      ...posted.notices,
-      ...(response.notices ?? []),
-    ];
-  }
-  return response;
-}
-
 export async function chatStream(
   request: UnifiedRequest,
   baseUrl: string,
   onChunk: OnChunkFn,
   headers: Record<string, string> = {},
 ): Promise<UnifiedResponse> {
-  const posted = await postResponses(request, baseUrl, headers, true);
+  const posted = await postResponses(request, baseUrl, headers);
   const prepared = posted.prepared;
   const messageId = randomUUID();
   const providerNotices: ProviderNotice[] = [...posted.notices];

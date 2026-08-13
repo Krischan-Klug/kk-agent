@@ -5,6 +5,7 @@ import { expandPersistedMode, compactEffectiveMode } from "./mode-config.js";
 import { getBundledAgents } from "./defaults.js";
 
 const STATE_FILE = "agents.json";
+const AGENT_SCHEMA_VERSION = 3;
 
 let cache: PersistedAgentDefinition[] | null = null;
 
@@ -23,15 +24,20 @@ function compactEffectiveAgent(agent: AgentDefinition): PersistedAgentDefinition
 }
 
 export async function initStore(): Promise<void> {
-  const state = await loadState<PersistedAgentsState>(STATE_FILE, { agents: [] });
+  const stored = await loadState<unknown>(STATE_FILE, null);
+  const state = stored
+    && typeof stored === "object"
+    && (stored as Partial<PersistedAgentsState>).schemaVersion === AGENT_SCHEMA_VERSION
+    && Array.isArray((stored as Partial<PersistedAgentsState>).agents)
+    ? stored as PersistedAgentsState
+    : {
+        schemaVersion: AGENT_SCHEMA_VERSION,
+        agents: getBundledAgents().map(compactEffectiveAgent),
+      };
 
-  if (state.agents.length === 0) {
-    const bundled = getBundledAgents().map(compactEffectiveAgent);
-    state.agents.push(...bundled);
-    await saveState(STATE_FILE, state);
-  }
-
+  if (state.agents.length === 0) state.agents = getBundledAgents().map(compactEffectiveAgent);
   cache = state.agents;
+  await saveState(STATE_FILE, state);
 }
 
 function getCache(): PersistedAgentDefinition[] {
@@ -40,7 +46,7 @@ function getCache(): PersistedAgentDefinition[] {
 }
 
 async function persist(): Promise<void> {
-  await saveState(STATE_FILE, { agents: getCache() });
+  await saveState(STATE_FILE, { schemaVersion: AGENT_SCHEMA_VERSION, agents: getCache() });
 }
 
 export function listAgents(): AgentDefinition[] {

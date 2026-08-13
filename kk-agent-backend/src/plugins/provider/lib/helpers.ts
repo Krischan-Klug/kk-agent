@@ -10,35 +10,23 @@ import {
   type TranscriptBlock,
   type TranscriptMessage,
   type TranscriptStopReason,
-} from "../../lib/transcript.js";
-import type { AssembledAssistantTurn, UnifiedRequest, UnifiedToolDefinition, UnifiedResponse } from "./types.js";
+} from "kk-agent-contract";
+import type { AssembledAssistantTurn, ModelContentPart, UnifiedRequest, UnifiedToolDefinition, UnifiedResponse } from "./types.js";
+import { buildRequestConfigBody } from "./request-body.js";
 
 type ChatCompletionContentPart =
   | { type: "text"; text: string }
   | { type: "image_url"; image_url: { url: string } };
 
-function toChatCompletionsContent(message: TranscriptMessage): string | ChatCompletionContentPart[] {
-  const textParts = message.content.filter((block) => block.type === "text").map((block) => block.text);
-  const attachments = message.content.filter(
-    (block): block is Extract<TranscriptBlock, { type: "attachment_ref" }> =>
-      block.type === "attachment_ref" && block.category === "image" && Boolean(block.previewDataUrl),
-  );
-  if (attachments.length === 0) {
-    return textParts.join("");
-  }
-
-  const parts: ChatCompletionContentPart[] = [];
-  const combinedText = textParts.join("");
-  if (combinedText) {
-    parts.push({ type: "text", text: combinedText });
-  }
-  for (const attachment of attachments) {
-    parts.push({ type: "image_url", image_url: { url: attachment.previewDataUrl! } });
-  }
-  return parts;
+function toChatCompletionsContent(message: TranscriptMessage, projection?: ModelContentPart[]): string | ChatCompletionContentPart[] {
+  if (!projection) return getMessageText(message);
+  if (projection.every((part) => part.type === "text")) return projection.map((part) => part.text).join("\n\n");
+  return projection.map((part): ChatCompletionContentPart => part.type === "text"
+    ? { type: "text", text: part.text }
+    : { type: "image_url", image_url: { url: part.dataUrl } });
 }
 
-export function buildMessages(messages: TranscriptMessage[]) {
+function buildMessages(messages: TranscriptMessage[], projections: Record<string, ModelContentPart[]> = {}) {
   return messages.map((message) => {
     if (message.role === "assistant") {
       const toolUses = getToolUses(message);
@@ -70,7 +58,7 @@ export function buildMessages(messages: TranscriptMessage[]) {
 
     return {
       role: message.role,
-      content: toChatCompletionsContent(message),
+      content: toChatCompletionsContent(message, projections[message.id]),
     };
   });
 }
@@ -82,30 +70,20 @@ function buildTools(request: UnifiedRequest) {
   }));
 }
 
-export function buildChatCompletionsBody(request: UnifiedRequest, stream: boolean): Record<string, unknown> {
-  const resolved = request.resolvedLlmRequestConfig;
-  const common = resolved?.common;
+export function buildChatCompletionsBody(request: UnifiedRequest): Record<string, unknown> {
   const body: Record<string, unknown> = {
+    ...buildRequestConfigBody(request.resolvedLlmRequestConfig),
     model: request.model,
-    messages: buildMessages(request.messages),
-    stream,
+    messages: [
+      { role: "system", content: request.instructions },
+      ...buildMessages(request.messages, request.modelContentByMessageId),
+    ],
+    stream: true,
   };
 
-  if (resolved?.extraBody) {
-    Object.assign(body, resolved.extraBody);
-  }
   const tools = buildTools(request);
   if (tools?.length) body.tools = tools;
-  if (common?.reasoningEffort) {
-    body.reasoning_effort = common.reasoningEffort;
-  }
-  if (common?.temperature !== undefined) {
-    body.temperature = common.temperature;
-  }
-  if (common?.maxOutputTokens !== undefined && common.maxOutputTokens > 0) {
-    body.max_tokens = common.maxOutputTokens;
-  }
-  if (stream) body.stream_options = { include_usage: true };
+  body.stream_options = { include_usage: true };
 
   return body;
 }
@@ -158,37 +136,36 @@ export function mapFinishReason(reason?: string | null): TranscriptStopReason {
   return "stop";
 }
 
-export function extractResponsesInstructions(messages: TranscriptMessage[]): string | undefined {
-  const instructions = messages
-    .filter((message) => message.role === "system")
-    .map((message) => getMessageText(message).trim())
-    .filter((text) => text.length > 0)
-    .join("\n\n")
-    .trim();
-
-  return instructions.length > 0 ? instructions : undefined;
+export function serializeUserMessageToResponsesInput(
+  message: TranscriptMessage,
+  projection?: ModelContentPart[],
+): Array<Record<string, unknown>> {
+  if (!projection) return [{ type: "message", role: "user", content: getMessageText(message) }];
+  const content = projection.map((part) => part.type === "text"
+    ? { type: "input_text", text: part.text }
+    : { type: "input_image", image_url: part.dataUrl, ...(part.detail ? { detail: part.detail } : {}) });
+  return [{ type: "message", role: "user", content }];
 }
 
-export function serializeUserMessageToResponsesInput(message: TranscriptMessage): Array<Record<string, unknown>> {
+export function serializeAssistantMessageToResponsesInput(message: TranscriptMessage): Array<Record<string, unknown>> {
+  const items: Array<Record<string, unknown>> = [];
   const text = getMessageText(message);
-  const attachments = message.content.filter((block) => block.type === "attachment_ref");
-  if (attachments.length === 0) {
-    return [{ type: "message", role: "user", content: text }];
+  if (text) {
+    items.push({
+      type: "message",
+      role: "assistant",
+      content: [{ type: "output_text", text }],
+    });
   }
-
-  const content: Array<Record<string, unknown>> = [];
-  if (text) content.push({ type: "input_text", text });
-  for (const attachment of attachments) {
-    if (attachment.category === "image" && attachment.previewDataUrl) {
-      content.push({ type: "input_image", image_url: attachment.previewDataUrl });
-    } else {
-      content.push({
-        type: "input_text",
-        text: `[Attachment] ${attachment.filename} (${attachment.mimeType}, ${attachment.size} bytes)`,
-      });
-    }
+  for (const toolUse of getToolUses(message)) {
+    items.push({
+      type: "function_call",
+      call_id: toolUse.id,
+      name: toolUse.name,
+      arguments: JSON.stringify(toolUse.input),
+    });
   }
-  return [{ type: "message", role: "user", content }];
+  return items;
 }
 
 export function serializeToolMessageToResponsesInput(

@@ -52,7 +52,7 @@ function buildUniqueModeId(seed: string, used: Set<string>): string {
   return next;
 }
 
-export function buildDefaultModeConfig(behavior: ModeBehavior): AgentModeConfig {
+function buildDefaultModeConfig(behavior: ModeBehavior): AgentModeConfig {
   const defaults = getDefaults();
   const template = defaults.agent.modeTemplates[behavior];
   return {
@@ -60,24 +60,23 @@ export function buildDefaultModeConfig(behavior: ModeBehavior): AgentModeConfig 
     modeInstruction: template.modeInstruction,
     toolIds: normalizeToolIds(template.toolIds),
     mcpIds: [],
-    skillIds: [],
+    skillIds: getKnownSkillIds(),
     toolAccessScopes: {},
     toolInstructions: { ...template.toolInstructions },
     mcpInstructions: {},
-    skillInstructions: {},
     allowedToolNames: [...template.allowedToolNames],
     autonomousBudget: template.autonomousBudget ? { ...template.autonomousBudget } : undefined,
   };
 }
 
-export function expandModeConfig(
+function expandModeConfig(
   behavior: ModeBehavior,
   overrides?: Partial<AgentModeConfig>,
 ): AgentModeConfig {
   return applyOverrides(buildDefaultModeConfig(behavior), overrides);
 }
 
-export function compactModeConfig(
+function compactModeConfig(
   behavior: ModeBehavior,
   effective: AgentModeConfig,
 ): Partial<AgentModeConfig> {
@@ -98,7 +97,6 @@ function normalizeModeConfig(
     toolAccessScopes: { ...defaults.toolAccessScopes, ...normalizeToolAccessScopes(current?.toolAccessScopes) },
     toolInstructions: { ...defaults.toolInstructions, ...current?.toolInstructions },
     mcpInstructions: { ...defaults.mcpInstructions, ...current?.mcpInstructions },
-    skillInstructions: { ...defaults.skillInstructions, ...current?.skillInstructions },
     allowedToolNames: [...new Set(current?.allowedToolNames ?? defaults.allowedToolNames)],
     autonomousBudget: current?.autonomousBudget ?? defaults.autonomousBudget,
   };

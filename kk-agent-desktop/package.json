@@ -3,14 +3,21 @@
   "productName": "KK-Agent",
   "version": "0.1.0",
   "private": true,
-  "description": "Electron desktop shell for KK-Agent.",
+  "description": "KK-Agent desktop application with Electron and a Next.js renderer.",
   "author": "KK-Agent",
   "main": "dist/main.js",
   "scripts": {
-    "build": "tsup --config tsup.config.ts",
-    "start:dev": "npm run build && node scripts/start-dev.mjs",
-    "lint": "tsc --noEmit",
-    "dist": "npm run build && electron-builder --win nsis"
+    "dev:renderer": "next dev --port 3000",
+    "start:dev": "npm run build:electron && node scripts/start-dev.mjs",
+    "build": "npm run build:renderer",
+    "build:renderer": "npm --prefix .. --workspace kk-agent-contract run build && next build",
+    "build:renderer:desktop": "npm --prefix .. --workspace kk-agent-contract run build && cross-env KK_AGENT_STATIC_EXPORT=1 next build",
+    "build:electron": "tsup --config tsup.config.ts",
+    "build:desktop": "npm run build:renderer:desktop && npm run build:electron",
+    "start": "next start",
+    "lint": "npm --prefix .. --workspace kk-agent-contract run build && tsc -p tsconfig.json --noEmit && cross-env NODE_PATH=./node_modules eslint src next.config.ts && tsc -p tsconfig.electron.json --noEmit",
+    "package": "electron-builder --win nsis",
+    "dist": "npm run build:desktop && npm run package"
   },
   "engines": {
     "node": "^20.19.0 || ^22.13.0 || >=24"
@@ -30,8 +37,8 @@
         "to": "backend"
       },
       {
-        "from": "../kk-agent-frontend/out",
-        "to": "frontend"
+        "from": "out",
+        "to": "renderer"
       }
     ],
     "asar": true,
@@ -48,7 +55,20 @@
     }
   },
   "devDependencies": {
-    "electron": "41.3.0",
-    "electron-builder": "^26.8.1"
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "cross-env": "^10.1.0",
+    "electron": "41.10.5",
+    "electron-builder": "^26.8.1",
+    "eslint": "^9",
+    "eslint-config-next": "^16.2.6",
+    "kk-agent-contract": "0.1.0",
+    "next": "^16.2.6",
+    "prism-react-renderer": "^2.4.1",
+    "react": "19.2.5",
+    "react-dom": "19.2.5",
+    "react-markdown": "^10.1.0",
+    "remark-gfm": "^4.0.1",
+    "styled-components": "^6.4.1"
   }
 }

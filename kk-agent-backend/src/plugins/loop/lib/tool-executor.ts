@@ -2,10 +2,9 @@ import {
   createTranscriptMessage,
   normalizeToolResultContent,
   toolResultBlock,
-  type TranscriptBlock,
   type TranscriptMessage,
   type TranscriptToolUseBlock,
-} from "../../lib/transcript.js";
+} from "kk-agent-contract";
 import type { ToolExecutionStatus } from "kk-agent-contract";
 import type {
   ModeRuntimeRef,
@@ -14,7 +13,7 @@ import type {
   ToolRuntimeContext,
 } from "../types.js";
 import { getErrorMessage } from "../../../lib/error.js";
-import { fitToolResultsToBudget, persistLargeToolResult } from "./tool-result-storage.js";
+import { fitToolResultsToBudget } from "./tool-result-budget.js";
 import { stripDisplayOnlyInputKeys } from "../../session/lib/tool-call-description.js";
 
 interface ToolExecutionUpdate {
@@ -30,15 +29,14 @@ interface ToolExecutionUpdate {
 
 type TrackedTool = {
   toolUse: TranscriptToolUseBlock;
+  executionInput: Record<string, unknown>;
   runtimeTool?: RuntimeToolDefinition;
   status: ToolExecutionStatus;
   isConcurrencySafe: boolean;
-  result?: { content: string; isError: boolean; metadata?: Record<string, unknown> };
+  result?: { content: string; isError: boolean };
   streamedResult?: TranscriptMessage;
-  finalResult?: TranscriptMessage;
-  assistantBlocks?: TranscriptBlock[];
-  additionalMessages?: TranscriptMessage[];
   yielded: boolean;
+  settled: boolean;
   promise?: Promise<void>;
   contextModifier?: (context: ToolRuntimeContext) => ToolRuntimeContext;
   metadata?: Record<string, unknown>;
@@ -92,14 +90,16 @@ export class StreamingToolExecutor {
 
     const runtimeTool = this.runtimeToolsByName[toolUse.name];
     const executionInput = runtimeTool
-      ? stripDisplayOnlyInputKeys(toolUse.input, runtimeTool.display?.displayOnlyInputKeys)
+      ? stripDisplayOnlyInputKeys(toolUse.input, runtimeTool.displayOnlyInputKeys)
       : toolUse.input;
     const tracked: TrackedTool = {
       toolUse,
+      executionInput,
       runtimeTool,
       status: runtimeTool ? "queued" : "invalid",
       isConcurrencySafe: runtimeTool ? runtimeTool.isConcurrencySafe(executionInput) : false,
       yielded: false,
+      settled: true,
     };
     this.tools.push(tracked);
 
@@ -127,7 +127,7 @@ export class StreamingToolExecutor {
   }
 
   async getFinalResults(): Promise<TranscriptMessage[]> {
-    await Promise.all(this.tools.map((tool) => tool.promise).filter((promise): promise is Promise<void> => Boolean(promise)));
+    await this.waitForAllTools();
     this.flushReadyResults();
 
     const ordered = this.tools.map((tool) => ({
@@ -137,17 +137,8 @@ export class StreamingToolExecutor {
       policy: tool.runtimeTool?.resultPolicy,
     }));
 
-    const persistedContents = await Promise.all(
-      ordered.map(async ({ tool, content, policy }) => ({
-        tool,
-        isError: tool.result?.isError === true,
-        content: await persistLargeToolResult(tool.toolUse.id, tool.toolUse.name, content, policy),
-        policy,
-      })),
-    );
-
     const finalContents = fitToolResultsToBudget(
-      persistedContents.map((entry) => ({
+      ordered.map((entry) => ({
         toolName: entry.tool.toolUse.name,
         content: entry.content,
         policy: entry.policy,
@@ -156,30 +147,39 @@ export class StreamingToolExecutor {
 
     const results: TranscriptMessage[] = [];
     finalContents.forEach((content, index) => {
-      const entry = persistedContents[index]!;
+      const entry = ordered[index]!;
       const finalMessage = toToolResultMessage(entry.tool.toolUse, content, entry.isError);
-      entry.tool.finalResult = finalMessage;
       results.push(finalMessage);
-      if (entry.tool.additionalMessages?.length) {
-        results.push(...entry.tool.additionalMessages);
-      }
     });
 
     return results;
   }
 
-  getRuntimeContext(): ToolRuntimeContext {
-    return this.runtimeContext;
+  private async waitForAllTools(): Promise<void> {
+    const isTerminal = (tool: TrackedTool) =>
+      tool.status === "completed"
+      || tool.status === "error"
+      || tool.status === "invalid"
+      || tool.status === "discarded";
+
+    while (this.tools.some((tool) => !isTerminal(tool) || !tool.settled)) {
+      await this.processQueue();
+      const inFlight = this.tools
+        .filter((tool) => !tool.settled)
+        .map((tool) => tool.promise)
+        .filter((promise): promise is Promise<void> => Boolean(promise));
+      if (inFlight.length === 0) {
+        for (const tool of this.tools.filter((entry) => !isTerminal(entry))) {
+          this.finishWithSyntheticError(tool, "error", "Tool scheduler could not make progress.");
+        }
+        break;
+      }
+      await Promise.all(inFlight);
+    }
   }
 
-  getAssistantBlocks(): TranscriptBlock[] {
-    const blocks: TranscriptBlock[] = [];
-    for (const tracked of this.tools) {
-      if (tracked.assistantBlocks?.length) {
-        blocks.push(...tracked.assistantBlocks);
-      }
-    }
-    return blocks;
+  getRuntimeContext(): ToolRuntimeContext {
+    return this.runtimeContext;
   }
 
   private emitUpdate(tracked: TrackedTool, update: Omit<ToolExecutionUpdate, "toolUseId" | "toolName" | "input">): void {
@@ -202,7 +202,6 @@ export class StreamingToolExecutor {
     tracked.status = status;
     tracked.result = { content: message, isError: true };
     tracked.streamedResult = toSyntheticErrorMessage(tracked.toolUse, message);
-    tracked.finalResult = tracked.streamedResult;
     if (emit) {
       this.emitUpdate(tracked, {
         status,
@@ -226,36 +225,33 @@ export class StreamingToolExecutor {
 
   private async executeTrackedTool(tracked: TrackedTool): Promise<void> {
     tracked.status = "executing";
+    tracked.settled = false;
     this.emitUpdate(tracked, {
       status: "executing",
       detail: `Executing ${tracked.toolUse.name}`,
     });
 
     tracked.promise = (async () => {
-      if (this.discarded) {
-        this.finishWithSyntheticError(tracked, "discarded", "Tool execution was discarded before start.", {
-          emit: false,
-          flush: false,
-        });
-        return;
-      }
-
-      const runtimeTool = tracked.runtimeTool!;
-      const executionInput = stripDisplayOnlyInputKeys(
-        tracked.toolUse.input,
-        runtimeTool.display?.displayOnlyInputKeys,
-      );
-      const permission = await this.resolveToolPermission(runtimeTool, tracked.toolUse.name, executionInput, this.mode);
-      if (!permission.allowed) {
-        const message = permission.reason ?? `Tool "${tracked.toolUse.name}" was blocked by runtime permissions.`;
-        this.finishWithSyntheticError(tracked, "error", message);
-        return;
-      }
-
       try {
+        if (this.discarded) {
+          this.finishWithSyntheticError(tracked, "discarded", "Tool execution was discarded before start.", {
+            emit: false,
+            flush: false,
+          });
+          return;
+        }
+
+        const runtimeTool = tracked.runtimeTool!;
+        const permission = await this.resolveToolPermission(runtimeTool, tracked.toolUse.name, tracked.executionInput, this.mode);
+        if (!permission.allowed) {
+          const message = permission.reason ?? `Tool "${tracked.toolUse.name}" was blocked by runtime permissions.`;
+          this.finishWithSyntheticError(tracked, "error", message);
+          return;
+        }
+
         const execution = await this.executeTool(
           tracked.toolUse.name,
-          executionInput,
+          tracked.executionInput,
           this.mode,
           this.runtimeContext,
         );
@@ -267,10 +263,7 @@ export class StreamingToolExecutor {
         tracked.result = {
           content: execution.content,
           isError: execution.isError === true,
-          metadata: execution.metadata,
         };
-        tracked.assistantBlocks = execution.assistantBlocks;
-        tracked.additionalMessages = execution.additionalMessages;
         tracked.streamedResult = toToolResultMessage(
           tracked.toolUse,
           tracked.result.content,
@@ -291,6 +284,7 @@ export class StreamingToolExecutor {
       } catch (error) {
         this.finishWithSyntheticError(tracked, "error", getErrorMessage(error));
       } finally {
+        tracked.settled = true;
         void this.processQueue();
       }
     })();

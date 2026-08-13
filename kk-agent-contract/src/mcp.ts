@@ -46,7 +46,6 @@ export interface McpServerConfig {
   source?: McpSource;
   systemKey?: SystemMcpKey;
   systemConfig?: SystemMcpConfig;
-  skillIds?: string[];
   transport: "stdio" | "sse";
   server: McpStdioConfig | McpSseConfig;
 }
@@ -58,6 +57,18 @@ export interface McpToolDefinition {
   mcpId: string;
 }
 
+export type McpRuntimeStatus = "running" | "stopped" | "unavailable";
+
+export interface McpRuntimeState {
+  status: McpRuntimeStatus;
+  error?: string;
+}
+
+export interface McpListItem extends McpServerConfig {
+  runtime: McpRuntimeState;
+  tools: McpToolDefinition[];
+}
+
 export interface CreateMcpBody {
   name: string;
   transport: "stdio" | "sse";
@@ -67,7 +78,6 @@ export interface CreateMcpBody {
   url?: string;
   instruction?: string;
   emoji?: string;
-  skillIds?: string[];
 }
 
 export interface UpdateMcpBody {
@@ -81,5 +91,4 @@ export interface UpdateMcpBody {
   instruction?: string;
   emoji?: string;
   systemConfig?: SystemMcpConfig;
-  skillIds?: string[];
 }

@@ -29,8 +29,6 @@ export interface NumericRange {
 export interface EndpointCapabilities {
   temperatureSupported: boolean;
   temperatureRange?: NumericRange;
-  maxOutputTokensSupported: boolean;
-  maxOutputTokensRange?: NumericRange;
 }
 
 export interface EndpointTransportProfile {
@@ -109,18 +107,15 @@ export interface CommonLlmRequestConfig {
   endpoint?: EndpointType;
   reasoningEffort?: ReasoningEffort;
   temperature?: number;
-  maxOutputTokens?: number;
+  topP?: number;
 }
 
 export interface LlmRequestConfig {
   common?: CommonLlmRequestConfig;
-  extraBody?: Partial<Record<EndpointType, Record<string, unknown>>>;
 }
 
 export interface ResolvedLlmRequestConfig extends LlmRequestConfig {
   common: CommonLlmRequestConfig & { endpoint: EndpointType };
-  extraBody?: Record<string, unknown>;
-  omittedUnsupportedKeys: string[];
 }
 
 export interface ModelSettings {

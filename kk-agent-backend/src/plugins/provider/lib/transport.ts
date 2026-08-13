@@ -1,4 +1,4 @@
-import type { TranscriptStopReason } from "../../lib/transcript.js";
+import type { TranscriptStopReason } from "kk-agent-contract";
 import type {
   AssembledAssistantTurn,
   AssembledOutputItem,
@@ -12,7 +12,6 @@ import {
 } from "./tool-call-normalizer.js";
 
 export {
-  splitConcatenatedJson,
   normalizeChatCompletionsToolCalls,
   normalizeResponsesToolCalls,
 } from "./tool-call-normalizer.js";

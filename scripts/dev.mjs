@@ -21,10 +21,10 @@ const services = [
     args: ["run", "dev:backend"],
   },
   {
-    name: "frontend",
+    name: "renderer",
     port: 3000,
     readyUrl: `http://${host}:3000`,
-    args: ["run", "dev:frontend"],
+    args: ["run", "dev:renderer"],
   },
 ];
 

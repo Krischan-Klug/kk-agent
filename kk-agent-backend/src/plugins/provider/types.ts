@@ -14,8 +14,6 @@ export type {
   ProviderTurnDebug,
   ProvidersState,
   ReasoningControl,
-  ReasoningEffort,
   ResolvedLlmRequestConfig,
   UpdateProviderBody,
-  VisionSupport,
 } from "kk-agent-contract";

@@ -9,5 +9,7 @@ export type {
 } from "kk-agent-contract";
 
 export interface SessionRecord extends SessionState {
+  schemaVersion: number;
   providerState?: ProviderTransportState;
+  loadedSkillIds: string[];
 }

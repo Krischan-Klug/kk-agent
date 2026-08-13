@@ -1,64 +1,117 @@
-import type { SessionRecord, SessionState } from "../types.js";
-import {
-  ensureSessionsRoot,
-  loadSessionData,
-  saveSessionData,
-  deleteSessionData,
-  listPersistedSessionIds,
-} from "../../lib/state.js";
+import type { AgentRun, TranscriptMessage } from "kk-agent-contract";
 import { createLogger } from "../../../lib/logger.js";
 import { getErrorMessage } from "../../../lib/error.js";
 import { NotFoundError } from "../../../lib/errors.js";
-import { ensureTasksLoaded } from "../../tools/lib/task-state.js";
+import {
+  deleteSessionData,
+  ensureSessionsRoot,
+  listPersistedSessionIds,
+  loadSessionData,
+  saveSessionData,
+} from "../../lib/state.js";
 import { ensureSessionFactsLoaded } from "../../tools/lib/memory-state.js";
+import { ensureTasksLoaded } from "../../tools/lib/task-state.js";
+import type { SessionRecord, SessionState } from "../types.js";
 
 const logger = createLogger("session/store");
-
 const SESSION_FILE = "session.json";
-const MESSAGES_FILE = "messages.json";
+const SESSION_SCHEMA_VERSION = 3;
 
 const sessions = new Map<string, SessionRecord>();
 
-/* Persistence helpers */
-
-type PersistedSessionMeta = Omit<SessionRecord, "messages">;
-
-async function persistSession(session: SessionRecord): Promise<void> {
-  const { messages, ...meta } = session;
-  await Promise.all([
-    saveSessionData(session.id, SESSION_FILE, meta),
-    saveSessionData(session.id, MESSAGES_FILE, messages),
-  ]);
+function isStringArray(value: unknown): value is string[] {
+  return Array.isArray(value) && value.every((entry) => typeof entry === "string");
 }
 
-/* Init (load from disk) */
+function isCompatibleSession(value: unknown, id: string): value is SessionRecord {
+  if (!value || typeof value !== "object") return false;
+  const session = value as Partial<SessionRecord>;
+  return session.schemaVersion === SESSION_SCHEMA_VERSION
+    && session.id === id
+    && typeof session.name === "string"
+    && typeof session.providerId === "string"
+    && typeof session.model === "string"
+    && typeof session.agentId === "string"
+    && typeof session.activeModeId === "string"
+    && isStringArray(session.activeToolIds)
+    && isStringArray(session.activeMcpIds)
+    && isStringArray(session.activeSkillIds)
+    && isStringArray(session.loadedSkillIds)
+    && Array.isArray(session.messages)
+    && Array.isArray(session.runs)
+    && Array.isArray(session.assets)
+    && typeof session.createdAt === "string"
+    && typeof session.updatedAt === "string";
+}
+
+function abortInterruptedRuns(
+  runs: AgentRun[],
+  messages: TranscriptMessage[],
+  sessionId: string,
+  timestamp = new Date().toISOString(),
+): { runs: AgentRun[]; changed: boolean } {
+  const anchorMessageId = [...messages]
+    .reverse()
+    .find((message) => message.role === "assistant" || message.role === "user")?.id;
+  let changed = false;
+  const reconciled = runs.map((run) => {
+    if (run.status !== "running") return run;
+    changed = true;
+    return {
+      ...run,
+      status: "aborted" as const,
+      updatedAt: timestamp,
+      completedAt: timestamp,
+      events: [...run.events, {
+        id: crypto.randomUUID(),
+        runId: run.id,
+        sessionId,
+        anchorMessageId: anchorMessageId ?? run.userMessageId,
+        kind: "run_aborted" as const,
+        severity: "warning" as const,
+        code: "process_interrupted",
+        message: "Run was interrupted before completion. The last committed checkpoint was preserved.",
+        step: run.step,
+        attempt: run.attempt,
+        createdAt: timestamp,
+      }],
+    };
+  });
+  return { runs: reconciled, changed };
+}
+
+async function persistSession(session: SessionRecord): Promise<void> {
+  await saveSessionData(session.id, SESSION_FILE, structuredClone(session));
+}
 
 export async function initStore(): Promise<void> {
+  sessions.clear();
   await ensureSessionsRoot();
-  const ids = await listPersistedSessionIds();
 
-  for (const id of ids) {
+  for (const id of await listPersistedSessionIds()) {
     try {
-      const meta = await loadSessionData<PersistedSessionMeta | null>(id, SESSION_FILE, null);
-      if (!meta || !meta.id) continue;
+      const stored = await loadSessionData<unknown>(id, SESSION_FILE, null);
+      if (!isCompatibleSession(stored, id)) {
+        logger.warn(`Deleting incompatible session "${id}".`);
+        await deleteSessionData(id);
+        continue;
+      }
 
-      const messages = await loadSessionData<SessionRecord["messages"]>(id, MESSAGES_FILE, []);
-
-      const session: SessionRecord = { ...meta, messages };
+      const interrupted = abortInterruptedRuns(stored.runs, stored.messages, id);
+      const session = interrupted.changed ? { ...stored, runs: interrupted.runs } : stored;
       sessions.set(id, session);
-
-      // Hydrate per-session satellite state.
+      if (interrupted.changed) await persistSession(session);
       await ensureTasksLoaded(id);
       await ensureSessionFactsLoaded(id);
-    } catch (err) {
-      logger.warn(`Failed to load session "${id}":`, getErrorMessage(err));
+    } catch (error) {
+      logger.warn(`Deleting unreadable session "${id}":`, getErrorMessage(error));
+      sessions.delete(id);
+      await deleteSessionData(id).catch(() => undefined);
     }
   }
 
   logger.info(`Loaded ${sessions.size} session(s) from disk.`);
 }
-
-/* CRUD */
 
 export async function createSession(data: {
   agentId: string;
@@ -72,6 +125,7 @@ export async function createSession(data: {
 }): Promise<SessionRecord> {
   const now = new Date().toISOString();
   const session: SessionRecord = {
+    schemaVersion: SESSION_SCHEMA_VERSION,
     id: crypto.randomUUID(),
     name: "",
     providerId: data.providerId,
@@ -83,11 +137,14 @@ export async function createSession(data: {
     activeSkillIds: data.activeSkillIds,
     llmRequestConfig: data.llmRequestConfig,
     messages: [],
+    runs: [],
+    assets: [],
+    loadedSkillIds: [],
     createdAt: now,
     updatedAt: now,
   };
-  sessions.set(session.id, session);
   await persistSession(session);
+  sessions.set(session.id, session);
   return session;
 }
 
@@ -98,17 +155,22 @@ export function getSession(id: string): SessionRecord | undefined {
 export async function updateSession(id: string, update: Partial<SessionRecord>): Promise<SessionRecord> {
   const session = sessions.get(id);
   if (!session) throw new NotFoundError("Session", id);
-  Object.assign(session, update, { updatedAt: new Date().toISOString() });
-  await persistSession(session);
-  return session;
+  const next: SessionRecord = {
+    ...session,
+    ...structuredClone(update),
+    schemaVersion: SESSION_SCHEMA_VERSION,
+    updatedAt: new Date().toISOString(),
+  };
+  await persistSession(next);
+  sessions.set(id, next);
+  return next;
 }
 
 export async function deleteSession(id: string): Promise<boolean> {
-  const deleted = sessions.delete(id);
-  if (deleted) {
-    await deleteSessionData(id);
-  }
-  return deleted;
+  if (!sessions.has(id)) return false;
+  await deleteSessionData(id);
+  sessions.delete(id);
+  return true;
 }
 
 export function listSessions(): SessionRecord[] {

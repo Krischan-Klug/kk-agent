@@ -1,5 +1,3 @@
-export type AttachmentCategory = "image" | "text" | "pdf";
-export type AttachmentSource = "user" | "assistant";
 export type TranscriptRole = "system" | "user" | "assistant" | "tool";
 export type TranscriptStopReason = "stop" | "tool_use" | "length";
 
@@ -33,15 +31,9 @@ export interface TranscriptToolResultBlock {
   is_error?: boolean;
 }
 
-export interface TranscriptAttachmentRefBlock {
-  type: "attachment_ref";
-  attachmentId?: string;
-  filename: string;
-  mimeType: string;
-  category: AttachmentCategory;
-  source: AttachmentSource;
-  size: number;
-  previewDataUrl?: string;
+export interface TranscriptAssetRefBlock {
+  type: "asset_ref";
+  assetId: string;
 }
 
 export type TranscriptBlock =
@@ -49,7 +41,7 @@ export type TranscriptBlock =
   | TranscriptReasoningBlock
   | TranscriptToolUseBlock
   | TranscriptToolResultBlock
-  | TranscriptAttachmentRefBlock;
+  | TranscriptAssetRefBlock;
 
 export interface TranscriptMessage {
   id: string;
@@ -58,8 +50,6 @@ export interface TranscriptMessage {
   timestamp: string;
   requestId?: string;
   stopReason?: TranscriptStopReason;
-  isMeta?: boolean;
-  isApiError?: boolean;
   usage?: TranscriptUsage;
 }
 
@@ -72,11 +62,8 @@ export type ToolExecutionStatus =
   | "discarded"
   | "invalid";
 
-export type TaskStatus = "pending" | "in_progress" | "completed";
-
 export type RuntimeToolSource = "system" | "mcp";
 export type McpSource = "system" | "custom";
-export type SkillSource = "system" | "custom";
 
 function generateId(): string {
   const c = (globalThis as { crypto?: { randomUUID?: () => string } }).crypto;
@@ -89,8 +76,6 @@ export function createTranscriptMessage(input: {
   content?: TranscriptBlock[];
   requestId?: string;
   stopReason?: TranscriptStopReason;
-  isMeta?: boolean;
-  isApiError?: boolean;
   usage?: TranscriptUsage;
   timestamp?: string;
   id?: string;
@@ -102,8 +87,6 @@ export function createTranscriptMessage(input: {
     timestamp: input.timestamp ?? new Date().toISOString(),
     requestId: input.requestId,
     stopReason: input.stopReason,
-    isMeta: input.isMeta,
-    isApiError: input.isApiError,
     usage: input.usage,
   };
 }
@@ -124,16 +107,8 @@ export function toolResultBlock(toolUseId: string, content: string, isError?: bo
   return { type: "tool_result", tool_use_id: toolUseId, content, ...(isError ? { is_error: true } : {}) };
 }
 
-export function attachmentRefBlock(input: {
-  attachmentId?: string;
-  filename: string;
-  mimeType: string;
-  category: AttachmentCategory;
-  source: AttachmentSource;
-  size: number;
-  previewDataUrl?: string;
-}): TranscriptAttachmentRefBlock {
-  return { type: "attachment_ref", ...input };
+export function assetRefBlock(assetId: string): TranscriptAssetRefBlock {
+  return { type: "asset_ref", assetId };
 }
 
 export function getMessageText(message: Pick<TranscriptMessage, "content">): string {
@@ -158,8 +133,8 @@ export function getToolResults(message: Pick<TranscriptMessage, "content">): Tra
   return message.content.filter((block): block is TranscriptToolResultBlock => block.type === "tool_result");
 }
 
-export function getAttachmentRefs(message: Pick<TranscriptMessage, "content">): TranscriptAttachmentRefBlock[] {
-  return message.content.filter((block): block is TranscriptAttachmentRefBlock => block.type === "attachment_ref");
+export function getAssetRefs(message: Pick<TranscriptMessage, "content">): TranscriptAssetRefBlock[] {
+  return message.content.filter((block): block is TranscriptAssetRefBlock => block.type === "asset_ref");
 }
 
 export function collectText(blocks: TranscriptBlock[]): string {
@@ -178,14 +153,14 @@ export function collectToolResults(blocks: TranscriptBlock[]): TranscriptToolRes
   return getToolResults({ content: blocks });
 }
 
-export function collectAttachments(blocks: TranscriptBlock[]): TranscriptAttachmentRefBlock[] {
-  return getAttachmentRefs({ content: blocks });
+export function collectAssetRefs(blocks: TranscriptBlock[]): TranscriptAssetRefBlock[] {
+  return getAssetRefs({ content: blocks });
 }
 
 export function hasVisibleAssistantContent(message: Pick<TranscriptMessage, "content">): boolean {
   return message.content.some((block) => {
     if (block.type === "text") return block.text.trim().length > 0;
-    return block.type === "tool_use" || block.type === "attachment_ref";
+    return block.type === "tool_use";
   });
 }
 

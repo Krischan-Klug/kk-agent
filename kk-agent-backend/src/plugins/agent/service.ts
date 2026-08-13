@@ -2,15 +2,14 @@ import type {
   AgentDefinition,
   CreateAgentBody,
   UpdateAgentBody,
-  AgentLoopState,
   AgentModeConfig,
   AgentModeDefinition,
 } from "./types.js";
 import * as store from "./lib/store.js";
 import { getDefaults } from "../lib/defaults.js";
 import { createSlugId } from "../lib/ids.js";
-import { compactLlmRequestConfig } from "../provider/lib/request-config.js";
-import { getSystemVariableNames } from "../systemprompt/index.js";
+import { compactLlmRequestConfig } from "kk-agent-contract";
+import { getSystemVariableNames } from "../systemprompt/lib/builder.js";
 import { buildDefaultModes, normalizeModeDefinitions, resolveDefaultModeId } from "./lib/mode-config.js";
 import { NotFoundError } from "../../lib/errors.js";
 
@@ -144,18 +143,10 @@ const REMOVE_TRANSFORMS: Record<"tool" | "mcp" | "skill", ModeConfigTransform> =
   },
   skill(modeConfig, id) {
     const nextSkillIds = modeConfig.skillIds.filter((entry) => entry !== id);
-    const nextSkillInstructions = { ...modeConfig.skillInstructions };
-    delete nextSkillInstructions[id];
-    if (
-      nextSkillIds.length === modeConfig.skillIds.length &&
-      Object.keys(nextSkillInstructions).length === Object.keys(modeConfig.skillInstructions).length
-    ) {
-      return modeConfig;
-    }
+    if (nextSkillIds.length === modeConfig.skillIds.length) return modeConfig;
     return {
       ...modeConfig,
       skillIds: nextSkillIds,
-      skillInstructions: nextSkillInstructions,
     };
   },
 };
@@ -189,54 +180,4 @@ export async function removeMcpFromAgents(mcpId: string): Promise<void> {
 
 export async function removeSkillFromAgents(skillId: string): Promise<void> {
   return removeFromAllAgents(skillId, "skill");
-}
-
-const loopStates = new Map<string, AgentLoopState>();
-const loopStateListeners = new Map<string, Set<(state: AgentLoopState) => void>>();
-
-export function getLoopState(sessionId: string): AgentLoopState | undefined {
-  return loopStates.get(sessionId);
-}
-
-export function setLoopState(sessionId: string, state: AgentLoopState): void {
-  loopStates.set(sessionId, state);
-  const listeners = loopStateListeners.get(sessionId);
-  if (listeners) {
-    for (const cb of listeners) cb(state);
-  }
-}
-
-export function clearLoopState(sessionId: string): void {
-  loopStates.delete(sessionId);
-  loopStateListeners.delete(sessionId);
-}
-
-const loopAbortControllers = new Map<string, AbortController>();
-
-export function createLoopAbortController(sessionId: string): AbortController {
-  loopAbortControllers.get(sessionId)?.abort();
-  const controller = new AbortController();
-  loopAbortControllers.set(sessionId, controller);
-  return controller;
-}
-
-export function abortLoop(sessionId: string): boolean {
-  const controller = loopAbortControllers.get(sessionId);
-  if (!controller) return false;
-  controller.abort();
-  return true;
-}
-
-export function clearLoopAbortController(sessionId: string): void {
-  loopAbortControllers.delete(sessionId);
-}
-
-export function subscribeLoopState(sessionId: string, cb: (state: AgentLoopState) => void): () => void {
-  if (!loopStateListeners.has(sessionId)) {
-    loopStateListeners.set(sessionId, new Set());
-  }
-  loopStateListeners.get(sessionId)!.add(cb);
-  return () => {
-    loopStateListeners.get(sessionId)?.delete(cb);
-  };
 }

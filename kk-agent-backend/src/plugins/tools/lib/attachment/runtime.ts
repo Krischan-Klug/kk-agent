@@ -1,134 +1,105 @@
+import { realpath } from "node:fs/promises";
+import { resolve, sep } from "node:path";
 import type { McpServerConfig } from "../../../mcp/types.js";
-import { attachmentRefBlock } from "../../../lib/transcript.js";
-import type { ToolExecutionResult } from "../../../loop/types.js";
+import type { ToolExecutionResult, ToolRuntimeContext } from "../../../loop/types.js";
 import {
-  buildAttachmentPreviewDataUrl,
-  describeAttachment,
-  listSessionAttachments,
-  readAttachmentData,
-  resolveAttachmentReference,
-  storeProvidedAttachment,
-  getSessionAttachmentById,
-} from "../../../session/lib/attachments.js";
-import type { StoredAttachment } from "../../../session/lib/attachment-types.js";
+  describeAsset,
+  getSessionAssetById,
+  ingestAsset,
+  ingestAssetFromPath,
+  listSessionAssets,
+  readAssetChunks,
+  readAssetText,
+} from "../../../session/lib/assets.js";
 import { getCurrentSessionId } from "../user-interaction/interaction-store.js";
 import { truncateSelfBoundedReadOutput } from "../read-output.js";
 
-const READ_LINE_LIMIT = 200;
-function formatSize(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-}
-
 function getSessionIdOrThrow(): string {
   const sessionId = getCurrentSessionId();
-  if (!sessionId) throw new Error("No active session context for attachment tool.");
+  if (!sessionId) throw new Error("No active session context for asset tool.");
   return sessionId;
 }
 
-function renderTextAttachment(attachment: StoredAttachment, rawText: string, offset: number, limit: number): string {
-  const lines = rawText.split("\n");
-  const total = lines.length;
-  const safeOffset = Math.max(1, Math.floor(offset));
-  const safeLimit = Math.max(1, Math.floor(limit));
-  const slice = lines.slice(safeOffset - 1, safeOffset - 1 + safeLimit);
-  const endLine = Math.min(safeOffset - 1 + safeLimit, total);
-  const width = String(endLine).length;
-  const numbered = slice.map((line, index) => `${String(safeOffset + index).padStart(width)}\t${line}`).join("\n");
-  const footer = safeOffset === 1 && endLine >= total ? "" : `\n\n[Lines ${safeOffset}-${endLine} of ${total}]`;
-  return [
-    `Attachment: ${attachment.filename}`,
-    `Id: ${attachment.id}`,
-    `Type: ${attachment.category}`,
-    `Source: ${attachment.source}`,
-    `Size: ${formatSize(attachment.size)}`,
-    "",
-    numbered,
-    footer,
-  ].join("\n");
+function readStringArray(value: unknown): string[] {
+  return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string" && item.trim().length > 0) : [];
+}
+
+async function resolvePublishPath(filePath: string, context?: ToolRuntimeContext): Promise<string> {
+  const candidate = await realpath(resolve(filePath));
+  const roots = readStringArray(context?.values.assetPublishRoots);
+  for (const root of roots) {
+    const canonicalRoot = await realpath(resolve(root)).catch(() => resolve(root));
+    const prefix = canonicalRoot.toLowerCase().endsWith(sep) ? canonicalRoot.toLowerCase() : `${canonicalRoot.toLowerCase()}${sep}`;
+    const normalized = candidate.toLowerCase();
+    if (normalized === canonicalRoot.toLowerCase() || normalized.startsWith(prefix)) return candidate;
+  }
+  throw new Error("Artifact path is outside the active filesystem and terminal access scopes.");
+}
+
+function withPublishedAsset(context: ToolRuntimeContext, assetId: string): ToolRuntimeContext {
+  const current = readStringArray(context.values.publishedAssetIds);
+  return { values: { ...context.values, publishedAssetIds: [...new Set([...current, assetId])] } };
 }
 
 export async function executeAttachmentTool(
   _config: McpServerConfig,
   toolName: string,
   args: Record<string, unknown>,
+  context: ToolRuntimeContext = { values: {} },
 ): Promise<ToolExecutionResult | null> {
   const sessionId = getSessionIdOrThrow();
 
-  if (toolName === "list_attachments") {
-    const attachments = await listSessionAttachments(sessionId);
-    if (attachments.length === 0) return { content: "No chat attachments available in this session.", isError: false };
+  if (toolName === "list_assets") {
+    const assets = listSessionAssets(sessionId);
+    return { content: assets.length ? assets.map(describeAsset).join("\n") : "No managed assets in this session." };
+  }
+
+  if (toolName === "read_asset") {
+    const assetId = typeof args.assetId === "string" ? args.assetId.trim() : "";
+    const asset = getSessionAssetById(sessionId, assetId);
+    if (!asset) throw new Error(`Asset "${assetId}" not found in this session.`);
+    if (!asset.textAvailable) {
+      return { content: `${describeAsset(asset)}\nNo extracted text is available. Use the original visual input when the model supports vision.` };
+    }
+    const text = await readAssetText(sessionId, assetId);
+    const lines = text.split("\n");
+    const offset = Math.max(1, Math.floor(typeof args.offset === "number" ? args.offset : 1));
+    const limit = Math.min(500, Math.max(1, Math.floor(typeof args.limit === "number" ? args.limit : 200)));
+    const end = Math.min(lines.length, offset - 1 + limit);
+    const width = String(end).length;
+    const body = lines.slice(offset - 1, end).map((line, index) => `${String(offset + index).padStart(width)}\t${line}`).join("\n");
+    return { content: truncateSelfBoundedReadOutput(`${describeAsset(asset)}\n\n${body}\n\n[Lines ${offset}-${end} of ${lines.length}]`) };
+  }
+
+  if (toolName === "search_asset") {
+    const assetId = typeof args.assetId === "string" ? args.assetId.trim() : "";
+    const query = typeof args.query === "string" ? args.query.trim() : "";
+    if (!query) throw new Error("search_asset requires a non-empty query.");
+    const asset = getSessionAssetById(sessionId, assetId);
+    if (!asset) throw new Error(`Asset "${assetId}" not found in this session.`);
+    const maxResults = Math.min(25, Math.max(1, Math.floor(typeof args.maxResults === "number" ? args.maxResults : 10)));
+    const needle = query.toLocaleLowerCase();
+    const matches = (await readAssetChunks(sessionId, assetId)).filter((chunk) => chunk.text.toLocaleLowerCase().includes(needle)).slice(0, maxResults);
     return {
-      content: attachments.map((attachment) => describeAttachment(attachment)).join("\n"),
-      isError: false,
+      content: matches.length
+        ? matches.map((chunk) => `[chunk=${chunk.index}, ${chunk.locator}]\n${chunk.text}`).join("\n\n")
+        : `No matches for "${query}" in ${asset.filename}.`,
     };
   }
 
-  if (toolName === "read_attachment") {
-    const attachment = await resolveAttachmentReference(sessionId, {
-      attachmentId: args.attachmentId,
-      filename: args.filename,
-    });
-    if (attachment.category === "image") {
-      return {
-        content: [
-          `Attachment: ${attachment.filename}`,
-          `Id: ${attachment.id}`,
-          `Type: image`,
-          `Source: ${attachment.source}`,
-          `Mime: ${attachment.mimeType}`,
-          `Size: ${formatSize(attachment.size)}`,
-          "",
-          "Image attachments should usually be analyzed from the original chat turn via model vision rather than as text.",
-        ].join("\n"),
-        isError: false,
-      };
-    }
-
-    const offset = typeof args.offset === "number" ? args.offset : 1;
-    const limit = typeof args.limit === "number" ? args.limit : READ_LINE_LIMIT;
-    const text = attachment.extractedText ?? (await readAttachmentData(attachment)).toString("utf-8");
-    return { content: truncateSelfBoundedReadOutput(renderTextAttachment(attachment, text, offset, limit)), isError: false };
-  }
-
-  if (toolName === "provide_attachment") {
+  if (toolName === "publish_artifact") {
+    const filePath = typeof args.file_path === "string" ? args.file_path.trim() : "";
     const filename = typeof args.filename === "string" ? args.filename.trim() : "";
-    const mimeType = typeof args.mimeType === "string" ? args.mimeType.trim() : "";
-    const content = typeof args.content === "string" ? args.content : "";
-    if (args.encoding !== undefined && args.encoding !== "utf8" && args.encoding !== "base64") {
-      throw new Error('provide_attachment encoding must be "utf8" or "base64".');
-    }
-    const encoding = args.encoding === "base64" ? "base64" : "utf8";
-
-    if (!filename) throw new Error("provide_attachment requires a filename.");
-    if (!mimeType) throw new Error("provide_attachment requires a mimeType.");
-    if (content.length === 0) throw new Error("provide_attachment requires non-empty content.");
-
-    const meta = await storeProvidedAttachment(sessionId, {
-      filename,
-      mimeType,
-      content,
-      encoding,
-    });
-    const stored = await getSessionAttachmentById(sessionId, meta.id);
-    if (!stored) throw new Error(`Stored attachment "${meta.id}" could not be resolved.`);
-    const previewDataUrl = await buildAttachmentPreviewDataUrl(stored);
-
+    const content = typeof args.content === "string" ? args.content : undefined;
+    if (Boolean(filePath) === (content !== undefined)) throw new Error("publish_artifact requires exactly one of file_path or content.");
+    if (content !== undefined && (!filename || content.length === 0)) throw new Error("Inline artifacts require a filename and non-empty UTF-8 content.");
+    const asset = filePath
+      ? await ingestAssetFromPath(sessionId, await resolvePublishPath(filePath, context), filename || undefined)
+      : await ingestAsset(sessionId, { filename, declaredMimeType: "text/plain", buffer: Buffer.from(content!, "utf8"), source: "assistant" });
     return {
-      content: `Attachment "${meta.filename}" is now available in chat as id=${meta.id}.`,
-      isError: false,
-      assistantBlocks: [
-        attachmentRefBlock({
-          attachmentId: meta.id,
-          filename: meta.filename,
-          mimeType: meta.mimeType,
-          category: meta.category,
-          source: meta.source,
-          size: meta.size,
-          previewDataUrl,
-        }),
-      ],
+      content: `Published artifact "${asset.filename}" as assetId=${asset.id}.`,
+      contextModifier: (current) => withPublishedAsset(current, asset.id),
+      metadata: { assetIds: [asset.id], artifact: asset },
     };
   }
 

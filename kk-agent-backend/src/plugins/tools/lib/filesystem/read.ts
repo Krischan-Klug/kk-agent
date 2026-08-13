@@ -30,7 +30,7 @@ export async function executeRead(
   const imagePdf = detectImagePdf(path);
   if (imagePdf) {
     return {
-      content: `Cannot read ${imagePdf} file as text: ${path}. Use attachment tools or request the file in a different way.`,
+      content: `Cannot read ${imagePdf} file as text: ${path}. Use the managed asset tools or request the file in a different way.`,
       isError: true,
       metadata: { filePath: path, operation: "read", unsupportedType: imagePdf },
     };

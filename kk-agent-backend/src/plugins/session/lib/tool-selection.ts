@@ -1,6 +1,6 @@
-import { buildCapabilityInstructions } from "../../systemprompt/index.js";
-import { getAllMcpsCached, getKnownMcpIds, getRunnableMcpIds } from "../../mcp/service.js";
-import { getSystemMcpById, getKnownSystemMcpIds, getRunnableSystemMcpIds } from "../../tools/service.js";
+import { buildCapabilityInstructions } from "../../systemprompt/lib/builder.js";
+import { getKnownMcpIds, getRunnableMcpIds } from "../../mcp/service.js";
+import { getKnownSystemMcpIds, getRunnableSystemMcpIds } from "../../tools/service.js";
 import { listSkills } from "../../skills/service.js";
 import { filterToKnownIds } from "../../lib/ids.js";
 import type { AgentDefinition, AgentModeDefinition } from "../../agent/types.js";
@@ -63,20 +63,4 @@ export function resolveSessionSkillIds(
   activeSkillIds?: string[],
 ): string[] {
   return resolveSessionIds(agent, activeSkillIds, (mode) => mode.config.skillIds, sanitizeSkillIds);
-}
-
-export function collectLinkedSkillIds(
-  activeToolIds: string[],
-  activeMcpIds: string[],
-): string[] {
-  const collected = new Set<string>();
-  for (const id of activeToolIds) {
-    const tool = getSystemMcpById(id);
-    for (const skillId of tool?.skillIds ?? []) collected.add(skillId);
-  }
-  for (const mcp of getAllMcpsCached()) {
-    if (!activeMcpIds.includes(mcp.id)) continue;
-    for (const skillId of mcp.skillIds ?? []) collected.add(skillId);
-  }
-  return sanitizeSkillIds([...collected]);
 }

@@ -1,15 +1,12 @@
-import type { RuntimeToolSource, ToolExecutionStatus, TranscriptMessage } from "kk-agent-contract";
-import type { ProviderTransportState, ProviderTurnDebug, TokenStats, UnifiedToolDefinition } from "../provider/lib/types.js";
+import type { AgentLoopState, RunEvent, RuntimeToolSource, ToolExecutionStatus, TranscriptMessage } from "kk-agent-contract";
+import type { ModelContentPart, ProviderTransportState, ProviderTurnDebug, TokenStats, UnifiedToolDefinition } from "../provider/lib/types.js";
 import type { ModeBehavior, AgentPromptSections } from "../agent/types.js";
 import type { LlmRequestConfig } from "../provider/types.js";
-
-type ToolInterruptBehavior = "cancel" | "block";
 
 interface RuntimeToolResultPolicy {
   previewThresholdChars?: number;
   previewChars?: number;
   contextBudgetChars?: number;
-  persistLargeResults?: boolean;
   excludeFromContextBudget?: boolean;
 }
 
@@ -33,21 +30,11 @@ export interface ModeRuntimeRef {
   behavior: ModeBehavior;
 }
 
-interface RuntimeToolDisplayMeta {
-  title?: string;
-  summaryInputKeys?: string[];
-  redactInputKeys?: string[];
-  descriptionInputKey?: "tool_call_description";
-  displayOnlyInputKeys?: string[];
-}
-
 export interface RuntimeToolDefinition extends UnifiedToolDefinition {
   source: RuntimeToolSource;
   capabilityId: string;
-  inputSchema: Record<string, unknown>;
   accessScope?: "user" | "system";
   isConcurrencySafe: (input: Record<string, unknown>) => boolean;
-  interruptBehavior: ToolInterruptBehavior;
   resultPolicy: RuntimeToolResultPolicy;
   permissionPolicy: RuntimeToolPermissionPolicy;
   resolvePermission?: (
@@ -55,24 +42,18 @@ export interface RuntimeToolDefinition extends UnifiedToolDefinition {
     args: Record<string, unknown>,
     mode: ModeRuntimeRef,
   ) => Promise<RuntimeToolPermissionPolicy> | RuntimeToolPermissionPolicy;
-  category?: "filesystem" | "search" | "web" | "other";
-  operationKind?: "read" | "write" | "search" | "fetch";
-  display?: RuntimeToolDisplayMeta;
-  selfBoundedResult?: boolean;
+  displayOnlyInputKeys?: string[];
 }
 
 export interface ToolExecutionResult {
   content: string;
   isError?: boolean;
-  assistantBlocks?: import("../lib/transcript.js").TranscriptBlock[];
-  additionalMessages?: TranscriptMessage[];
   contextModifier?: (context: ToolRuntimeContext) => ToolRuntimeContext;
   metadata?: Record<string, unknown>;
 }
 
 export interface ModeRuntimeConfig {
   modeId: string;
-  modeLabel: string;
   modePromptName: string;
   modeBehavior: ModeBehavior;
   promptSections: AgentPromptSections;
@@ -80,7 +61,6 @@ export interface ModeRuntimeConfig {
   mcpInstructions: string;
   skillsCatalog: string;
   activeSkillIds: string[];
-  skillInstructionsById: Record<string, string>;
   runtimeVariables?: Record<string, string>;
   allTools: UnifiedToolDefinition[];
   runtimeToolsByName: Record<string, RuntimeToolDefinition>;
@@ -88,19 +68,22 @@ export interface ModeRuntimeConfig {
 }
 
 export interface LoopOptions {
+  runId: string;
+  userMessageId: string;
   agentId: string;
   sessionId: string;
   providerId: string;
   model: string;
   messages: TranscriptMessage[];
-  buildEphemeralMetaMessages?: (input: {
+  buildRuntimeContext?: (input: {
     sessionId: string;
     agentId: string;
     modeId: string;
     modeName?: string;
     model: string;
-    iteration: number;
-  }) => TranscriptMessage[];
+    step: number;
+    toolContext: ToolRuntimeContext;
+  }) => string;
   modeConfigs: Record<string, ModeRuntimeConfig>;
   activeModeId: string;
   agentVariables: Record<string, string>;
@@ -113,25 +96,27 @@ export interface LoopOptions {
   toolContext?: ToolRuntimeContext;
   llmRequestConfig?: LlmRequestConfig;
   providerState?: ProviderTransportState;
+  modelContentByMessageId?: Record<string, ModelContentPart[]>;
   modelPassRunner?: (
     opts: LoopOptions,
     messages: TranscriptMessage[],
     providerState: LoopOptions["providerState"],
-    onToolUseBlock?: (toolUse: import("../lib/transcript.js").TranscriptToolUseBlock) => void,
     retryInstruction?: string,
-    metaMessages?: TranscriptMessage[],
+    runtimeContext?: string,
   ) => Promise<{
     message: TranscriptMessage;
-    finishReason: import("../lib/transcript.js").TranscriptStopReason;
+    finishReason: import("kk-agent-contract").TranscriptStopReason;
     stats?: TokenStats;
     notices?: import("../provider/lib/types.js").ProviderNotice[];
     parseIssues?: import("../provider/lib/types.js").ToolCallParseIssue[];
     transportState?: ProviderTransportState;
     debug?: ProviderTurnDebug;
   }>;
-  onAssistantBlockDelta?: (messageId: string, block: import("../lib/transcript.js").TranscriptBlock) => void;
+  onAssistantBlockDelta?: (messageId: string, block: import("kk-agent-contract").TranscriptBlock) => void;
   onAssistantMessage?: (message: TranscriptMessage) => void;
-  onSystemNotice?: (level: "info" | "warning" | "error", message: string) => void;
+  onAssistantAttemptDiscarded?: (messageIds: string[]) => void;
+  onRunEvent?: (event: RunEvent) => void | Promise<void>;
+  onCheckpoint?: (checkpoint: LoopCheckpoint) => void | Promise<void>;
   onToolExecutionUpdate?: (
     toolUseId: string,
     toolName: string,
@@ -148,16 +133,7 @@ export interface LoopOptions {
     args: Record<string, unknown>,
     mode: ModeRuntimeRef,
   ) => Promise<{ allowed: boolean; reason?: string }>;
-  onLoopState?: (state: {
-    sessionId: string;
-    agentId: string;
-    status: "idle" | "running" | "completed" | "error" | "aborted";
-    modeId: string;
-    modeBehavior: ModeBehavior;
-    iteration: number;
-    startedAt: string;
-    updatedAt: string;
-  }) => void;
+  onLoopState?: (state: AgentLoopState) => void;
   onStats?: (stats: TokenStats) => void;
   abortSignal?: AbortSignal;
   autonomous?: boolean;
@@ -172,8 +148,18 @@ export interface LoopOptions {
 export interface LoopResult {
   messages: TranscriptMessage[];
   finalResponse: string;
-  iterations: number;
+  status: "completed" | "stopped" | "failed" | "aborted";
+  step: number;
+  attempt: number;
+}
+
+export interface LoopCheckpoint {
+  messages: TranscriptMessage[];
+  status: "running" | "completed" | "stopped" | "failed" | "aborted";
+  step: number;
+  attempt: number;
+  toolBatch: number;
+  toolContext: ToolRuntimeContext;
   providerState?: ProviderTransportState;
   providerDebug?: ProviderTurnDebug;
-  aborted?: boolean;
 }

@@ -1,7 +1,6 @@
 export type {
-  CreateSkillBody,
   ImportSkillResult,
+  SkillDiagnostic,
   SkillDefinition,
-  UpdateSkillLinksBody,
-  UpdateSkillBody,
+  SkillSource,
 } from "kk-agent-contract";

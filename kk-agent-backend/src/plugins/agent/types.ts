@@ -1,6 +1,5 @@
 export type {
   AgentDefinition,
-  AgentLoopState,
   AgentModeDefinition,
   AgentModeConfig,
   AgentPromptSections,

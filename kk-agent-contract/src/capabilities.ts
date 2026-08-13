@@ -3,7 +3,6 @@ import type {
   EndpointTransportProfile,
   EndpointType,
   ModelCapabilities,
-  ModelInfo,
   NumericRange,
   VisionSupport,
 } from "./provider.js";
@@ -37,7 +36,6 @@ export function getEndpointCapabilities(
 ): EndpointCapabilities {
   return capabilities?.endpointCapabilities[endpoint] ?? {
     temperatureSupported: false,
-    maxOutputTokensSupported: false,
   };
 }
 
@@ -109,19 +107,6 @@ export function clampNumber(value: number | undefined, range?: NumericRange): nu
 
   const steps = Math.round((bounded - range.min) / range.step);
   return Number((range.min + steps * range.step).toFixed(6));
-}
-
-export function resolveMaxOutputRange(model: ModelInfo | undefined, endpoint: EndpointType): NumericRange | undefined {
-  const endpointRange = getEndpointCapabilities(model?.capabilities, endpoint).maxOutputTokensRange;
-  if (!endpointRange) return undefined;
-
-  const contextMax = model?.contextLength ?? model?.maxContextLength;
-  if (!contextMax) return endpointRange;
-
-  return {
-    ...endpointRange,
-    max: Math.min(endpointRange.max, contextMax),
-  };
 }
 
 export function allowsVisionInputs(visionSupport: VisionSupport | undefined): boolean {

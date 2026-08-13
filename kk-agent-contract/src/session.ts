@@ -2,23 +2,19 @@ import type { ProviderTurnDebug, LlmRequestConfig } from "./provider.js";
 import type { AgentLoopState, AgentPromptSections, AutonomousBudget, ModeBehavior } from "./agent.js";
 import type { ToolExecutionStatus, TranscriptBlock, TranscriptMessage } from "./transcript.js";
 
-export interface AttachmentMeta {
+export type AssetKind = "image" | "pdf" | "document" | "presentation" | "spreadsheet" | "text";
+export type AssetSource = "user" | "assistant";
+
+export interface AssetMeta {
   id: string;
   filename: string;
   mimeType: string;
-  category: "image" | "text" | "pdf";
-  source: "user" | "assistant";
+  kind: AssetKind;
+  source: AssetSource;
   size: number;
-}
-
-export interface AttachmentDisplayMeta {
-  attachmentId?: string;
-  filename: string;
-  mimeType: string;
-  category: "image" | "text" | "pdf";
-  source: "user" | "assistant";
-  size: number;
-  previewDataUrl?: string;
+  textAvailable: boolean;
+  previewAvailable: boolean;
+  pageCount?: number;
 }
 
 export interface SessionState {
@@ -33,9 +29,53 @@ export interface SessionState {
   activeSkillIds: string[];
   llmRequestConfig?: LlmRequestConfig;
   messages: TranscriptMessage[];
+  runs: AgentRun[];
+  assets: AssetMeta[];
   providerDebug?: ProviderTurnDebug;
   createdAt: string;
   updatedAt: string;
+}
+
+export type AgentRunStatus = "running" | "completed" | "stopped" | "failed" | "aborted";
+export type RunEventSeverity = "info" | "warning" | "error";
+export type RunEventKind =
+  | "provider_retry"
+  | "provider_notice"
+  | "context_compacted"
+  | "model_retry"
+  | "tool_error"
+  | "output_limit"
+  | "budget_stopped"
+  | "run_failed"
+  | "run_aborted";
+
+export interface RunEvent {
+  id: string;
+  runId: string;
+  sessionId: string;
+  anchorMessageId: string;
+  kind: RunEventKind;
+  severity: RunEventSeverity;
+  message: string;
+  code?: string;
+  detail?: string;
+  step: number;
+  attempt: number;
+  createdAt: string;
+}
+
+export interface AgentRun {
+  id: string;
+  userMessageId: string;
+  status: AgentRunStatus;
+  step: number;
+  attempt: number;
+  toolBatch: number;
+  startedAt: string;
+  updatedAt: string;
+  completedAt?: string;
+  events: RunEvent[];
+  artifactIds: string[];
 }
 
 export interface CreateSessionBody {
@@ -87,15 +127,15 @@ export interface SessionRuntimeSkillDebug {
   id: string;
   name: string;
   description: string;
-  instruction: string;
-  source?: "system" | "custom";
-  linkedToolIds: string[];
-  linkedMcpIds: string[];
+  path: string;
+  source: "managed" | "user" | "workspace";
+  resources: string[];
+  loaded: boolean;
 }
 
 export interface SessionPromptDebug {
   systemPrompt: string;
-  metaMessages: string[];
+  runtimeContext: string;
   runtimeTools: SessionRuntimeToolDebug[];
   runtimeMcps: SessionRuntimeMcpDebug[];
   runtimeSkills: SessionRuntimeSkillDebug[];
@@ -133,7 +173,7 @@ export interface AppDefaults {
   reasoning: {
     defaultEffort: string;
   };
-  attachment: {
+  asset: {
     visionNotSupportedInstruction: string;
   };
 }
@@ -141,6 +181,7 @@ export interface AppDefaults {
 export type StreamEvent =
   | { type: "assistant_block_delta"; messageId: string; block: TranscriptBlock }
   | { type: "assistant_message_complete"; message: TranscriptMessage }
+  | { type: "assistant_attempt_discarded"; messageIds: string[] }
   | {
       type: "tool_execution_update";
       toolUseId: string;
@@ -153,8 +194,8 @@ export type StreamEvent =
       metadata?: Record<string, unknown>;
     }
   | { type: "turn_state"; state: AgentLoopState }
-  | { type: "system_notice"; level: "info" | "warning" | "error"; message: string }
+  | { type: "run_event"; event: RunEvent }
   | { type: "stats"; inputTokens: number; outputTokens: number; reasoningTokens: number; source: "provider" | "estimated" | "unknown" }
   | { type: "user_prompt"; promptId: string; question: string; choices: { key: string; label: string }[] }
   | { type: "done"; session: SessionState }
-  | { type: "error"; message: string };
+  | { type: "transport_error"; message: string };

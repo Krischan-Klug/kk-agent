@@ -5,7 +5,6 @@ import type { UnifiedToolDefinition } from "../../provider/lib/types.js";
 import { executeSystemToolForId, type ResolvedSystemToolRuntime } from "../../tools/service.js";
 import {
   withToolCallDescriptionSchema,
-  stripDisplayOnlyInputKeys,
 } from "./tool-call-description.js";
 
 type RuntimeToolCollection = {
@@ -22,20 +21,12 @@ type RuntimeToolBucket = {
 
 function buildSystemRuntimeBuckets(systemRuntime: ResolvedSystemToolRuntime): RuntimeToolBucket[] {
   return Object.values(systemRuntime.runtimeToolsByName).map((tool) => {
-    const augmented = withToolCallDescriptionSchema(tool.inputSchema);
+    const augmented = withToolCallDescriptionSchema(tool.parameters);
     return {
       tool: {
         ...tool,
         parameters: augmented.schema,
-        inputSchema: augmented.schema,
-        display: {
-          ...tool.display,
-          descriptionInputKey: "tool_call_description",
-          displayOnlyInputKeys: [
-            ...(tool.display?.displayOnlyInputKeys ?? []),
-            ...augmented.displayOnlyInputKeys,
-          ],
-        },
+        displayOnlyInputKeys: [...(tool.displayOnlyInputKeys ?? []), ...augmented.displayOnlyInputKeys],
       },
       description: tool.description,
       parameters: augmented.schema,
@@ -51,17 +42,12 @@ function buildMcpRuntimeBuckets(activeMcpIds: string[]): RuntimeToolBucket[] {
         name: tool.name,
         description: tool.description,
         parameters: augmented.schema,
-        inputSchema: augmented.schema,
         source: "mcp",
         capabilityId: tool.mcpId,
         isConcurrencySafe: () => false,
-        interruptBehavior: "block",
         resultPolicy: {},
         permissionPolicy: { kind: "allow" },
-        display: {
-          descriptionInputKey: "tool_call_description",
-          displayOnlyInputKeys: augmented.displayOnlyInputKeys,
-        },
+        displayOnlyInputKeys: augmented.displayOnlyInputKeys,
       },
       description: tool.description,
       parameters: augmented.schema,
@@ -157,22 +143,17 @@ export async function executeRuntimeTool(
   args: Record<string, unknown>,
   context?: import("../../loop/types.js").ToolRuntimeContext,
 ): Promise<ToolExecutionResult> {
-  const executionArgs = stripDisplayOnlyInputKeys(
-    args,
-    runtimeTool.display?.displayOnlyInputKeys,
-  );
-
   if (runtimeTool.source === "system") {
     return (
       await executeSystemToolForId(
         runtimeTool.capabilityId,
         toolName,
-        executionArgs,
+        args,
         runtimeTool.accessScope,
         context,
       )
     ) ?? { content: `Tool "${toolName}" is not available.`, isError: true };
   }
 
-  return executeToolForMcp(runtimeTool.capabilityId, toolName, executionArgs);
+  return executeToolForMcp(runtimeTool.capabilityId, toolName, args);
 }

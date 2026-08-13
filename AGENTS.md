@@ -4,29 +4,31 @@ Quick reference for AI agents working in this repo.
 
 ## Project Overview
 - `kk-agent-backend`: Plugin-based backend for local / self-hosted LLM agents
-- `kk-agent-frontend`: Next.js frontend for chat, agents, tools, MCPs, providers, and defaults
-- `kk-agent-desktop`: Electron shell that bundles the static frontend and backend runtime
+- `kk-agent-desktop`: Electron application containing the Next.js renderer and desktop host
 - `kk-agent-contract`: Private local workspace for shared TypeScript types and request/capability helpers
 
 ## Backend at a Glance
-- `core`: Technical bootstrap minimum - no feature logic
 - `agent`: Agent definitions, variables, loop modes
-- `loop`: Agent loop, iterations, retry logic
+- `loop`: Agent loop, committed steps, attempts, retry logic
 - `systemprompt`: Builds the final LLM prompt
 - `tools`: Internal system tools, tool state APIs, task and memory state
 - `mcp`: External / user-added MCPs only
-- `skills`: Local developer-curated skills from `state/skills`, separate from tools and MCPs
+- `skills`: Agent Skills discovered from workspace/user roots plus managed imports, separate from tools and MCPs
 - `session`: Sessions, chat, streaming
 - `provider`: Models and providers
 
+Backend features register through a fixed, explicit initializer list. There is no dynamic plugin discovery, dependency graph, or lifecycle layer.
+
 ## Desktop at a Glance
+- `electron`: Electron main process and preload bridge
+- `src`: Next.js renderer for chat, agents, tools, MCPs, providers, and defaults
 - Electron main forks the backend bundle as a Node process (`ELECTRON_RUN_AS_NODE`)
 - Backend binds to a dynamic port; readiness is signaled via a `KK_AGENT_BACKEND_READY` stdout line
-- Static frontend is served through a custom `app://` protocol, not `file://`
-- Runtime state lives under `app.getPath("userData")/kk-agent/state`
+- The static renderer is served through a custom `app://` protocol, not `file://`
+- Development and packaged desktop share runtime state under `app.getPath("userData")/state`; the repository contains no live state
 - Renderer has `contextIsolation`, `sandbox`, and no `nodeIntegration`
 
-## Frontend at a Glance
+## Renderer at a Glance
 - `/chat`: Chat and debug
 - `/agent`: Agent editor
 - `/skills`: Skill bundles
@@ -39,10 +41,15 @@ Quick reference for AI agents working in this repo.
 ## Key Project Rules
 - Preserve existing structure; extend an existing plugin, route, component, or helper before adding a new system.
 - Internal tools are not user MCPs. Skills are not internal tools or user MCPs.
+- Skills use the Agent Skills `SKILL.md` format unchanged; KK-Agent adds no bundle overlays, capability links, or provider-specific adapters.
+- Skill discovery precedence is workspace `.agents/skills`, managed `state/agent-skills`, then user `~/.agents/skills`.
+- Skill metadata is catalog context; full instructions and resources enter request-scoped runtime context only after activation.
 - Agents separate `toolIds`, `mcpIds`, and `skillIds`.
 - Sessions separate `activeToolIds`, `activeMcpIds`, and `activeSkillIds`.
+- Conversation state is one versioned `session.json` snapshot plus its asset directory; incompatible snapshots are deleted instead of migrated. Tool-owned task and memory files remain separate.
 - Task and memory state lives exclusively in the `tools` plugin.
 - Chat uploads use an internal `attachment` tool, not the normal filesystem tool.
+- Session files use one asset pipeline: transcript input refs contain only `assetId`, generated artifacts belong to runs, and binary/model projections are request-scoped.
 - `src/plugins/lib` is utility code only, not a plugin.
 - Runtime data belongs in existing `state/*.json` stores unless there is a clear architectural reason.
 - Prompt-relevant defaults must be editable in Settings.
@@ -50,8 +57,12 @@ Quick reference for AI agents working in this repo.
 - Prompt structure must stay consistent as XML.
 - Loop behavior remains configurable per agent; `simple` loops must work without forced plan/verify steps.
 - Providers use a unified capability model and are configured only via `name`, `baseUrl`, and optional `apiKey`.
+- User-configurable sampling is limited to optional `temperature` and `top_p` overrides; arbitrary request-body passthrough belongs in the inference provider.
 - Internal tools are registered in the `tools` plugin, not the user MCP area.
+- MCP `active` is persisted intent; runtime availability is reported separately and connection failures never stop the backend.
 - Large tool results must be truncated for model context; keep full output only where UI/debug needs it.
+- Runtime context and loaded skill instructions are request-scoped provider instructions, never transcript messages.
+- Runs persist typed events and incremental transcript checkpoints; retries advance attempts, only valid model outputs advance steps.
 - Frontend debug content stays in debug surfaces, not the main chat transcript.
 - Settings > Defaults contains only values that affect the final LLM prompt or LLM behavior.
 

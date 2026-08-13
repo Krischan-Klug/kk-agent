@@ -9,29 +9,18 @@ import type {
 } from "../../types.js";
 import * as chatCompletions from "../endpoints/chat-completions.js";
 import * as responses from "../endpoints/responses.js";
-import { DEFAULT_REASONING_LEVELS } from "../capabilities.js";
+import { DEFAULT_REASONING_LEVELS } from "kk-agent-contract";
 import { getErrorMessage } from "../../../../lib/error.js";
 
 function buildHeaders(config: ProviderConfig): Record<string, string> {
   return config.apiKey ? { Authorization: `Bearer ${config.apiKey}` } : {};
 }
 
-export function createEndpointCapabilities(
-  maxTokensMax = 131072,
-): Partial<Record<"chat-completions" | "responses", EndpointCapabilities>> {
-  const sharedRange = { min: 1, max: maxTokensMax, step: 1 };
+function createEndpointCapabilities(): Partial<Record<"chat-completions" | "responses", EndpointCapabilities>> {
   const sharedEndpoint = {
     temperatureSupported: true,
     temperatureRange: { min: 0, max: 2, step: 0.1 },
-    maxOutputTokensSupported: true,
-    maxOutputTokensRange: sharedRange,
-  } satisfies Pick<
-    EndpointCapabilities,
-    | "temperatureSupported"
-    | "temperatureRange"
-    | "maxOutputTokensSupported"
-    | "maxOutputTokensRange"
-  >;
+  } satisfies EndpointCapabilities;
 
   return {
     "chat-completions": sharedEndpoint,
@@ -74,8 +63,7 @@ function createTransportProfiles(
   };
 }
 
-export function createCapabilities(
-  maxTokensMax?: number,
+function createCapabilities(
   overrides: Partial<
     Pick<
       ModelCapabilities,
@@ -102,7 +90,7 @@ export function createCapabilities(
     reasoning: {
       allowedEfforts: [...allowedEfforts],
     },
-    endpointCapabilities: createEndpointCapabilities(maxTokensMax),
+    endpointCapabilities: createEndpointCapabilities(),
     transportProfiles: createTransportProfiles(reasoningControl),
   };
 }
@@ -147,12 +135,6 @@ export function createLocalProviderAdapter(
 
   return {
     type: "local",
-
-    chat(request) {
-      const endpoint =
-        request.endpoint === "responses" ? responses : chatCompletions;
-      return endpoint.chat(request, baseUrl, headers);
-    },
 
     chatStream(request, onChunk) {
       const endpoint =

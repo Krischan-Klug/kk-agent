@@ -10,9 +10,6 @@ import type { ModelInfo } from "../types.js";
 export interface ProviderAdapter {
   readonly type: string;
 
-  /** Non-streaming call */
-  chat(request: UnifiedRequest): Promise<UnifiedResponse>;
-
   /** Streaming call */
   chatStream(request: UnifiedRequest, onChunk: OnChunkFn): Promise<UnifiedResponse>;
 

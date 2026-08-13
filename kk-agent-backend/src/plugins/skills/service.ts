@@ -1,18 +1,14 @@
-import { cp, mkdir, mkdtemp, readdir, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { basename, join, resolve } from "node:path";
-import { createSlugId, filterToKnownIds } from "../lib/ids.js";
+import { cp, mkdir, mkdtemp, readdir, rm, stat, writeFile } from "node:fs/promises";
+import { existsSync } from "node:fs";
+import { homedir, tmpdir } from "node:os";
+import { dirname, join, relative, resolve, sep } from "node:path";
 import { getStateDirPath } from "../lib/state.js";
-import { getKnownMcpIds } from "../mcp/service.js";
-import { getKnownSystemMcpIds } from "../tools/service.js";
-import type { CreateSkillBody, ImportSkillResult, SkillDefinition, UpdateSkillBody, UpdateSkillLinksBody } from "./types.js";
-import { loadSkillFromPath, normalizeSkillLinks, resolveSkillBundleRoot, writeSkillBundle, writeSkillLinks } from "./lib/loader.js";
-import { buildSkillsCatalogSection } from "./lib/xml.js";
+import type { ImportSkillResult, SkillDefinition, SkillSource } from "./types.js";
+import { loadSkillDirectory, resolveImportedSkillRoot, type LoadedSkill } from "./lib/loader.js";
+import { buildSkillContextXml, buildSkillsCatalogSection } from "./lib/xml.js";
 import { createLogger } from "../../lib/logger.js";
 import { getErrorMessage } from "../../lib/error.js";
-import { NotFoundError, ValidationError } from "../../lib/errors.js";
-import { setCreateSkillHandler } from "../tools/lib/skill/runtime.js";
-import { DEFAULT_CREATE_SKILL_BODY, DEFAULT_CREATE_SKILL_ID } from "./lib/default-create-skill.js";
+import { ConflictError, NotFoundError, ValidationError } from "../../lib/errors.js";
 
 const logger = createLogger("skills");
 
@@ -21,131 +17,124 @@ type ImportedSkillFile = {
   content: Buffer;
 };
 
-let skillsRootDir = getStateDirPath("skills");
-let cachedSkills: SkillDefinition[] = [];
-
-function sanitizeToolIds(toolIds: string[] = []): string[] {
-  return filterToKnownIds(toolIds, getKnownSystemMcpIds());
+interface DiscoveryRoot {
+  path: string;
+  source: SkillSource;
+  mutable: boolean;
 }
 
-function sanitizeMcpIds(mcpIds: string[] = []): string[] {
-  return filterToKnownIds(mcpIds, getKnownMcpIds());
+let managedSkillsRoot = resolve(getStateDirPath("agent-skills"));
+let workspaceRoot = resolve(process.cwd());
+let cachedSkills: LoadedSkill[] = [];
+
+function isWithinRoot(rootDir: string, targetPath: string): boolean {
+  const rel = relative(rootDir, targetPath);
+  return rel === "" || (!rel.startsWith("..") && !rel.includes(`..${sep}`));
 }
 
-function sanitizeLinks(body: UpdateSkillLinksBody): Pick<SkillDefinition, "linkedToolIds" | "linkedMcpIds"> {
-  const normalized = normalizeSkillLinks({
-    linkedToolIds: body.toolIds,
-    linkedMcpIds: body.mcpIds,
+function toDefinition(skill: LoadedSkill): SkillDefinition {
+  const { instruction: _instruction, ...definition } = skill;
+  return definition;
+}
+
+function findRepositoryRoot(startPath: string): string | undefined {
+  let current = resolve(startPath);
+  while (true) {
+    if (existsSync(join(current, ".git"))) return current;
+    const parent = dirname(current);
+    if (parent === current) return undefined;
+    current = parent;
+  }
+}
+
+function getWorkspaceDiscoveryRoots(): DiscoveryRoot[] {
+  const repositoryRoot = findRepositoryRoot(workspaceRoot);
+  const roots: DiscoveryRoot[] = [];
+  let current = workspaceRoot;
+
+  while (true) {
+    roots.push({ path: join(current, ".agents", "skills"), source: "workspace", mutable: false });
+    if (!repositoryRoot || current === repositoryRoot) break;
+    const parent = dirname(current);
+    if (parent === current) break;
+    current = parent;
+  }
+  return roots;
+}
+
+function getDiscoveryRoots(): DiscoveryRoot[] {
+  const roots = [
+    ...getWorkspaceDiscoveryRoots(),
+    { path: managedSkillsRoot, source: "managed" as const, mutable: true },
+    { path: join(homedir(), ".agents", "skills"), source: "user" as const, mutable: false },
+  ];
+  const seen = new Set<string>();
+  return roots.filter((entry) => {
+    const key = resolve(entry.path).toLowerCase();
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
   });
-  return {
-    linkedToolIds: sanitizeToolIds(normalized.linkedToolIds),
-    linkedMcpIds: sanitizeMcpIds(normalized.linkedMcpIds),
-  };
 }
 
-async function ensureSkillsRoot(): Promise<void> {
-  await mkdir(skillsRootDir, { recursive: true });
+async function loadDiscoveryRoot(root: DiscoveryRoot): Promise<LoadedSkill[]> {
+  const entries = await readdir(root.path, { withFileTypes: true }).catch(() => []);
+  const skills: LoadedSkill[] = [];
+  for (const entry of entries) {
+    if (!entry.isDirectory() && !entry.isSymbolicLink()) continue;
+    const skillDir = join(root.path, entry.name);
+    try {
+      if (entry.isSymbolicLink() && !(await stat(skillDir)).isDirectory()) continue;
+      skills.push(await loadSkillDirectory(skillDir, root.source, root.mutable));
+    } catch (error) {
+      logger.warn(`Skipping invalid skill at "${skillDir}": ${getErrorMessage(error)}`);
+    }
+  }
+  return skills.sort((left, right) => left.name.localeCompare(right.name));
 }
 
 async function reloadSkills(): Promise<void> {
-  await ensureSkillsRoot();
-  const entries = await readdir(skillsRootDir, { withFileTypes: true });
-  const resolvedSkills: SkillDefinition[] = [];
+  await mkdir(managedSkillsRoot, { recursive: true });
+  const resolved: LoadedSkill[] = [];
+  const claimedNames = new Map<string, LoadedSkill>();
 
-  for (const entry of entries) {
-    if (!entry.isDirectory()) continue;
-    const skillId = entry.name;
-    try {
-      const loaded = await loadSkillFromPath(skillsRootDir, skillId);
-      resolvedSkills.push({
-        id: skillId,
-        path: loaded.resolvedPath,
-        name: loaded.name,
-        description: loaded.description,
-        instruction: loaded.instruction,
-        source: "custom",
-        linkedToolIds: sanitizeToolIds(loaded.links.linkedToolIds),
-        linkedMcpIds: sanitizeMcpIds(loaded.links.linkedMcpIds),
-      });
-    } catch (error) {
-      logger.warn(`Skipping invalid skill "${skillId}": ${getErrorMessage(error)}`);
+  for (const root of getDiscoveryRoots()) {
+    for (const skill of await loadDiscoveryRoot(root)) {
+      const winner = claimedNames.get(skill.name);
+      if (winner) {
+        logger.warn(`Skill "${skill.name}" at "${skill.rootPath}" is shadowed by "${winner.rootPath}".`);
+        continue;
+      }
+      claimedNames.set(skill.name, skill);
+      resolved.push(skill);
     }
   }
 
-  cachedSkills = resolvedSkills.sort((left, right) => left.name.localeCompare(right.name));
+  cachedSkills = resolved.sort((left, right) => left.name.localeCompare(right.name));
 }
 
-function buildUniqueId(name: string): string {
-  const base = createSlugId(name) || "skill";
-  const existing = new Set(cachedSkills.map((skill) => skill.id));
-  if (!existing.has(base)) return base;
-  let index = 2;
-  while (existing.has(`${base}-${index}`)) index += 1;
-  return `${base}-${index}`;
-}
-
-function getSkillOrThrow(id: string): SkillDefinition {
+function getSkillOrThrow(id: string): LoadedSkill {
   const skill = cachedSkills.find((entry) => entry.id === id);
   if (!skill) throw new NotFoundError("Skill", id);
   return skill;
 }
 
-async function writeSkillBundleForId(
-  id: string,
-  body: {
-    name: string;
-    description: string;
-    instruction: string;
-    linkedToolIds?: string[];
-    linkedMcpIds?: string[];
-  },
-): Promise<void> {
-  await writeSkillBundle(join(skillsRootDir, id), {
-    name: body.name,
-    description: body.description,
-    instruction: body.instruction,
-    links: {
-      linkedToolIds: sanitizeToolIds(body.linkedToolIds),
-      linkedMcpIds: sanitizeMcpIds(body.linkedMcpIds),
-    },
-  });
-}
-
-async function ensureDefaultSkills(): Promise<void> {
-  const entries = await readdir(skillsRootDir, { withFileTypes: true }).catch(() => []);
-  if (entries.some((entry) => entry.isDirectory() && entry.name === DEFAULT_CREATE_SKILL_ID)) return;
-
-  await writeSkillBundleForId(DEFAULT_CREATE_SKILL_ID, {
-    name: DEFAULT_CREATE_SKILL_BODY.name,
-    description: DEFAULT_CREATE_SKILL_BODY.description,
-    instruction: DEFAULT_CREATE_SKILL_BODY.instruction,
-    linkedToolIds: [],
-    linkedMcpIds: [],
-  });
-}
-
 async function writeImportedFiles(tempRoot: string, files: ImportedSkillFile[]): Promise<void> {
   for (const file of files) {
-    const targetPath = resolve(tempRoot, file.path);
-    const parentDir = resolve(targetPath, "..");
-    if (!targetPath.startsWith(tempRoot)) {
+    const normalizedPath = file.path.replaceAll("\\", "/").replace(/^\/+/, "");
+    const targetPath = resolve(tempRoot, normalizedPath);
+    if (!isWithinRoot(tempRoot, targetPath)) {
       throw new ValidationError(`Invalid skill file path "${file.path}".`);
     }
-    await mkdir(parentDir, { recursive: true });
+    await mkdir(dirname(targetPath), { recursive: true });
     await writeFile(targetPath, file.content);
   }
 }
 
-export async function initSkillService(nextRootDir?: string): Promise<void> {
-  skillsRootDir = resolve(nextRootDir ?? getStateDirPath("skills"));
-  setCreateSkillHandler(createSkill);
-  await ensureSkillsRoot();
-  await ensureDefaultSkills();
+export async function initSkillService(nextManagedRoot?: string, nextWorkspaceRoot?: string): Promise<void> {
+  managedSkillsRoot = resolve(nextManagedRoot ?? getStateDirPath("agent-skills"));
+  workspaceRoot = resolve(nextWorkspaceRoot ?? process.cwd());
   await reloadSkills();
-}
-
-export function getSkillsRootDir(): string {
-  return skillsRootDir;
 }
 
 export async function refreshSkills(): Promise<void> {
@@ -153,7 +142,7 @@ export async function refreshSkills(): Promise<void> {
 }
 
 export function listSkills(): SkillDefinition[] {
-  return [...cachedSkills];
+  return cachedSkills.map(toDefinition);
 }
 
 export function getKnownSkillIds(): string[] {
@@ -161,46 +150,31 @@ export function getKnownSkillIds(): string[] {
 }
 
 export function buildActiveSkillCatalogSection(activeSkillIds: string[]): string {
-  const activeSkills = activeSkillIds
+  const active = new Set(activeSkillIds);
+  return buildSkillsCatalogSection(cachedSkills.filter((skill) => active.has(skill.id)).map(toDefinition));
+}
+
+export function buildLoadedSkillContexts(
+  loadedSkillIds: string[],
+  activeSkillIds: string[],
+): { loadedSkillIds: string[]; loadedSkillContexts: string[] } {
+  const active = new Set(activeSkillIds);
+  const loaded = loadedSkillIds
+    .filter((id) => active.has(id))
     .map((id) => cachedSkills.find((skill) => skill.id === id))
-    .filter((skill): skill is SkillDefinition => Boolean(skill));
-
-  return buildSkillsCatalogSection(activeSkills);
+    .filter((skill): skill is LoadedSkill => Boolean(skill));
+  return {
+    loadedSkillIds: loaded.map((skill) => skill.id),
+    loadedSkillContexts: loaded.map((skill) => buildSkillContextXml(toDefinition(skill), skill.instruction)),
+  };
 }
 
-export async function createSkill(body: CreateSkillBody): Promise<SkillDefinition> {
-  const name = body.name?.trim();
-  const description = body.description?.trim();
-  const instruction = body.instruction?.trim();
-  if (!name) throw new ValidationError("name is required");
-  if (!description) throw new ValidationError("description is required");
-  if (!instruction) throw new ValidationError("instruction is required");
-
-  const id = buildUniqueId(name);
-  await writeSkillBundleForId(id, { name, description, instruction, linkedToolIds: [], linkedMcpIds: [] });
-  await reloadSkills();
-  return getSkillOrThrow(id);
-}
-
-export async function updateSkill(id: string, body: UpdateSkillBody): Promise<SkillDefinition> {
-  const current = getSkillOrThrow(id);
-  await writeSkillBundleForId(id, {
-    name: body.name?.trim() || current.name,
-    description: body.description?.trim() || current.description,
-    instruction: body.instruction?.trim() || current.instruction,
-    linkedToolIds: current.linkedToolIds,
-    linkedMcpIds: current.linkedMcpIds,
-  });
-  await reloadSkills();
-  return getSkillOrThrow(id);
-}
-
-export async function updateSkillLinks(id: string, body: UpdateSkillLinksBody): Promise<SkillDefinition> {
-  getSkillOrThrow(id);
-  const links = sanitizeLinks(body);
-  await writeSkillLinks(join(skillsRootDir, id), links);
-  await reloadSkills();
-  return getSkillOrThrow(id);
+export function loadSkillContext(id: string): { skill: SkillDefinition; context: string } {
+  const skill = getSkillOrThrow(id);
+  return {
+    skill: toDefinition(skill),
+    context: buildSkillContextXml(toDefinition(skill), skill.instruction),
+  };
 }
 
 export async function importSkill(files: ImportedSkillFile[]): Promise<ImportSkillResult> {
@@ -209,24 +183,27 @@ export async function importSkill(files: ImportedSkillFile[]): Promise<ImportSki
   const tempRoot = await mkdtemp(join(tmpdir(), "kk-agent-skill-import-"));
   try {
     await writeImportedFiles(tempRoot, files);
-    const bundleRoot = await resolveSkillBundleRoot(tempRoot);
-    const loaded = await loadSkillFromPath(tempRoot, ".");
-    const id = buildUniqueId(loaded.name);
-    const targetDir = join(skillsRootDir, id);
+    const bundleRoot = await resolveImportedSkillRoot(tempRoot);
+    const loaded = await loadSkillDirectory(bundleRoot, "managed", true);
+    if (cachedSkills.some((skill) => skill.name === loaded.name)) {
+      throw new ConflictError(`Skill "${loaded.name}" already exists.`);
+    }
+    const targetDir = join(managedSkillsRoot, loaded.name);
+    if (existsSync(targetDir)) throw new ConflictError(`Managed skill "${loaded.name}" already exists.`);
     await cp(bundleRoot, targetDir, { recursive: true, errorOnExist: true, force: false });
-    await writeSkillLinks(targetDir, { linkedToolIds: [], linkedMcpIds: [] });
     await reloadSkills();
-    return { skill: getSkillOrThrow(id) };
+    const installed = getSkillOrThrow(loaded.name);
+    return { skill: toDefinition(installed) };
   } finally {
     await rm(tempRoot, { recursive: true, force: true });
   }
 }
 
 export async function deleteSkill(id: string): Promise<void> {
-  const skillDir = join(skillsRootDir, basename(id));
-  await rm(skillDir, { recursive: true, force: true });
-  await reloadSkills();
-  if (cachedSkills.some((skill) => skill.id === id)) {
-    throw new NotFoundError("Skill", id);
+  const skill = getSkillOrThrow(id);
+  if (!skill.mutable || skill.source !== "managed" || !isWithinRoot(managedSkillsRoot, skill.rootPath)) {
+    throw new ValidationError(`Skill "${id}" is read-only because it is not managed by KK-Agent.`);
   }
+  await rm(skill.rootPath, { recursive: true, force: true });
+  await reloadSkills();
 }

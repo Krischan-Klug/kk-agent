@@ -56,10 +56,6 @@ export async function recordReadForSession(
   });
 }
 
-export function getReadStateForSession(sessionId: string, path: string): ReadStateEntry | undefined {
-  return getSessionBucket(sessionId).get(normalizeKey(path));
-}
-
 export async function verifyReadStateForSession(
   sessionId: string,
   path: string,

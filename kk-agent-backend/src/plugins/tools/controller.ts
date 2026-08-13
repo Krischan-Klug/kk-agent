@@ -1,8 +1,6 @@
 import type { Request, Response } from "express";
 import { requireParam } from "../../lib/http.js";
 import {
-  ToggleBodySchema,
-  InstructionBodySchema,
   UpdateMcpBodySchema,
   TaskItemsBodySchema,
   MemoryFactsBodySchema,
@@ -15,8 +13,6 @@ import {
   replaceSessionFacts,
   replaceTasks,
   replaceUserFacts,
-  toggleSystemMcp,
-  updateInternalToolInstruction,
   updateInternalToolConfig,
 } from "./service.js";
 import { getSystemToolsForMcp } from "./lib/index.js";
@@ -24,20 +20,10 @@ import { getSystemToolsForMcp } from "./lib/index.js";
 export async function listTools(_req: Request, res: Response): Promise<Response> {
   const tools = getAllSystemMcps().map((tool) => ({
     ...tool,
-    running: tool.active,
+    runtime: { status: tool.active ? "running" as const : "stopped" as const },
     tools: getSystemToolsForMcp(tool.id),
   }));
   return res.json(tools);
-}
-
-export async function doToggleTool(req: Request, res: Response): Promise<Response> {
-  const { active } = ToggleBodySchema.parse(req.body);
-  return res.json(await toggleSystemMcp(requireParam(req, "id"), active));
-}
-
-export async function doUpdateToolInstruction(req: Request, res: Response): Promise<Response> {
-  const { instruction } = InstructionBodySchema.parse(req.body);
-  return res.json(await updateInternalToolInstruction(requireParam(req, "id"), instruction));
 }
 
 export async function listToolDefinitions(req: Request, res: Response): Promise<Response> {

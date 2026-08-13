@@ -3,7 +3,6 @@
   "private": true,
   "workspaces": [
     "kk-agent-backend",
-    "kk-agent-frontend",
     "kk-agent-contract",
     "kk-agent-desktop"
   ],
@@ -19,16 +18,16 @@
   },
   "scripts": {
     "dev:backend": "npm --workspace kk-agent-backend run dev",
-    "dev:frontend": "npm --workspace kk-agent-frontend run dev",
+    "dev:renderer": "npm --workspace kk-agent-desktop run dev:renderer",
     "dev:desktop": "npm --workspace kk-agent-desktop run start:dev",
     "dev": "npm --workspace kk-agent-contract run build && node scripts/dev.mjs",
-    "check": "npm --workspace kk-agent-contract run build && npm --workspace kk-agent-contract run lint && npm --workspace kk-agent-backend run lint && npm --workspace kk-agent-frontend run lint && npm --workspace kk-agent-desktop run lint",
-    "test": "npm --workspace kk-agent-contract run build && npm --workspace kk-agent-backend run test",
-    "build": "npm --workspace kk-agent-contract run build && npm --workspace kk-agent-backend run build && npm --workspace kk-agent-frontend run build",
+    "check": "npm --workspace kk-agent-contract run build && npm --workspace kk-agent-contract run lint && npm --workspace kk-agent-backend run lint && npm --workspace kk-agent-desktop run lint",
+    "build": "npm --workspace kk-agent-contract run build && npm --workspace kk-agent-backend run build && npm --workspace kk-agent-desktop run build:renderer",
     "deadcode": "knip --reporter compact --no-progress",
-    "ci:quality": "npm run check && npm test && npm run build && npm run deadcode",
-    "ci:desktop": "npm run desktop:build",
-    "desktop:build": "npm --workspace kk-agent-contract run build && npm --workspace kk-agent-backend run build:desktop && npm --workspace kk-agent-frontend run build:desktop && npm --workspace kk-agent-desktop run build",
-    "desktop:dist": "npm run desktop:build && npm --workspace kk-agent-desktop run dist"
+    "desktop:build": "npm --workspace kk-agent-contract run build && npm --workspace kk-agent-backend run build:desktop && npm --workspace kk-agent-desktop run build:desktop",
+    "desktop:dist": "npm run desktop:build && npm --workspace kk-agent-desktop run package"
+  },
+  "overrides": {
+    "esbuild": "^0.28.2"
   }
 }

@@ -1,4 +1,4 @@
-export function deepClone<T>(value: T): T {
+function deepClone<T>(value: T): T {
   if (value === null || value === undefined) return value;
   if (typeof value !== "object") return value;
   if (Array.isArray(value)) return value.map(deepClone) as unknown as T;
@@ -9,7 +9,7 @@ export function deepClone<T>(value: T): T {
   return cloned as T;
 }
 
-export function deepEqual(a: unknown, b: unknown): boolean {
+function deepEqual(a: unknown, b: unknown): boolean {
   if (a === b) return true;
   if (a === null || b === null) return a === b;
   if (a === undefined || b === undefined) return a === b;
@@ -36,7 +36,7 @@ export function deepEqual(a: unknown, b: unknown): boolean {
   return true;
 }
 
-export function hasOverride(value: unknown): boolean {
+function hasOverride(value: unknown): boolean {
   if (value === undefined) return false;
   if (value === null) return true;
   if (typeof value !== "object") return true;

@@ -1,16 +1,5 @@
 import { z } from "zod";
 
-const JsonValueSchema: z.ZodType<unknown> = z.lazy(() =>
-  z.union([
-    z.string(),
-    z.number(),
-    z.boolean(),
-    z.null(),
-    z.array(JsonValueSchema),
-    z.record(JsonValueSchema),
-  ]),
-);
-
 const NonEmptyStringSchema = z.string().trim().min(1);
 const OptionalTrimmedStringSchema = z.string().trim().optional();
 
@@ -22,14 +11,8 @@ const LlmRequestConfigSchema = z
         reasoningEffort: z
           .enum(["minimal", "low", "medium", "high"])
           .optional(),
-        temperature: z.number().optional(),
-        maxOutputTokens: z.number().int().positive().optional(),
-      })
-      .optional(),
-    extraBody: z
-      .object({
-        "chat-completions": z.record(JsonValueSchema).optional(),
-        responses: z.record(JsonValueSchema).optional(),
+        temperature: z.number().min(0).max(2).optional(),
+        topP: z.number().min(0).max(1).optional(),
       })
       .optional(),
   })
@@ -73,7 +56,6 @@ const AgentModeConfigSchema = z.object({
   toolAccessScopes: z.record(z.enum(["user", "system"])),
   toolInstructions: z.record(z.string()),
   mcpInstructions: z.record(z.string()),
-  skillInstructions: z.record(z.string()),
   allowedToolNames: z.array(z.string()),
   autonomousBudget: AutonomousBudgetSchema.optional(),
 });
@@ -87,16 +69,6 @@ const AgentModeDefinitionSchema = z.object({
   config: AgentModeConfigSchema,
 });
 
-/* Primitive request bodies */
-
-export const ToggleBodySchema = z.object({
-  active: z.boolean(),
-});
-
-export const InstructionBodySchema = z.object({
-  instruction: z.string(),
-});
-
 export const PromptResponseBodySchema = z.object({
   promptId: NonEmptyStringSchema,
   selectedKey: NonEmptyStringSchema,
@@ -106,7 +78,7 @@ export const PromptResponseBodySchema = z.object({
 
 export const ChatBodySchema = z.object({
   message: z.string(),
-  attachmentIds: z.array(NonEmptyStringSchema).optional(),
+  assetIds: z.array(NonEmptyStringSchema).max(10).optional(),
 });
 
 export const CreateSessionBodySchema = z.object({
@@ -143,7 +115,6 @@ export const CreateMcpBodySchema = z
     url: OptionalTrimmedStringSchema,
     instruction: z.string().optional(),
     emoji: z.string().optional(),
-    skillIds: z.array(NonEmptyStringSchema).optional(),
   })
   .superRefine((body, ctx) => {
     if (body.transport === "stdio" && !body.command) {
@@ -173,7 +144,6 @@ export const UpdateMcpBodySchema = z.object({
   instruction: z.string().optional(),
   emoji: z.string().optional(),
   systemConfig: SystemConfigSchema.optional(),
-  skillIds: z.array(NonEmptyStringSchema).optional(),
 });
 
 /* Agent */
@@ -198,25 +168,6 @@ export const UpdateAgentBodySchema = z.object({
   defaultProviderId: OptionalTrimmedStringSchema,
   defaultModel: OptionalTrimmedStringSchema,
   llmRequestConfig: LlmRequestConfigSchema,
-});
-
-/* Skill */
-
-export const CreateSkillBodySchema = z.object({
-  name: NonEmptyStringSchema,
-  description: NonEmptyStringSchema,
-  instruction: NonEmptyStringSchema,
-});
-
-export const UpdateSkillBodySchema = z.object({
-  name: OptionalTrimmedStringSchema,
-  description: OptionalTrimmedStringSchema,
-  instruction: OptionalTrimmedStringSchema,
-});
-
-export const UpdateSkillLinksBodySchema = z.object({
-  toolIds: z.array(z.string()).optional(),
-  mcpIds: z.array(z.string()).optional(),
 });
 
 /* Provider */

@@ -1,9 +1,6 @@
 import { Router } from "express";
-import { asyncHandler } from "../../lib/async-handler.js";
 import {
   listTools,
-  doToggleTool,
-  doUpdateToolInstruction,
   listToolDefinitions,
   doUpdateTool,
   listTaskState,
@@ -16,16 +13,14 @@ import {
 
 const router = Router();
 
-router.get("/", asyncHandler(listTools));
-router.get("/task/session/:sessionId", asyncHandler(listTaskState));
-router.put("/task/session/:sessionId", asyncHandler(replaceTaskState));
-router.get("/memory/user", asyncHandler(listUserMemoryState));
-router.put("/memory/user", asyncHandler(replaceUserMemoryState));
-router.get("/memory/session/:sessionId", asyncHandler(listSessionMemoryState));
-router.put("/memory/session/:sessionId", asyncHandler(replaceSessionMemoryState));
-router.get("/:id/tools", asyncHandler(listToolDefinitions));
-router.post("/:id/toggle", asyncHandler(doToggleTool));
-router.put("/:id/instruction", asyncHandler(doUpdateToolInstruction));
-router.put("/:id", asyncHandler(doUpdateTool));
+router.get("/", listTools);
+router.get("/task/session/:sessionId", listTaskState);
+router.put("/task/session/:sessionId", replaceTaskState);
+router.get("/memory/user", listUserMemoryState);
+router.put("/memory/user", replaceUserMemoryState);
+router.get("/memory/session/:sessionId", listSessionMemoryState);
+router.put("/memory/session/:sessionId", replaceSessionMemoryState);
+router.get("/:id/tools", listToolDefinitions);
+router.put("/:id", doUpdateTool);
 
 export default router;

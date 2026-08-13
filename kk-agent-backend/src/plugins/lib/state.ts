@@ -6,6 +6,7 @@ import { createLogger } from "../../lib/logger.js";
 import { getErrnoCode } from "../../lib/error.js";
 
 const logger = createLogger("state");
+const writeQueues = new Map<string, Promise<void>>();
 
 const STATE_DIR = resolve(resolveStateDir());
 const SESSIONS_ROOT = join(STATE_DIR, "sessions");
@@ -24,12 +25,11 @@ export async function readJsonFile<T>(absolutePath: string): Promise<T | null> {
   } catch (error) {
     if (getErrnoCode(error) !== "ENOENT") {
       logger.warn(`Failed to read JSON file '${absolutePath}':`, error);
-      const corruptPath = `${absolutePath}.corrupt-${Date.now()}`;
       try {
-        await rename(absolutePath, corruptPath);
-        logger.warn(`Moved unreadable JSON file to '${corruptPath}'.`);
-      } catch (moveError) {
-        logger.warn(`Failed to move unreadable JSON file '${absolutePath}':`, moveError);
+        await rm(absolutePath, { force: true });
+        logger.warn(`Deleted unreadable JSON file '${absolutePath}'.`);
+      } catch (deleteError) {
+        logger.warn(`Failed to delete unreadable JSON file '${absolutePath}':`, deleteError);
       }
     }
     return null;
@@ -41,10 +41,26 @@ export async function writeJsonFile<T>(
   data: T,
   options: { trailingNewline?: boolean } = {},
 ): Promise<void> {
-  await mkdir(dirname(absolutePath), { recursive: true });
-  const body = JSON.stringify(data, null, 2);
-  const content = options.trailingNewline ? `${body}\n` : body;
-  await writeFile(absolutePath, content, "utf-8");
+  const targetPath = resolve(absolutePath);
+  const previous = writeQueues.get(targetPath) ?? Promise.resolve();
+  const next = previous.catch(() => undefined).then(async () => {
+    await mkdir(dirname(targetPath), { recursive: true });
+    const body = JSON.stringify(data, null, 2);
+    const content = options.trailingNewline ? `${body}\n` : body;
+    const tempPath = `${targetPath}.tmp-${process.pid}-${crypto.randomUUID()}`;
+    try {
+      await writeFile(tempPath, content, "utf-8");
+      await rename(tempPath, targetPath);
+    } finally {
+      await rm(tempPath, { force: true }).catch(() => undefined);
+    }
+  });
+  writeQueues.set(targetPath, next);
+  try {
+    await next;
+  } finally {
+    if (writeQueues.get(targetPath) === next) writeQueues.delete(targetPath);
+  }
 }
 
 export async function loadState<T>(filename: string, defaults: T): Promise<T> {

@@ -1,6 +1,5 @@
 import type { ModelSettings } from "../types.js";
-import { normalizeCanonicalReasoningLevel } from "./capabilities.js";
-import { compactLlmRequestConfig, compactModelSettings } from "./request-config.js";
+import { compactLlmRequestConfig, compactModelSettings, normalizeCanonicalReasoningLevel } from "kk-agent-contract";
 
 export function getModelSettingsKey(providerId: string, modelId: string): string {
   return `${providerId}::${modelId}`;
@@ -16,9 +15,8 @@ export function normalizeStoredModelSettings(settings: ModelSettings | undefined
         endpoint: storedConfig?.common?.endpoint,
         reasoningEffort: normalizedReasoningEffort,
         temperature: storedConfig?.common?.temperature,
-        maxOutputTokens: storedConfig?.common?.maxOutputTokens,
+        topP: storedConfig?.common?.topP,
       },
-      extraBody: storedConfig?.extraBody,
     }),
   });
 }

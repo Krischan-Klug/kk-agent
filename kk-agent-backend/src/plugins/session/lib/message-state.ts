@@ -1,4 +1,4 @@
-import type { TranscriptMessage } from "../../lib/transcript.js";
+import type { TranscriptMessage } from "kk-agent-contract";
 
 export function generateSessionName(content: string): string {
   const clean = content.trim();
@@ -12,5 +12,4 @@ export function generateSessionName(content: string): string {
 export function cloneMessages(messages: TranscriptMessage[]): TranscriptMessage[] {
   return messages.map((message) => ({ ...message, content: [...message.content] }));
 }
-
 

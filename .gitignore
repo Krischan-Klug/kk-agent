@@ -30,10 +30,8 @@ pnpm-debug.log*
 **/*.tsbuildinfo
 **/next-env.d.ts
 
-state/
 plugins.config.json
 **/plugins.config.json
-kk-agent-backend/state/
 
 .claude/
 .vscode/

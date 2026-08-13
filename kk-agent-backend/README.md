@@ -16,13 +16,12 @@ Other common commands:
 npm run build
 npm run build:desktop
 npm run lint
-npm test
 ```
 
 Runtime configuration:
 
 - `PORT`: API port, `0` allowed for an ephemeral port
-- `KK_AGENT_STATE_DIR`: override the root directory for all persisted state
+- `KK_AGENT_STATE_DIR`: optional absolute override for persisted state; by default desktop and development share the OS app-data `KK-Agent/state` directory
 
 Shared contract dependency:
 
@@ -36,13 +35,12 @@ Session -> SystemPrompt -> Loop -> Provider -> Tools/MCPs/Skills -> Loop
 
 - `session` resolves the active agent, model, tools, MCPs, and skills
 - `systemprompt` builds the XML prompt from defaults, agent config, variables, and runtime instructions
-- `loop` handles retries, continuation, budget controls, and tool iteration
+- `loop` handles retries, continuation, budget controls, and committed tool steps
 - `provider` resolves model settings, endpoint choice, and request payloads
 - `tools`, `mcp`, and `skills` execute capability work
 
 ## Plugin Overview
 
-- `core`: bootstrap minimum
 - `agent`: agent definitions, variables, loop metadata
 - `loop`: execution loop and recovery
 - `systemprompt`: XML prompt builder
@@ -50,7 +48,9 @@ Session -> SystemPrompt -> Loop -> Provider -> Tools/MCPs/Skills -> Loop
 - `provider`: providers, model discovery, capability observation, request resolution
 - `tools`: internal tools plus task and memory state
 - `mcp`: external MCP servers only
-- `skills`: local curated skill bundles
+- `skills`: standard Agent Skills discovery, import, and progressive activation
+
+Features are initialized in one fixed order. There is no dynamic discovery, dependency graph, semver negotiation, or plugin lifecycle framework.
 
 ## Provider Model
 
@@ -64,9 +64,9 @@ Model settings are request defaults only:
 
 - endpoint
 - reasoning effort
-- temperature
-- max output tokens
-- endpoint-specific `Additional Request JSON`
+- compact `temperature` and `top_p` overrides
+
+Standard sampling fields use the canonical request config; arbitrary provider fields remain in the same editable JSON projection. Default values are omitted from persisted state and outbound requests.
 
 Observed capabilities are stored in `state/providers.json` and currently track only:
 
@@ -80,7 +80,7 @@ The provider layer keeps the wrapper small:
 - model discovery probes OpenAI-compatible endpoints such as `/v1/models`, `/api/v1/models`, `/api/tags`, and llama.cpp props
 - endpoint fallback from `responses` to `chat-completions` is observed and persisted
 - request-level fields are normalized against the model's reported capabilities
-- rare backend-specific fields pass through `extraBody`
+- all other inference settings belong in the inference provider
 
 ## API Routes
 
@@ -92,8 +92,6 @@ Agent:
 - `PUT /agent/:id`
 - `DELETE /agent/:id`
 - `GET /agent/system-variables`
-- `GET /agent/loop-state/:sessionId`
-- `GET /agent/loop-state/:sessionId/stream`
 
 Session:
 
@@ -102,10 +100,12 @@ Session:
 - `GET /session/:id`
 - `PATCH /session/:id`
 - `DELETE /session/:id`
-- `POST /session/:id/chat`
 - `POST /session/:id/chat/stream`
 - `POST /session/:id/abort`
-- `POST /session/:id/attachments`
+- `POST /session/:id/assets`
+- `GET /session/:id/assets/:assetId`
+- `GET /session/:id/assets/:assetId/preview/:page`
+- `DELETE /session/:id/assets/:assetId`
 - `GET /session/:id/prompt`
 - `POST /session/:id/prompt/respond`
 
@@ -113,8 +113,6 @@ Tools:
 
 - `GET /tools`
 - `GET /tools/:id/tools`
-- `POST /tools/:id/toggle`
-- `PUT /tools/:id/instruction`
 - `PUT /tools/:id`
 - `GET /tools/task/session/:sessionId`
 - `PUT /tools/task/session/:sessionId`
@@ -129,18 +127,15 @@ MCP:
 - `POST /mcp`
 - `PUT /mcp/:id`
 - `DELETE /mcp/:id`
-- `PUT /mcp/:id/instruction`
-- `POST /mcp/:id/toggle`
-- `POST /mcp/:id/start`
-- `POST /mcp/:id/stop`
 - `GET /mcp/:id/tools`
 
 Skills:
 
 - `GET /skills`
-- `POST /skills`
-- `PUT /skills/:id`
+- `POST /skills/import`
 - `DELETE /skills/:id`
+
+Skills are unmodified Agent Skills bundles with a root `SKILL.md`. Discovery precedence is workspace `.agents/skills`, managed imports, then `~/.agents/skills`; duplicate names use the first discovered bundle. The prompt receives only catalog metadata until the `Skill` tool loads full instructions into request-scoped runtime context.
 
 Provider:
 
@@ -154,8 +149,8 @@ Provider:
 
 Defaults:
 
-- `GET /defaults`
-- `PUT /defaults`
+- `GET /settings/defaults`
+- `PUT /settings/defaults`
 
 ## State
 
@@ -167,26 +162,10 @@ Persistent JSON state lives under `state/`:
 - `providers.json`
 - `system-mcps.json`
 - `user-memory.json`
-- `skills/`
-- `session-attachments/`
-- `tool-results/`
+- `agent-skills/`
+- `sessions/<sessionId>/session.json`
+- `sessions/<sessionId>/tasks.json`
+- `sessions/<sessionId>/facts.json`
+- `sessions/<sessionId>/assets/`
 
-Sessions remain in memory and are not restored across restarts.
-
-## Testing
-
-Provider-focused tests intentionally stay small and split by responsibility:
-
-- `service.test.ts`: provider service behavior
-- `lib/request-config.test.ts`: request config merge and sanitizing
-- `lib/helpers.test.ts`: chat-completions request body shaping
-- `lib/endpoints/responses.test.ts`: responses request and continuation behavior
-- `lib/transport.test.ts`: stream and tool-call normalization
-- `lib/adapters/local.test.ts`: local model discovery and capability inference
-- `lib/errors.test.ts`: provider error classification and backoff
-
-Run everything with:
-
-```bash
-npm --workspace kk-agent-backend run test
-```
+Each session uses one atomically replaced, versioned JSON snapshot. A snapshot with an unknown schema is deleted on startup; there are no session migrations or compatibility bridges. Large tool output is bounded before it enters model context and is not written to a separate global store.

@@ -1,6 +1,7 @@
 import type { Request, Response } from "express";
 import { getErrorMessage } from "../../lib/error.js";
-import { NotFoundError } from "../../lib/errors.js";
+import { ConflictError, NotFoundError, ValidationError } from "../../lib/errors.js";
+import { isLoopActive } from "../loop/lib/run-registry.js";
 import { requireParam } from "../../lib/http.js";
 import {
   ChatBodySchema,
@@ -16,9 +17,9 @@ import {
   patchSession,
   getCurrentPromptDebug,
 } from "./service.js";
-import { abortSessionLoop, chat, chatStream } from "./lib/chat-engine.js";
+import { abortSessionLoop, chatStream } from "./lib/chat-engine.js";
 import { resolvePrompt } from "../tools/lib/user-interaction/interaction-store.js";
-import { getSessionAttachmentById, readAttachmentData, storeAttachment } from "./lib/attachments.js";
+import { deleteUnreferencedAsset, getSessionAssetById, ingestAsset, readAssetData, readAssetPreview } from "./lib/assets.js";
 
 export async function doCreate(req: Request, res: Response): Promise<Response> {
   const body = CreateSessionBodySchema.parse(req.body);
@@ -44,61 +45,94 @@ interface MulterRequest extends Request {
   file?: Express.Multer.File;
 }
 
-export async function doUploadAttachment(req: Request, res: Response): Promise<Response> {
+export async function doUploadAsset(req: Request, res: Response): Promise<Response> {
   const file = (req as MulterRequest).file;
   if (!file) return res.status(400).json({ error: "No file uploaded" });
 
-  // Validate session exists
   const sessionId = requireParam(req, "id");
   getSession(sessionId);
+  if (isLoopActive(sessionId)) throw new ConflictError("Assets cannot be uploaded while a run is active.");
 
-  const meta = await storeAttachment(sessionId, file, { source: "user" });
+  const meta = await ingestAsset(sessionId, {
+      filename: file.originalname,
+      declaredMimeType: file.mimetype,
+      buffer: file.buffer,
+      source: "user",
+    }).catch((error: unknown) => { throw new ValidationError(getErrorMessage(error)); });
   return res.status(201).json(meta);
 }
 
-export async function doGetAttachment(req: Request, res: Response): Promise<Response> {
+export async function doGetAsset(req: Request, res: Response): Promise<Response> {
   const sessionId = requireParam(req, "id");
-  const attachmentId = requireParam(req, "attachmentId");
+  const assetId = requireParam(req, "assetId");
   getSession(sessionId);
-  const attachment = await getSessionAttachmentById(sessionId, attachmentId);
-  if (!attachment) throw new NotFoundError("Attachment", attachmentId);
+  const asset = getSessionAssetById(sessionId, assetId);
+  if (!asset) throw new NotFoundError("Asset", assetId);
 
-  const data = await readAttachmentData(attachment);
-  res.attachment(attachment.filename);
-  res.setHeader("Content-Type", attachment.mimeType);
+  const data = await readAssetData(sessionId, assetId);
+  res.attachment(asset.filename);
+  res.setHeader("Content-Type", asset.mimeType);
   res.setHeader("Content-Length", String(data.length));
   return res.status(200).send(data);
 }
 
-export async function doChat(req: Request, res: Response): Promise<Response> {
-  const { message, attachmentIds } = ChatBodySchema.parse(req.body);
-  const result = await chat(requireParam(req, "id"), message, attachmentIds);
-  return res.json(result);
+export async function doGetAssetPreview(req: Request, res: Response): Promise<Response> {
+  const sessionId = requireParam(req, "id");
+  const assetId = requireParam(req, "assetId");
+  const page = Number.parseInt(requireParam(req, "page"), 10);
+  if (!Number.isInteger(page) || page < 1) return res.status(400).json({ error: "Invalid preview page" });
+  getSession(sessionId);
+  if (!getSessionAssetById(sessionId, assetId)) throw new NotFoundError("Asset", assetId);
+  const preview = await readAssetPreview(sessionId, assetId, page);
+  res.setHeader("Content-Type", preview.mimeType);
+  res.setHeader("Content-Length", String(preview.data.length));
+  res.setHeader("Cache-Control", "private, max-age=3600");
+  return res.status(200).send(preview.data);
+}
+
+export async function doDeleteAsset(req: Request, res: Response): Promise<Response> {
+  const sessionId = requireParam(req, "id");
+  const assetId = requireParam(req, "assetId");
+  getSession(sessionId);
+  if (isLoopActive(sessionId)) throw new ConflictError("Assets cannot be deleted while a run is active.");
+  const deleted = await deleteUnreferencedAsset(sessionId, assetId);
+  if (!deleted) throw new NotFoundError("Asset", assetId);
+  return res.json({ deleted: true });
 }
 
 export async function doChatStream(req: Request, res: Response): Promise<void> {
   const sessionId = requireParam(req, "id");
-  const { message, attachmentIds } = ChatBodySchema.parse(req.body);
-
-  try {
+  const { message, assetIds } = ChatBodySchema.parse(req.body);
+  const startStream = () => {
+    if (res.headersSent) return;
     res.writeHead(200, {
       "Content-Type": "text/event-stream",
       "Cache-Control": "no-cache",
       Connection: "keep-alive",
     });
+  };
+  const abortOnDisconnect = () => {
+    if (!res.writableEnded) abortSessionLoop(sessionId);
+  };
+  res.once("close", abortOnDisconnect);
 
+  try {
     await chatStream(sessionId, message, (event) => {
+      startStream();
       res.write(`data: ${JSON.stringify(event)}\n\n`);
-    }, attachmentIds);
+    }, assetIds);
 
+    startStream();
     res.end();
   } catch (err) {
     if (!res.headersSent) {
-      res.status(500).json({ error: getErrorMessage(err) });
+      throw err;
     } else {
-      res.write(`data: ${JSON.stringify({ type: "error", message: getErrorMessage(err) })}\n\n`);
+      res.write(`data: ${JSON.stringify({ type: "transport_error", message: getErrorMessage(err) })}\n\n`);
       res.end();
     }
+  } finally {
+    res.off("close", abortOnDisconnect);
   }
 }
 

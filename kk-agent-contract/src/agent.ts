@@ -29,7 +29,6 @@ export interface AgentModeConfig {
   toolAccessScopes: Record<string, ToolAccessScope>;
   toolInstructions: Record<string, string>;
   mcpInstructions: Record<string, string>;
-  skillInstructions: Record<string, string>;
   allowedToolNames: string[];
   autonomousBudget?: AutonomousBudget;
 }
@@ -58,12 +57,15 @@ export interface AgentDefinition {
 }
 
 export interface AgentLoopState {
+  runId: string;
   sessionId: string;
   agentId: string;
-  status: "idle" | "running" | "completed" | "error" | "aborted";
+  status: "running" | "completed" | "stopped" | "failed" | "aborted";
   modeId: string;
   modeBehavior: ModeBehavior;
-  iteration: number;
+  step: number;
+  attempt: number;
+  toolBatch: number;
   startedAt: string;
   updatedAt: string;
 }

@@ -6,6 +6,7 @@ import type {
 import type { AgentModeSource } from "kk-agent-contract";
 
 export interface PersistedAgentsState {
+  schemaVersion: number;
   agents: PersistedAgentDefinition[];
 }
 

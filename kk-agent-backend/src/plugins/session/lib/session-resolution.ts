@@ -2,7 +2,7 @@ import type { CreateSessionBody, SessionState } from "../types.js";
 import {
   compactLlmRequestConfig,
   mergeLlmRequestConfigs,
-} from "../../provider/lib/request-config.js";
+} from "kk-agent-contract";
 import { resolveProviderModel } from "../../provider/service.js";
 import { resolveSessionMcpIds, resolveSessionSkillIds, resolveSessionToolIds } from "./tool-selection.js";
 import type { AgentDefinition } from "../../agent/types.js";

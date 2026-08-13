@@ -1,146 +1,180 @@
-import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
+import { lstat, readdir, readFile } from "node:fs/promises";
 import { basename, join, relative, resolve, sep } from "node:path";
 import YAML from "yaml";
+import type { SkillDefinition, SkillDiagnostic, SkillSource } from "../types.js";
 
-const KK_AGENT_FILE = join("agents", "kk-agent.json");
+const SKILL_FILE = "SKILL.md";
+const MAX_RESOURCE_FILES = 2_000;
+const MAX_RESOURCE_DIRECTORIES = 2_000;
+const MAX_RESOURCE_DEPTH = 8;
+const STANDARD_NAME_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 
-interface SkillLinks {
-  linkedToolIds: string[];
-  linkedMcpIds: string[];
-}
-
-interface LoadedSkillBundle {
-  name: string;
-  description: string;
+export interface LoadedSkill extends SkillDefinition {
   instruction: string;
-  skillFilePath: string;
-  resolvedPath: string;
-  links: SkillLinks;
 }
 
 function isWithinRoot(rootDir: string, targetPath: string): boolean {
   const rel = relative(rootDir, targetPath);
-  return (!rel.startsWith("..") && !rel.includes(`..${sep}`)) || targetPath === rootDir;
+  return rel === "" || (!rel.startsWith("..") && !rel.includes(`..${sep}`));
 }
 
-async function walkForSkillFiles(dir: string): Promise<string[]> {
-  const entries = await readdir(dir, { withFileTypes: true });
-  const files: string[] = [];
-
-  for (const entry of entries) {
-    const fullPath = resolve(dir, entry.name);
-    if (entry.isDirectory()) {
-      files.push(...await walkForSkillFiles(fullPath));
-      continue;
-    }
-    if (entry.isFile() && basename(entry.name).toLowerCase() === "skill.md") {
-      files.push(fullPath);
-    }
-  }
-
-  return files;
-}
-
-function parseFrontmatter(raw: string): { frontmatter: Record<string, unknown>; body: string } {
-  const match = raw.match(/^---\r?\n([\s\S]*?)\r?\n---\r?\n?([\s\S]*)$/);
+function parseFrontmatter(rawInput: string): { frontmatter: Record<string, unknown>; body: string } {
+  const raw = rawInput.replace(/^\uFEFF/, "");
+  const match = raw.match(/^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)([\s\S]*)$/);
   if (!match) throw new Error("SKILL.md must start with YAML frontmatter.");
-  const [, frontmatterRaw, bodyRaw] = match;
-  const frontmatter = YAML.parse(frontmatterRaw) as Record<string, unknown> | null;
+
+  const parsed = YAML.parse(match[1]!) as unknown;
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+    throw new Error("SKILL.md frontmatter must be a YAML mapping.");
+  }
+
   return {
-    frontmatter: frontmatter ?? {},
-    body: bodyRaw.trim(),
+    frontmatter: parsed as Record<string, unknown>,
+    body: match[2]!.trim(),
   };
 }
 
-function buildSkillMarkdown(name: string, description: string, instruction: string): string {
-  const frontmatter = YAML.stringify({ name, description }).trimEnd();
-  return `---\n${frontmatter}\n---\n\n${instruction.trim()}\n`;
+function readOptionalString(
+  frontmatter: Record<string, unknown>,
+  key: string,
+  maxLength?: number,
+): string | undefined {
+  const value = frontmatter[key];
+  if (value === undefined) return undefined;
+  if (typeof value !== "string" || value.trim().length === 0) {
+    throw new Error(`Skill frontmatter field "${key}" must be a non-empty string.`);
+  }
+  const normalized = value.trim();
+  if (maxLength && normalized.length > maxLength) {
+    throw new Error(`Skill frontmatter field "${key}" must not exceed ${maxLength} characters.`);
+  }
+  return normalized;
 }
 
-function normalizeIds(values: unknown): string[] {
-  if (!Array.isArray(values)) return [];
-  return [...new Set(values.filter((value): value is string => typeof value === "string" && value.trim().length > 0))];
+function readMetadata(value: unknown): Record<string, string> {
+  if (value === undefined) return {};
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error("Skill frontmatter field \"metadata\" must be a string-to-string mapping.");
+  }
+  const entries = Object.entries(value);
+  if (entries.some(([, entry]) => typeof entry !== "string")) {
+    throw new Error("Skill frontmatter field \"metadata\" must contain only string values.");
+  }
+  return Object.fromEntries(entries) as Record<string, string>;
 }
 
-export function normalizeSkillLinks(links?: Partial<{ linkedToolIds: string[]; linkedMcpIds: string[] }>): SkillLinks {
-  return {
-    linkedToolIds: normalizeIds(links?.linkedToolIds),
-    linkedMcpIds: normalizeIds(links?.linkedMcpIds),
-  };
-}
+async function listResources(rootDir: string): Promise<{ resources: string[]; diagnostics: SkillDiagnostic[] }> {
+  const resources: string[] = [];
+  const diagnostics: SkillDiagnostic[] = [];
+  let visitedDirectories = 0;
+  let listingCapped = false;
 
-async function readSkillLinks(skillDir: string): Promise<SkillLinks> {
-  try {
-    const raw = await readFile(join(skillDir, KK_AGENT_FILE), "utf-8");
-    const parsed = JSON.parse(raw) as { toolIds?: string[]; mcpIds?: string[] } | null;
-    return normalizeSkillLinks({
-      linkedToolIds: parsed?.toolIds,
-      linkedMcpIds: parsed?.mcpIds,
+  async function walk(directory: string, depth: number): Promise<void> {
+    if (resources.length >= MAX_RESOURCE_FILES || visitedDirectories >= MAX_RESOURCE_DIRECTORIES) {
+      listingCapped = true;
+      return;
+    }
+    visitedDirectories += 1;
+    const entries = await readdir(directory, { withFileTypes: true });
+    for (const entry of entries) {
+      if (resources.length >= MAX_RESOURCE_FILES || visitedDirectories >= MAX_RESOURCE_DIRECTORIES) {
+        listingCapped = true;
+        return;
+      }
+      const absolutePath = resolve(directory, entry.name);
+      if (!isWithinRoot(rootDir, absolutePath)) continue;
+      const relativePath = relative(rootDir, absolutePath).replaceAll("\\", "/");
+      if (relativePath === SKILL_FILE) continue;
+      if (entry.isSymbolicLink()) {
+        diagnostics.push({ level: "warning", message: `Skipped symbolic-link resource: ${relativePath}` });
+        continue;
+      }
+      if (entry.isDirectory()) {
+        if (depth >= MAX_RESOURCE_DEPTH) {
+          listingCapped = true;
+          continue;
+        }
+        await walk(absolutePath, depth + 1);
+      } else if (entry.isFile()) {
+        resources.push(relativePath);
+      }
+    }
+  }
+
+  await walk(rootDir, 0);
+  if (listingCapped) {
+    diagnostics.push({
+      level: "warning",
+      message: `Resource listing was bounded to ${MAX_RESOURCE_FILES} files, ${MAX_RESOURCE_DIRECTORIES} directories, and depth ${MAX_RESOURCE_DEPTH}.`,
     });
-  } catch {
-    return normalizeSkillLinks();
   }
+  return { resources: resources.sort(), diagnostics };
 }
 
-export async function writeSkillLinks(skillDir: string, links: SkillLinks): Promise<void> {
-  await mkdir(join(skillDir, "agents"), { recursive: true });
-  await writeFile(
-    join(skillDir, KK_AGENT_FILE),
-    JSON.stringify({
-      toolIds: links.linkedToolIds,
-      mcpIds: links.linkedMcpIds,
-    }, null, 2),
-    "utf-8",
-  );
-}
-
-export async function writeSkillBundle(
+export async function loadSkillDirectory(
   skillDir: string,
-  body: {
-    name: string;
-    description: string;
-    instruction: string;
-    links?: SkillLinks;
-  },
-): Promise<void> {
-  await mkdir(skillDir, { recursive: true });
-  await writeFile(join(skillDir, "SKILL.md"), buildSkillMarkdown(body.name, body.description, body.instruction), "utf-8");
-  await writeSkillLinks(skillDir, normalizeSkillLinks(body.links));
-}
+  source: SkillSource,
+  mutable: boolean,
+): Promise<LoadedSkill> {
+  const rootPath = resolve(skillDir);
+  const path = join(rootPath, SKILL_FILE);
+  const info = await lstat(path);
+  if (!info.isFile()) throw new Error(`${SKILL_FILE} must be a regular file.`);
 
-export async function resolveSkillBundleRoot(rootDir: string): Promise<string> {
-  const skillFiles = await walkForSkillFiles(rootDir);
-  if (skillFiles.length !== 1) {
-    throw new Error(`Expected exactly one SKILL.md, found ${skillFiles.length}.`);
-  }
-  return resolve(skillFiles[0]!, "..");
-}
-
-export async function loadSkillFromPath(rootDir: string, skillPath: string): Promise<LoadedSkillBundle> {
-  const resolvedRoot = resolve(rootDir);
-  const resolvedPath = resolve(resolvedRoot, skillPath);
-
-  if (!isWithinRoot(resolvedRoot, resolvedPath)) {
-    throw new Error(`Skill path must stay within root directory "${resolvedRoot}".`);
-  }
-
-  const bundleRoot = await resolveSkillBundleRoot(resolvedPath);
-  const skillFilePath = join(bundleRoot, "SKILL.md");
-  const raw = await readFile(skillFilePath, "utf-8");
+  const raw = await readFile(path, "utf-8");
   const { frontmatter, body } = parseFrontmatter(raw);
-  const name = typeof frontmatter.name === "string" ? frontmatter.name.trim() : "";
-  const description = typeof frontmatter.description === "string" ? frontmatter.description.trim() : "";
-
+  const name = readOptionalString(frontmatter, "name", 64);
+  const description = readOptionalString(frontmatter, "description", 1024);
   if (!name) throw new Error("Skill frontmatter requires a non-empty name.");
   if (!description) throw new Error("Skill frontmatter requires a non-empty description.");
-  if (!body) throw new Error("Skill instruction body must not be empty.");
+  if (!STANDARD_NAME_PATTERN.test(name)) {
+    throw new Error("Skill name must contain only lowercase letters, numbers, and single hyphens.");
+  }
+  if (basename(rootPath) !== name) {
+    throw new Error(`Skill name "${name}" must match its parent directory name "${basename(rootPath)}".`);
+  }
+
+  const license = readOptionalString(frontmatter, "license");
+  const compatibility = readOptionalString(frontmatter, "compatibility", 500);
+  const allowedTools = readOptionalString(frontmatter, "allowed-tools");
+  const metadata = readMetadata(frontmatter.metadata);
+  const { resources, diagnostics } = await listResources(rootPath);
 
   return {
+    id: name,
     name,
     description,
+    path,
+    rootPath,
+    source,
+    mutable,
+    license,
+    compatibility,
+    metadata,
+    allowedTools,
+    resources,
+    diagnostics,
     instruction: body,
-    skillFilePath,
-    resolvedPath: bundleRoot,
-    links: await readSkillLinks(bundleRoot),
   };
+}
+
+export async function resolveImportedSkillRoot(uploadRoot: string): Promise<string> {
+  const resolvedUploadRoot = resolve(uploadRoot);
+  const matches: string[] = [];
+
+  async function walk(directory: string): Promise<void> {
+    const entries = await readdir(directory, { withFileTypes: true });
+    for (const entry of entries) {
+      const absolutePath = resolve(directory, entry.name);
+      if (!isWithinRoot(resolvedUploadRoot, absolutePath) || entry.isSymbolicLink()) continue;
+      if (entry.isDirectory()) await walk(absolutePath);
+      else if (entry.isFile() && entry.name === SKILL_FILE) matches.push(absolutePath);
+    }
+  }
+
+  await walk(resolvedUploadRoot);
+  if (matches.length !== 1) {
+    throw new Error(`Expected exactly one ${SKILL_FILE}, found ${matches.length}.`);
+  }
+  return resolve(matches[0]!, "..");
 }

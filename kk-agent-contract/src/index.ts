@@ -43,11 +43,17 @@ export type {
 } from "./provider.js";
 
 export type {
-  AttachmentDisplayMeta,
-  AttachmentMeta,
+  AssetKind,
+  AssetMeta,
+  AssetSource,
+  AgentRun,
+  AgentRunStatus,
   AppDefaults,
   CreateSessionBody,
   MemoryFact,
+  RunEvent,
+  RunEventKind,
+  RunEventSeverity,
   SessionPromptDebug,
   SessionRuntimeMcpDebug,
   SessionRuntimeSkillDebug,
@@ -65,6 +71,9 @@ export {
 export type {
   AccessScope,
   CreateMcpBody,
+  McpListItem,
+  McpRuntimeState,
+  McpRuntimeStatus,
   McpServerConfig,
   McpSseConfig,
   McpStdioConfig,
@@ -76,22 +85,21 @@ export type {
 } from "./mcp.js";
 
 export type {
-  CreateSkillBody,
   ImportSkillResult,
+  SkillDiagnostic,
   SkillDefinition,
-  UpdateSkillLinksBody,
-  UpdateSkillBody,
+  SkillSource,
 } from "./skill.js";
 
 export {
-  attachmentRefBlock,
-  collectAttachments,
+  assetRefBlock,
+  collectAssetRefs,
   collectReasoning,
   collectText,
   collectToolResults,
   collectToolUses,
   createTranscriptMessage,
-  getAttachmentRefs,
+  getAssetRefs,
   getMessageReasoning,
   getMessageText,
   getToolResults,
@@ -106,14 +114,10 @@ export {
 } from "./transcript.js";
 
 export type {
-  AttachmentCategory,
-  AttachmentSource,
   McpSource,
   RuntimeToolSource,
-  SkillSource,
-  TaskStatus,
   ToolExecutionStatus,
-  TranscriptAttachmentRefBlock,
+  TranscriptAssetRefBlock,
   TranscriptBlock,
   TranscriptMessage,
   TranscriptReasoningBlock,
@@ -135,15 +139,10 @@ export {
   getPreferredEndpoint,
   getReasoningLevels,
   normalizeCanonicalReasoningLevel,
-  resolveMaxOutputRange,
 } from "./capabilities.js";
 
 export {
-  buildResolvedLlmRequestConfig,
   compactLlmRequestConfig,
   compactModelSettings,
   mergeLlmRequestConfigs,
-  sanitizeEndpointExtraBody,
-  stringifyJsonValue,
-  tryParseJsonObject,
 } from "./request-config.js";

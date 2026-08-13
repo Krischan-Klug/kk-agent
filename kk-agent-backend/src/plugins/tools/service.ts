@@ -37,34 +37,9 @@ export interface ResolvedSystemToolRuntime {
 
 const SELF_BOUNDED_READ_SYSTEM_TOOLS = new Set([
   "Read",
-  "read_attachment",
+  "read_asset",
+  "search_asset",
 ]);
-
-function buildSystemToolCategory(toolName: string): RuntimeToolDefinition["category"] {
-  if (["Read", "Edit", "Write"].includes(toolName)) return "filesystem";
-  if (["Glob", "Grep"].includes(toolName)) return "search";
-  if (["WebSearch", "WebFetch"].includes(toolName)) return "web";
-  return "other";
-}
-
-function buildSystemToolOperationKind(toolName: string): RuntimeToolDefinition["operationKind"] {
-  if (toolName === "Read" || toolName === "read_attachment") return "read";
-  if (["Edit", "Write"].includes(toolName)) return "write";
-  if (["Glob", "Grep"].includes(toolName)) return "search";
-  if (["WebSearch", "WebFetch"].includes(toolName)) return "fetch";
-  return undefined;
-}
-
-function buildSystemToolDisplayMeta(toolName: string): RuntimeToolDefinition["display"] {
-  if (toolName === "Read") return { title: "Read", summaryInputKeys: ["file_path"] };
-  if (toolName === "Edit") return { title: "Edit", summaryInputKeys: ["file_path"] };
-  if (toolName === "Write") return { title: "Write", summaryInputKeys: ["file_path"] };
-  if (toolName === "Glob") return { title: "Glob", summaryInputKeys: ["pattern"] };
-  if (toolName === "Grep") return { title: "Grep", summaryInputKeys: ["pattern"] };
-  if (toolName === "WebSearch") return { title: "WebSearch", summaryInputKeys: ["query"] };
-  if (toolName === "WebFetch") return { title: "WebFetch", summaryInputKeys: ["url"] };
-  return undefined;
-}
 
 function isConcurrencySafeSystemTool(toolName: string, input: Record<string, unknown>): boolean {
   if (toolName === "Bash") {
@@ -77,28 +52,19 @@ function isConcurrencySafeSystemTool(toolName: string, input: Record<string, unk
     "Grep",
     "WebSearch",
     "WebFetch",
-    "list_attachments",
-    "read_attachment",
+    "list_assets",
+    "search_asset",
+    "read_asset",
     "ask_user",
   ]).has(toolName);
 }
 
 function buildSystemToolResultPolicy(mcp: McpServerConfig, toolName: string) {
-  // Read-style tools bound their own output. Re-persisting them into tool-results is
-  // circular because the model would need the same read tool to inspect that file again.
   return {
     previewThresholdChars: mcp.systemConfig?.resultPolicy?.previewThresholdChars,
     previewChars: mcp.systemConfig?.resultPolicy?.previewChars,
-    persistLargeResults: !SELF_BOUNDED_READ_SYSTEM_TOOLS.has(toolName),
     excludeFromContextBudget: SELF_BOUNDED_READ_SYSTEM_TOOLS.has(toolName),
   };
-}
-
-function buildSystemToolPermissionPolicy(toolName: string): RuntimeToolDefinition["permissionPolicy"] {
-  if (toolName === "Bash") {
-    return { kind: "allow" };
-  }
-  return { kind: "allow" };
 }
 
 function buildSystemToolPermissionResolver(toolName: string): RuntimeToolDefinition["resolvePermission"] | undefined {
@@ -202,6 +168,7 @@ function resolveSystemMcp(
 
 export async function initToolsService(): Promise<void> {
   cachedSystemMcps = buildSystemMcps(await loadSystemMcpOverrides());
+  await persistSystemOverrides();
   await initMemoryState();
 }
 
@@ -258,19 +225,13 @@ export function buildResolvedSystemToolRuntime(
         name: tool.name,
         description: tool.description,
         parameters: tool.inputSchema,
-        inputSchema: tool.inputSchema,
         source: "system",
         capabilityId: toolId,
         accessScope: accessScopeOverrides[toolId],
         isConcurrencySafe: (input) => isConcurrencySafeSystemTool(tool.name, input),
-        interruptBehavior: "block",
         resultPolicy: buildSystemToolResultPolicy(resolved.mcp, tool.name),
-        permissionPolicy: buildSystemToolPermissionPolicy(tool.name),
+        permissionPolicy: { kind: "allow" },
         resolvePermission: buildSystemToolPermissionResolver(tool.name),
-        category: buildSystemToolCategory(tool.name),
-        operationKind: buildSystemToolOperationKind(tool.name),
-        display: buildSystemToolDisplayMeta(tool.name),
-        selfBoundedResult: SELF_BOUNDED_READ_SYSTEM_TOOLS.has(tool.name),
       };
     }
   }
@@ -282,16 +243,7 @@ export function buildResolvedSystemToolRuntime(
   };
 }
 
-export async function toggleSystemMcp(id: string, active: boolean): Promise<McpServerConfig> {
-  const systemMcp = getSystemMcpById(id);
-  if (!systemMcp) throw new NotFoundError("System-MCP", id);
-  const next = { ...systemMcp, active };
-  setSystemMcp(next);
-  await persistSystemOverrides();
-  return next;
-}
-
-async function updateSystemMcpConfig(id: string, body: UpdateMcpBody): Promise<McpServerConfig> {
+export async function updateInternalToolConfig(id: string, body: UpdateMcpBody): Promise<McpServerConfig> {
   const systemMcp = getSystemMcpById(id);
   if (!systemMcp) throw new NotFoundError("System-MCP", id);
 
@@ -307,19 +259,10 @@ async function updateSystemMcpConfig(id: string, body: UpdateMcpBody): Promise<M
 
   if (body.name !== undefined) next.name = body.name;
   if (body.emoji !== undefined) next.emoji = body.emoji;
-  if (body.skillIds !== undefined) next.skillIds = body.skillIds;
 
   setSystemMcp(next);
   await persistSystemOverrides();
   return next;
-}
-
-export async function updateInternalToolInstruction(id: string, instruction: string): Promise<McpServerConfig> {
-  return updateSystemMcpConfig(id, { instruction });
-}
-
-export async function updateInternalToolConfig(id: string, body: UpdateMcpBody): Promise<McpServerConfig> {
-  return updateSystemMcpConfig(id, body);
 }
 
 export async function executeSystemToolForId(

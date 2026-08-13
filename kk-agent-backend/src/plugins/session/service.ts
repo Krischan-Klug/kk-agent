@@ -1,35 +1,33 @@
 import type { SessionPromptDebug, SessionRecord, SessionState, CreateSessionBody } from "./types.js";
 import * as store from "./lib/store.js";
-import { clearSessionAttachments } from "./lib/attachments.js";
 import { getAllMcpsCached, getMcpTools, getRunnableMcpIds } from "../mcp/service.js";
-import { clearSystemReminders, enqueueSystemReminder } from "../loop/lib/system-reminder.js";
-import { getAgent, getLoopState, clearLoopState } from "../agent/service.js";
+import { getAgent } from "../agent/service.js";
+import { isLoopActive } from "../loop/lib/run-registry.js";
 import { clearSessionFacts, clearTasks } from "../tools/service.js";
 import { clearFilesystemReadState } from "../tools/lib/filesystem/read-state.js";
 import { resolveSessionDefaults } from "./lib/session-resolution.js";
-import { clearSessionDenials } from "./lib/denial-log.js";
 import { getModelCapabilities } from "../provider/service.js";
-import { listSkills } from "../skills/service.js";
-import { NotFoundError } from "../../lib/errors.js";
+import { buildLoadedSkillContexts, listSkills } from "../skills/service.js";
+import { ConflictError, NotFoundError } from "../../lib/errors.js";
 import {
   getSessionRecordOrThrow,
   normalizeSessionRequestConfig,
   toPublicSession,
 } from "./lib/session-records.js";
 import {
-  buildAttachmentMetaMessages,
+  buildAssetRuntimeContext,
   buildCurrentSystemPrompt,
   buildModeRuntimeConfig,
-  buildRuntimeMetaMessages,
-  extractMetaMessageTexts,
-  getLatestAttachmentRefs,
+  buildRuntimeContext,
+  getLatestAssetRefs,
 } from "./lib/runtime-context.js";
+import { getSessionAssetsByIds } from "./lib/assets.js";
 
 export { getSessionRecordOrThrow, normalizeSessionRequestConfig, toPublicSession } from "./lib/session-records.js";
 export {
-  buildAttachmentMetaMessages,
+  buildAssetRuntimeContext,
   buildModeRuntimeConfig,
-  buildRuntimeMetaMessages,
+  buildRuntimeContext,
   type SessionModeRuntimeConfig,
 } from "./lib/runtime-context.js";
 
@@ -57,52 +55,55 @@ export function listSessions(): SessionState[] {
 }
 
 export async function deleteSession(id: string): Promise<void> {
+  if (isLoopActive(id)) {
+    throw new ConflictError(`Session "${id}" cannot be deleted while a run is active.`);
+  }
   if (!(await store.deleteSession(id))) throw new NotFoundError("Session", id);
-  clearLoopState(id);
   clearTasks(id);
   clearSessionFacts(id);
   clearFilesystemReadState(id);
-  clearSessionAttachments(id);
-  clearSystemReminders(id);
-  clearSessionDenials(id);
 }
 
 export function getCurrentPromptDebug(sessionId: string): SessionPromptDebug {
   const session = getSessionRecordOrThrow(sessionId);
   const agent = getAgent(session.agentId);
   const modeRuntimeConfig = buildModeRuntimeConfig(session, agent, session.activeModeId);
-  const loopState = getLoopState(sessionId);
   const systemPrompt = buildCurrentSystemPrompt(sessionId, session, agent);
-  const runtimeMetaMessages = buildRuntimeMetaMessages({
-    sessionId,
-    modeId: modeRuntimeConfig.modeId,
-    modeName: modeRuntimeConfig.modePromptName,
-    model: session.model,
-    runtimeVariables: modeRuntimeConfig.runtimeVariables,
-  });
-
-  const latestAttachmentRefs = loopState?.status === "running" ? getLatestAttachmentRefs(session.messages) : [];
+  const latestAssetRefs = isLoopActive(sessionId) ? getLatestAssetRefs(session.messages) : [];
+  const latestAssets = getSessionAssetsByIds(sessionId, latestAssetRefs.map((ref) => ref.assetId));
   const capabilities = getModelCapabilities(session.providerId, session.model);
-  const attachmentMetaMessages = buildAttachmentMetaMessages({
-    attachments: latestAttachmentRefs.map((attachment) => ({
-      id: attachment.attachmentId,
-      filename: attachment.filename,
-      mimeType: attachment.mimeType,
-      category: attachment.category,
-      size: attachment.size,
+  const assetContext = buildAssetRuntimeContext({
+    assets: latestAssets.map((asset) => ({
+      id: asset.id,
+      filename: asset.filename,
+      mimeType: asset.mimeType,
+      kind: asset.kind,
+      size: asset.size,
     })),
     visionSupport: capabilities?.visionSupport,
   });
+  const loadedSkills = buildLoadedSkillContexts(
+    session.loadedSkillIds,
+    modeRuntimeConfig.activeSkillIds,
+  );
 
   return {
     systemPrompt,
-    metaMessages: extractMetaMessageTexts([...runtimeMetaMessages, ...attachmentMetaMessages]),
+    runtimeContext: buildRuntimeContext({
+      sessionId,
+      modeId: modeRuntimeConfig.modeId,
+      modeName: modeRuntimeConfig.modePromptName,
+      model: session.model,
+      runtimeVariables: modeRuntimeConfig.runtimeVariables,
+      toolContext: { values: loadedSkills },
+      assetContext,
+    }),
     runtimeTools: Object.values(modeRuntimeConfig.runtimeToolsByName).map((tool) => ({
       name: tool.name,
       description: tool.description,
       capabilityId: tool.capabilityId,
       source: tool.source,
-      inputSchema: tool.inputSchema,
+      inputSchema: tool.parameters,
     })),
     runtimeMcps: getAllMcpsCached()
       .filter((mcp) => modeRuntimeConfig.activeMcpIds.includes(mcp.id))
@@ -126,16 +127,19 @@ export function getCurrentPromptDebug(sessionId: string): SessionPromptDebug {
         id: skill.id,
         name: skill.name,
         description: skill.description,
-        instruction: skill.instruction,
+        path: skill.path,
         source: skill.source,
-        linkedToolIds: [...skill.linkedToolIds],
-        linkedMcpIds: [...skill.linkedMcpIds],
+        resources: [...skill.resources],
+        loaded: session.loadedSkillIds.includes(skill.id),
       })),
   };
 }
 
 async function updateSession(id: string, body: Partial<CreateSessionBody>): Promise<SessionState> {
   const session = getSessionRecordOrThrow(id);
+  if (isLoopActive(id)) {
+    throw new ConflictError(`Session "${id}" cannot be changed while a run is active.`);
+  }
   const nextAgentId = body.agentId ?? session.agentId;
   const agent = getAgent(nextAgentId);
   const switchingAgent = body.agentId !== undefined && body.agentId !== session.agentId;
@@ -172,6 +176,9 @@ async function updateSession(id: string, body: Partial<CreateSessionBody>): Prom
     activeToolIds: defaults.activeToolIds,
     activeMcpIds: defaults.activeMcpIds,
     activeSkillIds: defaults.activeSkillIds,
+    loadedSkillIds: switchingAgent
+      ? []
+      : session.loadedSkillIds.filter((skillId) => defaults.activeSkillIds.includes(skillId)),
     llmRequestConfig: defaults.llmRequestConfig,
     ...(switchingAgent || session.providerId !== defaults.providerId || session.model !== defaults.model
       ? { providerState: undefined, providerDebug: undefined }
@@ -179,13 +186,6 @@ async function updateSession(id: string, body: Partial<CreateSessionBody>): Prom
   };
 
   const updated = normalizeSessionRequestConfig(await store.updateSession(id, patch));
-  if (switchingAgent) clearLoopState(id);
-  if (defaults.activeModeId !== session.activeModeId) {
-    enqueueSystemReminder(id, {
-      type: "mode_changed",
-      body: `The user switched the chat mode from "${session.activeModeId}" to "${defaults.activeModeId}". Re-evaluate which tools are now allowed and proceed in the new mode.`,
-    });
-  }
   return toPublicSession(updated);
 }
 

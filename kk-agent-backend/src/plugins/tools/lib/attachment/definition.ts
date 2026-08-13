@@ -2,12 +2,12 @@ import { defineSystemMcp } from "../system-definition.js";
 
 export const attachmentDefinition = defineSystemMcp({
   id: "attachment",
-  name: "Attachments",
+  name: "Assets",
   instruction: [
-    "Use this tool as the session attachment store for files moving into and out of KK-Agent chat.",
-    "Prefer list_attachments, read_attachment, and provide_attachment over searching the main filesystem for chat-related files.",
-    "Use attachmentId when available because filenames may be ambiguous.",
-    "Do not assume attachments live in the normal project tree or on the same local machine as the agent runtime.",
+    "Use this tool for managed session inputs and downloadable run artifacts.",
+    "Use list_assets, search_asset, and read_asset for inputs; publish generated files with publish_artifact.",
+    "Always use assetId because filenames may be ambiguous.",
+    "Never encode binary file content in a tool call.",
   ].join(" "),
   emoji: "📎",
 });

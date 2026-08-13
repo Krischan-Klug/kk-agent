@@ -17,14 +17,7 @@ function readRequestToken(req: Request): string | undefined {
     return auth.slice("bearer ".length).trim();
   }
 
-  if (req.method !== "GET" || !/^\/session\/[^/]+\/attachments\/[^/]+$/.test(req.path)) {
-    return undefined;
-  }
-
-  const queryToken = req.query.apiToken;
-  return typeof queryToken === "string" && queryToken.trim().length > 0
-    ? queryToken.trim()
-    : undefined;
+  return undefined;
 }
 
 function tokensEqual(actual: string, expected: string): boolean {

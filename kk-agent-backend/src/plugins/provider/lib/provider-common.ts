@@ -1,4 +1,4 @@
-import { toolUseBlock } from "../../lib/transcript.js";
+import { toolUseBlock } from "kk-agent-contract";
 import type {
   NormalizedToolCall,
   OnChunkFn,

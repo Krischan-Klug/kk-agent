@@ -1,14 +1,14 @@
 import { basename } from "node:path";
-import { escapeXml, toCData } from "../../lib/xml.js";
 import type { SessionState } from "../types.js";
-import { getSystemVariables, buildPrompt } from "../../systemprompt/index.js";
+import { getSystemVariables, buildPrompt } from "../../systemprompt/lib/builder.js";
 import { buildResolvedSystemToolRuntime, getMemoryPromptContext, getTaskSummary } from "../../tools/service.js";
 import { buildActiveSkillCatalogSection } from "../../skills/service.js";
 import type { ModeRuntimeConfig } from "../../loop/types.js";
 import { getAgentMode } from "../../agent/lib/mode-config.js";
 import type { AgentDefinition } from "../../agent/types.js";
-import { createTranscriptMessage, getMessageText, textBlock, type TranscriptAttachmentRefBlock, type TranscriptMessage } from "../../lib/transcript.js";
-import { buildRunnableMcpInstructions, collectLinkedSkillIds } from "./tool-selection.js";
+import { type TranscriptAssetRefBlock, type TranscriptMessage } from "kk-agent-contract";
+import type { ToolRuntimeContext } from "../../loop/types.js";
+import { buildRunnableMcpInstructions } from "./tool-selection.js";
 import { buildRuntimeToolCollection } from "./runtime-tools.js";
 import { getDefaults } from "../../lib/defaults.js";
 
@@ -30,11 +30,13 @@ export function buildModeRuntimeConfig(
 ): SessionModeRuntimeConfig {
   const mode = getAgentMode(agent, modeId);
   const config = mode.config;
-  const activeToolIds = intersectIds(session.activeToolIds, config.toolIds);
+  const configuredActiveToolIds = intersectIds(session.activeToolIds, config.toolIds);
   const activeMcpIds = intersectIds(session.activeMcpIds, config.mcpIds);
-  const baseActiveSkillIds = intersectIds(session.activeSkillIds, config.skillIds);
-  const linkedSkillIds = collectLinkedSkillIds(activeToolIds, activeMcpIds);
-  const activeSkillIds = [...new Set([...baseActiveSkillIds, ...linkedSkillIds])];
+  const selectedSkillIds = intersectIds(session.activeSkillIds, config.skillIds);
+  const activeSkillIds = configuredActiveToolIds.includes("skill") ? selectedSkillIds : [];
+  const activeToolIds = activeSkillIds.length > 0
+    ? configuredActiveToolIds
+    : configuredActiveToolIds.filter((id) => id !== "skill");
   const systemToolRuntime = buildResolvedSystemToolRuntime(
     activeToolIds,
     config.toolAccessScopes,
@@ -49,15 +51,8 @@ export function buildModeRuntimeConfig(
     ...systemToolRuntime.instructionsById,
     ...config.mcpInstructions,
   };
-  const skillInstructionsById = Object.fromEntries(
-    activeSkillIds
-      .map((skillId) => [skillId, config.skillInstructions[skillId]])
-      .filter((entry): entry is [string, string] => typeof entry[1] === "string" && entry[1].trim().length > 0),
-  );
-
   return {
     modeId: mode.id,
-    modeLabel: mode.label,
     modePromptName: mode.source === "custom" ? mode.label : mode.id,
     modeBehavior: mode.behavior,
     promptSections: config.promptSections,
@@ -71,7 +66,6 @@ export function buildModeRuntimeConfig(
       ? buildActiveSkillCatalogSection(activeSkillIds)
       : "",
     activeSkillIds,
-    skillInstructionsById,
     runtimeVariables: systemToolRuntime.runtimeVariables,
     allTools: runtimeToolCollection.allTools,
     runtimeToolsByName: runtimeToolCollection.runtimeToolsByName,
@@ -107,22 +101,6 @@ export function buildCurrentSystemPrompt(
   );
 }
 
-function buildSystemReminder(type: string, body: string): string {
-  return [
-    `<system-reminder type="${escapeXml(type)}">`,
-    `  ${toCData(body.trim())}`,
-    "</system-reminder>",
-  ].join("\n");
-}
-
-function createMetaReminder(type: string, body: string): TranscriptMessage {
-  return createTranscriptMessage({
-    role: "user",
-    isMeta: true,
-    content: [textBlock(buildSystemReminder(type, body))],
-  });
-}
-
 function getRuntimeShellHint(): string {
   const shellCandidate = process.env.SHELL?.trim()
     || process.env.ComSpec?.trim()
@@ -138,13 +116,21 @@ function buildAccessSection(title: string, lines: string[]): string[] {
   return ["", title, ...lines];
 }
 
-export function buildRuntimeMetaMessages(input: {
+function readStringArray(value: unknown): string[] {
+  return Array.isArray(value)
+    ? value.filter((entry): entry is string => typeof entry === "string" && entry.trim().length > 0)
+    : [];
+}
+
+export function buildRuntimeContext(input: {
   sessionId: string;
   modeId: string;
   modeName: string;
   model: string;
   runtimeVariables?: Record<string, string>;
-}): TranscriptMessage[] {
+  toolContext?: ToolRuntimeContext;
+  assetContext?: string;
+}): string {
   const variables = getSystemVariables({
     CURRENT_MODEL: input.model,
     mode: input.modeName,
@@ -155,9 +141,9 @@ export function buildRuntimeMetaMessages(input: {
   const terminalScope = input.runtimeVariables?.TERMINAL_ACCESS_SCOPE;
   const filesystemActive = typeof filesystemScope === "string" && filesystemScope !== "nicht aktiv";
   const terminalActive = typeof terminalScope === "string" && terminalScope !== "nicht aktiv";
-  const body = [
-    "Treat this reminder as authoritative for the current turn.",
-    "",
+  const skillContexts = readStringArray(input.toolContext?.values.loadedSkillContexts);
+  return [
+    "<runtime_context>",
     `Current date: ${variables.CURRENT_DATE ?? ""}`,
     `Current time: ${variables.CURRENT_TIME ?? ""}`,
     `Current timestamp: ${variables.CURRENT_TIMESTAMP ?? ""}`,
@@ -168,6 +154,7 @@ export function buildRuntimeMetaMessages(input: {
     "",
     `Current model: ${variables.CURRENT_MODEL ?? input.model}`,
     `Current mode: ${input.modeName}`,
+    `Current mode id: ${input.modeId}`,
     "",
     "Current tasks:",
     getTaskSummary(input.sessionId),
@@ -188,72 +175,54 @@ export function buildRuntimeMetaMessages(input: {
       `allowedRoot=${input.runtimeVariables?.TERMINAL_ALLOWED_ROOT ?? "nicht verfuegbar"}`,
       `elevation=${input.runtimeVariables?.TERMINAL_ELEVATION ?? "nicht aktiv"}`,
     ] : []),
+    ...(input.assetContext ? ["", input.assetContext] : []),
+    ...(skillContexts.length > 0 ? ["", "Loaded skills:", ...skillContexts] : []),
+    "</runtime_context>",
   ].join("\n");
-
-  return [createMetaReminder("runtime_snapshot", body)];
 }
 
-export function buildAttachmentMetaMessages(input: {
-  attachments: Array<{
-    id?: string;
+export function buildAssetRuntimeContext(input: {
+  assets: Array<{
+    id: string;
     filename: string;
     mimeType: string;
-    category: "image" | "text" | "pdf";
+    kind: import("kk-agent-contract").AssetKind;
     size: number;
   }>;
   visionSupport?: "supported" | "unsupported" | "unknown";
-}): TranscriptMessage[] {
-  if (input.attachments.length === 0) return [];
+}): string {
+  if (input.assets.length === 0) return "";
 
-  const attachmentLines = input.attachments.map((att) =>
-    `- ${att.filename} [id=${att.id ?? "none"}, type=${att.category}, mime=${att.mimeType}, size=${formatAttachmentSize(att.size)}]`,
+  const assetLines = input.assets.map((asset) =>
+    `- ${asset.filename} [id=${asset.id}, kind=${asset.kind}, mime=${asset.mimeType}, size=${formatAssetSize(asset.size)}]`,
   );
 
-  const messages = [
-    createMetaReminder(
-      "attachment_context",
-      [
-        "The current user turn includes session attachments.",
-        "Treat them as chat attachments, not as normal project files.",
-        "Use the attachment tools to inspect them, and prefer attachmentId when available.",
-        "",
-        ...attachmentLines,
-      ].join("\n"),
-    ),
+  const lines = [
+    "Current user assets:",
+    "Their content is projected request-scoped. Use list_assets, search_asset, and read_asset for targeted access; prefer assetId.",
+    ...assetLines,
   ];
 
-  if (input.visionSupport === "unsupported" && input.attachments.some((att) => att.category === "image")) {
-    messages.push(createMetaReminder("vision_warning", getDefaults().attachment.visionNotSupportedInstruction));
+  if (input.visionSupport === "unsupported" && input.assets.some((asset) => asset.kind === "image")) {
+    lines.push("", getDefaults().asset.visionNotSupportedInstruction);
   }
 
-  return messages;
+  return lines.join("\n");
 }
 
-export function getLatestAttachmentRefs(messages: TranscriptMessage[]): TranscriptAttachmentRefBlock[] {
+export function getLatestAssetRefs(messages: TranscriptMessage[]): TranscriptAssetRefBlock[] {
   for (let index = messages.length - 1; index >= 0; index -= 1) {
     const message = messages[index];
-    if (!message || message.role !== "user" || message.isMeta) continue;
-    const attachments = message.content.filter(
-      (block): block is TranscriptAttachmentRefBlock => block.type === "attachment_ref",
+    if (!message || message.role !== "user") continue;
+    const assets = message.content.filter(
+      (block): block is TranscriptAssetRefBlock => block.type === "asset_ref",
     );
-    if (attachments.length > 0) return attachments;
+    if (assets.length > 0) return assets;
   }
   return [];
 }
 
-export function extractMetaMessageTexts(messages: TranscriptMessage[]): string[] {
-  return messages
-    .map((message) => decodeDebugMetaText(getMessageText(message).trim()))
-    .filter((text) => text.length > 0);
-}
-
-function decodeDebugMetaText(text: string): string {
-  const systemReminderMatch = text.match(/<system-reminder\b[^>]*>\s*<!\[CDATA\[([\s\S]*)\]\]>\s*<\/system-reminder>/i);
-  if (!systemReminderMatch) return text;
-  return systemReminderMatch[1]!.replaceAll("]]]]><![CDATA[>", "]]>").trim();
-}
-
-function formatAttachmentSize(bytes: number): string {
+function formatAssetSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;

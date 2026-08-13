@@ -8,7 +8,7 @@ import {
   DEFAULT_REASONING_LEVELS,
   getEndpointCapabilities,
   getEndpointTransportProfile,
-} from "./capabilities.js";
+} from "kk-agent-contract";
 
 export type ObservationUpdate = {
   endpointSupport?: Partial<Record<EndpointType, ObservationSupportState>>;

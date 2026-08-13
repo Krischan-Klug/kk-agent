@@ -15,7 +15,7 @@ import {
   finalizeChatCompletionsTurn,
   normalizeChatCompletionsToolCalls,
 } from "../transport.js";
-import { reasoningBlock, textBlock } from "../../../lib/transcript.js";
+import { reasoningBlock, textBlock } from "kk-agent-contract";
 import {
   consumeProviderStreamError,
   emitFinalStreamChunks,
@@ -24,64 +24,6 @@ import {
   normalizeProviderUsage,
   type ProviderTokenUsage,
 } from "../provider-common.js";
-
-export async function chat(
-  request: UnifiedRequest,
-  baseUrl: string,
-  headers: Record<string, string> = {},
-): Promise<UnifiedResponse> {
-  const res = await fetch(`${baseUrl}/chat/completions`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json", ...headers },
-    body: JSON.stringify(buildChatCompletionsBody(request, false)),
-  });
-
-  if (!res.ok) {
-    const text = await res.text();
-    throw new Error(`Chat Completions error ${res.status}: ${text}`);
-  }
-
-  const data = (await res.json()) as {
-    choices: Array<{
-      message: {
-        content?: string | null;
-        reasoning_content?: string | null;
-        tool_calls?: Array<{
-          id?: string;
-          function?: { name?: string; arguments?: string };
-        }>;
-      };
-      finish_reason?: string | null;
-    }>;
-    usage?: ProviderTokenUsage;
-  };
-
-  const choice = data.choices[0];
-  const turn = finalizeChatCompletionsTurn({
-    messageId: randomUUID(),
-    text: choice?.message.content ?? "",
-    reasoning: choice?.message.reasoning_content ?? "",
-    rawToolCalls: (choice?.message.tool_calls ?? []).map((toolCall, index) => ({
-      id: toolCall.id,
-      name: toolCall.function?.name,
-      rawArguments: toolCall.function?.arguments,
-      index,
-    })),
-    finishReason: mapFinishReason(choice?.finish_reason),
-    usage: normalizeProviderUsage(data.usage),
-    tools: request.tools,
-    supportsConcatenatedJsonSplit: true,
-  });
-
-  const response = buildUnifiedResponseFromTurn(turn);
-  response.transportState = {
-    endpoint: "chat-completions",
-  };
-  response.debug = {
-    endpoint: "chat-completions",
-  };
-  return response;
-}
 
 export async function chatStream(
   request: UnifiedRequest,
@@ -92,7 +34,7 @@ export async function chatStream(
   const res = await fetch(`${baseUrl}/chat/completions`, {
     method: "POST",
     headers: { "Content-Type": "application/json", ...headers },
-    body: JSON.stringify(buildChatCompletionsBody(request, true)),
+    body: JSON.stringify(buildChatCompletionsBody(request)),
   });
 
   if (!res.ok) {

@@ -1,224 +1,263 @@
-import type { SessionRecord, SessionState, SSEEvent } from "../types.js";
-import * as store from "../lib/store.js";
-import {
-  buildAttachmentPreviewDataUrl,
-  getSessionAttachmentsByIds,
-} from "../lib/attachments.js";
+import { randomUUID } from "node:crypto";
+import type { AgentRun, AgentRunStatus, RunEvent } from "kk-agent-contract";
+import type { SessionRecord, SSEEvent } from "../types.js";
+import * as store from "./store.js";
+import { getSessionAssetsByIds } from "./assets.js";
+import { compileAssetModelContent } from "./asset-context.js";
 import { getModelCapabilities } from "../../provider/service.js";
-import { allowsVisionInputs } from "../../provider/lib/capabilities.js";
+import { allowsVisionInputs } from "kk-agent-contract";
 import {
-  attachmentRefBlock,
+  assetRefBlock,
   createTranscriptMessage,
   textBlock,
   type TranscriptBlock,
-  type TranscriptMessage,
-} from "../../lib/transcript.js";
+} from "kk-agent-contract";
 import type { SessionModeRuntimeConfig } from "../service.js";
 import {
-  getSessionRecordOrThrow,
-  toPublicSession,
-  normalizeSessionRequestConfig,
+  buildAssetRuntimeContext,
   buildModeRuntimeConfig,
-  buildRuntimeMetaMessages,
-  buildAttachmentMetaMessages,
+  buildRuntimeContext,
+  getSessionRecordOrThrow,
+  normalizeSessionRequestConfig,
+  toPublicSession,
 } from "../service.js";
-import { resolveSessionLlmRequestConfig } from "../lib/session-resolution.js";
-import { getEnabledAgentModes } from "../../agent/lib/mode-config.js";
+import { resolveSessionLlmRequestConfig } from "./session-resolution.js";
+import { getEnabledAgentModes, getAgentMode } from "../../agent/lib/mode-config.js";
 import {
   getAgent,
-  createLoopAbortController,
-  abortLoop,
-  clearLoopAbortController,
-  setLoopState,
 } from "../../agent/service.js";
-import { getAgentMode } from "../../agent/lib/mode-config.js";
+import { abortLoop, beginLoop, finishLoop } from "../../loop/lib/run-registry.js";
+import { cloneMessages, generateSessionName } from "./message-state.js";
+import { buildLoadedSkillContexts } from "../../skills/service.js";
+import type {
+  LoopCheckpoint,
+  LoopOptions,
+  LoopResult,
+  ModeRuntimeRef,
+  RuntimeToolDefinition,
+  ToolRuntimeContext,
+} from "../../loop/types.js";
+import { executeRuntimeTool } from "./runtime-tools.js";
 import {
-  cloneMessages,
-  generateSessionName,
-} from "../lib/message-state.js";
-import { getLoadedSkillIds } from "../../skills/lib/xml.js";
-import { getSkillsRootDir } from "../../skills/service.js";
-import {
-  buildDenialReminderBody,
-  listSessionDenials,
-  recordSessionDenial,
-} from "../lib/denial-log.js";
-import {
-  buildSystemReminderMessages,
-  drainSystemReminders,
-  enqueueSystemReminder,
-} from "../../loop/lib/system-reminder.js";
-import type { LoopOptions, ModeRuntimeRef, RuntimeToolDefinition, ToolRuntimeContext } from "../../loop/types.js";
-import { executeRuntimeTool } from "../lib/runtime-tools.js";
-import {
+  cancelPendingPrompts,
   emitPrompt,
-  waitForResponse,
   registerSession,
-  unregisterSession,
   runWithSessionId,
+  unregisterSession,
+  waitForResponse,
 } from "../../tools/lib/user-interaction/interaction-store.js";
 import { runAgentLoop } from "../../loop/lib/agent-loop.js";
+import { getErrorMessage } from "../../../lib/error.js";
 
-async function prepareLoopRun(sessionId: string, message: string, attachmentIds?: string[]) {
+type PreparedLoopRun = Awaited<ReturnType<typeof prepareLoopRun>>;
+
+function nowIso(): string {
+  return new Date().toISOString();
+}
+
+function readStringArray(value: unknown): string[] {
+  return Array.isArray(value)
+    ? value.filter((entry): entry is string => typeof entry === "string" && entry.trim().length > 0)
+    : [];
+}
+
+function getExplicitSkillId(message: string, availableSkillIds: string[]): string | undefined {
+  const match = message.trimStart().match(/^[$/]([a-z0-9]+(?:-[a-z0-9]+)*)\b/);
+  const requested = match?.[1];
+  return requested && availableSkillIds.includes(requested) ? requested : undefined;
+}
+
+async function updateRun(
+  sessionId: string,
+  runId: string,
+  updater: (run: AgentRun) => AgentRun,
+  sessionPatch: Partial<SessionRecord> = {},
+): Promise<SessionRecord> {
+  const current = getSessionRecordOrThrow(sessionId);
+  const runFound = current.runs.some((run) => run.id === runId);
+  if (!runFound) throw new Error(`Run "${runId}" is missing from session "${sessionId}".`);
+  return store.updateSession(sessionId, {
+    ...sessionPatch,
+    runs: current.runs.map((run) => run.id === runId ? updater(run) : run),
+  });
+}
+
+async function appendRunEvent(
+  sessionId: string,
+  runId: string,
+  event: RunEvent,
+  emit?: (event: SSEEvent) => void,
+): Promise<void> {
+  await updateRun(sessionId, runId, (run) => ({
+    ...run,
+    updatedAt: event.createdAt,
+    events: run.events.some((existing) => existing.id === event.id)
+      ? run.events
+      : [...run.events, event],
+  }));
+  emit?.({ type: "run_event", event });
+}
+
+async function prepareLoopRun(sessionId: string, message: string, assetIds?: string[]) {
   const session = getSessionRecordOrThrow(sessionId);
   const agent = getAgent(session.agentId);
-
   const userBlocks: TranscriptBlock[] = [textBlock(message)];
-  const attachmentMetaMessages: TranscriptMessage[] = [];
   const capabilities = getModelCapabilities(session.providerId, session.model);
   const visionSupported = allowsVisionInputs(capabilities?.visionSupport);
+  let assetContext = "";
 
-  if (attachmentIds?.length) {
-    const attachments = await getSessionAttachmentsByIds(sessionId, attachmentIds);
-    if (attachments.length > 0) {
-      for (const att of attachments) {
-        const previewDataUrl = att.category === "image" && visionSupported
-          ? await buildAttachmentPreviewDataUrl(att)
-          : undefined;
-
-        userBlocks.push(attachmentRefBlock({
-          attachmentId: att.id,
-          filename: att.filename,
-          mimeType: att.mimeType,
-          category: att.category,
-          source: att.source,
-          size: att.size,
-          previewDataUrl,
-        }));
-      }
-
-      attachmentMetaMessages.push(...buildAttachmentMetaMessages({
-        attachments: attachments.map((att) => ({
-          id: att.id,
-          filename: att.filename,
-          mimeType: att.mimeType,
-          category: att.category,
-          size: att.size,
-        })),
-        visionSupport: capabilities?.visionSupport,
-      }));
+  if (assetIds?.length) {
+    const assets = getSessionAssetsByIds(sessionId, assetIds);
+    if (assets.length !== new Set(assetIds).size) throw new Error("One or more selected assets are missing from this session.");
+    for (const asset of assets) {
+      userBlocks.push(assetRefBlock(asset.id));
     }
+    assetContext = buildAssetRuntimeContext({
+      assets: assets.map((asset) => ({
+        id: asset.id,
+        filename: asset.filename,
+        mimeType: asset.mimeType,
+        kind: asset.kind,
+        size: asset.size,
+      })),
+      visionSupport: capabilities?.visionSupport,
+    });
   }
 
-  const userMessage = createTranscriptMessage({
-    role: "user",
-    content: userBlocks,
-  });
-
+  const userMessage = createTranscriptMessage({ role: "user", content: userBlocks });
+  const runStartedAt = nowIso();
+  const run: AgentRun = {
+    id: randomUUID(),
+    userMessageId: userMessage.id,
+    status: "running",
+    step: 0,
+    attempt: 0,
+    toolBatch: 0,
+    startedAt: runStartedAt,
+    updatedAt: runStartedAt,
+    events: [],
+    artifactIds: [],
+  };
   const messages = [...session.messages, userMessage];
-  await store.updateSession(sessionId, { messages });
+  const modelContentByMessageId = await compileAssetModelContent({ sessionId, messages, visionSupported });
 
   const modeRuntimeConfigs = Object.fromEntries(
     getEnabledAgentModes(agent).map((mode) => [mode.id, buildModeRuntimeConfig(session, agent, mode.id)]),
   ) as Record<string, SessionModeRuntimeConfig>;
+  const activeModeConfig = modeRuntimeConfigs[session.activeModeId];
+  if (!activeModeConfig) throw new Error(`Missing active mode config "${session.activeModeId}".`);
+  const explicitSkillId = getExplicitSkillId(message, activeModeConfig.activeSkillIds);
+  const requestedLoadedSkillIds = explicitSkillId
+    ? [...new Set([...session.loadedSkillIds, explicitSkillId])]
+    : session.loadedSkillIds;
+  const loadedSkills = buildLoadedSkillContexts(requestedLoadedSkillIds, activeModeConfig.activeSkillIds);
+  await store.updateSession(sessionId, { messages, runs: [...session.runs, run] });
 
   return {
     session,
     agent,
+    run,
     messages,
-    attachmentMetaMessages,
+    assetContext,
+    modelContentByMessageId,
     modeRuntimeConfigs,
     reasoning: resolveSessionLlmRequestConfig(session),
+    loadedSkills,
   };
+}
+
+async function persistCheckpoint(
+  prepared: PreparedLoopRun,
+  checkpoint: LoopCheckpoint,
+): Promise<void> {
+  const loadedSkillIds = readStringArray(checkpoint.toolContext.values.loadedSkillIds);
+  const publishedAssetIds = readStringArray(checkpoint.toolContext.values.publishedAssetIds);
+  const completedAt = checkpoint.status === "running" ? undefined : nowIso();
+  await updateRun(prepared.session.id, prepared.run.id, (run) => ({
+    ...run,
+    status: checkpoint.status,
+    step: checkpoint.step,
+    attempt: checkpoint.attempt,
+    toolBatch: checkpoint.toolBatch,
+    updatedAt: nowIso(),
+    ...(completedAt ? { completedAt } : {}),
+    artifactIds: [...new Set([...run.artifactIds, ...publishedAssetIds])],
+  }), {
+    messages: cloneMessages(checkpoint.messages),
+    providerState: checkpoint.providerState,
+    providerDebug: checkpoint.providerDebug,
+    loadedSkillIds,
+  });
 }
 
 async function finalizeLoopSession(
-  sessionId: string,
-  session: SessionRecord,
-  messages: TranscriptMessage[],
-  finalResponse: string,
-  providerState?: SessionRecord["providerState"],
-  providerDebug?: SessionRecord["providerDebug"],
+  prepared: PreparedLoopRun,
+  result: LoopResult,
 ): Promise<SessionRecord> {
-  const nextMessages = cloneMessages(messages);
-  const patch: Partial<SessionRecord> = {
-    messages: nextMessages,
-    providerState,
-    providerDebug,
-  };
-  if (!session.name && finalResponse) {
-    const name = generateSessionName(finalResponse);
-    if (name) patch.name = name;
+  const current = getSessionRecordOrThrow(prepared.session.id);
+  if (!current.name && result.finalResponse) {
+    const name = generateSessionName(result.finalResponse);
+    if (name) return normalizeSessionRequestConfig(await store.updateSession(prepared.session.id, { name }));
   }
-  return normalizeSessionRequestConfig(await store.updateSession(sessionId, patch));
+  return normalizeSessionRequestConfig(current);
 }
 
 function buildLoopRequest(
-  prepared: Awaited<ReturnType<typeof prepareLoopRun>>,
-  sessionId: string,
-  handlers: Partial<Pick<LoopOptions, "onAssistantBlockDelta" | "onAssistantMessage" | "onSystemNotice" | "onToolExecutionUpdate" | "onLoopState" | "onStats">> = {},
-) {
-  const loopMessages = cloneMessages(prepared.messages);
-  const activeModeConfig = prepared.modeRuntimeConfigs[prepared.session.activeModeId] as SessionModeRuntimeConfig;
+  prepared: PreparedLoopRun,
+  handlers: Partial<Pick<
+    LoopOptions,
+    "onAssistantBlockDelta" | "onAssistantMessage" | "onAssistantAttemptDiscarded" | "onToolExecutionUpdate" | "onLoopState" | "onStats"
+  >> = {},
+  emit?: (event: SSEEvent) => void,
+): LoopOptions {
+  const activeModeConfig = prepared.modeRuntimeConfigs[prepared.session.activeModeId]!;
   const activeAgentModeConfig = getAgentMode(prepared.agent, prepared.session.activeModeId);
-  const loadedSkillIds = getLoadedSkillIds(loopMessages);
+  const initialToolContext: ToolRuntimeContext = {
+    values: {
+      ...prepared.loadedSkills,
+      availableSkillIds: activeModeConfig.activeSkillIds,
+      publishedAssetIds: [],
+      assetPublishRoots: [...new Set([
+        activeModeConfig.runtimeVariables?.FILESYSTEM_ALLOWED_ROOT,
+        activeModeConfig.runtimeVariables?.TERMINAL_ALLOWED_ROOT,
+      ].filter((value): value is string => Boolean(value)))],
+    },
+  };
 
   return {
+    runId: prepared.run.id,
+    userMessageId: prepared.run.userMessageId,
     agentId: prepared.session.agentId,
-    sessionId,
+    sessionId: prepared.session.id,
     providerId: prepared.session.providerId,
-    messages: loopMessages,
+    messages: cloneMessages(prepared.messages),
     model: prepared.session.model,
-    buildEphemeralMetaMessages: ({
-      iteration,
+    buildRuntimeContext: ({ modeId, modeName, model, toolContext }) => buildRuntimeContext({
+      sessionId: prepared.session.id,
       modeId,
-      modeName,
+      modeName: modeName ?? activeModeConfig.modePromptName,
       model,
-    }: {
-      sessionId: string;
-      agentId: string;
-      modeId: string;
-      modeName?: string;
-      model: string;
-      iteration: number;
-    }) => {
-      const runtimeMessages = buildRuntimeMetaMessages({
-        sessionId,
-        modeId,
-        modeName: modeName ?? activeModeConfig.modePromptName,
-        model,
-        runtimeVariables: activeModeConfig.runtimeVariables,
-      });
-      const denials = listSessionDenials(sessionId);
-      if (denials.length > 0) {
-        enqueueSystemReminder(sessionId, {
-          type: "tool_denied",
-          body: buildDenialReminderBody(denials),
-        });
-      }
-      const reminderMessages = buildSystemReminderMessages(drainSystemReminders(sessionId));
-      return iteration === 1
-        ? [...runtimeMessages, ...prepared.attachmentMetaMessages, ...reminderMessages]
-        : [...runtimeMessages, ...reminderMessages];
-    },
+      runtimeVariables: activeModeConfig.runtimeVariables,
+      toolContext,
+      assetContext: prepared.assetContext,
+    }),
     llmRequestConfig: prepared.reasoning,
     providerState: prepared.session.providerState,
-    toolContext: {
-      values: {
-        loadedSkillIds,
-        availableSkillIds: activeModeConfig.activeSkillIds,
-        skillInstructionsById: activeModeConfig.skillInstructionsById,
-        skillsRootDir: getSkillsRootDir(),
-      },
-    },
+    modelContentByMessageId: prepared.modelContentByMessageId,
+    toolContext: initialToolContext,
     modeConfigs: prepared.modeRuntimeConfigs,
     activeModeId: prepared.session.activeModeId,
     agentVariables: prepared.agent.variables ?? {},
-    executeTool: (
-      toolName: string,
-      args: Record<string, unknown>,
-      mode: ModeRuntimeRef,
-      _context: ToolRuntimeContext,
-    ) => {
-      const modeRuntimeConfig = prepared.modeRuntimeConfigs[mode.id] as SessionModeRuntimeConfig;
-      const runtimeTool = modeRuntimeConfig.runtimeToolsByName[toolName];
+    executeTool: (toolName, args, mode, context) => {
+      const modeRuntimeConfig = prepared.modeRuntimeConfigs[mode.id];
+      const runtimeTool = modeRuntimeConfig?.runtimeToolsByName[toolName];
       if (!runtimeTool) {
         return Promise.resolve({
-          content: `Tool "${toolName}" ist im Mode "${mode.id}" nicht erlaubt oder nicht verfuegbar.`,
+          content: `Tool "${toolName}" is not allowed or available in mode "${mode.id}".`,
           isError: true,
         });
       }
-      return executeRuntimeTool(runtimeTool, toolName, args, _context);
+      return executeRuntimeTool(runtimeTool, toolName, args, context);
     },
     resolveToolPermission: async (
       runtimeTool: RuntimeToolDefinition,
@@ -229,133 +268,112 @@ function buildLoopRequest(
       const policy = runtimeTool.resolvePermission
         ? await runtimeTool.resolvePermission(toolName, args, mode)
         : runtimeTool.permissionPolicy;
+      if (policy.kind === "allow") return { allowed: true };
+      if (policy.kind === "deny") return { allowed: false, reason: policy.reason };
 
-      switch (policy.kind) {
-        case "allow":
-          return { allowed: true };
-        case "deny":
-          recordSessionDenial(sessionId, toolName, args, policy.reason ?? "denied by policy");
-          return { allowed: false, reason: policy.reason };
-        case "prompt": {
-          const promptId = `${toolName}-${Date.now()}`;
-          emitPrompt(sessionId, {
-            promptId,
-            question: policy.question,
-            choices: policy.choices,
-          });
-          const result = await waitForResponse(sessionId, promptId);
-          if (result.isError) {
-            recordSessionDenial(sessionId, toolName, args, result.content);
-            return { allowed: false, reason: result.content };
-          }
-          try {
-            const parsed = JSON.parse(result.content) as { selectedKey?: string };
-            if (parsed.selectedKey && policy.allowKeys.includes(parsed.selectedKey)) {
-              return { allowed: true };
-            }
-          } catch {
-            // fall through
-          }
-          const reason = policy.deniedMessage ?? `Tool "${toolName}" was rejected by the user.`;
-          recordSessionDenial(sessionId, toolName, args, reason);
-          return { allowed: false, reason };
-        }
+      const promptId = `${toolName}-${randomUUID()}`;
+      emitPrompt(prepared.session.id, { promptId, question: policy.question, choices: policy.choices });
+      const response = await waitForResponse(prepared.session.id, promptId);
+      if (response.isError) return { allowed: false, reason: response.content };
+      try {
+        const parsed = JSON.parse(response.content) as { selectedKey?: string };
+        if (parsed.selectedKey && policy.allowKeys.includes(parsed.selectedKey)) return { allowed: true };
+      } catch {
+        // Invalid prompt responses are treated as denial.
       }
-      return { allowed: true };
+      return { allowed: false, reason: policy.deniedMessage ?? `Tool "${toolName}" was rejected by the user.` };
     },
     autonomous: activeModeConfig.modeBehavior === "autonomous",
     autonomousBudget: activeAgentModeConfig.config.autonomousBudget,
+    onRunEvent: (event) => appendRunEvent(prepared.session.id, prepared.run.id, event, emit),
+    onCheckpoint: (checkpoint) => persistCheckpoint(prepared, checkpoint),
     ...handlers,
   };
 }
 
-export async function chat(
-  sessionId: string,
-  message: string,
-  attachmentIds?: string[],
-): Promise<{ response: string; session: SessionState }> {
-  const prepared = await prepareLoopRun(sessionId, message, attachmentIds);
-  const abortController = createLoopAbortController(sessionId);
-  let result;
-  try {
-    result = await runWithSessionId(sessionId, () =>
-      runAgentLoop({ ...buildLoopRequest(prepared, sessionId), abortSignal: abortController.signal }),
-    );
-  } finally {
-    clearLoopAbortController(sessionId);
+async function persistRuntimeNotices(prepared: PreparedLoopRun, emit?: (event: SSEEvent) => void): Promise<void> {
+  const notices = prepared.modeRuntimeConfigs[prepared.session.activeModeId]?.runtimeNotices ?? [];
+  for (const message of notices) {
+    await appendRunEvent(prepared.session.id, prepared.run.id, {
+      id: randomUUID(),
+      runId: prepared.run.id,
+      sessionId: prepared.session.id,
+      anchorMessageId: prepared.run.userMessageId,
+      kind: "provider_notice",
+      severity: "warning",
+      code: "runtime_configuration_notice",
+      message,
+      step: 0,
+      attempt: 0,
+      createdAt: nowIso(),
+    }, emit);
   }
-  return {
-    response: result.finalResponse,
-    session: toPublicSession(await finalizeLoopSession(
-      sessionId,
-      prepared.session,
-      result.messages,
-      result.finalResponse,
-      result.providerState,
-      result.providerDebug,
-    )),
-  };
+}
+
+async function markUnexpectedFailure(prepared: PreparedLoopRun, error: unknown, emit?: (event: SSEEvent) => void): Promise<SessionRecord> {
+  const message = "The agent run failed before the loop could finish. The available state was preserved.";
+  await appendRunEvent(prepared.session.id, prepared.run.id, {
+    id: randomUUID(),
+    runId: prepared.run.id,
+    sessionId: prepared.session.id,
+    anchorMessageId: prepared.run.userMessageId,
+    kind: "run_failed",
+    severity: "error",
+    code: "chat_engine_failure",
+    message,
+    detail: getErrorMessage(error).slice(0, 4000),
+    step: 0,
+    attempt: 0,
+    createdAt: nowIso(),
+  }, emit).catch(() => undefined);
+  return updateRun(prepared.session.id, prepared.run.id, (run) => ({
+    ...run,
+    status: "failed" as AgentRunStatus,
+    updatedAt: nowIso(),
+    completedAt: nowIso(),
+  }));
 }
 
 export async function chatStream(
   sessionId: string,
   message: string,
   emit: (event: SSEEvent) => void,
-  attachmentIds?: string[],
+  assetIds?: string[],
 ): Promise<void> {
-  const prepared = await prepareLoopRun(sessionId, message, attachmentIds);
-  for (const notice of prepared.modeRuntimeConfigs[prepared.session.activeModeId]?.runtimeNotices ?? []) {
-    emit({ type: "system_notice", level: "warning", message: notice });
-  }
+  const abortController = beginLoop(sessionId);
+  let prepared: PreparedLoopRun | undefined;
+  let interactionRegistered = false;
 
-  registerSession(sessionId, (payload) => {
-    emit({
-      type: "user_prompt",
-      promptId: payload.promptId,
-      question: payload.question,
-      choices: payload.choices,
-    });
-  });
-
-  const abortController = createLoopAbortController(sessionId);
   try {
-    const result = await runWithSessionId(sessionId, () =>
-      runAgentLoop({ ...buildLoopRequest(prepared, sessionId, {
+    const currentRun = await prepareLoopRun(sessionId, message, assetIds);
+    prepared = currentRun;
+    registerSession(sessionId, (payload) => emit({ type: "user_prompt", ...payload }));
+    interactionRegistered = true;
+    await persistRuntimeNotices(currentRun, emit);
+    const result = await runWithSessionId(sessionId, () => runAgentLoop({
+      ...buildLoopRequest(currentRun, {
         onAssistantBlockDelta: (messageId, block) => emit({ type: "assistant_block_delta", messageId, block }),
         onAssistantMessage: (messageObject) => emit({ type: "assistant_message_complete", message: messageObject }),
-        onSystemNotice: (level, messageText) => emit({ type: "system_notice", level, message: messageText }),
+        onAssistantAttemptDiscarded: (messageIds) => emit({ type: "assistant_attempt_discarded", messageIds }),
         onToolExecutionUpdate: (toolUseId, toolName, status, resultMessage, detail, summary, input, metadata) =>
           emit({ type: "tool_execution_update", toolUseId, toolName, input, status, result: resultMessage, detail, summary, metadata }),
-        onLoopState: (state) => {
-          setLoopState(sessionId, state);
-          emit({ type: "turn_state", state });
-        },
-        onStats: (stats) =>
-          emit({
-            type: "stats",
-            inputTokens: stats.inputTokens,
-            outputTokens: stats.outputTokens,
-            reasoningTokens: stats.reasoningTokens,
-            source: stats.source,
-          }),
-      }), abortSignal: abortController.signal }),
-    );
-
-    const updated = await finalizeLoopSession(
-      sessionId,
-      prepared.session,
-      result.messages,
-      result.finalResponse,
-      result.providerState,
-      result.providerDebug,
-    );
-    emit({ type: "done", session: toPublicSession(updated) });
+        onLoopState: (state) => emit({ type: "turn_state", state }),
+        onStats: (stats) => emit({ type: "stats", inputTokens: stats.inputTokens, outputTokens: stats.outputTokens, reasoningTokens: stats.reasoningTokens, source: stats.source }),
+      }, emit),
+      abortSignal: abortController.signal,
+    }));
+    emit({ type: "done", session: toPublicSession(await finalizeLoopSession(currentRun, result)) });
+  } catch (error) {
+    if (!prepared) throw error;
+    emit({ type: "done", session: toPublicSession(await markUnexpectedFailure(prepared, error, emit)) });
   } finally {
-    clearLoopAbortController(sessionId);
-    unregisterSession(sessionId);
+    finishLoop(sessionId, abortController);
+    if (interactionRegistered) unregisterSession(sessionId);
   }
 }
 
 export function abortSessionLoop(sessionId: string): boolean {
-  return abortLoop(sessionId);
+  const aborted = abortLoop(sessionId);
+  if (aborted) cancelPendingPrompts(sessionId, "Run aborted while waiting for user response.");
+  return aborted;
 }

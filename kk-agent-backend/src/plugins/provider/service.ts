@@ -27,7 +27,7 @@ import { getErrorMessage } from "../../lib/error.js";
 
 const logger = createLogger("provider");
 import { loadState, saveState } from "../lib/state.js";
-import { getMessageReasoning } from "../lib/transcript.js";
+import { getMessageReasoning } from "kk-agent-contract";
 import {
   getModelSettingsKey,
   normalizeStoredModelSettings,
@@ -58,10 +58,6 @@ const DEFAULT_STATE: ProvidersState = {
 
 let state: ProvidersState = structuredClone(DEFAULT_STATE);
 
-let adapterFactory: (config: ProviderConfig) => ProviderAdapter =
-  createLocalProviderAdapter;
-let persistOverride: (() => Promise<void>) | undefined;
-
 const adapterCache = new Map<string, ProviderAdapter>();
 const modelsCache = new Map<string, ModelInfo[]>();
 
@@ -90,14 +86,15 @@ function resolveProvider(providerId?: string): ProviderConfig {
 function normalizeStoredProvidersState(
   nextState: ProvidersState,
 ): ProvidersState {
+  const modelSettings = Object.fromEntries(
+    Object.entries(nextState.modelSettings ?? {}).flatMap(([key, value]) => {
+      const normalized = normalizeStoredModelSettings(value);
+      return normalized.llmRequestConfig ? [[key, normalized]] : [];
+    }),
+  );
   return {
     providers: nextState.providers ?? [],
-    modelSettings: Object.fromEntries(
-      Object.entries(nextState.modelSettings ?? {}).map(([key, value]) => [
-        key,
-        normalizeStoredModelSettings(value),
-      ]),
-    ),
+    modelSettings,
     observedCapabilities: Object.fromEntries(
       Object.entries(nextState.observedCapabilities ?? {}).map(
         ([key, value]) => [key, normalizeObservation(value)],
@@ -118,16 +115,6 @@ function resolveRequestProvider(providerId?: string): ProviderConfig {
   return resolveProvider(providerId ?? getSingleProviderId());
 }
 
-function normalizeProviderStateForTests(
-  overrides: Partial<ProvidersState>,
-): ProvidersState {
-  return normalizeStoredProvidersState({
-    providers: structuredClone(overrides.providers ?? []),
-    modelSettings: structuredClone(overrides.modelSettings ?? {}),
-    observedCapabilities: structuredClone(overrides.observedCapabilities ?? {}),
-  });
-}
-
 function getAdapter(providerId: string): ProviderAdapter {
   const cached = adapterCache.get(providerId);
   if (cached) return cached;
@@ -135,7 +122,7 @@ function getAdapter(providerId: string): ProviderAdapter {
   const provider = getProviderById(providerId);
   if (!provider) throw new NotFoundError("Provider", providerId);
 
-  const adapter = adapterFactory(provider);
+  const adapter = createLocalProviderAdapter(provider);
   adapterCache.set(providerId, adapter);
   return adapter;
 }
@@ -155,10 +142,6 @@ function clearObservedCapabilities(providerId: string): void {
 }
 
 async function persist(): Promise<void> {
-  if (persistOverride) {
-    await persistOverride();
-    return;
-  }
   await saveState(STATE_FILE, state);
 }
 
@@ -259,10 +242,8 @@ function hasObservedReasoning(response: UnifiedResponse): boolean {
 }
 
 function requestContainsImageInputs(request: UnifiedRequest): boolean {
-  return request.messages.some((message) =>
-    message.content.some(
-      (block) => block.type === "attachment_ref" && block.category === "image",
-    ),
+  return Object.values(request.modelContentByMessageId ?? {}).some((parts) =>
+    parts.some((part) => part.type === "image"),
   );
 }
 
@@ -278,9 +259,25 @@ function isUnsupportedVisionError(error: unknown): boolean {
   );
 }
 
+function withoutImageInputs(request: UnifiedRequest): UnifiedRequest {
+  return {
+    ...request,
+    modelContentByMessageId: Object.fromEntries(
+      Object.entries(request.modelContentByMessageId ?? {}).map(([messageId, parts]) => [
+        messageId,
+        [
+          ...parts.filter((part) => part.type !== "image"),
+          { type: "text" as const, text: "[Visual pixels omitted because this model does not accept image input.]" },
+        ],
+      ]),
+    ),
+  };
+}
+
 export async function initState(): Promise<void> {
   const loaded = await loadState<ProvidersState>(STATE_FILE, DEFAULT_STATE);
   state = normalizeStoredProvidersState(loaded);
+  if (JSON.stringify(state) !== JSON.stringify(loaded)) await persist();
 
   if (state.providers.length > 0) {
     logger.info(`Loaded ${state.providers.length} provider(s).`);
@@ -598,6 +595,16 @@ async function executeWithEndpointFallback(
       await markObservedCapabilities(primary.provider.id, request.model, {
         visionSupport: "unsupported",
       });
+      const fallbackRequest = withoutImageInputs(primary.prepared);
+      const response = await invoke(fallbackRequest, primary.provider);
+      response.notices = [{
+        level: "warning",
+        code: "vision_input_fallback",
+        message: "Provider rejected image input. Retried with extracted text and asset metadata only.",
+      }, ...(response.notices ?? [])];
+      attachProviderDebug(response, fallbackRequest, { attemptedEndpoints, endpointSelection });
+      await trackObservedSuccess(primary.provider.id, request.model, fallbackRequest, response);
+      return response;
     }
 
     if (
@@ -639,14 +646,6 @@ async function executeWithEndpointFallback(
   }
 }
 
-export async function callProvider(
-  request: UnifiedRequest,
-): Promise<UnifiedResponse> {
-  return executeWithEndpointFallback(request, async (prepared, provider) =>
-    getAdapter(provider.id).chat(prepared),
-  );
-}
-
 export async function callProviderStream(
   request: UnifiedRequest,
   onChunk: OnChunkFn,
@@ -664,7 +663,7 @@ export function getModelCapabilities(
   return models?.find((m) => m.id === modelId)?.capabilities;
 }
 
-export function getModelSettings(
+function getModelSettings(
   providerId: string,
   modelId: string,
 ): ModelSettings {
@@ -691,29 +690,9 @@ export async function setModelSettings(
   modelId: string,
   settings: ModelSettings,
 ): Promise<void> {
-  state.modelSettings[getModelSettingsKey(providerId, modelId)] =
-    normalizeStoredModelSettings(settings);
+  const key = getModelSettingsKey(providerId, modelId);
+  const normalized = normalizeStoredModelSettings(settings);
+  if (normalized.llmRequestConfig) state.modelSettings[key] = normalized;
+  else delete state.modelSettings[key];
   await persist();
-}
-
-export function __resetProviderServiceForTests(
-  overrides: Partial<ProvidersState> = {},
-): void {
-  state = normalizeProviderStateForTests(overrides);
-  adapterFactory = createLocalProviderAdapter;
-  persistOverride = async () => {};
-  adapterCache.clear();
-  modelsCache.clear();
-}
-
-export function __setProviderAdapterFactoryForTests(
-  factory?: (config: ProviderConfig) => ProviderAdapter,
-): void {
-  adapterFactory = factory ?? createLocalProviderAdapter;
-  adapterCache.clear();
-  modelsCache.clear();
-}
-
-export function __getProviderStateForTests(): ProvidersState {
-  return structuredClone(state);
 }

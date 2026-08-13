@@ -136,13 +136,6 @@ export interface LoopOptions {
   onLoopState?: (state: AgentLoopState) => void;
   onStats?: (stats: TokenStats) => void;
   abortSignal?: AbortSignal;
-  autonomous?: boolean;
-  autonomousBudget?: {
-    maxInputTokens?: number;
-    maxOutputTokens?: number;
-    maxWallClockMs?: number;
-    maxConsecutiveAutoContinues?: number;
-  };
 }
 
 export interface LoopResult {

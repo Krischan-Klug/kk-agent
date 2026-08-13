@@ -1,7 +1,14 @@
 import { loadState, saveState } from "../../lib/state.js";
 import type { AgentDefinition } from "../types.js";
 import type { PersistedAgentsState, PersistedAgentDefinition } from "./persisted-types.js";
-import { expandPersistedMode, compactEffectiveMode } from "./mode-config.js";
+import {
+  buildDefaultModes,
+  compactEffectiveMode,
+  expandPersistedMode,
+  normalizeModeDefinitions,
+  resolveDefaultModeId,
+} from "./mode-config.js";
+import { isModeBehavior } from "./modes.js";
 import { getBundledAgents } from "./defaults.js";
 
 const STATE_FILE = "agents.json";
@@ -23,6 +30,20 @@ function compactEffectiveAgent(agent: AgentDefinition): PersistedAgentDefinition
   };
 }
 
+function normalizePersistedAgent(agent: PersistedAgentDefinition): PersistedAgentDefinition {
+  const supportedModes = agent.modes
+    .filter((mode) => isModeBehavior(mode.behavior))
+    .map(expandPersistedMode);
+  const modes = supportedModes.some((mode) => mode.enabled)
+    ? normalizeModeDefinitions(supportedModes)
+    : buildDefaultModes();
+  return compactEffectiveAgent({
+    ...agent,
+    defaultModeId: resolveDefaultModeId(agent.defaultModeId, modes),
+    modes,
+  });
+}
+
 export async function initStore(): Promise<void> {
   const stored = await loadState<unknown>(STATE_FILE, null);
   const state = stored
@@ -35,9 +56,11 @@ export async function initStore(): Promise<void> {
         agents: getBundledAgents().map(compactEffectiveAgent),
       };
 
-  if (state.agents.length === 0) state.agents = getBundledAgents().map(compactEffectiveAgent);
-  cache = state.agents;
-  await saveState(STATE_FILE, state);
+  const agents = state.agents.length > 0
+    ? state.agents.map(normalizePersistedAgent)
+    : getBundledAgents().map(compactEffectiveAgent);
+  cache = agents;
+  await saveState(STATE_FILE, { schemaVersion: AGENT_SCHEMA_VERSION, agents });
 }
 
 function getCache(): PersistedAgentDefinition[] {

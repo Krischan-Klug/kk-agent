@@ -8,7 +8,7 @@ The Electron application uses a Next.js renderer and connects to the plugin-base
 
 ## What It Does
 
-- Runs chat, edit, and autonomous agent loops against local models
+- Runs plan and edit agent loops against local models
 - Separates internal tools, external MCPs, and standard Agent Skills
 - Streams assistant text, reasoning, tool activity, and loop state live
 - Persists lightweight JSON state without a database

@@ -1,7 +1,6 @@
 import TextArea from "@/components/TextArea";
 import type { AppDefaults, ModeBehavior } from "@/types/api";
 import { FieldLabel, FormField } from "@/components/PageForm";
-import AutonomousBudgetFields from "@/components/AutonomousBudgetFields";
 import ModeTabsSelector from "./ModeTabsSelector";
 
 interface Props {
@@ -20,23 +19,6 @@ export default function ModeInstructionsSection({
   setSelectedMode,
 }: Props) {
   const template = draft.agent.modeTemplates[selectedMode];
-  const budget = template?.autonomousBudget ?? {};
-
-  function updateBudget(partial: Partial<typeof budget>) {
-    setDraft({
-      ...draft,
-      agent: {
-        ...draft.agent,
-        modeTemplates: {
-          ...draft.agent.modeTemplates,
-          [selectedMode]: {
-            ...template,
-            autonomousBudget: { ...budget, ...partial },
-          },
-        },
-      },
-    });
-  }
 
   return (
     <>
@@ -61,9 +43,6 @@ export default function ModeInstructionsSection({
           })}
         />
       </FormField>
-      {selectedMode === "autonomous" && (
-        <AutonomousBudgetFields value={budget} onChange={updateBudget} full />
-      )}
     </>
   );
 }

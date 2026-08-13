@@ -7,7 +7,6 @@ export type {
   AgentModeConfig,
   AgentPromptSections,
   AppDefaults,
-  AutonomousBudget,
   AssetMeta,
   ModeBehavior,
   CreateAgentBody,

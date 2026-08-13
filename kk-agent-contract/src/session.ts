@@ -1,5 +1,5 @@
 import type { ProviderTurnDebug, LlmRequestConfig } from "./provider.js";
-import type { AgentLoopState, AgentPromptSections, AutonomousBudget, ModeBehavior } from "./agent.js";
+import type { AgentLoopState, AgentPromptSections, ModeBehavior } from "./agent.js";
 import type { ToolExecutionStatus, TranscriptBlock, TranscriptMessage } from "./transcript.js";
 
 export type AssetKind = "image" | "pdf" | "document" | "presentation" | "spreadsheet" | "text";
@@ -45,7 +45,7 @@ export type RunEventKind =
   | "model_retry"
   | "tool_error"
   | "output_limit"
-  | "budget_stopped"
+  | "run_limit"
   | "run_failed"
   | "run_aborted";
 
@@ -160,7 +160,6 @@ export interface AppDefaults {
     modeTemplates: Record<ModeBehavior, {
       label: string;
       modeInstruction: string;
-      autonomousBudget?: AutonomousBudget;
       toolIds: string[];
       allowedToolNames: string[];
       toolInstructions: Record<string, string>;

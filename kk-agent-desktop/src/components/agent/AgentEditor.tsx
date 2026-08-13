@@ -20,7 +20,6 @@ import { EditorArea } from "./AgentEditor.styled";
 import { createCustomMode } from "./AgentEditor.helpers";
 import {
   AgentInfoSection,
-  AutonomousBudgetSection,
   ExternalMcpsSection,
   InternalToolsSection,
   ModeInstructionSection,
@@ -221,10 +220,6 @@ export default function AgentEditor({
         isCustomizedModeInstruction={selectedModeConfig.modeInstruction.trim() !== defaultModeInstruction.trim()}
         updateModeConfig={updateModeConfig}
       />
-
-      {selectedModeDefinition.behavior === "autonomous" && (
-        <AutonomousBudgetSection selectedModeConfig={selectedModeConfig} updateModeConfig={updateModeConfig} />
-      )}
 
       <InternalToolsSection
         selectedModeConfig={selectedModeConfig}

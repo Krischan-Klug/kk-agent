@@ -22,7 +22,7 @@ import {
   toPublicSession,
 } from "../service.js";
 import { resolveSessionLlmRequestConfig } from "./session-resolution.js";
-import { getEnabledAgentModes, getAgentMode } from "../../agent/lib/mode-config.js";
+import { getEnabledAgentModes } from "../../agent/lib/mode-config.js";
 import {
   getAgent,
 } from "../../agent/service.js";
@@ -211,7 +211,6 @@ function buildLoopRequest(
   emit?: (event: SSEEvent) => void,
 ): LoopOptions {
   const activeModeConfig = prepared.modeRuntimeConfigs[prepared.session.activeModeId]!;
-  const activeAgentModeConfig = getAgentMode(prepared.agent, prepared.session.activeModeId);
   const initialToolContext: ToolRuntimeContext = {
     values: {
       ...prepared.loadedSkills,
@@ -283,8 +282,6 @@ function buildLoopRequest(
       }
       return { allowed: false, reason: policy.deniedMessage ?? `Tool "${toolName}" was rejected by the user.` };
     },
-    autonomous: activeModeConfig.modeBehavior === "autonomous",
-    autonomousBudget: activeAgentModeConfig.config.autonomousBudget,
     onRunEvent: (event) => appendRunEvent(prepared.session.id, prepared.run.id, event, emit),
     onCheckpoint: (checkpoint) => persistCheckpoint(prepared, checkpoint),
     ...handlers,

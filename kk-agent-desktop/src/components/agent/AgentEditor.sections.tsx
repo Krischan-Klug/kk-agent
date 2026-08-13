@@ -18,7 +18,6 @@ import Button from "@/components/Button";
 import Input from "@/components/Input";
 import TextArea from "@/components/TextArea";
 import KeyValueEditor from "@/components/KeyValueEditor";
-import AutonomousBudgetFields from "@/components/AutonomousBudgetFields";
 import {
   ActionsRow,
   EmptyHint,
@@ -374,26 +373,6 @@ export function ModeInstructionSection({
         value={selectedModeConfig.modeInstruction}
         onChange={(e) => updateModeConfig({ ...selectedModeConfig, modeInstruction: e.target.value })}
         placeholder={defaultModeInstruction}
-      />
-    </Section>
-  );
-}
-
-type AutonomousBudgetSectionProps = {
-  selectedModeConfig: AgentModeConfig;
-  updateModeConfig: (nextConfig: AgentModeConfig) => void;
-};
-
-export function AutonomousBudgetSection({
-  selectedModeConfig,
-  updateModeConfig,
-}: AutonomousBudgetSectionProps) {
-  return (
-    <Section>
-      <SectionTitle>Autonomous Budget</SectionTitle>
-      <AutonomousBudgetFields
-        value={selectedModeConfig.autonomousBudget}
-        onChange={(autonomousBudget) => updateModeConfig({ ...selectedModeConfig, autonomousBudget })}
       />
     </Section>
   );

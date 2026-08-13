@@ -21,10 +21,6 @@ import {
   PTL_SNIP_NOTICE,
   snipOldestToolCycles,
 } from "./recovery.js";
-import { createTokenBudget, recordTurn, shouldContinue } from "./token-budget.js";
-
-const TASK_COMPLETE_SENTINEL = "TASK_COMPLETE";
-const AUTONOMOUS_CONTINUE_INSTRUCTION = `Continue working on the task autonomously. If the task is fully complete, respond with exactly "${TASK_COMPLETE_SENTINEL}" on its own line and nothing else.`;
 const EMPTY_RESPONSE_RETRY_BUDGET = 1;
 const TRANSIENT_RETRY_BUDGET = 3;
 const PROMPT_TOO_LONG_RETRY_BUDGET = 3;
@@ -237,26 +233,10 @@ export async function runAgentLoop(opts: LoopOptions): Promise<LoopResult> {
   let promptTooLongRetries = 0;
   let maxOutputRetries = 0;
   let transientRetries = 0;
-  let consecutiveAutoContinues = 0;
   let providerState = opts.providerState;
   let providerDebug: LoopCheckpoint["providerDebug"];
   let toolContext = cloneToolContext(opts.toolContext ?? { values: {} });
-  let lastTurnStats: import("../../provider/lib/types.js").TokenStats | undefined;
-  const tokenBudget = createTokenBudget({
-    maxInputTokens: opts.autonomousBudget?.maxInputTokens,
-    maxOutputTokens: opts.autonomousBudget?.maxOutputTokens,
-  });
-  const autonomousStart = Date.now();
-  const maxWallClockMs = opts.autonomousBudget?.maxWallClockMs ?? 30 * 60 * 1000;
-  const maxConsecutiveAutoContinues = opts.autonomousBudget?.maxConsecutiveAutoContinues ?? 20;
   const defaults = getDefaults();
-  const loopOpts: LoopOptions = {
-    ...opts,
-    onStats: (stats) => {
-      lastTurnStats = stats;
-      opts.onStats?.(stats);
-    },
-  };
 
   let status: LoopResult["status"] = "completed";
 
@@ -265,17 +245,14 @@ export async function runAgentLoop(opts: LoopOptions): Promise<LoopResult> {
     // eslint-disable-next-line no-constant-condition
     while (true) {
       throwIfAborted(opts.abortSignal);
-      const elapsedMs = Date.now() - autonomousStart;
-      const safetyStopReason = elapsedMs >= maxWallClockMs
-        ? "wall-clock limit reached"
-        : state.step >= MAX_COMMITTED_STEPS_PER_RUN
-          ? "committed step limit reached"
-          : state.toolBatch >= MAX_TOOL_BATCHES_PER_RUN
-            ? "tool batch limit reached"
-            : undefined;
+      const safetyStopReason = state.step >= MAX_COMMITTED_STEPS_PER_RUN
+        ? "committed step limit reached"
+        : state.toolBatch >= MAX_TOOL_BATCHES_PER_RUN
+          ? "tool batch limit reached"
+          : undefined;
       if (safetyStopReason) {
         await emitRunEvent(opts, messages, state, {
-          kind: "budget_stopped",
+          kind: "run_limit",
           severity: "warning",
           code: "run_safety_limit_reached",
           message: `Run stopped because its ${safetyStopReason}.`,
@@ -299,10 +276,9 @@ export async function runAgentLoop(opts: LoopOptions): Promise<LoopResult> {
       }) ?? "";
 
       let response;
-      lastTurnStats = undefined;
       try {
         response = await (opts.modelPassRunner ?? runModelPass)(
-          loopOpts,
+          opts,
           contextMessages,
           providerState,
           retryInstruction,
@@ -357,9 +333,6 @@ export async function runAgentLoop(opts: LoopOptions): Promise<LoopResult> {
           message: notice.message,
         });
       }
-      const turnStats = lastTurnStats ?? response.stats;
-      if (turnStats) recordTurn(tokenBudget, turnStats);
-
       const assistantMessage = response.message;
       const assistantText = getMessageText(assistantMessage).trim();
       const toolUses = getToolUses(assistantMessage);
@@ -496,29 +469,7 @@ export async function runAgentLoop(opts: LoopOptions): Promise<LoopResult> {
         continue;
       }
 
-      if (!opts.autonomous || assistantText.includes(TASK_COMPLETE_SENTINEL)) break;
-
-      let stopReason: string | undefined;
-      if (consecutiveAutoContinues >= maxConsecutiveAutoContinues) stopReason = "consecutive auto-continue limit reached";
-      else {
-        const verdict = shouldContinue(tokenBudget);
-        if (!verdict.continue) stopReason = verdict.reason;
-      }
-      if (stopReason) {
-        await emitRunEvent(opts, messages, state, {
-          kind: "budget_stopped",
-          severity: "info",
-          code: "autonomous_budget_reached",
-          message: `Autonomous run stopped: ${stopReason}.`,
-          anchorMessageId: assistantMessage.id,
-        });
-        status = "stopped";
-        break;
-      }
-
-      consecutiveAutoContinues += 1;
-      retryInstruction = AUTONOMOUS_CONTINUE_INSTRUCTION;
-      state.attempt = 0;
+      break;
     }
   } catch (error) {
     if (error instanceof AbortedError || opts.abortSignal?.aborted) {

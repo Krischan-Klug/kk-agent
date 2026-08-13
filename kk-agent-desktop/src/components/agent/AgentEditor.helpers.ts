@@ -8,7 +8,7 @@ import type {
 } from "@/types/api";
 export { PROMPT_SECTION_META } from "@/lib/promptSections";
 
-export const MODE_BEHAVIORS: ModeBehavior[] = ["plan", "edit", "autonomous"];
+export const MODE_BEHAVIORS: ModeBehavior[] = ["plan", "edit"];
 
 export const OVERRIDE_EMOJI = "\u270F\uFE0F";
 export const RESET_EMOJI = "\u21BA";
@@ -58,7 +58,6 @@ function buildModeConfigFromDefaults(behavior: ModeBehavior, defaults: AppDefaul
     toolInstructions: { ...(template?.toolInstructions ?? {}) },
     mcpInstructions: {},
     allowedToolNames: [...(template?.allowedToolNames ?? [])],
-    autonomousBudget: template?.autonomousBudget ? { ...template.autonomousBudget } : {},
   };
 }
 

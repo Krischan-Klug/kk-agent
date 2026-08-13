@@ -66,16 +66,10 @@ const BUILT_IN_MODE_META: Record<ModeBehavior, BuiltInModeMeta> = {
     behavior: "edit",
     source: "builtin",
   },
-  autonomous: {
-    id: "autonomous",
-    label: "Autonomous",
-    behavior: "autonomous",
-    source: "builtin",
-  },
 };
 
 export function getBuiltInModeBehaviors(): ModeBehavior[] {
-  return ["plan", "edit", "autonomous"];
+  return ["plan", "edit"];
 }
 
 export function getBuiltInModeMeta(behavior: ModeBehavior): BuiltInModeMeta {

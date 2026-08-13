@@ -11,6 +11,8 @@ import {
 } from "../../lib/state.js";
 import { ensureSessionFactsLoaded } from "../../tools/lib/memory-state.js";
 import { ensureTasksLoaded } from "../../tools/lib/task-state.js";
+import { getAgent } from "../../agent/service.js";
+import { getEnabledAgentModes } from "../../agent/lib/mode-config.js";
 import type { SessionRecord, SessionState } from "../types.js";
 
 const logger = createLogger("session/store");
@@ -93,6 +95,12 @@ export async function initStore(): Promise<void> {
       const stored = await loadSessionData<unknown>(id, SESSION_FILE, null);
       if (!isCompatibleSession(stored, id)) {
         logger.warn(`Deleting incompatible session "${id}".`);
+        await deleteSessionData(id);
+        continue;
+      }
+      const agent = getAgent(stored.agentId);
+      if (!getEnabledAgentModes(agent).some((mode) => mode.id === stored.activeModeId)) {
+        logger.warn(`Deleting session "${id}" with an unavailable mode.`);
         await deleteSessionData(id);
         continue;
       }

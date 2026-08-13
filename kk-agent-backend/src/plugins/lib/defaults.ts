@@ -1,6 +1,12 @@
 import { loadState, saveState } from "./state.js";
 import type { AppDefaults } from "kk-agent-contract";
-import { getBuiltInModeMeta, getDefaultAllowedToolNames, getDefaultToolIds } from "../agent/lib/modes.js";
+import {
+  getBuiltInModeBehaviors,
+  getBuiltInModeMeta,
+  getDefaultAllowedToolNames,
+  getDefaultToolIds,
+  isModeBehavior,
+} from "../agent/lib/modes.js";
 import { applyOverrides, diffOverrides } from "./overrides.js";
 
 const STATE_FILE = "defaults.json";
@@ -81,7 +87,6 @@ const CODE_DEFAULTS: AppDefaults = {
           "Use create_tasks or update_tasks when task tracking would make the plan clearer.",
           "Do not mark tasks completed in planning behavior.",
         ].join("\n"),
-        autonomousBudget: {},
         toolIds: getDefaultToolIds("plan"),
         allowedToolNames: getDefaultAllowedToolNames("plan"),
         toolInstructions: {
@@ -134,7 +139,6 @@ const CODE_DEFAULTS: AppDefaults = {
           "When the work benefits from explicit tracking, maintain tasks as you go and close them with solve_tasks when completed.",
           "After non-trivial implementation, run an appropriate verification step if possible and report the result honestly.",
         ].join("\n"),
-        autonomousBudget: {},
         toolIds: getDefaultToolIds("edit"),
         allowedToolNames: getDefaultAllowedToolNames("edit"),
         toolInstructions: {
@@ -186,20 +190,6 @@ const CODE_DEFAULTS: AppDefaults = {
           ].join(" "),
         },
       },
-      autonomous: {
-        label: getBuiltInModeMeta("autonomous").label,
-        modeInstruction: [
-          "You are running in autonomous behavior. Keep working on the user's goal across multiple turns without waiting for further instructions.",
-          "Plan, execute, verify, and iterate on your own until the goal is demonstrably met.",
-          "Do not stop mid-task, do not ask the user to confirm routine steps, and do not hand work back prematurely.",
-          "When the goal is fully complete, respond with exactly TASK_COMPLETE on its own line and nothing else.",
-          "If you hit a hard blocker you cannot resolve (missing credentials, out-of-scope permission), summarize the blocker and ask the user.",
-        ].join("\n"),
-        autonomousBudget: {},
-        toolIds: getDefaultToolIds("edit"),
-        allowedToolNames: getDefaultAllowedToolNames("edit"),
-        toolInstructions: {},
-      },
     },
   },
   retry: {
@@ -222,7 +212,23 @@ interface DefaultsState {
   overrides: Partial<AppDefaults>;
 }
 
-let cache: AppDefaults = applyOverrides(CODE_DEFAULTS, {});
+function normalizeDefaults(defaults: AppDefaults): AppDefaults {
+  const modeTemplates = Object.fromEntries(
+    getBuiltInModeBehaviors().map((behavior) => [behavior, defaults.agent.modeTemplates[behavior]]),
+  ) as AppDefaults["agent"]["modeTemplates"];
+  return {
+    ...defaults,
+    agent: {
+      ...defaults.agent,
+      defaultModeBehavior: isModeBehavior(defaults.agent.defaultModeBehavior)
+        ? defaults.agent.defaultModeBehavior
+        : "edit",
+      modeTemplates,
+    },
+  };
+}
+
+let cache: AppDefaults = normalizeDefaults(applyOverrides(CODE_DEFAULTS, {}));
 
 export async function initDefaults(): Promise<void> {
   const stored = await loadState<unknown>(STATE_FILE, null);
@@ -232,8 +238,11 @@ export async function initDefaults(): Promise<void> {
     && typeof (stored as Partial<DefaultsState>).overrides === "object"
     ? stored as DefaultsState
     : { schemaVersion: DEFAULTS_SCHEMA_VERSION, overrides: {} };
-  cache = applyOverrides(CODE_DEFAULTS, state.overrides);
-  if (state !== stored) await saveState(STATE_FILE, state);
+  cache = normalizeDefaults(applyOverrides(CODE_DEFAULTS, state.overrides));
+  await saveState<DefaultsState>(STATE_FILE, {
+    schemaVersion: DEFAULTS_SCHEMA_VERSION,
+    overrides: diffOverrides(CODE_DEFAULTS, cache),
+  });
 }
 
 export function getDefaults(): AppDefaults {
@@ -241,9 +250,9 @@ export function getDefaults(): AppDefaults {
 }
 
 export async function updateDefaults(partial: Partial<AppDefaults>): Promise<AppDefaults> {
-  const effective = applyOverrides(cache, partial);
+  const effective = normalizeDefaults(applyOverrides(cache, partial));
   const overrides = diffOverrides(CODE_DEFAULTS, effective);
-  cache = applyOverrides(CODE_DEFAULTS, overrides);
+  cache = normalizeDefaults(applyOverrides(CODE_DEFAULTS, overrides));
   await saveState<DefaultsState>(STATE_FILE, { schemaVersion: DEFAULTS_SCHEMA_VERSION, overrides });
   return cache;
 }

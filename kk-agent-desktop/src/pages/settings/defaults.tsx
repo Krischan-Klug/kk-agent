@@ -19,7 +19,7 @@ import {
   SaveMsg,
 } from "@/components/settings/defaults.styled";
 
-const CHAT_MODES: ModeBehavior[] = ["plan", "edit", "autonomous"];
+const CHAT_MODES: ModeBehavior[] = ["plan", "edit"];
 
 type SectionKey =
   | "agentCore"

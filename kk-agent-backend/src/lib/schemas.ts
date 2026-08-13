@@ -40,13 +40,6 @@ const AgentPromptSectionsSchema = z.object({
   communication: z.string(),
 });
 
-const AutonomousBudgetSchema = z.object({
-  maxInputTokens: z.number().int().positive().optional(),
-  maxOutputTokens: z.number().int().positive().optional(),
-  maxWallClockMs: z.number().int().positive().optional(),
-  maxConsecutiveAutoContinues: z.number().int().positive().optional(),
-});
-
 const AgentModeConfigSchema = z.object({
   promptSections: AgentPromptSectionsSchema,
   modeInstruction: z.string(),
@@ -57,13 +50,12 @@ const AgentModeConfigSchema = z.object({
   toolInstructions: z.record(z.string()),
   mcpInstructions: z.record(z.string()),
   allowedToolNames: z.array(z.string()),
-  autonomousBudget: AutonomousBudgetSchema.optional(),
 });
 
 const AgentModeDefinitionSchema = z.object({
   id: NonEmptyStringSchema,
   label: NonEmptyStringSchema,
-  behavior: z.enum(["plan", "edit", "autonomous"]),
+  behavior: z.enum(["plan", "edit"]),
   source: z.enum(["builtin", "custom"]),
   enabled: z.boolean(),
   config: AgentModeConfigSchema,

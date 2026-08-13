@@ -5,7 +5,6 @@ export type {
   AgentModeConfig,
   AgentModeSource,
   AgentPromptSections,
-  AutonomousBudget,
   ModeBehavior,
   CreateAgentBody,
   ToolAccessScope,

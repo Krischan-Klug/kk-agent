@@ -65,7 +65,6 @@ function buildDefaultModeConfig(behavior: ModeBehavior): AgentModeConfig {
     toolInstructions: { ...template.toolInstructions },
     mcpInstructions: {},
     allowedToolNames: [...template.allowedToolNames],
-    autonomousBudget: template.autonomousBudget ? { ...template.autonomousBudget } : undefined,
   };
 }
 
@@ -98,7 +97,6 @@ function normalizeModeConfig(
     toolInstructions: { ...defaults.toolInstructions, ...current?.toolInstructions },
     mcpInstructions: { ...defaults.mcpInstructions, ...current?.mcpInstructions },
     allowedToolNames: [...new Set(current?.allowedToolNames ?? defaults.allowedToolNames)],
-    autonomousBudget: current?.autonomousBudget ?? defaults.autonomousBudget,
   };
 }
 

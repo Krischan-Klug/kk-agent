@@ -1,5 +1,5 @@
 import type { LlmRequestConfig } from "./provider.js";
-export type ModeBehavior = "plan" | "edit" | "autonomous";
+export type ModeBehavior = "plan" | "edit";
 export type AgentModeSource = "builtin" | "custom";
 export type ToolAccessScope = "user" | "system";
 
@@ -13,13 +13,6 @@ export interface AgentPromptSections {
   communication: string;
 }
 
-export interface AutonomousBudget {
-  maxInputTokens?: number;
-  maxOutputTokens?: number;
-  maxWallClockMs?: number;
-  maxConsecutiveAutoContinues?: number;
-}
-
 export interface AgentModeConfig {
   promptSections: AgentPromptSections;
   modeInstruction: string;
@@ -30,7 +23,6 @@ export interface AgentModeConfig {
   toolInstructions: Record<string, string>;
   mcpInstructions: Record<string, string>;
   allowedToolNames: string[];
-  autonomousBudget?: AutonomousBudget;
 }
 
 export interface AgentModeDefinition {

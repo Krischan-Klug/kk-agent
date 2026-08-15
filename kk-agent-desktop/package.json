@@ -1,7 +1,7 @@
 {
   "name": "kk-agent-desktop",
   "productName": "KK-Agent",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "private": true,
   "description": "KK-Agent desktop application with Electron and a Next.js renderer.",
   "author": "KK Studios",

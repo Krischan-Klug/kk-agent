@@ -136,10 +136,12 @@ type Props = {
   showReasoningControl: boolean;
   showTemperatureControl: boolean;
   resolvedEffort: string;
+  resolvedReasoningHistory: string;
   resolvedTemp: number;
   reasoningOptions: SelectMenuOption[];
   temperatureOptions: SelectMenuOption[];
   onReasoningSelect: (value: string) => void;
+  onReasoningHistorySelect: (value: string) => void;
   onTemperatureSelect: (value: string) => void;
   onLlmRequestConfigChange: (value: LlmRequestConfig | undefined) => void;
 };
@@ -192,10 +194,12 @@ export default function ChatDebugPanel({
   showReasoningControl,
   showTemperatureControl,
   resolvedEffort,
+  resolvedReasoningHistory,
   resolvedTemp,
   reasoningOptions,
   temperatureOptions,
   onReasoningSelect,
+  onReasoningHistorySelect,
   onTemperatureSelect,
   onLlmRequestConfigChange,
 }: Props) {
@@ -321,8 +325,9 @@ export default function ChatDebugPanel({
         activeMcpIds: session.activeMcpIds,
         activeSkillIds: session.activeSkillIds,
         activeModeId: session.activeModeId,
-        reasoningEffort: session.llmRequestConfig?.common?.reasoningEffort ?? "default",
-        temperature: session.llmRequestConfig?.common?.temperature ?? "default",
+        reasoningEffort: session.llmRequestConfig?.reasoning?.effort ?? "manufacturer default",
+        reasoningHistory: session.llmRequestConfig?.reasoning?.history ?? "auto",
+        temperature: session.llmRequestConfig?.sampling?.temperature ?? "profile default",
         llmRequestConfig: session.llmRequestConfig ?? null,
         providerDebug: session.providerDebug ?? null,
         messageCount: session.messages.length,
@@ -384,12 +389,25 @@ export default function ChatDebugPanel({
             <Badge variant="info">{session.model}</Badge>
           )}
           {showReasoningControl && (
-            <SelectMenu
-              value={resolvedEffort}
-              options={reasoningOptions}
-              onSelect={onReasoningSelect}
-              variant="neutral"
-            />
+            <>
+              <SelectMenu
+                value={resolvedEffort}
+                options={reasoningOptions}
+                onSelect={onReasoningSelect}
+                variant="neutral"
+              />
+              <SelectMenu
+                value={resolvedReasoningHistory}
+                options={[
+                  { value: "auto", label: "history: manufacturer" },
+                  { value: "discard", label: "history: current turn" },
+                  { value: "tool-turns", label: "history: tool turns" },
+                  { value: "all", label: "history: all" },
+                ]}
+                onSelect={onReasoningHistorySelect}
+                variant="neutral"
+              />
+            </>
           )}
           {showTemperatureControl && (
             <SelectMenu

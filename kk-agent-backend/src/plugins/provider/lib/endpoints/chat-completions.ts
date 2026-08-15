@@ -69,6 +69,8 @@ export async function chatStream(
             delta?: {
               content?: string | null;
               reasoning_content?: string | null;
+              reasoning?: string | null;
+              thinking?: string | null;
               tool_calls?: Array<{
                 index: number;
                 id?: string;
@@ -88,15 +90,14 @@ export async function chatStream(
       if (isProviderTokenUsage(parsed.usage)) usage = parsed.usage;
       finishReason = mapFinishReason(choice.finish_reason);
 
-      if (
-        typeof delta?.reasoning_content === "string" &&
-        delta.reasoning_content.length > 0
-      ) {
-        reasoning += delta.reasoning_content;
+      const reasoningDelta = [delta?.reasoning_content, delta?.reasoning, delta?.thinking]
+        .find((value): value is string => typeof value === "string" && value.length > 0);
+      if (reasoningDelta) {
+        reasoning += reasoningDelta;
         onChunk({
           type: "assistant_block_delta",
           messageId,
-          block: reasoningBlock(delta.reasoning_content),
+          block: reasoningBlock(reasoningDelta),
         });
       }
 
@@ -125,7 +126,8 @@ export async function chatStream(
         const normalizedToolCalls = normalizeChatCompletionsToolCalls({
           rawToolCalls: [...rawToolCalls.values()],
           tools: request.tools,
-          supportsConcatenatedJsonSplit: true,
+          supportsConcatenatedJsonSplit:
+            request.transportProfile?.supportsConcatenatedJsonSplit ?? false,
         }).toolCalls;
         emitToolUseDeltas(
           normalizedToolCalls,
@@ -155,7 +157,8 @@ export async function chatStream(
     finishReason,
     usage: normalizeProviderUsage(usage),
     tools: request.tools,
-    supportsConcatenatedJsonSplit: true,
+    supportsConcatenatedJsonSplit:
+      request.transportProfile?.supportsConcatenatedJsonSplit ?? false,
   });
 
   const response = buildUnifiedResponseFromTurn(turn);

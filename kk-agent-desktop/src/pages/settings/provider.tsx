@@ -7,7 +7,12 @@ import {
   removeProviderVerification,
   verifyProviders,
 } from "@/lib/providerVerification";
-import type { ModelInfo, ModelSettings, ProviderConfig } from "@/types/api";
+import type {
+  ModelInfo,
+  ModelProfileSummary,
+  ModelSettings,
+  ProviderConfig,
+} from "@/types/api";
 import { useToggleSet } from "@/hooks/useToggleSet";
 import Card from "@/components/Card";
 import Button from "@/components/Button";
@@ -39,6 +44,7 @@ function parseModelsText(text: string): string[] {
 export default function SettingsProviderPage() {
   const [providers, setProviders] = useState<ProviderConfig[]>([]);
   const [models, setModels] = useState<ModelInfo[]>([]);
+  const [profiles, setProfiles] = useState<ModelProfileSummary[]>([]);
   const [modelSettings, setModelSettings] = useState<
     Record<string, ModelSettings>
   >({});
@@ -91,12 +97,14 @@ export default function SettingsProviderPage() {
       if (providerList.length > 0) {
         const modelsData = await providerApi.getModels();
         setModels(modelsData.models);
+        setProfiles(modelsData.profiles);
         setModelSettings(modelsData.modelSettings ?? {});
         void runProviderVerification(
           providerList.map((provider) => provider.id),
         );
       } else {
         setModels([]);
+        setProfiles([]);
         setModelSettings({});
         setTestingValues(new Set());
       }
@@ -205,14 +213,25 @@ export default function SettingsProviderPage() {
     const modelRef = toModelRef(model);
     setModelSettings((prev) => {
       const next = { ...prev };
-      if (settings.llmRequestConfig) next[modelRef] = settings;
+      if (settings.profileId) next[modelRef] = settings;
       else delete next[modelRef];
       return next;
     });
     try {
-      await providerApi.setModelSettings(model.providerId, model.id, settings);
+      const saved = await providerApi.setModelSettings(model.providerId, model.id, settings);
+      setModelSettings((prev) => {
+        const next = { ...prev };
+        if (saved.settings.profileId) next[modelRef] = saved.settings;
+        else delete next[modelRef];
+        return next;
+      });
+      const modelsData = await providerApi.getModels();
+      setModels(modelsData.models);
+      setProfiles(modelsData.profiles);
+      setModelSettings(modelsData.modelSettings ?? {});
     } catch (err) {
       logger.error("Failed to save model settings:", err);
+      void loadData();
     }
   }
 
@@ -244,6 +263,7 @@ export default function SettingsProviderPage() {
                 isTesting={isTestingProvider(provider.id)}
                 testResult={testResults[provider.id]}
                 models={getProviderModels(provider.id)}
+                profiles={profiles}
                 modelSettings={modelSettings}
                 onToggleExpand={() => expanded.toggle(provider.id)}
                 onTest={() => void handleTest(provider.id)}

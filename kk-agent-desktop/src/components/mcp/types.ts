@@ -1,11 +1,10 @@
-import type { CreateMcpBody, McpListItem, McpStdioConfig } from "@/types/api";
+import type { McpListItem } from "@/types/api";
+import { formatMcpServerJson } from "./configJson";
 
 export type EditForm = {
   name: string;
   emoji: string;
-  command: string;
-  args: string;
-  url: string;
+  serverJson: string;
   accessScope: "user" | "system";
   basePath: string;
   workingDirectory: string;
@@ -13,24 +12,11 @@ export type EditForm = {
   previewChars: string;
 };
 
-export const EMPTY_MCP_FORM: CreateMcpBody = {
-  name: "",
-  transport: "stdio",
-  command: "",
-  args: [],
-  url: "",
-  instruction: "",
-  emoji: "",
-};
-
 export function buildEditForm(mcp: McpListItem): EditForm {
-  const server = mcp.server as McpStdioConfig & { url?: string };
   return {
     name: mcp.name,
     emoji: mcp.emoji ?? "",
-    command: server.command ?? "",
-    args: (server.args ?? []).join("\n"),
-    url: server.url ?? "",
+    serverJson: formatMcpServerJson(mcp),
     accessScope: mcp.systemConfig?.accessScope ?? "user",
     basePath: mcp.systemConfig?.basePath ?? "",
     workingDirectory: mcp.systemConfig?.workingDirectory ?? "",

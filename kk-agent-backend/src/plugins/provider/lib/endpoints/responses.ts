@@ -11,7 +11,6 @@ import type {
   UnifiedResponse,
 } from "../types.js";
 import { readSSEStream } from "../sse.js";
-import { buildRequestConfigBody } from "../request-body.js";
 import {
   buildResponsesTools,
   buildUnifiedResponseFromTurn,
@@ -37,12 +36,6 @@ import {
   normalizeProviderUsage,
   type ProviderTokenUsage,
 } from "../provider-common.js";
-
-type ContinuationFallback = {
-  from: ContinuationMode;
-  to: ContinuationMode;
-  reason: string;
-};
 
 function cloneConversationItem<
   T extends ResponsesConversationItem | AssembledOutputItem,
@@ -212,15 +205,12 @@ function prepareResponsesRequest(
     }] : []),
   ];
   const body: Record<string, unknown> = {
-    ...buildRequestConfigBody(request.resolvedLlmRequestConfig),
+    ...(request.providerRequestBody ?? {}),
     model: request.model,
     stream: true,
   };
 
-  const tools = buildResponsesTools(
-    request.tools,
-    request.transportProfile?.supportsStrictTools === true,
-  );
+  const tools = buildResponsesTools(request.tools);
 
   if (request.instructions.trim()) body.instructions = request.instructions;
   if (tools?.length) body.tools = tools;
@@ -270,35 +260,6 @@ function commitResponsesTransportState(input: {
   return next;
 }
 
-function isUnsupportedPreviousResponseIdResponse(
-  status: number,
-  text: string,
-): boolean {
-  if (
-    status !== 400 &&
-    status !== 404 &&
-    status !== 405 &&
-    status !== 422 &&
-    status !== 501
-  ) {
-    return false;
-  }
-
-  const lowered = text.toLowerCase();
-  return (
-    lowered.includes("previous_response_id") ||
-    lowered.includes("previous response") ||
-    lowered.includes("conversation") ||
-    lowered.includes("unsupported") ||
-    lowered.includes("not implemented") ||
-    lowered.includes("unknown")
-  );
-}
-
-function buildContinuationFallbackReason(status: number, text: string): string {
-  return `previous_response_id failed with HTTP ${status}: ${text}`;
-}
-
 async function postResponses(
   request: UnifiedRequest,
   baseUrl: string,
@@ -306,63 +267,18 @@ async function postResponses(
 ): Promise<{
   res: Response;
   prepared: PreparedResponsesRequest;
-  notices: ProviderNotice[];
-  continuationFallback?: ContinuationFallback;
 }> {
   const prepared = prepareResponsesRequest(request);
-  let res = await fetch(`${baseUrl}/responses`, {
+  const res = await fetch(`${baseUrl}/responses`, {
     method: "POST",
     headers: { "Content-Type": "application/json", ...headers },
     body: JSON.stringify(prepared.body),
   });
 
-  if (res.ok) {
-    return { res, prepared, notices: [] };
+  if (!res.ok) {
+    throw new Error(`Responses API error ${res.status}: ${await res.text()}`);
   }
-
-  const text = await res.text();
-  const status = res.status;
-  if (
-    prepared.continuationMode === "previous-response-id" &&
-    isUnsupportedPreviousResponseIdResponse(res.status, text)
-  ) {
-    const fallbackPrepared = prepareResponsesRequest({
-      ...request,
-      transportProfile: request.transportProfile
-        ? { ...request.transportProfile, continuationMode: "raw-output-replay" }
-        : request.transportProfile,
-    });
-    res = await fetch(`${baseUrl}/responses`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", ...headers },
-      body: JSON.stringify(fallbackPrepared.body),
-    });
-
-    if (!res.ok) {
-      const fallbackText = await res.text();
-      throw new Error(`Responses API error ${res.status}: ${fallbackText}`);
-    }
-
-    return {
-      res,
-      prepared: fallbackPrepared,
-      notices: [
-        {
-          level: "warning",
-          code: "response_statefulness_fallback",
-          message:
-            "Provider rejected previous_response_id. Retried with raw output replay.",
-        },
-      ],
-      continuationFallback: {
-        from: "previous-response-id",
-        to: "raw-output-replay",
-        reason: buildContinuationFallbackReason(status, text),
-      },
-    };
-  }
-
-  throw new Error(`Responses API error ${res.status}: ${text}`);
+  return { res, prepared };
 }
 
 export async function chatStream(
@@ -374,7 +290,7 @@ export async function chatStream(
   const posted = await postResponses(request, baseUrl, headers);
   const prepared = posted.prepared;
   const messageId = randomUUID();
-  const providerNotices: ProviderNotice[] = [...posted.notices];
+  const providerNotices: ProviderNotice[] = [];
   let output: Array<Record<string, unknown> & { type: string }> = [];
   let usage: ProviderTokenUsage | undefined;
   let responseId: string | undefined;
@@ -463,9 +379,6 @@ export async function chatStream(
     continuationMode: prepared.continuationMode,
     responseId,
     outputCount: output.length,
-    ...(posted.continuationFallback
-      ? { continuationFallback: posted.continuationFallback }
-      : {}),
   };
   if (prepared.notices.length > 0 || providerNotices.length > 0) {
     response.notices = [

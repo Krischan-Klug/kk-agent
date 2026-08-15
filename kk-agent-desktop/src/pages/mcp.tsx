@@ -12,7 +12,6 @@ import McpCard from "@/components/mcp/McpCard";
 import McpCardList from "@/components/mcp/McpCardList";
 import CreateMcpModal from "@/components/mcp/CreateMcpModal";
 import { ActionsRow, EmptyHint, MutedText } from "@/components/PageForm";
-import { EMPTY_MCP_FORM } from "@/components/mcp/types";
 import { buildMcpCardBaseProps } from "@/components/mcp/cardProps";
 import { buildCustomMcpUpdateBody } from "@/components/mcp/updateBody";
 
@@ -24,7 +23,6 @@ const HeaderActions = styled.div`
 
 export default function McpPage() {
   const [showCreate, setShowCreate] = useState(false);
-  const [createForm, setCreateForm] = useState<CreateMcpBody>(EMPTY_MCP_FORM);
   const [creating, setCreating] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
   const collection = useMcpCardCollection(mcpApi, logger, "MCPs");
@@ -38,7 +36,7 @@ export default function McpPage() {
     }
   }
 
-  async function handleCreate() {
+  async function handleCreate(createForm: CreateMcpBody) {
     setCreating(true);
     try {
       await mcpApi.create({
@@ -47,11 +45,11 @@ export default function McpPage() {
         emoji: createForm.emoji || undefined,
         command: createForm.transport === "stdio" ? createForm.command : undefined,
         args: createForm.transport === "stdio" && createForm.args?.length ? createForm.args : undefined,
+        env: createForm.transport === "stdio" ? createForm.env : undefined,
         url: createForm.transport === "sse" ? createForm.url : undefined,
         instruction: createForm.instruction || undefined,
       });
       setShowCreate(false);
-      setCreateForm(EMPTY_MCP_FORM);
       await collection.loadItems();
     } catch (err) {
       logger.error("Failed to create MCP:", err);
@@ -92,7 +90,7 @@ export default function McpPage() {
   return (
     <PageBody>
       <HeaderActions>
-        <Button onClick={() => setShowCreate(true)}>Add MCP</Button>
+        <Button onClick={() => setShowCreate(true)}>Import MCP JSON</Button>
       </HeaderActions>
       <McpCardList>
         {collection.items.map((mcp) => (
@@ -109,10 +107,7 @@ export default function McpPage() {
       </McpCardList>
       <CreateMcpModal
         open={showCreate}
-        form={createForm}
         creating={creating}
-        systemVariables={collection.systemVariables}
-        onChange={setCreateForm}
         onCreate={handleCreate}
         onClose={() => setShowCreate(false)}
       />

@@ -1,6 +1,10 @@
 import { useState } from "react";
 import styled from "styled-components";
-import type { ProviderConfig } from "@/types/api";
+import type {
+  ModelInfo,
+  ModelProfileSummary,
+  ProviderConfig,
+} from "@/types/api";
 import { provider as providerApi } from "@/lib/api";
 import { createLogger } from "@/lib/logger";
 import Button from "@/components/Button";
@@ -37,11 +41,40 @@ const StatusBox = styled.div<{ $tone: "info" | "success" | "error" }>`
   font-size: var(--font-size-sm);
 `;
 
+const ModelRow = styled.div`
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+  padding: var(--space-sm);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+`;
+
+const ModelName = styled.span`
+  font-family: var(--font-mono);
+  font-size: var(--font-size-sm);
+`;
+
+const Select = styled.select`
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  padding: var(--space-xs) var(--space-sm);
+`;
+
 type StepState =
   | { kind: "idle" }
   | { kind: "saving" }
-  | { kind: "success"; message: string }
-  | { kind: "error"; message: string; providerId?: string };
+  | {
+      kind: "profiles";
+      provider: ProviderConfig;
+      models: ModelInfo[];
+      profiles: ModelProfileSummary[];
+      saving?: boolean;
+      error?: string;
+    }
+  | { kind: "error"; message: string };
 
 type Props = {
   onComplete: (provider: ProviderConfig) => void;
@@ -64,6 +97,7 @@ export default function ProviderOnboardingWizard({ onComplete }: Props) {
   const [baseUrl, setBaseUrl] = useState(DEFAULT_PROVIDER_BASE_URL);
   const [apiKey, setApiKey] = useState("");
   const [models, setModels] = useState("");
+  const [selectedProfiles, setSelectedProfiles] = useState<Record<string, string>>({});
   const [state, setState] = useState<StepState>({ kind: "idle" });
 
   const canSubmit =
@@ -114,10 +148,11 @@ export default function ProviderOnboardingWizard({ onComplete }: Props) {
       }
 
       setState({
-        kind: "success",
-        message: `${modelsResult.models.length} model(s) found.`,
+        kind: "profiles",
+        provider: created,
+        models: modelsResult.models,
+        profiles: modelsResult.profiles,
       });
-      onComplete(created);
     } catch (error) {
       if (created) {
         await cleanupProvider(created.id);
@@ -128,33 +163,91 @@ export default function ProviderOnboardingWizard({ onComplete }: Props) {
     }
   }
 
+  async function handleProfilesSubmit() {
+    if (state.kind !== "profiles") return;
+    const selections = Object.entries(selectedProfiles).filter(([, profileId]) => profileId);
+    if (selections.length === 0) return;
+    const readyState = state;
+    setState({ ...readyState, saving: true, error: undefined });
+    try {
+      await Promise.all(selections.map(([modelId, profileId]) =>
+        providerApi.setModelSettings(readyState.provider.id, modelId, { profileId }),
+      ));
+      onComplete(readyState.provider);
+    } catch (error) {
+      logger.error("Failed to save onboarding model profiles:", error);
+      setState({ ...readyState, saving: false, error: getErrorMessage(error) });
+    }
+  }
+
   return (
     <Modal title="Set up provider" onClose={() => {}} showClose={false}>
       <Body>
-        <MutedText>
-          Set up a local or self-hosted LLM provider so sessions can be started.
-        </MutedText>
-        <ProviderFormFields
-          name={name}
-          baseUrl={baseUrl}
-          apiKey={apiKey}
-          models={models}
-          onNameChange={setName}
-          onBaseUrlChange={setBaseUrl}
-          onApiKeyChange={setApiKey}
-          onModelsChange={setModels}
-          autoFocus
-        />
+        {state.kind === "profiles" ? (
+          <>
+            <MutedText>
+              Select an inference profile for every model you want to use. The profile fixes its endpoint and capabilities.
+            </MutedText>
+            {state.models.map((model) => {
+              const suggestion = state.profiles.find((profile) => profile.id === model.suggestedProfileId);
+              return (
+                <ModelRow key={model.id}>
+                  <ModelName>{model.id}</ModelName>
+                  <Select
+                    value={selectedProfiles[model.id] ?? ""}
+                    onChange={(event) => setSelectedProfiles((current) => ({
+                      ...current,
+                      [model.id]: event.target.value,
+                    }))}
+                  >
+                    <option value="">not configured</option>
+                    {state.profiles.map((profile) => (
+                      <option key={profile.id} value={profile.id}>
+                        {profile.label}{suggestion?.id === profile.id ? " (suggested)" : ""}
+                      </option>
+                    ))}
+                  </Select>
+                </ModelRow>
+              );
+            })}
+          </>
+        ) : (
+          <>
+            <MutedText>
+              Set up a local or self-hosted LLM provider so sessions can be started.
+            </MutedText>
+            <ProviderFormFields
+              name={name}
+              baseUrl={baseUrl}
+              apiKey={apiKey}
+              models={models}
+              onNameChange={setName}
+              onBaseUrlChange={setBaseUrl}
+              onApiKeyChange={setApiKey}
+              onModelsChange={setModels}
+              autoFocus
+            />
+          </>
+        )}
         {state.kind === "error" ? (
           <StatusBox $tone="error">{state.message}</StatusBox>
         ) : null}
-        {state.kind === "success" ? (
-          <StatusBox $tone="success">{state.message}</StatusBox>
+        {state.kind === "profiles" && state.error ? (
+          <StatusBox $tone="error">{state.error}</StatusBox>
         ) : null}
         <ActionsRow>
-          <Button onClick={() => void handleSubmit()} disabled={!canSubmit}>
-            {state.kind === "saving" ? <Spinner size={14} /> : "Save & test"}
-          </Button>
+          {state.kind === "profiles" ? (
+            <Button
+              onClick={() => void handleProfilesSubmit()}
+              disabled={state.saving || !Object.values(selectedProfiles).some(Boolean)}
+            >
+              {state.saving ? <Spinner size={14} /> : "Finish setup"}
+            </Button>
+          ) : (
+            <Button onClick={() => void handleSubmit()} disabled={!canSubmit}>
+              {state.kind === "saving" ? <Spinner size={14} /> : "Save & test"}
+            </Button>
+          )}
         </ActionsRow>
       </Body>
     </Modal>

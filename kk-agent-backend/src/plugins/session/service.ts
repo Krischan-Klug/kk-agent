@@ -80,7 +80,7 @@ export function getCurrentPromptDebug(sessionId: string): SessionPromptDebug {
       kind: asset.kind,
       size: asset.size,
     })),
-    visionSupport: capabilities?.visionSupport,
+    imageInputSupported: capabilities?.inputModalities.includes("image") === true,
   });
   const loadedSkills = buildLoadedSkillContexts(
     session.loadedSkillIds,

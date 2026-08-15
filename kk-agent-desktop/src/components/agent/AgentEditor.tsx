@@ -122,10 +122,10 @@ export default function AgentEditor({
     });
   }
 
-  function updateCommonRequestConfig(patch: NonNullable<AgentDefinition["llmRequestConfig"]>["common"]) {
+  function updateReasoningConfig(patch: NonNullable<AgentDefinition["llmRequestConfig"]>["reasoning"]) {
     onChange({
       ...currentAgent,
-      llmRequestConfig: compactLlmRequestConfig(mergeLlmRequestConfigs(currentAgent.llmRequestConfig, { common: patch })),
+      llmRequestConfig: compactLlmRequestConfig(mergeLlmRequestConfigs(currentAgent.llmRequestConfig, { reasoning: patch })),
     });
   }
 
@@ -180,7 +180,7 @@ export default function AgentEditor({
         reasoningLevels={reasoningLevels}
         setSelectedModeId={setSelectedModeId}
         addCustomMode={addCustomMode}
-        updateCommonRequestConfig={updateCommonRequestConfig}
+        updateReasoningConfig={updateReasoningConfig}
         updateRequestConfig={(value) => onChange({
           ...currentAgent,
           llmRequestConfig: compactLlmRequestConfig(value),

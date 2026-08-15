@@ -8,6 +8,7 @@ import type {
   MemoryFact,
   ModelInfo,
   ModelSettings,
+  ReasoningHistory,
   SessionState,
   SkillDefinition,
   TaskItem,
@@ -81,7 +82,8 @@ export function useChatSessionData({ onDebugOpen, setDebugOpen }: Options) {
   const loadModels = useCallback(async () => {
     try {
       const result = await providerApi.getModels();
-      setModels(result.models.map(toModelRef));
+      const configuredModels = result.models.filter((model) => model.profile && model.capabilities);
+      setModels(configuredModels.map(toModelRef));
       setModelInfoMap(new Map(result.models.map((model) => [toModelRef(model), model])));
       setModelSettingsMap(result.modelSettings ?? {});
     } catch {
@@ -209,16 +211,14 @@ export function useChatSessionData({ onDebugOpen, setDebugOpen }: Options) {
     }
   }, [session, updateSessionAndSet]);
 
-  const updateCommonRequestConfig = useCallback(async (
-    patch: NonNullable<LlmRequestConfig["common"]>,
+  const updateRequestConfig = useCallback(async (
+    patch: LlmRequestConfig,
     errorMessage: string,
   ) => {
     if (!session) return;
     try {
       await updateSessionAndSet({
-        llmRequestConfig: compactLlmRequestConfig(mergeLlmRequestConfigs(session.llmRequestConfig, {
-          common: patch,
-        })),
+        llmRequestConfig: compactLlmRequestConfig(mergeLlmRequestConfigs(session.llmRequestConfig, patch)),
       });
     } catch (err) {
       logger.error(errorMessage, err);
@@ -250,16 +250,22 @@ export function useChatSessionData({ onDebugOpen, setDebugOpen }: Options) {
   }, [updateActiveCapabilityIds]);
 
   const handleReasoningEffort = useCallback(async (value: string) => {
-    await updateCommonRequestConfig({
-      reasoningEffort: normalizeCanonicalReasoningEffort(value),
+    await updateRequestConfig({
+      reasoning: { effort: normalizeCanonicalReasoningEffort(value) },
     }, "Failed to set reasoning:");
-  }, [updateCommonRequestConfig]);
+  }, [updateRequestConfig]);
+
+  const handleReasoningHistory = useCallback(async (value: string) => {
+    await updateRequestConfig({
+      reasoning: { history: value as ReasoningHistory },
+    }, "Failed to set reasoning history:");
+  }, [updateRequestConfig]);
 
   const handleTemperature = useCallback(async (value: string) => {
-    await updateCommonRequestConfig({
-      temperature: Number(value),
+    await updateRequestConfig({
+      sampling: { temperature: Number(value) },
     }, "Failed to set temperature:");
-  }, [updateCommonRequestConfig]);
+  }, [updateRequestConfig]);
 
   const handleLlmRequestConfig = useCallback(async (value: LlmRequestConfig | undefined) => {
     if (!session) return;
@@ -354,6 +360,7 @@ export function useChatSessionData({ onDebugOpen, setDebugOpen }: Options) {
     handleToolToggle,
     handleSkillToggle,
     handleReasoningEffort,
+    handleReasoningHistory,
     handleTemperature,
     handleLlmRequestConfig,
     handleAgentSwitch,

@@ -7,6 +7,7 @@ import { ActionsRow, Section } from "@/components/PageForm";
 import { StatusDot } from "@/components/agent/AgentEditor.styled";
 import type { EditForm } from "./types";
 import { InstructionEditorBlock, McpEditFields } from "./McpCard.parts";
+import { parseMcpServerJson } from "./configJson";
 
 const Header = styled.div<{ $withBody: boolean }>`
   display: flex;
@@ -109,6 +110,9 @@ export default function McpCard({
     ? `Unavailable${mcp.runtime.error ? `: ${mcp.runtime.error}` : ""}`
     : isActive ? "Active" : "Inactive";
   const hasBody = editOpen && Boolean(editForm);
+  const customConfigInvalid = mcp.source === "custom" && editForm
+    ? !parseMcpServerJson(editForm.serverJson, mcp.transport).ok
+    : false;
 
   return (
     <Card>
@@ -155,7 +159,7 @@ export default function McpCard({
           <McpEditFields mcp={mcp} editForm={editForm} onEditFormChange={onEditFormChange} />
 
           <ActionsRow>
-            <Button size="sm" onClick={onSaveEdit}>
+            <Button size="sm" onClick={onSaveEdit} disabled={customConfigInvalid}>
               Save
             </Button>
             {mcp.source === "custom" && onDelete && (

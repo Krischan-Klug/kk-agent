@@ -4,6 +4,7 @@ import type {
   McpListItem,
   McpServerConfig,
   ModelInfo,
+  ModelProfileSummary,
   StreamEvent,
   CreateMcpBody,
   UpdateMcpBody,
@@ -116,6 +117,7 @@ export const provider = {
   getModels: (providerId?: string) =>
     request<{
       models: ModelInfo[];
+      profiles: ModelProfileSummary[];
       providerId?: string;
       modelSettings: Record<string, ModelSettings>;
     }>(

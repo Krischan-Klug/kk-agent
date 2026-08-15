@@ -1,5 +1,6 @@
 import type { McpListItem, UpdateMcpBody } from "@/types/api";
 import type { EditForm } from "./types";
+import { parseMcpServerJson } from "./configJson";
 
 function optionalResultPolicy(form: EditForm) {
   const previewThresholdChars = form.previewThresholdChars.trim() ? Number(form.previewThresholdChars) : undefined;
@@ -29,11 +30,11 @@ function buildBaseUpdate(form: EditForm): Pick<UpdateMcpBody, "name" | "emoji"> 
 }
 
 export function buildCustomMcpUpdateBody(mcp: McpListItem, form: EditForm): UpdateMcpBody {
+  const server = parseMcpServerJson(form.serverJson, mcp.transport);
+  if (!server.ok) throw new Error(server.error);
   return {
     ...buildBaseUpdate(form),
-    ...(mcp.transport === "stdio"
-      ? { command: form.command, args: form.args.split("\n").filter(Boolean) }
-      : { url: form.url }),
+    ...server.value,
   };
 }
 

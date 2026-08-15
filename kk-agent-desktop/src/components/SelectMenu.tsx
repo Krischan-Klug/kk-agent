@@ -5,6 +5,7 @@ export type SelectMenuOption = {
   value: string;
   label: string;
   description?: string;
+  color?: string;
 };
 
 type TriggerVariant = "accent" | "neutral" | "warning";
@@ -16,7 +17,7 @@ const Wrapper = styled.div`
   display: inline-block;
 `;
 
-const Trigger = styled.button<{ $variant: TriggerVariant }>`
+const Trigger = styled.button<{ $variant: TriggerVariant; $optionColor?: string }>`
   display: inline-flex;
   align-items: center;
   gap: var(--space-xs);
@@ -24,9 +25,11 @@ const Trigger = styled.button<{ $variant: TriggerVariant }>`
   background: ${(p) =>
     p.$variant === "warning" ? "rgba(255, 160, 50, 0.12)" : p.$variant === "neutral" ? "var(--bg-surface)" : "var(--accent-muted)"};
   color: ${(p) =>
-    p.$variant === "warning" ? "var(--warning)" : p.$variant === "neutral" ? "var(--text-primary)" : "var(--accent)"};
+    p.$optionColor ??
+    (p.$variant === "warning" ? "var(--warning)" : p.$variant === "neutral" ? "var(--text-primary)" : "var(--accent)")};
   border: 1px solid ${(p) =>
-    p.$variant === "warning" ? "var(--warning)" : p.$variant === "neutral" ? "var(--border)" : "var(--accent)"};
+    p.$optionColor ??
+    (p.$variant === "warning" ? "var(--warning)" : p.$variant === "neutral" ? "var(--border)" : "var(--accent)")};
   border-radius: var(--radius-sm);
   font-size: var(--font-size-sm);
   font-weight: 500;
@@ -35,7 +38,9 @@ const Trigger = styled.button<{ $variant: TriggerVariant }>`
 
   &:hover {
     ${(p) =>
-      p.$variant === "neutral"
+      p.$optionColor
+        ? `border-color: ${p.$optionColor}; background: var(--bg-hover); color: ${p.$optionColor};`
+        : p.$variant === "neutral"
         ? "border-color: var(--accent);"
         : "background: var(--accent); color: var(--bg-base); border-color: var(--accent);"}
   }
@@ -80,12 +85,13 @@ const Option = styled.button<{ $active: boolean; $mono?: boolean }>`
   }
 `;
 
-const OptionTitle = styled.span<{ $active: boolean }>`
+const OptionTitle = styled.span<{ $active: boolean; $color?: string }>`
   font-weight: 500;
+  color: ${(p) => p.$color ?? "inherit"};
 
   &::after {
     content: "${(p) => (p.$active ? " ✓" : "")}";
-    color: var(--accent);
+    color: ${(p) => p.$color ?? "var(--accent)"};
     font-size: 12px;
   }
 `;
@@ -122,7 +128,7 @@ export default function SelectMenu({
 
   return (
     <Wrapper ref={ref}>
-      <Trigger type="button" $variant={variant} onClick={toggle}>
+      <Trigger type="button" $variant={variant} $optionColor={active?.color} onClick={toggle}>
         {active?.label ?? value}
       </Trigger>
       {open && (
@@ -138,7 +144,9 @@ export default function SelectMenu({
                 close();
               }}
             >
-              <OptionTitle $active={option.value === value}>{option.label}</OptionTitle>
+              <OptionTitle $active={option.value === value} $color={option.color}>
+                {option.label}
+              </OptionTitle>
               {option.description && <OptionDescription>{option.description}</OptionDescription>}
             </Option>
           ))}

@@ -7,6 +7,8 @@ import TextArea from "@/components/TextArea";
 import { Select } from "@/components/FormControls.styled";
 import { ActionsRow, FieldLabel, FormField, MutedText, SectionTitle } from "@/components/PageForm";
 import type { EditForm } from "./types";
+import McpJsonEditor from "./McpJsonEditor";
+import { MCP_SSE_HINT, MCP_STDIO_HINT, parseMcpServerJson } from "./configJson";
 
 const ConfigDetail = styled.div`
   margin-top: var(--space-sm);
@@ -75,6 +77,9 @@ type McpEditFieldsProps = {
 };
 
 export function McpEditFields({ mcp, editForm, onEditFormChange }: McpEditFieldsProps) {
+  const parsedServer = parseMcpServerJson(editForm.serverJson, mcp.transport);
+  const serverJsonError = mcp.source === "custom" && !parsedServer.ok ? parsedServer.error : undefined;
+
   return (
     <>
       {mcp.source === "system" ? (
@@ -153,22 +158,15 @@ export function McpEditFields({ mcp, editForm, onEditFormChange }: McpEditFields
             </>
           )}
         </>
-      ) : mcp.transport === "stdio" ? (
-        <>
-          <FormField>
-            <FieldLabel>Command</FieldLabel>
-            <Input value={editForm.command} onChange={(e) => onEditFormChange({ ...editForm, command: e.target.value })} />
-          </FormField>
-          <FormField>
-            <FieldLabel>Args (one argument per line)</FieldLabel>
-            <TextArea value={editForm.args} onChange={(e) => onEditFormChange({ ...editForm, args: e.target.value })} rows={4} />
-          </FormField>
-        </>
       ) : (
-        <FormField>
-          <FieldLabel>URL</FieldLabel>
-          <Input value={editForm.url} onChange={(e) => onEditFormChange({ ...editForm, url: e.target.value })} />
-        </FormField>
+        <McpJsonEditor
+          value={editForm.serverJson}
+          onChange={(serverJson) => onEditFormChange({ ...editForm, serverJson })}
+          hint={mcp.transport === "stdio" ? MCP_STDIO_HINT : MCP_SSE_HINT}
+          error={serverJsonError}
+          rows={8}
+          label={`Server JSON (${mcp.transport})`}
+        />
       )}
     </>
   );

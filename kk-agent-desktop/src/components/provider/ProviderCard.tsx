@@ -1,5 +1,10 @@
 import styled from "styled-components";
-import type { ModelInfo, ModelSettings, ProviderConfig } from "@/types/api";
+import type {
+  ModelInfo,
+  ModelProfileSummary,
+  ModelSettings,
+  ProviderConfig,
+} from "@/types/api";
 import Card from "@/components/Card";
 import Button from "@/components/Button";
 import Input from "@/components/Input";
@@ -95,6 +100,7 @@ type Props = {
   isTesting: boolean;
   testResult?: { ok: boolean; error?: string };
   models: ModelInfo[];
+  profiles: ModelProfileSummary[];
   modelSettings: Record<string, ModelSettings>;
   onToggleExpand: () => void;
   onTest: () => void;
@@ -109,6 +115,7 @@ export default function ProviderCard({
   isTesting,
   testResult,
   models,
+  profiles,
   modelSettings,
   onToggleExpand,
   onTest,
@@ -187,6 +194,7 @@ export default function ProviderCard({
 
           <ModelSettingsSection
             models={models}
+            profiles={profiles}
             modelSettings={modelSettings}
             onSave={onModelSettingsSave}
           />

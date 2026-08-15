@@ -169,9 +169,6 @@ export interface AppDefaults {
     emptyResponseInstruction: string;
     invalidToolInstruction: string;
   };
-  reasoning: {
-    defaultEffort: string;
-  };
   asset: {
     visionNotSupportedInstruction: string;
   };

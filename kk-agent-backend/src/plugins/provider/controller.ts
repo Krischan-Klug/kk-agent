@@ -6,6 +6,7 @@ import {
   UpdateProviderBodySchema,
 } from "../../lib/schemas.js";
 import {
+  getAvailableModelProfiles,
   getModels,
   getAllModelSettings,
   setModelSettings,
@@ -21,6 +22,7 @@ export async function listModels(req: Request, res: Response): Promise<Response>
   const models = await getModels(providerId);
   return res.json({
     models,
+    profiles: getAvailableModelProfiles(),
     ...(providerId ? { providerId } : {}),
     modelSettings: getAllModelSettings(providerId),
   });
@@ -29,8 +31,8 @@ export async function listModels(req: Request, res: Response): Promise<Response>
 export async function doSetModelSettings(req: Request, res: Response): Promise<Response> {
   const { providerId, settings } = ModelSettingsBodySchema.parse(req.body);
   const modelId = requireParam(req, "modelId");
-  await setModelSettings(providerId, modelId, settings);
-  return res.json({ providerId, modelId, settings });
+  const normalizedSettings = await setModelSettings(providerId, modelId, settings);
+  return res.json({ providerId, modelId, settings: normalizedSettings });
 }
 
 export async function doListProviders(_req: Request, res: Response): Promise<Response> {

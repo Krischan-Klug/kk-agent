@@ -17,7 +17,7 @@ import type { SessionRecord, SessionState } from "../types.js";
 
 const logger = createLogger("session/store");
 const SESSION_FILE = "session.json";
-const SESSION_SCHEMA_VERSION = 3;
+const SESSION_SCHEMA_VERSION = 5;
 
 const sessions = new Map<string, SessionRecord>();
 

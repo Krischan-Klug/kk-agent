@@ -16,6 +16,7 @@ Quick reference for AI agents working in this repo.
 - `skills`: Agent Skills discovered from workspace/user roots plus managed imports, separate from tools and MCPs
 - `session`: Sessions, chat, streaming
 - `provider`: Models and providers
+- `provider/lib/model-profiles`: Versioned model-family inference recipes and canonical request translation
 
 Backend features register through a fixed, explicit initializer list. There is no dynamic plugin discovery, dependency graph, or lifecycle layer.
 
@@ -57,6 +58,9 @@ Backend features register through a fixed, explicit initializer list. There is n
 - Prompt structure must stay consistent as XML.
 - Loop behavior remains configurable per agent; `simple` loops must work without forced plan/verify steps.
 - Providers use a unified capability model and are configured only via `name`, `baseUrl`, and optional `apiKey`.
+- Every usable model requires an explicit versioned inference profile; the profile fixes endpoint, transport, modalities, tools, reasoning translation, and manufacturer sampling defaults. Do not infer these from model names or retry across endpoints.
+- Harness reasoning uses `reasoning.effort` (`none|low|medium|high|xhigh`) plus a canonical history policy; model profiles translate that intent into model-specific prompts and template arguments.
+- Sampling defaults beyond optional user `temperature` and `top_p` overrides belong to versioned model profiles.
 - User-configurable sampling is limited to optional `temperature` and `top_p` overrides; arbitrary request-body passthrough belongs in the inference provider.
 - Internal tools are registered in the `tools` plugin, not the user MCP area.
 - MCP `active` is persisted intent; runtime availability is reported separately and connection failures never stop the backend.

@@ -1,5 +1,16 @@
 import type { UnifiedRequest, UnifiedResponse, OnChunkFn } from "./types.js";
-import type { ModelInfo } from "../types.js";
+import type { RuntimeModelCapabilities } from "../types.js";
+
+export interface DiscoveredModel {
+  id: string;
+  object: string;
+  providerId: string;
+  maxContextLength?: number;
+  contextLength?: number;
+  publisher?: string;
+  architecture?: string;
+  runtimeCapabilities: RuntimeModelCapabilities;
+}
 
 /**
  * ProviderAdapter — the contract every provider must implement.
@@ -14,7 +25,7 @@ export interface ProviderAdapter {
   chatStream(request: UnifiedRequest, onChunk: OnChunkFn): Promise<UnifiedResponse>;
 
   /** List available models from this provider */
-  listModels(): Promise<ModelInfo[]>;
+  listModels(): Promise<DiscoveredModel[]>;
 
   /** Quick connectivity check */
   testConnection(): Promise<{ ok: boolean; error?: string }>;

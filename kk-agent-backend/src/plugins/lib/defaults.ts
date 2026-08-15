@@ -10,7 +10,7 @@ import {
 import { applyOverrides, diffOverrides } from "./overrides.js";
 
 const STATE_FILE = "defaults.json";
-const DEFAULTS_SCHEMA_VERSION = 2;
+const DEFAULTS_SCHEMA_VERSION = 3;
 
 const CODE_DEFAULTS: AppDefaults = {
   agent: {
@@ -197,9 +197,6 @@ const CODE_DEFAULTS: AppDefaults = {
       "Your last attempt was empty or contained no meaningful content. Return a substantive response or a real structured tool_call.",
     invalidToolInstruction:
       "Your last attempt emitted a tool call as plain text. Tools must be invoked only via structured tool_calls in the API.",
-  },
-  reasoning: {
-    defaultEffort: "medium",
   },
   asset: {
     visionNotSupportedInstruction:

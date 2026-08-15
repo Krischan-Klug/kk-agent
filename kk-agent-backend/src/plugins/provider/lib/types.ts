@@ -23,6 +23,7 @@ export interface UnifiedRequest {
   endpoint?: EndpointType;
   llmRequestConfig?: LlmRequestConfig;
   resolvedLlmRequestConfig?: ResolvedLlmRequestConfig;
+  providerRequestBody?: Record<string, unknown>;
   transportProfile?: EndpointTransportProfile;
   transportState?: ProviderTransportState;
   modelContentByMessageId?: Record<string, ModelContentPart[]>;

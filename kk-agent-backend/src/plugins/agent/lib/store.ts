@@ -12,7 +12,7 @@ import { isModeBehavior } from "./modes.js";
 import { getBundledAgents } from "./defaults.js";
 
 const STATE_FILE = "agents.json";
-const AGENT_SCHEMA_VERSION = 3;
+const AGENT_SCHEMA_VERSION = 5;
 
 let cache: PersistedAgentDefinition[] | null = null;
 

@@ -26,13 +26,30 @@ function unavailable(error: unknown): McpRuntimeState {
 }
 
 function mergeEnv(env?: Record<string, string>): Record<string, string> | undefined {
-  if (!env) return undefined;
+  const windowsProcessEnv = process.platform === "win32"
+    ? { COMSPEC: process.env.COMSPEC, PATHEXT: process.env.PATHEXT }
+    : {};
+  const source = env ? { ...process.env, ...env } : windowsProcessEnv;
 
   const merged: Record<string, string> = {};
-  for (const [key, value] of Object.entries({ ...process.env, ...env })) {
+  for (const [key, value] of Object.entries(source)) {
     if (typeof value === "string") merged[key] = value;
   }
-  return merged;
+  return Object.keys(merged).length > 0 ? merged : undefined;
+}
+
+function createTransport(config: McpServerConfig): StdioClientTransport | SSEClientTransport {
+  if (config.transport === "sse") {
+    return new SSEClientTransport(new URL((config.server as McpSseConfig).url));
+  }
+
+  const server = config.server as McpStdioConfig;
+  const env = mergeEnv(server.env);
+  return new StdioClientTransport({
+    command: server.command,
+    args: server.args,
+    ...(env && { env }),
+  });
 }
 
 export async function startMcp(config: McpServerConfig): Promise<McpRuntimeState> {
@@ -57,13 +74,7 @@ export async function startMcp(config: McpServerConfig): Promise<McpRuntimeState
   };
 
   try {
-    const transport = config.transport === "stdio"
-      ? new StdioClientTransport({
-          command: (config.server as McpStdioConfig).command,
-          args: (config.server as McpStdioConfig).args,
-          ...((config.server as McpStdioConfig).env && { env: mergeEnv((config.server as McpStdioConfig).env) }),
-        })
-      : new SSEClientTransport(new URL((config.server as McpSseConfig).url));
+    const transport = createTransport(config);
 
     await client.connect(transport);
     const { tools: rawTools } = await client.listTools();

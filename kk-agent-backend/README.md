@@ -36,7 +36,7 @@ Session -> SystemPrompt -> Loop -> Provider -> Tools/MCPs/Skills -> Loop
 - `session` resolves the active agent, model, tools, MCPs, and skills
 - `systemprompt` builds the XML prompt from defaults, agent config, variables, and runtime instructions
 - `loop` handles retries, continuation, budget controls, and committed tool steps
-- `provider` resolves model settings, endpoint choice, and request payloads
+- `provider` resolves explicit model profiles and request payloads
 - `tools`, `mcp`, and `skills` execute capability work
 
 ## Plugin Overview
@@ -45,7 +45,7 @@ Session -> SystemPrompt -> Loop -> Provider -> Tools/MCPs/Skills -> Loop
 - `loop`: execution loop and recovery
 - `systemprompt`: XML prompt builder
 - `session`: chat, streaming, uploads, lifecycle
-- `provider`: providers, model discovery, capability observation, request resolution
+- `provider`: providers, model discovery, explicit profiles, request resolution
 - `tools`: internal tools plus task and memory state
 - `mcp`: external MCP servers only
 - `skills`: standard Agent Skills discovery, import, and progressive activation
@@ -60,26 +60,23 @@ Providers are configured only with:
 - `baseUrl`
 - optional `apiKey`
 
-Model settings are request defaults only:
+Each usable model has an explicitly selected, versioned inference profile. Profiles own:
 
-- endpoint
-- reasoning effort
-- compact `temperature` and `top_p` overrides
+- one fixed endpoint and transport grammar
+- standardized input/output modalities and native tool support
+- manufacturer reasoning, history, sampling, and system-role translations
 
-Standard sampling fields use the canonical request config; arbitrary provider fields remain in the same editable JSON projection. Default values are omitted from persisted state and outbound requests.
+Model settings contain only the profile ID plus optional canonical reasoning/history and compact `temperature` / `top_p` overrides. Arbitrary provider request bodies are never persisted as user configuration.
 
-Observed capabilities are stored in `state/providers.json` and currently track only:
-
-- endpoint support
-- reasoning support
-- responses statefulness
-- vision support
+Reasoning history is `auto|discard|tool-turns|all`: `auto` selects the profile default, `discard` keeps only the active turn, `tool-turns` also retains historical tool-call reasoning, and `all` preserves the complete reasoning trace.
 
 The provider layer keeps the wrapper small:
 
-- model discovery probes OpenAI-compatible endpoints such as `/v1/models`, `/api/v1/models`, `/api/tags`, and llama.cpp props
-- endpoint fallback from `responses` to `chat-completions` is observed and persisted
-- request-level fields are normalized against the model's reported capabilities
+- LM Studio discovery prefers `/api/v1/models` metadata and falls back to OpenAI-compatible `/v1/models`
+- unprofiled models remain visible but cannot be used for inference
+- profiles, never model-name heuristics, declare reasoning, tools, modalities, and endpoint behavior
+- provider-declared visual artifact availability can narrow a profile's visual modalities
+- requests use exactly the endpoint selected by the profile, without cross-endpoint fallback
 - all other inference settings belong in the inference provider
 
 ## API Routes

@@ -21,13 +21,18 @@ Providers are configured only with:
 - `baseUrl`
 - optional `apiKey`
 
-Per model, kk-agent keeps only request-level defaults:
+Every usable model has an explicitly selected, versioned inference profile. The profile owns:
 
-- endpoint: `chat-completions` or `responses`
-- reasoning effort
+- the fixed `chat-completions` or `responses` endpoint
+- input/output modalities and native tool support
+- manufacturer prompt/template translations and sampling recipes
+
+Per model, users may override only:
+
+- reasoning effort and history policy
 - two optional OpenAI sampling overrides: `temperature` and `top_p`
 
-`null` means provider default. Only actual overrides are persisted.
+Unprofiled models are discoverable in Provider Settings but cannot be selected for agents or sessions. There is no fuzzy capability detection or endpoint fallback.
 
 Runtime topics such as context window, KV cache, quantization, and backend load settings stay in LM Studio, Ollama, or the serving backend itself.
 
@@ -121,7 +126,7 @@ Open `http://localhost:3000`.
 
 1. Open `Settings -> Provider`.
 2. Add a provider with `name` and `baseUrl` and optional `apiKey`.
-3. Pick a discovered model and set only the defaults you want the wrapper to own.
+3. Pick a discovered model and explicitly select its inference profile.
 4. Override `temperature` or `top_p` only when the inference provider default is not suitable.
 
 ## Tech Stack

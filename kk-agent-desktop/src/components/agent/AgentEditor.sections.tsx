@@ -8,6 +8,7 @@ import type {
   ModelInfo,
   ProviderConfig,
   ReasoningEffort,
+  ReasoningHistory,
   SkillDefinition,
   ToolAccessScope,
 } from "@/types/api";
@@ -61,7 +62,7 @@ type AgentInfoSectionProps = {
   reasoningLevels: ReasoningEffort[];
   setSelectedModeId: Dispatch<SetStateAction<string>>;
   addCustomMode: () => void;
-  updateCommonRequestConfig: (patch: NonNullable<AgentDefinition["llmRequestConfig"]>["common"]) => void;
+  updateReasoningConfig: (patch: NonNullable<AgentDefinition["llmRequestConfig"]>["reasoning"]) => void;
   updateRequestConfig: (value: AgentDefinition["llmRequestConfig"]) => void;
   onChange: (agent: AgentDefinition) => void;
 };
@@ -76,7 +77,7 @@ export function AgentInfoSection({
   reasoningLevels,
   setSelectedModeId,
   addCustomMode,
-  updateCommonRequestConfig,
+  updateReasoningConfig,
   updateRequestConfig,
   onChange,
 }: AgentInfoSectionProps) {
@@ -147,18 +148,34 @@ export function AgentInfoSection({
           </Select>
         </FormField>
         {showReasoning && (
-          <FormField>
-            <FieldLabel>Default Reasoning</FieldLabel>
-            <Select
-              value={currentAgent.llmRequestConfig?.common?.reasoningEffort ?? ""}
-              onChange={(e) => updateCommonRequestConfig({
-                reasoningEffort: normalizeCanonicalReasoningEffort(e.target.value),
-              })}
-            >
-              <option value="">-- Default --</option>
-              {reasoningLevels.map((level) => <option key={level} value={level}>{level}</option>)}
-            </Select>
-          </FormField>
+          <>
+            <FormField>
+              <FieldLabel>Default Reasoning</FieldLabel>
+              <Select
+                value={currentAgent.llmRequestConfig?.reasoning?.effort ?? ""}
+                onChange={(e) => updateReasoningConfig({
+                  effort: normalizeCanonicalReasoningEffort(e.target.value),
+                })}
+              >
+                <option value="">-- Default --</option>
+                {reasoningLevels.map((level) => <option key={level} value={level}>{level}</option>)}
+              </Select>
+            </FormField>
+            <FormField>
+              <FieldLabel>Reasoning History</FieldLabel>
+              <Select
+                value={currentAgent.llmRequestConfig?.reasoning?.history ?? "auto"}
+                onChange={(e) => updateReasoningConfig({
+                  history: e.target.value as ReasoningHistory,
+                })}
+              >
+                <option value="auto">Manufacturer default</option>
+                <option value="discard">Current turn only</option>
+                <option value="tool-turns">Tool turns only</option>
+                <option value="all">Preserve all</option>
+              </Select>
+            </FormField>
+          </>
         )}
       </FormRow>
       <SamplingSettings

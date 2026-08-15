@@ -5,7 +5,6 @@ export type {
   AgentPromptSections,
   ModeBehavior,
   CreateAgentBody,
-  ReasoningEffort,
   ToolAccessScope,
   UpdateAgentBody,
 } from "kk-agent-contract";

@@ -11,6 +11,7 @@
     "prestart": "npm run build",
     "start": "node dist/index.js",
     "dev": "tsx watch index.ts",
+    "test": "npm --prefix .. --workspace kk-agent-contract run build && tsx --test src/plugins/provider/lib/model-profiles/compiler.test.ts",
     "lint": "npm --prefix .. --workspace kk-agent-contract run build && tsc --noEmit"
   },
   "engines": {

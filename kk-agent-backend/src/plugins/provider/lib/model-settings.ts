@@ -7,15 +7,18 @@ export function getModelSettingsKey(providerId: string, modelId: string): string
 
 export function normalizeStoredModelSettings(settings: ModelSettings | undefined): ModelSettings {
   const storedConfig = settings?.llmRequestConfig;
-  const normalizedReasoningEffort = normalizeCanonicalReasoningLevel(storedConfig?.common?.reasoningEffort);
+  const normalizedReasoningEffort = normalizeCanonicalReasoningLevel(storedConfig?.reasoning?.effort);
 
   return compactModelSettings({
+    profileId: settings?.profileId,
     llmRequestConfig: compactLlmRequestConfig({
-      common: {
-        endpoint: storedConfig?.common?.endpoint,
-        reasoningEffort: normalizedReasoningEffort,
-        temperature: storedConfig?.common?.temperature,
-        topP: storedConfig?.common?.topP,
+      reasoning: {
+        effort: normalizedReasoningEffort,
+        history: storedConfig?.reasoning?.history,
+      },
+      sampling: {
+        temperature: storedConfig?.sampling?.temperature,
+        topP: storedConfig?.sampling?.topP,
       },
     }),
   });

@@ -6,7 +6,7 @@ import type {
   TaskItem,
 } from "@/types/api";
 import type { PendingAsset } from "@/hooks/useAssets";
-import SelectMenu from "@/components/SelectMenu";
+import SelectMenu, { type SelectMenuOption } from "@/components/SelectMenu";
 import Spinner from "@/components/Spinner";
 import AssetPreview from "./AssetPreview";
 import type { TokenDisplayStats } from "./types";
@@ -382,6 +382,8 @@ type Props = {
   sending: boolean;
   agents: AgentDefinition[];
   currentAgentId: string;
+  reasoningValue?: string;
+  reasoningOptions: SelectMenuOption[];
   activeModeId: string;
   maxCtx: number;
   tokenStats: TokenDisplayStats | null;
@@ -391,6 +393,7 @@ type Props = {
   onInputChange: (value: string) => void;
   onKeyDown: (e: React.KeyboardEvent<HTMLTextAreaElement>) => void;
   onAgentSwitch: (agentId: string) => void;
+  onReasoningSelect: (effort: string) => void;
   onModeSwitch: (modeId: string) => void;
   onSend: () => void;
   onAbort?: () => void;
@@ -403,6 +406,8 @@ export default function ChatComposer({
   sending,
   agents,
   currentAgentId,
+  reasoningValue,
+  reasoningOptions,
   activeModeId,
   maxCtx,
   tokenStats,
@@ -411,6 +416,7 @@ export default function ChatComposer({
   onInputChange,
   onKeyDown,
   onAgentSwitch,
+  onReasoningSelect,
   onModeSwitch,
   onSend,
   onAbort,
@@ -562,6 +568,16 @@ export default function ChatComposer({
                       description: agent.description || undefined,
                     }))}
                     onSelect={onAgentSwitch}
+                  />
+                )}
+                {reasoningValue && reasoningOptions.length > 0 && (
+                  <SelectMenu
+                    value={reasoningValue}
+                    direction="up"
+                    minWidth="180px"
+                    variant="neutral"
+                    options={reasoningOptions}
+                    onSelect={onReasoningSelect}
                   />
                 )}
               </ComposerMeta>

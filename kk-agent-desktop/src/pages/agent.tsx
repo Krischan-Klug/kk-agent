@@ -31,7 +31,7 @@ export default function AgentPage() {
   async function loadModels() {
     try {
       const providerModels = await providerApi.getModels();
-      setModels(providerModels.models);
+      setModels(providerModels.models.filter((model) => model.profile && model.capabilities));
     } catch (err) {
       logger.error("Failed to load models:", err);
       setModels([]);

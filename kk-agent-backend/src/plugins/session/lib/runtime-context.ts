@@ -189,7 +189,7 @@ export function buildAssetRuntimeContext(input: {
     kind: import("kk-agent-contract").AssetKind;
     size: number;
   }>;
-  visionSupport?: "supported" | "unsupported" | "unknown";
+  imageInputSupported: boolean;
 }): string {
   if (input.assets.length === 0) return "";
 
@@ -203,7 +203,7 @@ export function buildAssetRuntimeContext(input: {
     ...assetLines,
   ];
 
-  if (input.visionSupport === "unsupported" && input.assets.some((asset) => asset.kind === "image")) {
+  if (!input.imageInputSupported && input.assets.some((asset) => asset.kind === "image")) {
     lines.push("", getDefaults().asset.visionNotSupportedInstruction);
   }
 

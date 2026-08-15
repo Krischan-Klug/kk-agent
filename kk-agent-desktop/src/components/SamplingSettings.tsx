@@ -52,8 +52,8 @@ function readNumber(value: string): number | undefined {
 }
 
 export default function SamplingSettings({ value, onChange }: Props) {
-  function update(common: NonNullable<LlmRequestConfig["common"]>) {
-    onChange(mergeLlmRequestConfigs(value, { common }));
+  function update(sampling: NonNullable<LlmRequestConfig["sampling"]>) {
+    onChange(mergeLlmRequestConfigs(value, { sampling }));
   }
 
   return (
@@ -70,7 +70,7 @@ export default function SamplingSettings({ value, onChange }: Props) {
             min={0}
             max={2}
             step={0.1}
-            value={value?.common?.temperature ?? ""}
+            value={value?.sampling?.temperature ?? ""}
             placeholder="provider default"
             onChange={(event) => update({ temperature: readNumber(event.target.value) })}
           />
@@ -82,7 +82,7 @@ export default function SamplingSettings({ value, onChange }: Props) {
             min={0}
             max={1}
             step={0.05}
-            value={value?.common?.topP ?? ""}
+            value={value?.sampling?.topP ?? ""}
             placeholder="provider default"
             onChange={(event) => update({ topP: readNumber(event.target.value) })}
           />

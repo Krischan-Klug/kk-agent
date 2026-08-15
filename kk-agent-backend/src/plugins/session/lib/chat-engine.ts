@@ -5,7 +5,7 @@ import * as store from "./store.js";
 import { getSessionAssetsByIds } from "./assets.js";
 import { compileAssetModelContent } from "./asset-context.js";
 import { getModelCapabilities } from "../../provider/service.js";
-import { allowsVisionInputs } from "kk-agent-contract";
+import { supportsInputModality } from "kk-agent-contract";
 import {
   assetRefBlock,
   createTranscriptMessage,
@@ -103,7 +103,7 @@ async function prepareLoopRun(sessionId: string, message: string, assetIds?: str
   const agent = getAgent(session.agentId);
   const userBlocks: TranscriptBlock[] = [textBlock(message)];
   const capabilities = getModelCapabilities(session.providerId, session.model);
-  const visionSupported = allowsVisionInputs(capabilities?.visionSupport);
+  const imageInputSupported = supportsInputModality(capabilities, "image");
   let assetContext = "";
 
   if (assetIds?.length) {
@@ -120,7 +120,7 @@ async function prepareLoopRun(sessionId: string, message: string, assetIds?: str
         kind: asset.kind,
         size: asset.size,
       })),
-      visionSupport: capabilities?.visionSupport,
+      imageInputSupported,
     });
   }
 
@@ -139,7 +139,11 @@ async function prepareLoopRun(sessionId: string, message: string, assetIds?: str
     artifactIds: [],
   };
   const messages = [...session.messages, userMessage];
-  const modelContentByMessageId = await compileAssetModelContent({ sessionId, messages, visionSupported });
+  const modelContentByMessageId = await compileAssetModelContent({
+    sessionId,
+    messages,
+    visionSupported: imageInputSupported,
+  });
 
   const modeRuntimeConfigs = Object.fromEntries(
     getEnabledAgentModes(agent).map((mode) => [mode.id, buildModeRuntimeConfig(session, agent, mode.id)]),

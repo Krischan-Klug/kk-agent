@@ -2,9 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import styled from "styled-components";
 import {
   buildTemperatureOptions,
-  getEndpointCapabilities,
   getReasoningLevels,
-  getResolvedEndpoint,
   getResolvedReasoningEffort,
 } from "@/lib/modelCapabilities";
 import Button from "@/components/Button";
@@ -22,9 +20,22 @@ import { session as sessionApi } from "@/lib/api";
 import { createLogger } from "@/lib/logger";
 import { resolveDefaultSessionAgentId } from "@/lib/sessionFactory";
 import { getSessionModelRef } from "@/lib/modelRefs";
-import type { SessionRuntimeMcpDebug, SessionRuntimeSkillDebug, SessionRuntimeToolDebug } from "@/types/api";
+import type {
+  ReasoningEffort,
+  SessionRuntimeMcpDebug,
+  SessionRuntimeSkillDebug,
+  SessionRuntimeToolDebug,
+} from "@/types/api";
 
 const logger = createLogger("chat");
+
+const REASONING_COLORS: Record<ReasoningEffort, string> = {
+  none: "#9d9d9d",
+  low: "#1eff00",
+  medium: "#0070dd",
+  high: "#a335ee",
+  xhigh: "#ff8000",
+};
 
 const ChatWrapper = styled.div`
   display: flex;
@@ -145,19 +156,32 @@ export default function ChatPage() {
 
   const modelInfo = sessionData.session ? sessionData.modelInfoMap.get(getSessionModelRef(sessionData.session)) : undefined;
   const modelSettings = sessionData.session ? sessionData.modelSettingsMap[getSessionModelRef(sessionData.session)] : undefined;
-  const resolvedEndpoint = getResolvedEndpoint(modelInfo, modelSettings);
-  const endpointCapabilities = getEndpointCapabilities(modelInfo, resolvedEndpoint);
+  const endpointCapabilities = modelInfo?.capabilities?.endpointCapabilities ?? {
+    temperatureSupported: false,
+  };
   const reasoningLevels = getReasoningLevels(modelInfo);
-  const reasoningOptions = reasoningLevels.map((level) => ({ value: level, label: level }));
+  const reasoningOptions = reasoningLevels.map((level) => ({
+    value: level,
+    label: level,
+    color: REASONING_COLORS[level],
+  }));
   const resolvedEffort = getResolvedReasoningEffort(
     modelInfo,
     modelSettings,
-    sessionData.session?.llmRequestConfig?.common?.reasoningEffort,
+    sessionData.session?.llmRequestConfig?.reasoning?.effort,
   );
+  const resolvedReasoningHistory =
+    sessionData.session?.llmRequestConfig?.reasoning?.history ??
+    modelSettings?.llmRequestConfig?.reasoning?.history ??
+    "auto";
+  const profileSampling = resolvedEffort === "none"
+    ? modelInfo?.profile?.sampling.direct
+    : modelInfo?.profile?.sampling.thinking;
   const resolvedTemp = sessionData.session
     ? (
-      sessionData.session.llmRequestConfig?.common?.temperature ??
-      endpointCapabilities.temperatureRange?.min ??
+      sessionData.session.llmRequestConfig?.sampling?.temperature ??
+      modelSettings?.llmRequestConfig?.sampling?.temperature ??
+      profileSampling?.temperature ??
       1.0
     )
     : 1.0;
@@ -222,10 +246,12 @@ export default function ChatPage() {
         showReasoningControl={showReasoningControl}
         showTemperatureControl={showTemperatureControl}
         resolvedEffort={resolvedEffort ?? "default"}
+        resolvedReasoningHistory={resolvedReasoningHistory}
         resolvedTemp={resolvedTemp}
         reasoningOptions={reasoningOptions}
         temperatureOptions={temperatureOptions}
         onReasoningSelect={sessionData.handleReasoningEffort}
+        onReasoningHistorySelect={sessionData.handleReasoningHistory}
         onTemperatureSelect={sessionData.handleTemperature}
         onLlmRequestConfigChange={sessionData.handleLlmRequestConfig}
       />
@@ -249,6 +275,8 @@ export default function ChatPage() {
         sending={streaming.sending || assets.uploading}
         agents={sessionData.agents}
         currentAgentId={activeSession.agentId}
+        reasoningValue={resolvedEffort}
+        reasoningOptions={reasoningOptions}
         activeModeId={activeSession.activeModeId}
         maxCtx={maxCtx}
         tokenStats={streaming.tokenStats}
@@ -258,6 +286,7 @@ export default function ChatPage() {
         onInputChange={streaming.setInput}
         onKeyDown={streaming.handleKeyDown}
         onAgentSwitch={(agentId) => void streaming.handleAgentSwitch(agentId, sessionData.handleAgentSwitch)}
+        onReasoningSelect={(effort) => void sessionData.handleReasoningEffort(effort)}
         onModeSwitch={(mode) => void sessionData.handleModeSwitch(mode)}
         onSend={() => void streaming.handleSend()}
         onAbort={() => void sessionApi.abort(activeSession.id)}

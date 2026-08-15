@@ -21,7 +21,7 @@
     "dev:renderer": "npm --workspace kk-agent-desktop run dev:renderer",
     "dev:desktop": "npm --workspace kk-agent-desktop run start:dev",
     "dev": "npm --workspace kk-agent-contract run build && node scripts/dev.mjs",
-    "check": "npm --workspace kk-agent-contract run build && npm --workspace kk-agent-contract run lint && npm --workspace kk-agent-backend run lint && npm --workspace kk-agent-desktop run lint",
+    "check": "npm --workspace kk-agent-contract run build && npm --workspace kk-agent-contract run lint && npm --workspace kk-agent-backend run test && npm --workspace kk-agent-backend run lint && npm --workspace kk-agent-desktop run lint",
     "build": "npm --workspace kk-agent-contract run build && npm --workspace kk-agent-backend run build && npm --workspace kk-agent-desktop run build:renderer",
     "deadcode": "knip --reporter compact --no-progress",
     "desktop:build": "npm --workspace kk-agent-contract run build && npm --workspace kk-agent-backend run build:desktop && npm --workspace kk-agent-desktop run build:desktop",

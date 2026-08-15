@@ -1,55 +1,48 @@
-import type { ContinuationMode, EndpointType, ModelInfo, ModelSettings } from "../types.js";
+import type { ModelInfo, ModelSettings } from "../types.js";
 import type { UnifiedRequest } from "./types.js";
-import {
-  clampNumber,
-  coerceReasoningSelection,
-  getEndpointCapabilities,
-  getEndpointTransportProfile,
-  getPreferredEndpoint,
-  mergeLlmRequestConfigs,
-} from "kk-agent-contract";
+import { mergeLlmRequestConfigs } from "kk-agent-contract";
+import { compileModelRequest } from "./model-profiles/compiler.js";
+import { getModelProfile } from "./model-profiles/registry.js";
 
 export function normalizeRequestOptions(
-  model: ModelInfo | undefined,
+  model: ModelInfo,
   settings: ModelSettings,
   request: UnifiedRequest,
-  forcedEndpoint?: EndpointType,
 ): Pick<
   UnifiedRequest,
-  "endpoint" | "transportProfile" | "resolvedLlmRequestConfig"
-> & { explicitEndpointSelection: boolean } {
+  | "endpoint"
+  | "transportProfile"
+  | "resolvedLlmRequestConfig"
+  | "providerRequestBody"
+  | "instructions"
+  | "messages"
+  | "tools"
+  | "modelContentByMessageId"
+> {
+  const profile = getModelProfile(settings.profileId);
+  if (!profile || model.profile?.id !== profile.id || !model.capabilities) {
+    throw new Error(`Model "${model.id}" has no valid inference profile.`);
+  }
   const mergedConfig = mergeLlmRequestConfigs(settings.llmRequestConfig, request.llmRequestConfig);
-  const explicitEndpointSelection = mergedConfig?.common?.endpoint !== undefined;
-  const endpoint = forcedEndpoint ?? getPreferredEndpoint(model?.capabilities, mergedConfig?.common?.endpoint);
-  const endpointCapabilities = getEndpointCapabilities(model?.capabilities, endpoint);
-  const continuationMode: ContinuationMode = endpoint === "responses"
-    ? getEndpointTransportProfile(model?.capabilities, endpoint).continuationMode
-    : "none";
-  const transportProfile = endpoint === "responses"
-    ? {
-        ...getEndpointTransportProfile(model?.capabilities, endpoint),
-        continuationMode,
-      }
-    : getEndpointTransportProfile(model?.capabilities, endpoint);
-  const rawReasoningSelection = mergedConfig?.common?.reasoningEffort;
-  const reasoningEffort = coerceReasoningSelection(model?.capabilities, endpoint, rawReasoningSelection);
-  const temperature = endpointCapabilities.temperatureSupported
-    ? clampNumber(mergedConfig?.common?.temperature, endpointCapabilities.temperatureRange)
-    : undefined;
-  const topP = clampNumber(mergedConfig?.common?.topP, { min: 0, max: 1 });
-  const resolvedLlmRequestConfig = {
-    common: {
-      endpoint,
-      reasoningEffort,
-      temperature,
-      topP,
-    },
-  };
+  const compiled = compileModelRequest({
+    profile,
+    config: mergedConfig,
+    instructions: request.instructions,
+    messages: request.messages,
+    modelContentByMessageId: request.modelContentByMessageId,
+    temperatureRange: model.capabilities.endpointCapabilities.temperatureSupported
+      ? model.capabilities.endpointCapabilities.temperatureRange
+      : undefined,
+  });
 
   return {
-    endpoint,
-    transportProfile,
-    resolvedLlmRequestConfig,
-    explicitEndpointSelection,
+    endpoint: profile.endpoint,
+    transportProfile: profile.transport,
+    resolvedLlmRequestConfig: compiled.resolved,
+    providerRequestBody: compiled.body,
+    instructions: compiled.instructions,
+    messages: compiled.messages,
+    tools: model.capabilities.tools.mode === "native" ? request.tools : undefined,
+    modelContentByMessageId: compiled.modelContentByMessageId,
   };
 }

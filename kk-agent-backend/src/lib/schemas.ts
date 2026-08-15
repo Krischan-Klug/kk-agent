@@ -5,12 +5,14 @@ const OptionalTrimmedStringSchema = z.string().trim().optional();
 
 const LlmRequestConfigSchema = z
   .object({
-    common: z
+    reasoning: z
       .object({
-        endpoint: z.enum(["chat-completions", "responses"]).optional(),
-        reasoningEffort: z
-          .enum(["minimal", "low", "medium", "high"])
-          .optional(),
+        effort: z.enum(["none", "low", "medium", "high", "xhigh"]).optional(),
+        history: z.enum(["auto", "discard", "tool-turns", "all"]).optional(),
+      })
+      .optional(),
+    sampling: z
+      .object({
         temperature: z.number().min(0).max(2).optional(),
         topP: z.number().min(0).max(1).optional(),
       })
@@ -181,6 +183,7 @@ export const UpdateProviderBodySchema = z.object({
 export const ModelSettingsBodySchema = z.object({
   providerId: NonEmptyStringSchema,
   settings: z.object({
+    profileId: NonEmptyStringSchema.optional(),
     llmRequestConfig: LlmRequestConfigSchema,
   }),
 });

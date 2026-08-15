@@ -1,5 +1,4 @@
-import type { AgentDefinition, ModeBehavior, ReasoningEffort } from "../types.js";
-import { getDefaults } from "../../lib/defaults.js";
+import type { AgentDefinition, ModeBehavior } from "../types.js";
 import { buildDefaultModes, resolveDefaultModeId } from "./mode-config.js";
 
 function buildAgent(
@@ -19,11 +18,6 @@ function buildAgent(
     modes,
     variables: {},
     defaultModel,
-    llmRequestConfig: {
-      common: {
-        reasoningEffort: getDefaults().reasoning.defaultEffort as ReasoningEffort /* validated at runtime by caller */,
-      },
-    },
     createdAt: now,
     updatedAt: now,
   };

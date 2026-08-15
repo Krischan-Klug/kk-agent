@@ -1,10 +1,8 @@
 import {
-  getEndpointCapabilities as getSharedEndpointCapabilities,
-  getPreferredEndpoint,
   getReasoningLevels as getSharedReasoningLevels,
   normalizeCanonicalReasoningLevel,
 } from "kk-agent-contract";
-import type { EndpointType, ModelInfo, ModelSettings, ReasoningEffort } from "@/types/api";
+import type { ModelInfo, ModelSettings, ReasoningEffort } from "@/types/api";
 
 export function getReasoningLevels(modelInfo?: ModelInfo): ReasoningEffort[] {
   return getSharedReasoningLevels(modelInfo?.capabilities);
@@ -14,15 +12,6 @@ export function normalizeCanonicalReasoningEffort(value?: string): ReasoningEffo
   return normalizeCanonicalReasoningLevel(value);
 }
 
-export function getResolvedEndpoint(modelInfo: ModelInfo | undefined, settings?: ModelSettings): EndpointType {
-  const configuredEndpoint = settings?.llmRequestConfig?.common?.endpoint;
-  return getPreferredEndpoint(modelInfo?.capabilities, configuredEndpoint);
-}
-
-export function getEndpointCapabilities(modelInfo: ModelInfo | undefined, endpoint: EndpointType) {
-  return getSharedEndpointCapabilities(modelInfo?.capabilities, endpoint);
-}
-
 export function getResolvedReasoningEffort(
   modelInfo: ModelInfo | undefined,
   settings: ModelSettings | undefined,
@@ -30,10 +19,11 @@ export function getResolvedReasoningEffort(
 ): ReasoningEffort | undefined {
   const levels = getReasoningLevels(modelInfo);
   const normalizedValue = normalizeCanonicalReasoningEffort(value);
-  const normalizedSetting = normalizeCanonicalReasoningEffort(settings?.llmRequestConfig?.common?.reasoningEffort);
+  const normalizedSetting = normalizeCanonicalReasoningEffort(settings?.llmRequestConfig?.reasoning?.effort);
   if (normalizedValue && levels.includes(normalizedValue)) return normalizedValue;
   if (normalizedSetting && levels.includes(normalizedSetting)) return normalizedSetting;
-  if (levels.includes("medium")) return "medium";
+  const declaredDefault = modelInfo?.capabilities?.reasoning.defaultEffort;
+  if (declaredDefault && levels.includes(declaredDefault)) return declaredDefault;
   return levels[0];
 }
 

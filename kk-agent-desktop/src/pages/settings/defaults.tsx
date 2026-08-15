@@ -8,7 +8,6 @@ import MiscSection from "@/components/settings/MiscSection";
 import ModeInstructionsSection from "@/components/settings/ModeInstructionsSection";
 import ModeToolInstructionsSection from "@/components/settings/ModeToolInstructionsSection";
 import PromptSectionsEditor from "@/components/settings/PromptSectionsEditor";
-import ReasoningSection from "@/components/settings/ReasoningSection";
 import { useDefaultsForm } from "@/hooks/useDefaultsForm";
 import { ActionsRow } from "@/components/PageForm";
 import {
@@ -26,8 +25,7 @@ type SectionKey =
   | "promptSections"
   | "modeInstructions"
   | "modeToolInstructions"
-  | "misc"
-  | "reasoning";
+  | "misc";
 
 export default function DefaultsPage() {
   const { draft, setDraft, internalTools, saving, saved, error, dirty, save } = useDefaultsForm();
@@ -39,7 +37,6 @@ export default function DefaultsPage() {
     modeInstructions: true,
     modeToolInstructions: false,
     misc: false,
-    reasoning: false,
   });
 
   function toggle(key: SectionKey) {
@@ -85,10 +82,6 @@ export default function DefaultsPage() {
 
             <CollapsibleSection title="Misc" expanded={expanded.misc} onToggle={() => toggle("misc")}>
               <MiscSection draft={draft} setDraft={setDraft} />
-            </CollapsibleSection>
-
-            <CollapsibleSection title="Reasoning" expanded={expanded.reasoning} onToggle={() => toggle("reasoning")}>
-              <ReasoningSection draft={draft} setDraft={setDraft} />
             </CollapsibleSection>
 
             <ActionsRow>

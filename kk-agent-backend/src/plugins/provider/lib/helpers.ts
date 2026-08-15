@@ -12,7 +12,6 @@ import {
   type TranscriptStopReason,
 } from "kk-agent-contract";
 import type { AssembledAssistantTurn, ModelContentPart, UnifiedRequest, UnifiedToolDefinition, UnifiedResponse } from "./types.js";
-import { buildRequestConfigBody } from "./request-body.js";
 
 type ChatCompletionContentPart =
   | { type: "text"; text: string }
@@ -34,7 +33,7 @@ function buildMessages(messages: TranscriptMessage[], projections: Record<string
       return {
         role: "assistant" as const,
         content: getMessageText(message) || null,
-        ...(reasoning ? { reasoning } : {}),
+        ...(reasoning ? { reasoning_content: reasoning } : {}),
         ...(toolUses.length > 0
           ? {
               tool_calls: toolUses.map((toolUse) => ({
@@ -72,7 +71,7 @@ function buildTools(request: UnifiedRequest) {
 
 export function buildChatCompletionsBody(request: UnifiedRequest): Record<string, unknown> {
   const body: Record<string, unknown> = {
-    ...buildRequestConfigBody(request.resolvedLlmRequestConfig),
+    ...(request.providerRequestBody ?? {}),
     model: request.model,
     messages: [
       { role: "system", content: request.instructions },
@@ -149,6 +148,14 @@ export function serializeUserMessageToResponsesInput(
 
 export function serializeAssistantMessageToResponsesInput(message: TranscriptMessage): Array<Record<string, unknown>> {
   const items: Array<Record<string, unknown>> = [];
+  const reasoning = getMessageReasoning(message);
+  if (reasoning) {
+    items.push({
+      type: "reasoning",
+      content: [{ type: "reasoning_text", text: reasoning }],
+      summary: [],
+    });
+  }
   const text = getMessageText(message);
   if (text) {
     items.push({

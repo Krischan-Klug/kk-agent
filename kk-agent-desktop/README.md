@@ -39,7 +39,7 @@ Use the root `npm run dev` command to start backend, renderer, and Electron toge
 - `/skills`: Agent Skills discovery, import, inspection, and managed deletion
 - `/settings/appearance`: theme settings
 - `/settings/defaults`: prompt and runtime defaults
-- `/settings/provider`: providers and model request defaults
+- `/settings/provider`: providers, explicit model profiles, and request overrides
 - `/settings/tools`: internal tool configuration
 
 Renderer-local state uses React hooks and `localStorage`. Persistent agent state belongs to the backend.

@@ -11,10 +11,13 @@ export type {
   UpdateAgentBody,
 } from "./agent.js";
 
-export type { ReasoningEffort } from "./common.js";
+export type {
+  ReasoningEffort,
+  ReasoningHistory,
+  ResolvedReasoningHistory,
+} from "./common.js";
 
 export type {
-  CommonLlmRequestConfig,
   ContinuationMode,
   CreateProviderBody,
   EndpointCapabilities,
@@ -22,23 +25,26 @@ export type {
   EndpointType,
   LlmRequestConfig,
   ModelCapabilities,
+  ModelCompatibilityIssue,
   ModelInfo,
-  ModelObservation,
+  ModelInputModality,
+  ModelOutputModality,
+  ModelProfileSummary,
+  ModelReasoningCapabilities,
   ModelSettings,
+  ModelToolCapabilities,
   NumericRange,
-  ObservationSupportState,
   ProviderConfig,
   ProvidersState,
   ProviderTurnDebug,
+  ReasoningConfig,
   ReasoningControl,
-  ReasoningSource,
-  ReasoningTransport,
   ResolvedLlmRequestConfig,
-  StreamGrammar,
-  ToolCallAssemblyMode,
-  ToolSchemaTransport,
+  ResolvedSamplingConfig,
+  RuntimeModelCapabilities,
+  SamplingOverrides,
+  ToolUseMode,
   UpdateProviderBody,
-  VisionSupport,
 } from "./provider.js";
 
 export type {
@@ -129,15 +135,11 @@ export type {
 } from "./transcript.js";
 
 export {
-  DEFAULT_REASONING_LEVELS,
-  allowsVisionInputs,
+  CANONICAL_REASONING_EFFORTS,
   clampNumber,
-  coerceReasoningSelection,
-  getEndpointCapabilities,
-  getEndpointTransportProfile,
-  getPreferredEndpoint,
   getReasoningLevels,
   normalizeCanonicalReasoningLevel,
+  supportsInputModality,
 } from "./capabilities.js";
 
 export {

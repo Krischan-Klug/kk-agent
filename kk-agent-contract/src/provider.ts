@@ -1,24 +1,15 @@
-import type { ReasoningEffort } from "./common.js";
+import type {
+  ReasoningEffort,
+  ReasoningHistory,
+  ResolvedReasoningHistory,
+} from "./common.js";
 
 export type EndpointType = "chat-completions" | "responses";
-export type ReasoningControl = "none" | "effort" | "on-off";
-export type ReasoningSource = "none" | "declared" | "observed" | "inferred";
-export type ReasoningTransport =
-  | "none"
-  | "chat-completions-effort"
-  | "chat-completions-on-off"
-  | "responses-effort";
-export type ToolSchemaTransport = "chat-completions-tools" | "responses-tools";
-export type StreamGrammar = "openai-chat-completions" | "openai-responses";
-export type ToolCallAssemblyMode =
-  | "chat-completions-indexed"
-  | "responses-output-state";
-export type ContinuationMode =
-  | "none"
-  | "raw-output-replay"
-  | "previous-response-id";
-export type ObservationSupportState = "supported" | "unsupported";
-export type VisionSupport = "supported" | "unsupported" | "unknown";
+export type ReasoningControl = "none" | "binary" | "effort";
+export type ModelInputModality = "text" | "image" | "audio" | "video" | "file";
+export type ModelOutputModality = "text" | "image" | "audio";
+export type ToolUseMode = "none" | "native";
+export type ContinuationMode = "none" | "raw-output-replay" | "previous-response-id";
 
 export interface NumericRange {
   min: number;
@@ -32,14 +23,8 @@ export interface EndpointCapabilities {
 }
 
 export interface EndpointTransportProfile {
-  supported: boolean;
-  reasoningTransport: ReasoningTransport;
-  toolSchemaTransport: ToolSchemaTransport;
-  streamGrammar: StreamGrammar;
-  toolCallAssemblyMode: ToolCallAssemblyMode;
   supportsConcatenatedJsonSplit: boolean;
   continuationMode: ContinuationMode;
-  supportsStrictTools: boolean;
 }
 
 export interface ProviderConfig {
@@ -64,34 +49,60 @@ export interface UpdateProviderBody {
   models?: string[];
 }
 
-export interface ModelObservation {
-  endpointSupport?: Partial<Record<EndpointType, ObservationSupportState>>;
-  reasoningSupport?: Partial<Record<EndpointType, ObservationSupportState>>;
-  responsesStatefulness?: ObservationSupportState;
-  visionSupport?: ObservationSupportState;
-  lastObservedAt: string;
-}
-
 export interface ProvidersState {
+  schemaVersion: number;
   providers: ProviderConfig[];
   modelSettings: Record<string, ModelSettings>;
-  observedCapabilities: Record<string, ModelObservation>;
+}
+
+export interface ModelReasoningCapabilities {
+  control: ReasoningControl;
+  allowedEfforts: ReasoningEffort[];
+  defaultEffort?: ReasoningEffort;
+  defaultHistory: ResolvedReasoningHistory;
+}
+
+export interface ModelToolCapabilities {
+  mode: ToolUseMode;
+  protocol?: string;
 }
 
 export interface ModelCapabilities {
-  supportsTools: boolean;
-  supportsReasoning: boolean;
-  visionSupport: VisionSupport;
-  reasoningSource: ReasoningSource;
+  inputModalities: ModelInputModality[];
+  outputModalities: ModelOutputModality[];
+  tools: ModelToolCapabilities;
+  reasoning: ModelReasoningCapabilities;
   supportsStreaming: boolean;
-  supportedEndpoints: EndpointType[];
-  reasoningControl: ReasoningControl;
-  reasoningLevels: ReasoningEffort[];
-  reasoning?: {
-    allowedEfforts: ReasoningEffort[];
+  endpoint: EndpointType;
+  endpointCapabilities: EndpointCapabilities;
+  transport: EndpointTransportProfile;
+}
+
+export interface RuntimeModelCapabilities {
+  visualInputSupported?: boolean;
+}
+
+export interface ModelCompatibilityIssue {
+  code: "runtime_modality_unavailable";
+  message: string;
+}
+
+export interface ModelProfileSummary {
+  id: string;
+  manufacturer: string;
+  modelName: string;
+  profileVersion: number;
+  label: string;
+  sourceUrl?: string;
+  endpoint: EndpointType;
+  inputModalities: ModelInputModality[];
+  outputModalities: ModelOutputModality[];
+  tools: ModelToolCapabilities;
+  reasoning: ModelReasoningCapabilities;
+  sampling: {
+    thinking?: ResolvedSamplingConfig;
+    direct?: ResolvedSamplingConfig;
   };
-  endpointCapabilities: Partial<Record<EndpointType, EndpointCapabilities>>;
-  transportProfiles: Partial<Record<EndpointType, EndpointTransportProfile>>;
 }
 
 export interface ModelInfo {
@@ -100,44 +111,61 @@ export interface ModelInfo {
   providerId: string;
   maxContextLength?: number;
   contextLength?: number;
-  capabilities: ModelCapabilities;
+  publisher?: string;
+  architecture?: string;
+  runtimeCapabilities: RuntimeModelCapabilities;
+  suggestedProfileId?: string;
+  profile?: ModelProfileSummary;
+  capabilities?: ModelCapabilities;
+  compatibilityIssues: ModelCompatibilityIssue[];
 }
 
-export interface CommonLlmRequestConfig {
-  endpoint?: EndpointType;
-  reasoningEffort?: ReasoningEffort;
+export interface ReasoningConfig {
+  effort?: ReasoningEffort;
+  history?: ReasoningHistory;
+}
+
+export interface SamplingOverrides {
   temperature?: number;
   topP?: number;
 }
 
 export interface LlmRequestConfig {
-  common?: CommonLlmRequestConfig;
+  reasoning?: ReasoningConfig;
+  sampling?: SamplingOverrides;
 }
 
-export interface ResolvedLlmRequestConfig extends LlmRequestConfig {
-  common: CommonLlmRequestConfig & { endpoint: EndpointType };
+export interface ResolvedSamplingConfig extends SamplingOverrides {
+  topK?: number;
+  minP?: number;
+  presencePenalty?: number;
+  repetitionPenalty?: number;
+}
+
+export interface ResolvedLlmRequestConfig {
+  endpoint: EndpointType;
+  profileId: string;
+  reasoning: {
+    requestedEffort?: ReasoningEffort;
+    effectiveEffort?: ReasoningEffort;
+    requestedHistory: ReasoningHistory;
+    effectiveHistory: ResolvedReasoningHistory;
+    enabled: boolean;
+  };
+  sampling: ResolvedSamplingConfig;
+  warnings: string[];
 }
 
 export interface ModelSettings {
+  profileId?: string;
   llmRequestConfig?: LlmRequestConfig;
 }
 
 export interface ProviderTurnDebug {
   endpoint: EndpointType;
+  profileId?: string;
   continuationMode?: ContinuationMode;
   responseId?: string;
   outputCount?: number;
   resolvedRequestConfig?: ResolvedLlmRequestConfig;
-  attemptedEndpoints?: EndpointType[];
-  endpointSelection?: "implicit" | "explicit";
-  fallback?: {
-    from: EndpointType;
-    to: EndpointType;
-    reason: string;
-  };
-  continuationFallback?: {
-    from: ContinuationMode;
-    to: ContinuationMode;
-    reason: string;
-  };
 }

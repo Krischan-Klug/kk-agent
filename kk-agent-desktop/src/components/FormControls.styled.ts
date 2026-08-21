@@ -56,11 +56,13 @@ export const ModeTabs = styled.div`
   flex-wrap: wrap;
 `;
 
-export const ModeTab = styled.button<{ $active: boolean }>`
+export const ModeTab = styled.button<{ $active: boolean; $variant?: "info" | "warning" }>`
   padding: 6px 10px;
-  background: ${(p) => (p.$active ? "var(--accent)" : "var(--accent-muted)")};
-  color: ${(p) => (p.$active ? "var(--bg-base)" : "var(--accent)")};
-  border: 1px solid var(--accent);
+  background: ${({ $active, $variant = "warning" }) => $active
+    ? `color-mix(in srgb, var(--${$variant}) 20%, transparent)`
+    : "var(--bg-surface)"};
+  color: ${({ $variant = "warning" }) => `var(--${$variant})`};
+  border: 1px solid ${({ $variant = "warning" }) => `var(--${$variant})`};
   border-radius: var(--radius-sm);
   font-size: var(--font-size-sm);
   cursor: pointer;

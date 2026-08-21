@@ -8,7 +8,7 @@ export type SelectMenuOption = {
   color?: string;
 };
 
-type TriggerVariant = "accent" | "neutral" | "warning";
+type TriggerVariant = "accent" | "neutral" | "info" | "warning";
 type Direction = "up" | "down";
 type Align = "left" | "right";
 
@@ -23,13 +23,16 @@ const Trigger = styled.button<{ $variant: TriggerVariant; $optionColor?: string 
   gap: var(--space-xs);
   padding: 2px var(--space-sm);
   background: ${(p) =>
-    p.$variant === "warning" ? "rgba(255, 160, 50, 0.12)" : p.$variant === "neutral" ? "var(--bg-surface)" : "var(--accent-muted)"};
+    p.$optionColor ? `color-mix(in srgb, ${p.$optionColor} 14%, transparent)`
+      : p.$variant === "warning" ? "color-mix(in srgb, var(--warning) 14%, transparent)"
+      : p.$variant === "info" ? "color-mix(in srgb, var(--info) 14%, transparent)"
+        : p.$variant === "neutral" ? "var(--bg-surface)" : "var(--accent-muted)"};
   color: ${(p) =>
     p.$optionColor ??
-    (p.$variant === "warning" ? "var(--warning)" : p.$variant === "neutral" ? "var(--text-primary)" : "var(--accent)")};
+    (p.$variant === "warning" ? "var(--warning)" : p.$variant === "info" ? "var(--info)" : p.$variant === "neutral" ? "var(--text-primary)" : "var(--accent)")};
   border: 1px solid ${(p) =>
     p.$optionColor ??
-    (p.$variant === "warning" ? "var(--warning)" : p.$variant === "neutral" ? "var(--border)" : "var(--accent)")};
+    (p.$variant === "warning" ? "var(--warning)" : p.$variant === "info" ? "var(--info)" : p.$variant === "neutral" ? "var(--border)" : "var(--accent)")};
   border-radius: var(--radius-sm);
   font-size: var(--font-size-sm);
   font-weight: 500;
@@ -42,6 +45,10 @@ const Trigger = styled.button<{ $variant: TriggerVariant; $optionColor?: string 
         ? `border-color: ${p.$optionColor}; background: var(--bg-hover); color: ${p.$optionColor};`
         : p.$variant === "neutral"
         ? "border-color: var(--accent);"
+        : p.$variant === "info"
+        ? "background: color-mix(in srgb, var(--info) 22%, transparent); color: var(--info); border-color: var(--info);"
+        : p.$variant === "warning"
+        ? "background: color-mix(in srgb, var(--warning) 22%, transparent); color: var(--warning); border-color: var(--warning);"
         : "background: var(--accent); color: var(--accent-foreground); border-color: var(--accent);"}
   }
 

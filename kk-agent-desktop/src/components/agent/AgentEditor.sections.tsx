@@ -118,9 +118,15 @@ export function AgentInfoSection({
           <FieldLabel>Modes</FieldLabel>
           <ModeTabs>
             {currentAgent.modes.map((mode) => (
-              <ModeTab key={mode.id} type="button" $active={mode.id === effectiveSelectedModeId} onClick={() => setSelectedModeId(mode.id)}>
+              <ModeTab
+                key={mode.id}
+                type="button"
+                $active={mode.id === effectiveSelectedModeId}
+                $variant={mode.behavior === "plan" ? "info" : "warning"}
+                onClick={() => setSelectedModeId(mode.id)}
+              >
                 <ModeTabContent>
-                  <ModeStatusDot $enabled={mode.enabled} $active={mode.id === effectiveSelectedModeId} />
+                  <ModeStatusDot $enabled={mode.enabled} $variant={mode.behavior === "plan" ? "info" : "warning"} />
                   <span>{mode.label}</span>
                 </ModeTabContent>
               </ModeTab>

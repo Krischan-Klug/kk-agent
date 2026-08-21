@@ -89,17 +89,12 @@ export const ModeTabContent = styled.span`
   gap: 8px;
 `;
 
-export const ModeStatusDot = styled.span<{ $enabled: boolean; $active: boolean }>`
+export const ModeStatusDot = styled.span<{ $enabled: boolean; $variant: "info" | "warning" }>`
   width: 8px;
   height: 8px;
   border-radius: 50%;
   flex-shrink: 0;
-  background: ${({ $enabled, $active }) => {
-    if ($enabled) {
-      return $active ? "var(--bg-base)" : "var(--success)";
-    }
-    return "var(--text-muted)";
-  }};
+  background: ${({ $enabled, $variant }) => $enabled ? `var(--${$variant})` : "var(--text-muted)"};
   opacity: ${({ $enabled }) => ($enabled ? 1 : 0.85)};
 `;
 

@@ -131,7 +131,8 @@ export default function AgentPage() {
       <MasterDetailLayout>
         <AgentList
           agents={agents}
-          mcps={[...internalTools, ...mcps]}
+          tools={internalTools}
+          mcps={mcps}
           selectedId={selectedId}
           onSelect={selectAgent}
           onCreate={() => setShowCreate(true)}

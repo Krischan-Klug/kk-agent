@@ -466,7 +466,9 @@ export default function ChatComposer({
     .map((mode) => ({
       value: mode.id,
       label: mode.label,
+      color: mode.behavior === "plan" ? "var(--info)" : "var(--warning)",
     }));
+  const activeModeBehavior = currentAgent?.modes.find((mode) => mode.id === activeModeId)?.behavior ?? "edit";
 
   const canSend =
     !sending && (input.trim().length > 0 || pendingAssets.length > 0);
@@ -605,19 +607,21 @@ export default function ChatComposer({
                     options={modeOptions}
                     onSelect={onModeSwitch}
                     direction="up"
-                    variant="neutral"
+                    minWidth="max-content"
+                    variant={activeModeBehavior === "plan" ? "info" : "warning"}
                   />
                 </ControlGroup>
                 <ControlGroup>
                   <SelectMenu
                     value={approvalMode}
                     options={[
-                      { value: "ask_approval", label: "Ask approval" },
-                      { value: "full_access", label: "Full access" },
+                      { value: "ask_approval", label: "Ask approval", color: "var(--info)" },
+                      { value: "full_access", label: "Full access", color: "var(--warning)" },
                     ]}
                     onSelect={(value) => onApprovalModeSwitch(value as ApprovalMode)}
                     direction="up"
-                    variant={approvalMode === "full_access" ? "warning" : "neutral"}
+                    minWidth="max-content"
+                    variant={approvalMode === "full_access" ? "warning" : "info"}
                   />
                 </ControlGroup>
                 {agents.length > 0 && (
@@ -637,7 +641,7 @@ export default function ChatComposer({
                   <SelectMenu
                     value={reasoningValue}
                     direction="up"
-                    minWidth="180px"
+                    minWidth="max-content"
                     variant="neutral"
                     options={reasoningOptions}
                     onSelect={onReasoningSelect}

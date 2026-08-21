@@ -4,7 +4,7 @@ import type { SessionRecord, SSEEvent } from "../types.js";
 import * as store from "./store.js";
 import { getSessionAssetsByIds } from "./assets.js";
 import { compileAssetModelContent } from "./asset-context.js";
-import { getModelCapabilities } from "../../provider/service.js";
+import { getEffectiveContextLimit, getModelCapabilities } from "../../provider/service.js";
 import { supportsInputModality } from "kk-agent-contract";
 import {
   assetRefBlock,
@@ -88,14 +88,15 @@ async function appendRunEvent(
   event: RunEvent,
   emit?: (event: SSEEvent) => void,
 ): Promise<void> {
-  await updateRun(sessionId, runId, (run) => ({
-    ...run,
-    updatedAt: event.createdAt,
-    events: run.events.some((existing) => existing.id === event.id)
-      ? run.events
-      : [...run.events, event],
-  }));
-  emit?.({ type: "run_event", event });
+  let appended = false;
+  await updateRun(sessionId, runId, (run) => {
+    const duplicate = run.events.some((existing) => existing.id === event.id);
+    const terminalAlreadyRecorded = event.terminal && run.events.some((existing) => existing.terminal);
+    if (duplicate || terminalAlreadyRecorded) return run;
+    appended = true;
+    return { ...run, updatedAt: event.createdAt, events: [...run.events, event] };
+  });
+  if (appended) emit?.({ type: "run_event", event });
 }
 
 async function prepareLoopRun(sessionId: string, message: string, assetIds?: string[]) {
@@ -136,6 +137,7 @@ async function prepareLoopRun(sessionId: string, message: string, assetIds?: str
     startedAt: runStartedAt,
     updatedAt: runStartedAt,
     events: [],
+    modelInputs: [],
     artifactIds: [],
   };
   const messages = [...session.messages, userMessage];
@@ -190,6 +192,7 @@ async function persistCheckpoint(
     messages: cloneMessages(checkpoint.messages),
     providerState: checkpoint.providerState,
     providerDebug: checkpoint.providerDebug,
+    contextState: checkpoint.contextState,
     loadedSkillIds,
   });
 }
@@ -215,14 +218,43 @@ function buildLoopRequest(
   emit?: (event: SSEEvent) => void,
 ): LoopOptions {
   const activeModeConfig = prepared.modeRuntimeConfigs[prepared.session.activeModeId]!;
+  const runPermissionGrants = new Set<string>();
+  const recordApprovalDecision = async (
+    toolName: string,
+    selectedKey: string,
+    allowed: boolean,
+    detail: string,
+  ): Promise<void> => {
+    const current = getSessionRecordOrThrow(prepared.session.id);
+    const currentRun = current.runs.find((run) => run.id === prepared.run.id) ?? prepared.run;
+    await appendRunEvent(prepared.session.id, prepared.run.id, {
+      id: randomUUID(),
+      runId: prepared.run.id,
+      sessionId: prepared.session.id,
+      anchorMessageId: prepared.run.userMessageId,
+      kind: "tool_approval",
+      severity: allowed ? "info" : "warning",
+      visibility: "debug",
+      terminal: false,
+      errorCategory: "tool",
+      code: selectedKey,
+      message: allowed
+        ? `${toolName} approval granted.`
+        : `${toolName} approval denied.`,
+      detail,
+      step: currentRun.step,
+      attempt: currentRun.attempt,
+      createdAt: nowIso(),
+    }, emit);
+  };
   const initialToolContext: ToolRuntimeContext = {
     values: {
       ...prepared.loadedSkills,
       availableSkillIds: activeModeConfig.activeSkillIds,
       publishedAssetIds: [],
       assetPublishRoots: [...new Set([
-        activeModeConfig.runtimeVariables?.FILESYSTEM_ALLOWED_ROOT,
-        activeModeConfig.runtimeVariables?.TERMINAL_ALLOWED_ROOT,
+        activeModeConfig.runtimeVariables?.FILESYSTEM_ROOT,
+        activeModeConfig.runtimeVariables?.TERMINAL_ROOT,
       ].filter((value): value is string => Boolean(value)))],
     },
   };
@@ -246,6 +278,11 @@ function buildLoopRequest(
     }),
     llmRequestConfig: prepared.reasoning,
     providerState: prepared.session.providerState,
+    contextState: prepared.session.contextState,
+    resolveContextLimit: () => getEffectiveContextLimit(
+      prepared.session.providerId,
+      prepared.session.model,
+    ),
     modelContentByMessageId: prepared.modelContentByMessageId,
     toolContext: initialToolContext,
     modeConfigs: prepared.modeRuntimeConfigs,
@@ -273,20 +310,46 @@ function buildLoopRequest(
         : runtimeTool.permissionPolicy;
       if (policy.kind === "allow") return { allowed: true };
       if (policy.kind === "deny") return { allowed: false, reason: policy.reason };
+      if (policy.runGrantKey && runPermissionGrants.has(policy.runGrantKey)) return { allowed: true };
 
       const promptId = `${toolName}-${randomUUID()}`;
-      emitPrompt(prepared.session.id, { promptId, question: policy.question, choices: policy.choices });
+      emitPrompt(prepared.session.id, {
+        purpose: "approval",
+        promptId,
+        question: policy.question,
+        choices: policy.choices,
+      });
       const response = await waitForResponse(prepared.session.id, promptId);
-      if (response.isError) return { allowed: false, reason: response.content };
+      if (response.isError) {
+        await recordApprovalDecision(toolName, "response_error", false, response.content);
+        return { allowed: false, reason: response.content };
+      }
       try {
         const parsed = JSON.parse(response.content) as { selectedKey?: string };
-        if (parsed.selectedKey && policy.allowKeys.includes(parsed.selectedKey)) return { allowed: true };
+        if (parsed.selectedKey && policy.allowKeys.includes(parsed.selectedKey)) {
+          if (
+            policy.runGrantKey &&
+            policy.grantForRunKeys?.includes(parsed.selectedKey)
+          ) {
+            runPermissionGrants.add(policy.runGrantKey);
+          }
+          await recordApprovalDecision(toolName, parsed.selectedKey, true, policy.question);
+          return { allowed: true };
+        }
+        await recordApprovalDecision(toolName, parsed.selectedKey ?? "deny", false, policy.question);
       } catch {
-        // Invalid prompt responses are treated as denial.
+        await recordApprovalDecision(toolName, "invalid_response", false, response.content);
       }
       return { allowed: false, reason: policy.deniedMessage ?? `Tool "${toolName}" was rejected by the user.` };
     },
     onRunEvent: (event) => appendRunEvent(prepared.session.id, prepared.run.id, event, emit),
+    onModelInput: async (input) => {
+      await updateRun(prepared.session.id, prepared.run.id, (run) => (
+        run.modelInputs.some((existing) => existing.id === input.id)
+          ? run
+          : { ...run, updatedAt: nowIso(), modelInputs: [...run.modelInputs, input] }
+      ));
+    },
     onCheckpoint: (checkpoint) => persistCheckpoint(prepared, checkpoint),
     ...handlers,
   };
@@ -302,6 +365,9 @@ async function persistRuntimeNotices(prepared: PreparedLoopRun, emit?: (event: S
       anchorMessageId: prepared.run.userMessageId,
       kind: "provider_notice",
       severity: "warning",
+      visibility: "debug",
+      terminal: false,
+      errorCategory: "configuration",
       code: "runtime_configuration_notice",
       message,
       step: 0,
@@ -320,6 +386,9 @@ async function markUnexpectedFailure(prepared: PreparedLoopRun, error: unknown, 
     anchorMessageId: prepared.run.userMessageId,
     kind: "run_failed",
     severity: "error",
+    visibility: "user",
+    terminal: true,
+    errorCategory: "internal",
     code: "chat_engine_failure",
     message,
     detail: getErrorMessage(error).slice(0, 4000),
@@ -327,12 +396,15 @@ async function markUnexpectedFailure(prepared: PreparedLoopRun, error: unknown, 
     attempt: 0,
     createdAt: nowIso(),
   }, emit).catch(() => undefined);
-  return updateRun(prepared.session.id, prepared.run.id, (run) => ({
-    ...run,
-    status: "failed" as AgentRunStatus,
-    updatedAt: nowIso(),
-    completedAt: nowIso(),
-  }));
+  return updateRun(prepared.session.id, prepared.run.id, (run) => {
+    const terminalEvent = run.events.find((event) => event.terminal);
+    const status: AgentRunStatus = terminalEvent?.kind === "run_aborted"
+      ? "aborted"
+      : terminalEvent?.kind === "run_limit"
+        ? "stopped"
+        : "failed";
+    return { ...run, status, updatedAt: nowIso(), completedAt: nowIso() };
+  });
 }
 
 export async function chatStream(

@@ -5,6 +5,7 @@ import {
   CustomInput,
   CustomInputRow,
   PromptCard,
+  PromptKind,
   PromptQuestion,
 } from "./ChatMessages.styled";
 import type { PendingPrompt } from "./types";
@@ -30,7 +31,8 @@ export default function PendingPromptCard({
   }
 
   return (
-    <PromptCard>
+    <PromptCard $purpose={pendingPrompt.purpose}>
+      <PromptKind>{pendingPrompt.purpose === "approval" ? "Freigabe" : "Nutzerfrage"}</PromptKind>
       <PromptQuestion>
         <MarkdownMessage content={pendingPrompt.question} />
       </PromptQuestion>
@@ -39,19 +41,21 @@ export default function PendingPromptCard({
           {choice.label}
         </ChoiceButton>
       ))}
-      <CustomInputRow>
-        <CustomInput
-          value={customAnswer}
-          onChange={(event) => onCustomAnswerChange(event.target.value)}
-          onKeyDown={(event) => {
-            if (event.key === "Enter") submitCustomAnswer();
-          }}
-          placeholder="Oder eigene Antwort eingeben..."
-        />
-        <Button onClick={submitCustomAnswer} disabled={!customAnswer.trim()}>
-          OK
-        </Button>
-      </CustomInputRow>
+      {pendingPrompt.purpose === "question" && (
+        <CustomInputRow>
+          <CustomInput
+            value={customAnswer}
+            onChange={(event) => onCustomAnswerChange(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") submitCustomAnswer();
+            }}
+            placeholder="Oder eigene Antwort eingeben..."
+          />
+          <Button onClick={submitCustomAnswer} disabled={!customAnswer.trim()}>
+            OK
+          </Button>
+        </CustomInputRow>
+      )}
     </PromptCard>
   );
 }

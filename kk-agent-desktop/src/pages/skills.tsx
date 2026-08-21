@@ -14,13 +14,40 @@ const logger = createLogger("skills");
 
 const UploadSection = styled.section<{ $dragOver: boolean }>`
   display: flex;
-  flex-direction: column;
+  align-items: center;
+  justify-content: space-between;
   gap: var(--space-sm);
-  padding: var(--space-md);
+  padding: 10px var(--space-md);
   margin-bottom: var(--space-md);
   border: 1px dashed ${({ $dragOver }) => ($dragOver ? "var(--accent)" : "var(--border)")};
   border-radius: var(--radius-md);
   background: ${({ $dragOver }) => ($dragOver ? "var(--bg-surface)" : "var(--bg-elevated)")};
+
+  @media (max-width: 620px) {
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+`;
+
+const UploadCopy = styled.div`
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-sm);
+  min-width: 0;
+
+  ${MutedText} {
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
+
+  @media (max-width: 620px) {
+    display: contents;
+
+    ${MutedText} {
+      white-space: normal;
+    }
+  }
 `;
 
 const Detail = styled.div`
@@ -28,9 +55,8 @@ const Detail = styled.div`
   flex: 1;
   display: flex;
   flex-direction: column;
-  gap: var(--space-lg);
-  padding: var(--space-lg);
-  overflow-y: auto;
+  gap: var(--space-md);
+  padding: var(--space-md);
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
   background: var(--bg-elevated);
@@ -267,8 +293,10 @@ export default function SkillsPage() {
           });
         }}
       >
-        <strong>Import Agent Skill</strong>
-        <MutedText>Upload an unmodified skill folder containing exactly one <code>SKILL.md</code>.</MutedText>
+        <UploadCopy>
+          <strong>Import Agent Skill</strong>
+          <MutedText>Upload a skill folder with one <code>SKILL.md</code>.</MutedText>
+        </UploadCopy>
         <ActionsRow>
           <Button type="button" variant="secondary" disabled={uploading} onClick={() => directoryInputRef.current?.click()}>
             {uploading ? "Importing..." : "Upload folder"}

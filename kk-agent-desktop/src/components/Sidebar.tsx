@@ -2,6 +2,8 @@ import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
 import { useRouter } from "next/router";
 import Spinner from "@/components/Spinner";
+import BrandMark from "@/components/BrandMark";
+import SkillIcon from "@/components/SkillIcon";
 import { session as sessionApi } from "@/lib/api";
 import { createLogger } from "@/lib/logger";
 import { getRunningChatStreamSessionIds, subscribeChatStreamStore } from "@/lib/chatStreamState";
@@ -18,10 +20,9 @@ import { createAndActivateSession } from "@/lib/sessionFactory";
 import {
   SidebarWrapper,
   LogoRow,
-  Logo,
   SidebarToggle,
   NavItem,
-  NavEmoji,
+  NavIcon,
   NavLabel,
   SidebarDivider,
   SidebarSection,
@@ -37,19 +38,25 @@ import {
 
 const logger = createLogger("sidebar");
 
-const CHAT_EMOJI = "\u{1F4AC}";
-const AGENT_EMOJI = "\u{1F916}";
-const SKILL_EMOJI = "\u{1F4DA}";
-const MCP_EMOJI = "\u{1F9E9}";
-const SETTINGS_EMOJI = "\u2699\uFE0F";
-
 const navItems = [
-  { href: "/chat", emoji: CHAT_EMOJI, label: "Chat" },
-  { href: "/agent", emoji: AGENT_EMOJI, label: "Agents" },
-  { href: "/skills", emoji: SKILL_EMOJI, label: "Skills" },
-  { href: "/mcp", emoji: MCP_EMOJI, label: "MCP" },
-  { href: "/settings/defaults", emoji: SETTINGS_EMOJI, label: "Settings" },
+  { href: "/chat", Icon: ChatIcon, label: "Chat" },
+  { href: "/agent", Icon: BrandMark, label: "Agents" },
+  { href: "/skills", Icon: SkillIcon, label: "Skills" },
+  { href: "/mcp", Icon: McpIcon, label: "MCP" },
+  { href: "/settings/security", Icon: SettingsIcon, label: "Settings" },
 ];
+
+function ChatIcon() {
+  return <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 5.5h14v10H9l-4 3v-13Z" /></svg>;
+}
+
+function McpIcon() {
+  return <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 7v5m6-5v5M7 12h10v3a3 3 0 0 1-3 3h-1v3m-2-3H10a3 3 0 0 1-3-3v-3ZM8 4h2v3H8zm6 0h2v3h-2z" /></svg>;
+}
+
+function SettingsIcon() {
+  return <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3" /><circle cx="12" cy="12" r="6" /><path d="M12 3v3m0 12v3m9-9h-3M6 12H3m15.4-6.4-2.1 2.1M7.7 16.3l-2.1 2.1m12.8 0-2.1-2.1M7.7 7.7 5.6 5.6" /></svg>;
+}
 
 const navLinkStyle = { textDecoration: "none" };
 
@@ -143,7 +150,6 @@ export default function Sidebar() {
   return (
     <SidebarWrapper $collapsed={collapsed} onClick={() => collapsed && updateSidebarCollapsed(false)}>
       <LogoRow $collapsed={collapsed}>
-        <Logo $collapsed={collapsed} role="img" aria-label="KK-Agent" />
         <SidebarToggle
           $collapsed={collapsed}
           type="button"
@@ -161,7 +167,7 @@ export default function Sidebar() {
       {navItems.map((item) => (
         <Link key={item.href} href={item.href} style={navLinkStyle}>
           <NavItem $collapsed={collapsed} $active={isNavActive(router.pathname, item.href)}>
-            <NavEmoji>{item.emoji}</NavEmoji>
+            <NavIcon><item.Icon /></NavIcon>
             <NavLabel $collapsed={collapsed}>{item.label}</NavLabel>
           </NavItem>
         </Link>

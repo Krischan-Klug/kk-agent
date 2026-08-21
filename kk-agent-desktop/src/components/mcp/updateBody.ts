@@ -12,12 +12,8 @@ function optionalResultPolicy(form: EditForm) {
 }
 
 function buildSystemConfig(tool: McpListItem, form: EditForm) {
-  const supportsAccessScope = tool.systemKey === "filesystem" || tool.systemKey === "terminal";
-  const supportsResultPolicy = supportsAccessScope || tool.systemKey === "web-search";
+  const supportsResultPolicy = tool.systemKey === "filesystem" || tool.systemKey === "terminal" || tool.systemKey === "web-search";
   return {
-    ...(supportsAccessScope ? { accessScope: form.accessScope } : {}),
-    ...(tool.systemKey === "filesystem" ? { basePath: form.basePath } : {}),
-    ...(tool.systemKey === "terminal" ? { workingDirectory: form.workingDirectory } : {}),
     ...(supportsResultPolicy ? { resultPolicy: optionalResultPolicy(form) } : {}),
   };
 }

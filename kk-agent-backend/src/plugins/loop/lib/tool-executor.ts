@@ -42,15 +42,27 @@ type TrackedTool = {
   metadata?: Record<string, unknown>;
 };
 
-function toToolResultMessage(toolUse: TranscriptToolUseBlock, content: string, isError = false): TranscriptMessage {
+function toToolResultMessage(
+  toolUse: TranscriptToolUseBlock,
+  content: string,
+  isError = false,
+  metadata?: Record<string, unknown>,
+): TranscriptMessage {
   return createTranscriptMessage({
     role: "tool",
-    content: [toolResultBlock(toolUse.id, normalizeToolResultContent(toolUse.name, content), isError)],
+    content: [toolResultBlock(toolUse.id, normalizeToolResultContent(toolUse.name, content), isError, metadata)],
   });
 }
 
 function toSyntheticErrorMessage(toolUse: TranscriptToolUseBlock, message: string): TranscriptMessage {
   return toToolResultMessage(toolUse, message, true);
+}
+
+function getPersistedToolMetadata(
+  toolUse: TranscriptToolUseBlock,
+  metadata?: Record<string, unknown>,
+): Record<string, unknown> | undefined {
+  return toolUse.name === "Terminal" ? metadata : undefined;
 }
 
 function partitionCanRunTogether(executing: TrackedTool[], next: TrackedTool): boolean {
@@ -148,7 +160,12 @@ export class StreamingToolExecutor {
     const results: TranscriptMessage[] = [];
     finalContents.forEach((content, index) => {
       const entry = ordered[index]!;
-      const finalMessage = toToolResultMessage(entry.tool.toolUse, content, entry.isError);
+      const finalMessage = toToolResultMessage(
+        entry.tool.toolUse,
+        content,
+        entry.isError,
+        getPersistedToolMetadata(entry.tool.toolUse, entry.tool.metadata),
+      );
       results.push(finalMessage);
     });
 
@@ -268,6 +285,7 @@ export class StreamingToolExecutor {
           tracked.toolUse,
           tracked.result.content,
           tracked.result.isError,
+          getPersistedToolMetadata(tracked.toolUse, execution.metadata),
         );
         tracked.status = tracked.result.isError ? "error" : "completed";
         tracked.metadata = execution.metadata;

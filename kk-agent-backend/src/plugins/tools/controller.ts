@@ -9,6 +9,7 @@ import {
   listSessionFacts,
   listTasks,
   getAllSystemMcps,
+  getSystemMcpRuntimeState,
   listUserFacts,
   replaceSessionFacts,
   replaceTasks,
@@ -20,7 +21,7 @@ import { getSystemToolsForMcp } from "./lib/index.js";
 export async function listTools(_req: Request, res: Response): Promise<Response> {
   const tools = getAllSystemMcps().map((tool) => ({
     ...tool,
-    runtime: { status: tool.active ? "running" as const : "stopped" as const },
+    runtime: getSystemMcpRuntimeState(tool),
     tools: getSystemToolsForMcp(tool.id),
   }));
   return res.json(tools);

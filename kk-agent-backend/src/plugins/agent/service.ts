@@ -49,6 +49,10 @@ export function listSystemVariables(): string[] {
   return getSystemVariableNames();
 }
 
+export function getAgentTemplates() {
+  return structuredClone(getDefaults().agent);
+}
+
 export async function createAgent(body: CreateAgentBody): Promise<AgentDefinition> {
   const defaults = getDefaults();
   const id = createSlugId(body.name);

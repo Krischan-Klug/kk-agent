@@ -74,28 +74,28 @@ const SYSTEM_VARIABLE_DEFINITIONS: SystemVariableDefinition[] = [
     resolve: (context) => context.rawVariables.FILESYSTEM_ACCESS_SCOPE ?? "nicht aktiv",
   },
   {
-    name: "FILESYSTEM_BASE_PATH",
-    resolve: (context) => context.rawVariables.FILESYSTEM_BASE_PATH ?? "nicht verfuegbar",
-  },
-  {
-    name: "FILESYSTEM_ALLOWED_ROOT",
-    resolve: (context) => context.rawVariables.FILESYSTEM_ALLOWED_ROOT ?? "nicht verfuegbar",
+    name: "FILESYSTEM_ROOT",
+    resolve: (context) => context.rawVariables.FILESYSTEM_ROOT ?? "nicht verfuegbar",
   },
   {
     name: "TERMINAL_ACCESS_SCOPE",
     resolve: (context) => context.rawVariables.TERMINAL_ACCESS_SCOPE ?? "nicht aktiv",
   },
   {
-    name: "TERMINAL_WORKING_DIRECTORY",
-    resolve: (context) => context.rawVariables.TERMINAL_WORKING_DIRECTORY ?? "nicht verfuegbar",
+    name: "TERMINAL_APPROVAL_MODE",
+    resolve: (context) => context.rawVariables.TERMINAL_APPROVAL_MODE ?? "nicht aktiv",
   },
   {
-    name: "TERMINAL_ALLOWED_ROOT",
-    resolve: (context) => context.rawVariables.TERMINAL_ALLOWED_ROOT ?? "nicht verfuegbar",
+    name: "TERMINAL_ROOT",
+    resolve: (context) => context.rawVariables.TERMINAL_ROOT ?? "nicht verfuegbar",
   },
   {
-    name: "TERMINAL_ELEVATION",
-    resolve: (context) => context.rawVariables.TERMINAL_ELEVATION ?? "nicht aktiv",
+    name: "TERMINAL_CWD",
+    resolve: (context) => context.rawVariables.TERMINAL_CWD ?? "nicht verfuegbar",
+  },
+  {
+    name: "TERMINAL_SHELL",
+    resolve: (context) => context.rawVariables.TERMINAL_SHELL ?? "nicht verfuegbar",
   },
 ];
 

@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { agent as agentApi, mcp as mcpApi, provider as providerApi, settings as settingsApi, skills as skillsApi, tools as toolsApi } from "@/lib/api";
 import { createLogger } from "@/lib/logger";
-import type { AgentDefinition, AppDefaults, CreateAgentBody, McpListItem, ModelInfo, ProviderConfig, SkillDefinition } from "@/types/api";
+import type { AgentDefinition, AppDefaults, CreateAgentBody, McpListItem, ModelInfo, ProviderConfig, SecuritySettings, SkillDefinition } from "@/types/api";
 import { PageBody } from "@/components/Layout.styled";
 import { MasterDetailLayout } from "@/components/MasterDetail.styled";
 import Spinner from "@/components/Spinner";
@@ -18,7 +18,8 @@ export default function AgentPage() {
   const [internalTools, setInternalTools] = useState<McpListItem[]>([]);
   const [skills, setSkills] = useState<SkillDefinition[]>([]);
   const [models, setModels] = useState<ModelInfo[]>([]);
-  const [defaults, setDefaults] = useState<AppDefaults | null>(null);
+  const [templates, setTemplates] = useState<AppDefaults["agent"] | null>(null);
+  const [securityDefaults, setSecurityDefaults] = useState<SecuritySettings | null>(null);
   const [systemVariables, setSystemVariables] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -39,15 +40,16 @@ export default function AgentPage() {
   }
 
   useEffect(() => {
-    Promise.all([agentApi.list(), mcpApi.list(), toolsApi.list(), skillsApi.list(), agentApi.systemVariables(), providerApi.listProviders(), settingsApi.getDefaults()])
-      .then(async ([agentList, mcpList, toolList, skillList, vars, providerList, appDefaults]) => {
+    Promise.all([agentApi.list(), mcpApi.list(), toolsApi.list(), skillsApi.list(), agentApi.systemVariables(), providerApi.listProviders(), agentApi.templates(), settingsApi.getSecurity()])
+      .then(async ([agentList, mcpList, toolList, skillList, vars, providerList, agentTemplates, security]) => {
         setAgents(agentList);
         setProviders(providerList);
         setMcps(mcpList);
         setInternalTools(toolList);
         setSkills(skillList);
         setSystemVariables(vars.variables);
-        setDefaults(appDefaults);
+        setTemplates(agentTemplates);
+        setSecurityDefaults(security);
         if (agentList.length > 0) {
           const firstAgent = agentList[0];
           setSelectedId(firstAgent.id);
@@ -141,7 +143,8 @@ export default function AgentPage() {
           internalTools={internalTools}
           skills={skills}
           models={models}
-          defaults={defaults}
+          templates={templates}
+          securityDefaults={securityDefaults}
           systemVariables={systemVariables}
           saving={saving}
           showSystemVariables={showSystemVariables}

@@ -4,7 +4,8 @@ import { executeFilesystemTool } from "./filesystem/runtime.js";
 import { filesystemTools } from "./filesystem/tools.js";
 import { terminalDefinition } from "./terminal/definition.js";
 import { executeTerminalTool } from "./terminal/runtime.js";
-import { terminalTools } from "./terminal/tools.js";
+import { buildTerminalTools } from "./terminal/tools.js";
+import { getTerminalShellProfile } from "./terminal/shell-profile.js";
 import { webSearchDefinition } from "./web-search/definition.js";
 import { executeWebSearchTool } from "./web-search/runtime.js";
 import { webSearchTools } from "./web-search/tools.js";
@@ -54,7 +55,7 @@ const SYSTEM_TOOL_MODULES: Record<SystemMcpKey, SystemToolModule> = {
   },
   terminal: {
     definition: terminalDefinition,
-    tools: terminalTools,
+    tools: [],
     execute: executeTerminalTool,
   },
   "user-interaction": {
@@ -107,7 +108,12 @@ export function getDefaultSystemMcpMap(): Record<SystemMcpKey, McpServerConfig> 
 }
 
 export function getSystemToolsForMcp(id: string): McpToolDefinition[] {
-  return isSystemMcpKey(id) ? SYSTEM_TOOL_MODULES[id].tools : [];
+  if (!isSystemMcpKey(id)) return [];
+  if (id === "terminal") {
+    const profile = getTerminalShellProfile();
+    return profile ? buildTerminalTools(profile) : [];
+  }
+  return SYSTEM_TOOL_MODULES[id].tools;
 }
 
 export async function executeSystemTool(

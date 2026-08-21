@@ -1,5 +1,4 @@
 import type { SystemMcpConfig, SystemMcpKey, ToolResultPolicy } from "../../mcp/types.js";
-import { resolveFilesystemSystemConfig, resolveTerminalSystemConfig } from "./access-paths.js";
 
 function normalizeResultPolicy(resultPolicy?: ToolResultPolicy): ToolResultPolicy | undefined {
   if (!resultPolicy) return undefined;
@@ -17,17 +16,9 @@ function normalizeResultPolicy(resultPolicy?: ToolResultPolicy): ToolResultPolic
   };
 }
 
-export function normalizeSystemConfig(key: SystemMcpKey, systemConfig?: SystemMcpConfig): SystemMcpConfig | undefined {
+export function normalizeSystemConfig(_key: SystemMcpKey, systemConfig?: SystemMcpConfig): SystemMcpConfig | undefined {
   if (!systemConfig) return systemConfig;
 
-  const resolved =
-    key === "filesystem"
-      ? resolveFilesystemSystemConfig(systemConfig)
-      : key === "terminal"
-        ? resolveTerminalSystemConfig(systemConfig)
-        : { ...systemConfig };
-
-  const resultPolicy = normalizeResultPolicy(resolved.resultPolicy);
-  const { resultPolicy: _ignored, ...rest } = resolved;
-  return resultPolicy ? { ...rest, resultPolicy } : rest;
+  const resultPolicy = normalizeResultPolicy(systemConfig.resultPolicy);
+  return resultPolicy ? { resultPolicy } : undefined;
 }

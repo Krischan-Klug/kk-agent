@@ -4,6 +4,7 @@ import { getAllMcpsCached, getMcpTools, getRunnableMcpIds } from "../mcp/service
 import { getAgent } from "../agent/service.js";
 import { isLoopActive } from "../loop/lib/run-registry.js";
 import { clearSessionFacts, clearTasks } from "../tools/service.js";
+import { getSecuritySettings } from "../security/service.js";
 import { clearFilesystemReadState } from "../tools/lib/filesystem/read-state.js";
 import { resolveSessionDefaults } from "./lib/session-resolution.js";
 import { getModelCapabilities } from "../provider/service.js";
@@ -22,6 +23,10 @@ import {
   getLatestAssetRefs,
 } from "./lib/runtime-context.js";
 import { getSessionAssetsByIds } from "./lib/assets.js";
+import { getHarnessInstructionCatalog } from "../lib/defaults.js";
+import { getTerminalShellResolution } from "../tools/lib/terminal/shell-profile.js";
+import { OUTPUT_CONTINUE_INSTRUCTION, PTL_SNIP_NOTICE } from "../loop/lib/recovery.js";
+import { COMPACTION_INSTRUCTIONS } from "../loop/lib/context-compaction.js";
 
 export { getSessionRecordOrThrow, normalizeSessionRequestConfig, toPublicSession } from "./lib/session-records.js";
 export {
@@ -31,6 +36,10 @@ export {
   type SessionModeRuntimeConfig,
 } from "./lib/runtime-context.js";
 
+function sameIds(left: string[], right: string[]): boolean {
+  return left.length === right.length && left.every((value, index) => value === right[index]);
+}
+
 export async function createSession(body: CreateSessionBody): Promise<SessionState> {
   const agent = getAgent(body.agentId);
   const defaults = await resolveSessionDefaults(agent, body);
@@ -39,6 +48,7 @@ export async function createSession(body: CreateSessionBody): Promise<SessionSta
     providerId: defaults.providerId,
     model: defaults.model,
     activeModeId: defaults.activeModeId,
+    approvalMode: body.approvalMode ?? getSecuritySettings().approvalMode,
     activeToolIds: defaults.activeToolIds,
     activeMcpIds: defaults.activeMcpIds,
     activeSkillIds: defaults.activeSkillIds,
@@ -86,6 +96,8 @@ export function getCurrentPromptDebug(sessionId: string): SessionPromptDebug {
     session.loadedSkillIds,
     modeRuntimeConfig.activeSkillIds,
   );
+  const latestRun = session.runs.at(-1);
+  const shellResolution = getTerminalShellResolution();
 
   return {
     systemPrompt,
@@ -132,6 +144,42 @@ export function getCurrentPromptDebug(sessionId: string): SessionPromptDebug {
         resources: [...skill.resources],
         loaded: session.loadedSkillIds.includes(skill.id),
       })),
+    modelInputs: structuredClone(latestRun?.modelInputs ?? []),
+    harnessInstructions: [
+      ...getHarnessInstructionCatalog(),
+      {
+        id: "context.auto-compaction",
+        source: "Agent loop",
+        activation: "Used in a separate no-tools model pass when the effective runtime context reaches its reserved threshold.",
+        text: COMPACTION_INSTRUCTIONS,
+      },
+      {
+        id: "recovery.context-compacted",
+        source: "Agent loop",
+        activation: "Added only after older transcript context is removed to recover from a context overflow.",
+        text: PTL_SNIP_NOTICE,
+      },
+      {
+        id: "recovery.output-continue",
+        source: "Agent loop",
+        activation: "Added only when a response reached its output-token limit and continuation recovery is available.",
+        text: OUTPUT_CONTINUE_INSTRUCTION,
+      },
+    ],
+    runtimeDiagnostics: {
+      terminalShell: shellResolution.status === "available"
+        ? {
+            status: shellResolution.status,
+            kind: shellResolution.profile.kind,
+            dialect: shellResolution.profile.dialect,
+            executable: shellResolution.profile.executable,
+            displayName: shellResolution.profile.displayName,
+            version: shellResolution.profile.version,
+            pathConvention: shellResolution.profile.pathConvention,
+            syntaxRules: shellResolution.profile.syntaxRules,
+          }
+        : shellResolution,
+    },
   };
 }
 
@@ -167,12 +215,20 @@ async function updateSession(id: string, body: Partial<CreateSessionBody>): Prom
     defaultsInput,
     body.agentId ? (body.providerId ?? agent.defaultProviderId ?? session.providerId) : session.providerId,
   );
+  const runtimeContextChanged = switchingAgent
+    || session.providerId !== defaults.providerId
+    || session.model !== defaults.model
+    || session.activeModeId !== defaults.activeModeId
+    || !sameIds(session.activeToolIds, defaults.activeToolIds)
+    || !sameIds(session.activeMcpIds, defaults.activeMcpIds)
+    || !sameIds(session.activeSkillIds, defaults.activeSkillIds);
 
   const patch: Partial<SessionRecord> = {
     agentId: nextAgentId,
     providerId: defaults.providerId,
     model: defaults.model,
     activeModeId: defaults.activeModeId,
+    approvalMode: body.approvalMode ?? session.approvalMode,
     activeToolIds: defaults.activeToolIds,
     activeMcpIds: defaults.activeMcpIds,
     activeSkillIds: defaults.activeSkillIds,
@@ -180,8 +236,12 @@ async function updateSession(id: string, body: Partial<CreateSessionBody>): Prom
       ? []
       : session.loadedSkillIds.filter((skillId) => defaults.activeSkillIds.includes(skillId)),
     llmRequestConfig: defaults.llmRequestConfig,
-    ...(switchingAgent || session.providerId !== defaults.providerId || session.model !== defaults.model
-      ? { providerState: undefined, providerDebug: undefined }
+    ...(runtimeContextChanged
+      ? {
+          providerState: undefined,
+          providerDebug: undefined,
+          contextState: { consecutiveCompactionFailures: 0 },
+        }
       : {}),
   };
 

@@ -1,5 +1,4 @@
-import { loadState, saveState } from "./state.js";
-import type { AppDefaults } from "kk-agent-contract";
+import type { AppDefaults, HarnessInstructionDebug } from "kk-agent-contract";
 import {
   getBuiltInModeBehaviors,
   getBuiltInModeMeta,
@@ -7,10 +6,6 @@ import {
   getDefaultToolIds,
   isModeBehavior,
 } from "../agent/lib/modes.js";
-import { applyOverrides, diffOverrides } from "./overrides.js";
-
-const STATE_FILE = "defaults.json";
-const DEFAULTS_SCHEMA_VERSION = 3;
 
 const CODE_DEFAULTS: AppDefaults = {
   agent: {
@@ -30,7 +25,8 @@ const CODE_DEFAULTS: AppDefaults = {
       ].join("\n"),
       runtime: [
         "The harness provides a request-scoped <runtime_context> alongside these instructions.",
-        "Use it for current date, environment, model, mode, tasks, memory, access scope, assets, and loaded skills.",
+        "Treat its values as authoritative facts for the current request. An omitted capability section means that capability is inactive or unavailable.",
+        "For filesystem and terminal sections, root is the hard access boundary and cwd is only the starting directory. The terminal shell value determines the command syntax.",
         "It is system-owned context, is not part of the user's conversation, and must not be quoted or treated as a new user request.",
       ].join("\n"),
       tasks: [
@@ -43,9 +39,9 @@ const CODE_DEFAULTS: AppDefaults = {
       ].join("\n"),
       security: [
         "Carefully consider reversibility and blast radius before acting.",
-        "You may generally take local, reversible actions such as reading files, editing code, or running safe diagnostics without asking first.",
-        "Ask the user before destructive, hard-to-reverse, externally visible, or shared-state actions.",
-        "Examples include deleting files, overwriting uncommitted work, force operations, changing shared infrastructure, sending messages, posting externally, or publishing content to third-party services.",
+        "Work autonomously within the active mode, configured access scope, and tool permissions.",
+        "The harness requests any required tool approval automatically. Never use ask_user or normal chat text to request permission for commands, filesystem operations, tool calls, or potentially harmful actions.",
+        "If an action is denied or outside the configured scope, respect the result and adjust your approach instead of asking the user to override it.",
         "Do not use risky shortcuts just to get unstuck. Investigate root causes instead of bypassing safety checks.",
         "If you encounter unexpected files, branches, configs, or state, investigate before deleting or overwriting them.",
         "Do not invent facts. State uncertainty plainly.",
@@ -54,11 +50,11 @@ const CODE_DEFAULTS: AppDefaults = {
       toolUsage: [
         "Use the most specific available tool for the job.",
         "Prefer Read over shell file reads, Edit over shell text replacement, Write over ad-hoc file creation, Glob over ad-hoc file search, and Grep over shell grep or rg when the dedicated tools can do the job.",
-        "Use Bash for real terminal work such as builds, tests, package managers, git, or commands that genuinely require a shell.",
+        "Use Terminal for real terminal work such as builds, tests, package managers, git, or commands that genuinely require a shell.",
         "Use the asset tools for session files moving into and out of the chat instead of treating them like normal project files.",
         "Use WebSearch for current information and discovery, and WebFetch when you need a specific page.",
         "Use the task tools when explicit task tracking would materially help structure the work.",
-        "Use ask_user only when you genuinely need missing information, confirmation, approval, or a user decision. Do not use it as a substitute for your own investigation.",
+        "Use ask_user only for missing information, user preferences, or user-owned decisions that cannot be discovered or inferred safely. Never use it for tool or command approval.",
         "If a listed skill clearly matches the task, load it with Skill before following that workflow.",
         "Use only skills listed in <available_skills>. Do not guess skill names and do not imply that a skill is loaded when it is not.",
         "If several independent read, search, fetch, or lookup calls can happen in parallel, make them in parallel. If later calls depend on earlier results, do them sequentially.",
@@ -97,9 +93,10 @@ const CODE_DEFAULTS: AppDefaults = {
             "Stay inside the allowed root and prefer absolute paths.",
           ].join(" "),
           terminal: [
-            "Use Bash only for read-only inspection, diagnostics, listing, git status, and similar non-mutating commands.",
+            "Use Terminal only for read-only inspection, diagnostics, listing, git status, and similar non-mutating commands.",
             "Prefer dedicated tools over shell commands when they fit the task.",
             "Use terminal output to inform the plan, not to implement it.",
+            "In runtime context, root is the hard access boundary, cwd is the starting directory, shell determines syntax, and approval describes harness confirmation behavior.",
           ].join(" "),
           task: [
             "Use create_tasks and update_tasks to structure the work into small, concrete steps.",
@@ -113,7 +110,8 @@ const CODE_DEFAULTS: AppDefaults = {
             "Prefer targeted queries and summarize only the relevant findings.",
           ].join(" "),
           "user-interaction": [
-            "Use ask_user only when you genuinely need a user decision, approval, or missing information that you cannot infer safely.",
+            "Use ask_user only when you genuinely need missing information, a user preference, or a user-owned decision that you cannot infer safely.",
+            "Never use ask_user for permission or confirmation of commands, filesystem operations, tool calls, or risk acceptance; the harness handles configured approvals automatically.",
             "Do not use it for routine commentary or status updates.",
             "When you do use it, offer concrete options that unblock the next step quickly.",
           ].join(" "),
@@ -150,11 +148,12 @@ const CODE_DEFAULTS: AppDefaults = {
             "Stay inside the allowed root and prefer absolute paths.",
           ].join(" "),
           terminal: [
-            "Use Bash for tests, builds, git, package manager work, scripts, and other terminal operations.",
+            "Use Terminal for tests, builds, git, package manager work, scripts, and other terminal operations.",
             "Prefer dedicated file tools over shell commands when possible.",
             "Keep commands short and targeted.",
             "Start with safe diagnostics before riskier actions.",
-            "Ask before destructive, irreversible, or externally visible commands.",
+            "Follow the runtime approval mode. Never request terminal approval through ask_user or normal chat text; the harness pauses protected commands automatically when configured.",
+            "In runtime context, root is the hard access boundary, cwd is the starting directory, shell determines syntax, and approval describes harness confirmation behavior.",
           ].join(" "),
           task: [
             "Use create_tasks when explicit task tracking will materially help.",
@@ -174,7 +173,8 @@ const CODE_DEFAULTS: AppDefaults = {
             "Keep queries focused and summarize only what matters to the task.",
           ].join(" "),
           "user-interaction": [
-            "Use ask_user only for genuine blockers such as missing input, approval, or a user decision.",
+            "Use ask_user only for genuine blockers such as missing information, a user preference, or a user-owned decision.",
+            "Never use ask_user for permission or confirmation of commands, filesystem operations, tool calls, or risk acceptance.",
             "Do not use it as a substitute for reading the codebase, checking tool output, or making reasonable progress on your own.",
             "When you use it, give concrete options that make it easy for the user to unblock the work.",
           ].join(" "),
@@ -196,18 +196,13 @@ const CODE_DEFAULTS: AppDefaults = {
     emptyResponseInstruction:
       "Your last attempt was empty or contained no meaningful content. Return a substantive response or a real structured tool_call.",
     invalidToolInstruction:
-      "Your last attempt emitted a tool call as plain text. Tools must be invoked only via structured tool_calls in the API.",
+      "Your last attempt emitted an invalid tool call. Tools must be invoked only via structured tool_calls using a registered tool name and valid JSON object arguments.",
   },
   asset: {
     visionNotSupportedInstruction:
       "The user attached an image, but the current model does not support vision. Tell the user that clearly and suggest switching to a vision-capable model.",
   },
 };
-
-interface DefaultsState {
-  schemaVersion: number;
-  overrides: Partial<AppDefaults>;
-}
 
 function normalizeDefaults(defaults: AppDefaults): AppDefaults {
   const modeTemplates = Object.fromEntries(
@@ -225,31 +220,31 @@ function normalizeDefaults(defaults: AppDefaults): AppDefaults {
   };
 }
 
-let cache: AppDefaults = normalizeDefaults(applyOverrides(CODE_DEFAULTS, {}));
-
-export async function initDefaults(): Promise<void> {
-  const stored = await loadState<unknown>(STATE_FILE, null);
-  const state: DefaultsState = stored
-    && typeof stored === "object"
-    && (stored as Partial<DefaultsState>).schemaVersion === DEFAULTS_SCHEMA_VERSION
-    && typeof (stored as Partial<DefaultsState>).overrides === "object"
-    ? stored as DefaultsState
-    : { schemaVersion: DEFAULTS_SCHEMA_VERSION, overrides: {} };
-  cache = normalizeDefaults(applyOverrides(CODE_DEFAULTS, state.overrides));
-  await saveState<DefaultsState>(STATE_FILE, {
-    schemaVersion: DEFAULTS_SCHEMA_VERSION,
-    overrides: diffOverrides(CODE_DEFAULTS, cache),
-  });
-}
+const defaults = normalizeDefaults(CODE_DEFAULTS);
 
 export function getDefaults(): AppDefaults {
-  return cache;
+  return defaults;
 }
 
-export async function updateDefaults(partial: Partial<AppDefaults>): Promise<AppDefaults> {
-  const effective = normalizeDefaults(applyOverrides(cache, partial));
-  const overrides = diffOverrides(CODE_DEFAULTS, effective);
-  cache = normalizeDefaults(applyOverrides(CODE_DEFAULTS, overrides));
-  await saveState<DefaultsState>(STATE_FILE, { schemaVersion: DEFAULTS_SCHEMA_VERSION, overrides });
-  return cache;
+export function getHarnessInstructionCatalog(): HarnessInstructionDebug[] {
+  return [
+    {
+      id: "retry.empty-response",
+      source: "Agent loop",
+      activation: "Added only when a model attempt is empty.",
+      text: defaults.retry.emptyResponseInstruction,
+    },
+    {
+      id: "retry.invalid-tool-call",
+      source: "Agent loop",
+      activation: "Added only when a model emits an invalid tool call.",
+      text: defaults.retry.invalidToolInstruction,
+    },
+    {
+      id: "asset.vision-unavailable",
+      source: "Asset runtime context",
+      activation: "Added only when an image is attached and the active model has no image input.",
+      text: defaults.asset.visionNotSupportedInstruction,
+    },
+  ];
 }

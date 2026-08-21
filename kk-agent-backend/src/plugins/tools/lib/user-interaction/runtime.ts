@@ -26,7 +26,7 @@ export async function executeUserInteractionTool(
   }
 
   const promptId = randomUUID();
-  const payload: UserPromptPayload = { promptId, question, choices };
+  const payload: UserPromptPayload = { purpose: "question", promptId, question, choices };
 
   emitPrompt(sessionId, payload);
 

@@ -31,8 +31,8 @@ export default class MyDocument extends Document {
     return (
       <Html lang="de">
         <Head>
-          <meta name="application-name" content="KK-Agent" />
-          <meta name="theme-color" content="#181818" />
+          <meta name="application-name" content="KK Agent" />
+          <meta name="theme-color" content="#ffffff" />
           <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
           <link rel="icon" href="/favicon.ico" sizes="any" />
           <link rel="apple-touch-icon" href="/apple-touch-icon.png" />

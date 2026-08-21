@@ -1,5 +1,7 @@
 import Badge from "@/components/Badge";
 import Spinner from "@/components/Spinner";
+import SkillIcon from "@/components/SkillIcon";
+import type { ReactNode } from "react";
 import type { McpListItem } from "@/types/api";
 import type { ActiveToolCall } from "./types";
 import { getToolCardMetadataSummary, renderToolCardBody } from "./toolCardRenderers";
@@ -20,9 +22,11 @@ type Props = {
   toolCalls: ActiveToolCall[];
 };
 
-function getToolEmoji(mcps: McpListItem[], toolName: string): string {
+function getToolIcon(mcps: McpListItem[], toolName: string): ReactNode {
   for (const mcp of mcps) {
-    if (mcp.tools.some((tool) => tool.name === toolName)) return mcp.emoji || "\u{1F6E0}\uFE0F";
+    if (mcp.tools.some((tool) => tool.name === toolName)) {
+      return mcp.id === "skill" ? <SkillIcon /> : mcp.emoji || "\u{1F6E0}\uFE0F";
+    }
   }
   return "\u{1F6E0}\uFE0F";
 }
@@ -31,11 +35,14 @@ export default function ToolCallCards({ mcps, toolCalls }: Props) {
   return toolCalls.map((toolCall) => {
     const metadataSummary = getToolCardMetadataSummary(toolCall);
     const metadataDetails = renderToolCardBody(toolCall);
+    const shellName = toolCall.name === "Terminal" && typeof toolCall.metadata?.shellDisplayName === "string"
+      ? toolCall.metadata.shellDisplayName
+      : undefined;
     return (
       <ToolCard key={toolCall.id}>
         <CardSummary>
-          <ToolEmoji>{getToolEmoji(mcps, toolCall.name)}</ToolEmoji>
-          <ToolLabel>{toolCall.name}</ToolLabel>
+          <ToolEmoji>{getToolIcon(mcps, toolCall.name)}</ToolEmoji>
+          <ToolLabel>{shellName ? `${toolCall.name} · ${shellName}` : toolCall.name}</ToolLabel>
           {toolCall.displayText && <ToolDisplayText>{toolCall.displayText}</ToolDisplayText>}
           {toolCall.status === "queued" || toolCall.status === "executing" || toolCall.status === "yielded" ? (
             <>

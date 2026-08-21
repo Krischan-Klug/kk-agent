@@ -26,10 +26,12 @@ const ToolResultPolicySchema = z.object({
 });
 
 const SystemConfigSchema = z.object({
-  accessScope: z.enum(["user", "system"]).optional(),
-  basePath: z.string().optional(),
-  workingDirectory: z.string().optional(),
   resultPolicy: ToolResultPolicySchema.optional(),
+});
+
+export const SecuritySettingsBodySchema = z.object({
+  accessScope: z.enum(["user", "system"]),
+  approvalMode: z.enum(["ask_approval", "full_access"]),
 });
 
 const AgentPromptSectionsSchema = z.object({
@@ -79,6 +81,7 @@ export const CreateSessionBodySchema = z.object({
   agentId: NonEmptyStringSchema,
   providerId: OptionalTrimmedStringSchema,
   activeModeId: OptionalTrimmedStringSchema,
+  approvalMode: z.enum(["ask_approval", "full_access"]).optional(),
   model: OptionalTrimmedStringSchema,
   activeToolIds: z.array(NonEmptyStringSchema).optional(),
   activeMcpIds: z.array(NonEmptyStringSchema).optional(),
@@ -90,6 +93,7 @@ export const UpdateSessionBodySchema = z.object({
   agentId: OptionalTrimmedStringSchema,
   providerId: OptionalTrimmedStringSchema,
   activeModeId: OptionalTrimmedStringSchema,
+  approvalMode: z.enum(["ask_approval", "full_access"]).optional(),
   model: OptionalTrimmedStringSchema,
   activeToolIds: z.array(NonEmptyStringSchema).optional(),
   activeMcpIds: z.array(NonEmptyStringSchema).optional(),

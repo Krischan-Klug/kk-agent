@@ -1,4 +1,4 @@
-import type { AgentLoopState, RunEvent, RuntimeToolSource, ToolExecutionStatus, TranscriptMessage } from "kk-agent-contract";
+import type { AgentLoopState, ModelInputDebug, RunEvent, RuntimeToolSource, SessionContextState, ToolExecutionStatus, TranscriptMessage } from "kk-agent-contract";
 import type { ModelContentPart, ProviderTransportState, ProviderTurnDebug, TokenStats, UnifiedToolDefinition } from "../provider/lib/types.js";
 import type { ModeBehavior, AgentPromptSections } from "../agent/types.js";
 import type { LlmRequestConfig } from "../provider/types.js";
@@ -10,7 +10,7 @@ interface RuntimeToolResultPolicy {
   excludeFromContextBudget?: boolean;
 }
 
-type RuntimeToolPermissionPolicy =
+export type RuntimeToolPermissionPolicy =
   | { kind: "allow" }
   | { kind: "deny"; reason: string }
   | {
@@ -18,6 +18,8 @@ type RuntimeToolPermissionPolicy =
       question: string;
       choices: { key: string; label: string }[];
       allowKeys: string[];
+      runGrantKey?: string;
+      grantForRunKeys?: string[];
       deniedMessage?: string;
     };
 
@@ -96,11 +98,14 @@ export interface LoopOptions {
   toolContext?: ToolRuntimeContext;
   llmRequestConfig?: LlmRequestConfig;
   providerState?: ProviderTransportState;
+  contextState: SessionContextState;
+  resolveContextLimit: () => Promise<number | undefined>;
   modelContentByMessageId?: Record<string, ModelContentPart[]>;
   onAssistantBlockDelta?: (messageId: string, block: import("kk-agent-contract").TranscriptBlock) => void;
   onAssistantMessage?: (message: TranscriptMessage) => void;
   onAssistantAttemptDiscarded?: (messageIds: string[]) => void;
   onRunEvent?: (event: RunEvent) => void | Promise<void>;
+  onModelInput?: (input: ModelInputDebug) => void | Promise<void>;
   onCheckpoint?: (checkpoint: LoopCheckpoint) => void | Promise<void>;
   onToolExecutionUpdate?: (
     toolUseId: string,
@@ -136,4 +141,5 @@ export interface LoopCheckpoint {
   toolContext: ToolRuntimeContext;
   providerState?: ProviderTransportState;
   providerDebug?: ProviderTurnDebug;
+  contextState: SessionContextState;
 }

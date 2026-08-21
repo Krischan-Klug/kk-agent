@@ -29,6 +29,7 @@ export interface TranscriptToolResultBlock {
   tool_use_id: string;
   content: string;
   is_error?: boolean;
+  metadata?: Record<string, unknown>;
 }
 
 export interface TranscriptAssetRefBlock {
@@ -103,8 +104,19 @@ export function toolUseBlock(id: string, name: string, input: Record<string, unk
   return { type: "tool_use", id, name, input };
 }
 
-export function toolResultBlock(toolUseId: string, content: string, isError?: boolean): TranscriptToolResultBlock {
-  return { type: "tool_result", tool_use_id: toolUseId, content, ...(isError ? { is_error: true } : {}) };
+export function toolResultBlock(
+  toolUseId: string,
+  content: string,
+  isError?: boolean,
+  metadata?: Record<string, unknown>,
+): TranscriptToolResultBlock {
+  return {
+    type: "tool_result",
+    tool_use_id: toolUseId,
+    content,
+    ...(isError ? { is_error: true } : {}),
+    ...(metadata ? { metadata } : {}),
+  };
 }
 
 export function assetRefBlock(assetId: string): TranscriptAssetRefBlock {

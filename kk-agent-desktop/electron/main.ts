@@ -12,9 +12,10 @@ const logger = {
   error: (...args: unknown[]) => console.error("[desktop]", ...args),
 };
 
-const APP_NAME = "KK-Agent";
-const APP_ID = "com.krikra.kk-agent";
-const canonicalUserDataDir = path.join(app.getPath("appData"), APP_NAME);
+const APP_NAME = "KK Agent";
+const LEGACY_APP_DATA_NAME = "KK-Agent";
+const APP_ID = "net.kkstudios.kk-agent";
+const canonicalUserDataDir = path.join(app.getPath("appData"), LEGACY_APP_DATA_NAME);
 app.setName(APP_NAME);
 app.setPath("userData", canonicalUserDataDir);
 
@@ -92,9 +93,7 @@ function getBackendEntry(): string {
 }
 
 function getWindowIconPath(): string {
-  return app.isPackaged
-    ? path.join(process.resourcesPath, "icon.ico")
-    : path.join(getDesktopRoot(), "build", "icon.ico");
+  return path.join(app.getAppPath(), "assets", "icon.ico");
 }
 
 async function waitForHttp(url: string, timeoutMs = 30000): Promise<void> {

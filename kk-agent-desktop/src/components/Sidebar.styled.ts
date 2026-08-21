@@ -15,20 +15,10 @@ export const LogoRow = styled.div<{ $collapsed: boolean }>`
   position: relative;
   display: flex;
   align-items: center;
-  justify-content: ${(p) => (p.$collapsed ? "center" : "space-between")};
+  justify-content: flex-end;
   gap: var(--space-sm);
   padding: var(--space-sm) var(--space-lg);
   margin-bottom: var(--space-lg);
-`;
-
-export const Logo = styled.div<{ $collapsed: boolean }>`
-  width: ${(p) => (p.$collapsed ? "34px" : "48px")};
-  height: ${(p) => (p.$collapsed ? "17px" : "24px")};
-  flex: 0 0 auto;
-  background: var(--accent);
-  mask: url("/brand/logo-kk.svg") center / contain no-repeat;
-  -webkit-mask: url("/brand/logo-kk.svg") center / contain no-repeat;
-  transition: width 0.18s ease, height 0.18s ease;
 `;
 
 export const SidebarToggle = styled.button<{ $collapsed: boolean }>`
@@ -68,9 +58,22 @@ export const NavItem = styled.div<{ $active?: boolean; $collapsed: boolean }>`
   }
 `;
 
-export const NavEmoji = styled.span`
-  flex: 0 0 auto;
-  line-height: 1;
+export const NavIcon = styled.span`
+  display: inline-flex;
+  width: 18px;
+  height: 18px;
+  flex: 0 0 18px;
+
+  svg {
+    width: 100%;
+    height: 100%;
+    fill: none;
+    stroke: currentColor;
+    stroke-linecap: square;
+    stroke-linejoin: miter;
+    stroke-width: 1.7;
+  }
+
 `;
 
 export const NavLabel = styled.span<{ $collapsed: boolean }>`

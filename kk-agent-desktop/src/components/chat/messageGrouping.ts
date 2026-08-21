@@ -4,9 +4,9 @@ import { buildToolCards, collectToolResults, collectToolUses } from "./messageBl
 
 export type MessageGroup =
   | { kind: "single"; message: SessionMessage; key: string }
-  | { kind: "agent-turn"; steps: AgentStepView[]; key: string; userMessageId?: string; streaming?: boolean };
+  | { kind: "agent-step"; step: AgentStepView; key: string; userMessageId?: string; streaming?: boolean };
 
-type AgentTurnGroup = Extract<MessageGroup, { kind: "agent-turn" }>;
+type AgentStepGroup = Extract<MessageGroup, { kind: "agent-step" }>;
 
 export function groupMessages(messages: SessionMessage[]): MessageGroup[] {
   const groups: MessageGroup[] = [];
@@ -26,13 +26,12 @@ export function groupMessages(messages: SessionMessage[]): MessageGroup[] {
       continue;
     }
 
-    const steps: AgentStepView[] = [];
     while (index < messages.length) {
       const current = messages[index];
       if (!current || (current.role !== "assistant" && current.role !== "tool")) break;
       if (current.role === "assistant") {
         const assistant = current;
-        const toolResults = new Map<string, { content: string; isError: boolean }>();
+        const toolResults = new Map<string, { content: string; isError: boolean; metadata?: Record<string, unknown> }>();
         index++;
 
         while (index < messages.length) {
@@ -43,38 +42,36 @@ export function groupMessages(messages: SessionMessage[]): MessageGroup[] {
             toolResults.set(toolResult.tool_use_id, {
               content: toolResult.content,
               isError: toolResult.is_error === true,
+              metadata: toolResult.metadata,
             });
           }
           index++;
         }
 
-        steps.push({
-          assistant,
-          toolCalls: buildToolCards(collectToolUses(assistant.content), toolResults),
+        groups.push({
+          kind: "agent-step",
+          step: {
+            assistant,
+            toolCalls: buildToolCards(collectToolUses(assistant.content), toolResults),
+          },
+          key: assistant.id,
+          userMessageId: latestUserMessageId,
         });
         continue;
       }
 
       index++;
     }
-
-    groups.push({
-      kind: "agent-turn",
-      steps,
-      key: steps.map((step) => step.assistant.id).join(":"),
-      userMessageId: latestUserMessageId,
-    });
   }
 
   return groups;
 }
 
-export function buildStreamingTurnGroup(steps: AgentStepView[]): AgentTurnGroup | null {
-  if (steps.length === 0) return null;
-  return {
-    kind: "agent-turn",
-    steps,
-    key: "streaming-turn",
+export function buildStreamingStepGroups(steps: AgentStepView[]): AgentStepGroup[] {
+  return steps.map((step) => ({
+    kind: "agent-step",
+    step,
+    key: `streaming-${step.assistant.id}`,
     streaming: true,
-  };
+  }));
 }

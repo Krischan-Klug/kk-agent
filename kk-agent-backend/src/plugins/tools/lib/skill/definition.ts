@@ -3,7 +3,7 @@ import { defineSystemMcp } from "../system-definition.js";
 export const skillDefinition = defineSystemMcp({
   id: "skill",
   name: "Skill",
-  emoji: "S",
+  emoji: "📚",
   instruction: [
     "Agent Skills are standard SKILL.md bundles.",
     "When a task matches a skill description, call Skill with the exact name from <available_skills> before proceeding.",

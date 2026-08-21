@@ -3,6 +3,7 @@ import { agent as agentApi, mcp as mcpApi, provider as providerApi, session as s
 import { createLogger } from "@/lib/logger";
 import type {
   AgentDefinition,
+  ApprovalMode,
   LlmRequestConfig,
   McpListItem,
   MemoryFact,
@@ -294,6 +295,15 @@ export function useChatSessionData({ onDebugOpen, setDebugOpen }: Options) {
     }
   }, [session, updateSessionAndSet]);
 
+  const handleApprovalModeSwitch = useCallback(async (approvalMode: ApprovalMode) => {
+    if (!session || approvalMode === session.approvalMode) return;
+    try {
+      await updateSessionAndSet({ approvalMode });
+    } catch (err) {
+      logger.error("Failed to switch approval mode:", err);
+    }
+  }, [session, updateSessionAndSet]);
+
   const handleNewSession = useCallback(async (fallbackAgentId?: string) => {
     try {
       const newSession = await createAndActivateSession(agents, fallbackAgentId ?? resolveDefaultSessionAgentId(agents));
@@ -365,6 +375,7 @@ export function useChatSessionData({ onDebugOpen, setDebugOpen }: Options) {
     handleLlmRequestConfig,
     handleAgentSwitch,
     handleModeSwitch,
+    handleApprovalModeSwitch,
     handleNewSession,
     handleSaveTasks,
     handleSaveSessionFacts,

@@ -22,6 +22,8 @@ import { resolveDefaultSessionAgentId } from "@/lib/sessionFactory";
 import { getSessionModelRef } from "@/lib/modelRefs";
 import type {
   ReasoningEffort,
+  ModelInputDebug,
+  HarnessInstructionDebug,
   SessionRuntimeMcpDebug,
   SessionRuntimeSkillDebug,
   SessionRuntimeToolDebug,
@@ -65,19 +67,22 @@ const FloatingDebugButton = styled.button`
 
   &:hover {
     background: var(--accent);
-    color: var(--bg-base);
+    color: var(--accent-foreground);
     border-color: var(--accent);
   }
 `;
 
 export default function ChatPage() {
   const [debugOpen, setDebugOpen] = useState(false);
-  const [debugTab, setDebugTab] = useState<ChatDebugTab | null>("prompt");
+  const [debugTab, setDebugTab] = useState<ChatDebugTab | null>("model-input");
   const [debugPrompt, setDebugPrompt] = useState<string | null>(null);
   const [debugRuntimeContext, setDebugRuntimeContext] = useState<string | null>(null);
   const [debugRuntimeTools, setDebugRuntimeTools] = useState<SessionRuntimeToolDebug[] | null>(null);
   const [debugRuntimeMcps, setDebugRuntimeMcps] = useState<SessionRuntimeMcpDebug[] | null>(null);
   const [debugRuntimeSkills, setDebugRuntimeSkills] = useState<SessionRuntimeSkillDebug[] | null>(null);
+  const [debugModelInputs, setDebugModelInputs] = useState<ModelInputDebug[] | null>(null);
+  const [debugHarnessInstructions, setDebugHarnessInstructions] = useState<HarnessInstructionDebug[] | null>(null);
+  const [debugRuntimeDiagnostics, setDebugRuntimeDiagnostics] = useState<Record<string, unknown> | null>(null);
   const [creatingSession, setCreatingSession] = useState(false);
   const debugPromptRequestRef = useRef(0);
   const assets = useAssets();
@@ -92,6 +97,9 @@ export default function ChatPage() {
         setDebugRuntimeTools(result.runtimeTools);
         setDebugRuntimeMcps(result.runtimeMcps);
         setDebugRuntimeSkills(result.runtimeSkills);
+        setDebugModelInputs(result.modelInputs);
+        setDebugHarnessInstructions(result.harnessInstructions);
+        setDebugRuntimeDiagnostics(result.runtimeDiagnostics);
       }
     } catch {
       if (requestId === debugPromptRequestRef.current) {
@@ -100,6 +108,9 @@ export default function ChatPage() {
         setDebugRuntimeTools([]);
         setDebugRuntimeMcps([]);
         setDebugRuntimeSkills([]);
+        setDebugModelInputs([]);
+        setDebugHarnessInstructions([]);
+        setDebugRuntimeDiagnostics({});
       }
     }
   }, []);
@@ -188,7 +199,16 @@ export default function ChatPage() {
   const temperatureOptions = buildTemperatureOptions(endpointCapabilities.temperatureRange);
   const showReasoningControl = reasoningLevels.length > 0;
   const showTemperatureControl = endpointCapabilities.temperatureSupported && temperatureOptions.length > 0;
-  const maxCtx = modelInfo?.contextLength ?? modelInfo?.maxContextLength ?? 0;
+  const contextUsage = sessionData.session?.contextState.usage;
+  const maxCtx = contextUsage?.limitTokens ?? 0;
+  const tokenStats = streaming.tokenStats ?? (contextUsage
+    ? {
+        input: contextUsage.inputTokens,
+        output: contextUsage.outputTokens,
+        reasoning: contextUsage.reasoningTokens,
+        used: contextUsage.usedTokens,
+      }
+    : null);
 
   async function beginNewSession() {
     try {
@@ -224,11 +244,15 @@ export default function ChatPage() {
         onTabChange={setDebugTab}
         session={sessionData.session}
         loopState={streaming.loopState}
+        streamRunEvents={streaming.streamRunEvents}
         debugPrompt={debugPrompt}
         debugRuntimeContext={debugRuntimeContext}
         debugRuntimeTools={debugRuntimeTools}
         debugRuntimeMcps={debugRuntimeMcps}
         debugRuntimeSkills={debugRuntimeSkills}
+        debugModelInputs={debugModelInputs}
+        debugHarnessInstructions={debugHarnessInstructions}
+        debugRuntimeDiagnostics={debugRuntimeDiagnostics}
         internalTools={sessionData.toolMcps}
         debugMcps={sessionData.mcps}
         skills={sessionData.skills}
@@ -262,7 +286,6 @@ export default function ChatPage() {
         streaming={streaming.streaming}
         streamTurn={streaming.streamTurn}
         streamRunEvents={streaming.streamRunEvents}
-        loopState={streaming.loopState}
         pendingPrompt={streaming.pendingPrompt}
         customAnswer={streaming.customAnswer}
         messagesRef={messagesRef}
@@ -278,16 +301,17 @@ export default function ChatPage() {
         reasoningValue={resolvedEffort}
         reasoningOptions={reasoningOptions}
         activeModeId={activeSession.activeModeId}
+        approvalMode={activeSession.approvalMode}
         maxCtx={maxCtx}
-        tokenStats={streaming.tokenStats}
+        tokenStats={tokenStats}
         tasks={sessionData.tasks}
-        loopState={streaming.loopState}
         pendingAssets={assets.pendingAssets}
         onInputChange={streaming.setInput}
         onKeyDown={streaming.handleKeyDown}
         onAgentSwitch={(agentId) => void streaming.handleAgentSwitch(agentId, sessionData.handleAgentSwitch)}
         onReasoningSelect={(effort) => void sessionData.handleReasoningEffort(effort)}
         onModeSwitch={(mode) => void sessionData.handleModeSwitch(mode)}
+        onApprovalModeSwitch={(approvalMode) => void sessionData.handleApprovalModeSwitch(approvalMode)}
         onSend={() => void streaming.handleSend()}
         onAbort={() => void sessionApi.abort(activeSession.id)}
         onFilesSelected={(files) => { void assets.addFiles(activeSession.id, files); }}

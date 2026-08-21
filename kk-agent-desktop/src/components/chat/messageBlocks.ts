@@ -17,7 +17,7 @@ export function getToolCallDisplayText(input: Record<string, unknown>): string |
 
 export function buildToolCards(
   toolUses: TranscriptToolUseBlock[],
-  toolResults = new Map<string, { content: string; isError: boolean }>(),
+  toolResults = new Map<string, { content: string; isError: boolean; metadata?: Record<string, unknown> }>(),
 ): ActiveToolCall[] {
   return toolUses.map((toolUse) => {
     const result = toolResults.get(toolUse.id);
@@ -28,6 +28,7 @@ export function buildToolCards(
       status: result ? (result.isError ? "error" : "completed") : "queued",
       displayText: getToolCallDisplayText(toolUse.input),
       ...(result ? { result } : {}),
+      ...(result?.metadata ? { metadata: result.metadata } : {}),
     };
   });
 }

@@ -1,8 +1,6 @@
 import express, { Request, Response } from "express";
 import cors from "cors";
 import initPlugins from "./plugins/index.js";
-import { initDefaults } from "./plugins/lib/defaults.js";
-import defaultsRoutes from "./plugins/lib/defaults-routes.js";
 import { errorMiddleware } from "./lib/error-middleware.js";
 import { requireLocalApiToken } from "./lib/local-auth.js";
 
@@ -37,9 +35,6 @@ export async function createApp() {
 
   app.get("/healthz", (_req: Request, res: Response) => res.json({ ok: true }));
   app.use(requireLocalApiToken);
-
-  await initDefaults();
-  app.use("/settings/defaults", defaultsRoutes);
 
   await initPlugins(app);
 

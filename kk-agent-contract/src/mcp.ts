@@ -14,6 +14,12 @@ export const SYSTEM_MCP_KEYS = [
 export type SystemMcpKey = (typeof SYSTEM_MCP_KEYS)[number];
 
 export type AccessScope = "user" | "system";
+export type ApprovalMode = "ask_approval" | "full_access";
+
+export interface SecuritySettings {
+  accessScope: AccessScope;
+  approvalMode: ApprovalMode;
+}
 
 export interface ToolResultPolicy {
   previewThresholdChars?: number;
@@ -21,9 +27,15 @@ export interface ToolResultPolicy {
 }
 
 export interface SystemMcpConfig {
+  /** Effective runtime values. They are owned by Security settings, not editable tool settings. */
   accessScope?: AccessScope;
+  approvalMode?: ApprovalMode;
   basePath?: string;
   workingDirectory?: string;
+  resultPolicy?: ToolResultPolicy;
+}
+
+export interface SystemMcpUpdateConfig {
   resultPolicy?: ToolResultPolicy;
 }
 
@@ -90,5 +102,5 @@ export interface UpdateMcpBody {
   url?: string;
   instruction?: string;
   emoji?: string;
-  systemConfig?: SystemMcpConfig;
+  systemConfig?: SystemMcpUpdateConfig;
 }

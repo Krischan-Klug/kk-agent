@@ -1,4 +1,4 @@
-import type { AgentRun, TranscriptMessage } from "kk-agent-contract";
+import type { AgentRun, SessionContextState, TranscriptMessage } from "kk-agent-contract";
 import { createLogger } from "../../../lib/logger.js";
 import { getErrorMessage } from "../../../lib/error.js";
 import { NotFoundError } from "../../../lib/errors.js";
@@ -17,12 +17,45 @@ import type { SessionRecord, SessionState } from "../types.js";
 
 const logger = createLogger("session/store");
 const SESSION_FILE = "session.json";
-const SESSION_SCHEMA_VERSION = 5;
+const SESSION_SCHEMA_VERSION = 9;
 
 const sessions = new Map<string, SessionRecord>();
 
 function isStringArray(value: unknown): value is string[] {
   return Array.isArray(value) && value.every((entry) => typeof entry === "string");
+}
+
+function isFiniteNonNegativeNumber(value: unknown): value is number {
+  return typeof value === "number" && Number.isFinite(value) && value >= 0;
+}
+
+function isCompatibleContextState(value: unknown): value is SessionContextState {
+  if (!value || typeof value !== "object") return false;
+  const context = value as Partial<SessionContextState>;
+  if (!isFiniteNonNegativeNumber(context.consecutiveCompactionFailures)) return false;
+  if (context.usage) {
+    if (
+      !isFiniteNonNegativeNumber(context.usage.limitTokens)
+      || !isFiniteNonNegativeNumber(context.usage.inputTokens)
+      || !isFiniteNonNegativeNumber(context.usage.outputTokens)
+      || !isFiniteNonNegativeNumber(context.usage.reasoningTokens)
+      || !isFiniteNonNegativeNumber(context.usage.usedTokens)
+      || !isFiniteNonNegativeNumber(context.usage.remainingTokens)
+      || !["provider", "estimated", "unknown"].includes(context.usage.source)
+      || typeof context.usage.updatedAt !== "string"
+    ) return false;
+  }
+  if (context.activeCompaction) {
+    if (
+      typeof context.activeCompaction.id !== "string"
+      || typeof context.activeCompaction.summary !== "string"
+      || typeof context.activeCompaction.throughMessageId !== "string"
+      || !isFiniteNonNegativeNumber(context.activeCompaction.beforeTokens)
+      || !isFiniteNonNegativeNumber(context.activeCompaction.afterTokens)
+      || typeof context.activeCompaction.createdAt !== "string"
+    ) return false;
+  }
+  return true;
 }
 
 function isCompatibleSession(value: unknown, id: string): value is SessionRecord {
@@ -35,13 +68,16 @@ function isCompatibleSession(value: unknown, id: string): value is SessionRecord
     && typeof session.model === "string"
     && typeof session.agentId === "string"
     && typeof session.activeModeId === "string"
+    && (session.approvalMode === "ask_approval" || session.approvalMode === "full_access")
     && isStringArray(session.activeToolIds)
     && isStringArray(session.activeMcpIds)
     && isStringArray(session.activeSkillIds)
     && isStringArray(session.loadedSkillIds)
     && Array.isArray(session.messages)
     && Array.isArray(session.runs)
+    && session.runs.every((run) => Array.isArray(run.modelInputs))
     && Array.isArray(session.assets)
+    && isCompatibleContextState(session.contextState)
     && typeof session.createdAt === "string"
     && typeof session.updatedAt === "string";
 }
@@ -71,6 +107,9 @@ function abortInterruptedRuns(
         anchorMessageId: anchorMessageId ?? run.userMessageId,
         kind: "run_aborted" as const,
         severity: "warning" as const,
+        visibility: "user" as const,
+        terminal: true,
+        errorCategory: "abort" as const,
         code: "process_interrupted",
         message: "Run was interrupted before completion. The last committed checkpoint was preserved.",
         step: run.step,
@@ -126,6 +165,7 @@ export async function createSession(data: {
   providerId: string;
   model: string;
   activeModeId: SessionState["activeModeId"];
+  approvalMode: SessionState["approvalMode"];
   activeToolIds: string[];
   activeMcpIds: string[];
   activeSkillIds: string[];
@@ -140,6 +180,7 @@ export async function createSession(data: {
     model: data.model,
     agentId: data.agentId,
     activeModeId: data.activeModeId,
+    approvalMode: data.approvalMode,
     activeToolIds: data.activeToolIds,
     activeMcpIds: data.activeMcpIds,
     activeSkillIds: data.activeSkillIds,
@@ -147,6 +188,7 @@ export async function createSession(data: {
     messages: [],
     runs: [],
     assets: [],
+    contextState: { consecutiveCompactionFailures: 0 },
     loadedSkillIds: [],
     createdAt: now,
     updatedAt: now,

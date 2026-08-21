@@ -209,6 +209,17 @@ export async function getModels(providerId?: string): Promise<ModelInfo[]> {
   return [];
 }
 
+export async function getEffectiveContextLimit(
+  providerId: string,
+  modelId: string,
+): Promise<number | undefined> {
+  const model = (await getModels(providerId)).find((entry) => entry.id === modelId);
+  const limit = model?.contextLength;
+  return typeof limit === "number" && Number.isFinite(limit) && limit > 0
+    ? Math.floor(limit)
+    : undefined;
+}
+
 function configuredModels(models: ModelInfo[]): ModelInfo[] {
   return models.filter((model) => model.profile && model.capabilities);
 }
@@ -280,8 +291,10 @@ function attachProviderDebug(response: UnifiedResponse, prepared: UnifiedRequest
 export async function callProviderStream(
   request: UnifiedRequest,
   onChunk: OnChunkFn,
+  onPrepared?: (request: UnifiedRequest) => void | Promise<void>,
 ): Promise<UnifiedResponse> {
   const { provider, prepared } = await prepareRequest(request);
+  await onPrepared?.(prepared);
   const response = await getAdapter(provider.id).chatStream(prepared, onChunk);
   attachProviderDebug(response, prepared);
   return response;

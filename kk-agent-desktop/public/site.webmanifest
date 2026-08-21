@@ -1,6 +1,6 @@
 {
-  "name": "KK-Agent",
-  "short_name": "KK-Agent",
+  "name": "KK Agent",
+  "short_name": "KK Agent",
   "description": "Local desktop agent for self-hosted language models.",
   "icons": [
     {

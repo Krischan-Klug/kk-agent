@@ -5,8 +5,9 @@ import initSkills from "./skills/index.js";
 import initProvider from "./provider/index.js";
 import initAgent from "./agent/index.js";
 import initSession from "./session/index.js";
+import initSecurity from "./security/index.js";
 
-const initializers = [initTools, initMcp, initSkills, initProvider, initAgent, initSession];
+const initializers = [initSecurity, initTools, initMcp, initSkills, initProvider, initAgent, initSession];
 
 export default async function initPlugins(app: Express): Promise<void> {
   for (const initialize of initializers) {

@@ -12,7 +12,6 @@ export const MODE_BEHAVIORS: ModeBehavior[] = ["plan", "edit"];
 
 export const OVERRIDE_EMOJI = "\u270F\uFE0F";
 export const RESET_EMOJI = "\u21BA";
-export const SKILL_EMOJI = "\u{1F4DA}";
 
 type ConcreteCapabilityTool = {
   capabilityId: string;
@@ -38,10 +37,12 @@ function buildUniqueModeId(seed: string, existingIds: string[]): string {
   return `${base}-${index}`;
 }
 
-function buildModeConfigFromDefaults(behavior: ModeBehavior, defaults: AppDefaults | null): AgentModeConfig {
-  const template = defaults?.agent.modeTemplates[behavior];
+type AgentTemplates = AppDefaults["agent"];
+
+function buildModeConfigFromDefaults(behavior: ModeBehavior, defaults: AgentTemplates | null): AgentModeConfig {
+  const template = defaults?.modeTemplates[behavior];
   return {
-    promptSections: { ...(defaults?.agent.promptSections ?? {
+    promptSections: { ...(defaults?.promptSections ?? {
       identity: "",
       system: "",
       runtime: "",
@@ -63,7 +64,7 @@ function buildModeConfigFromDefaults(behavior: ModeBehavior, defaults: AppDefaul
 
 export function createCustomMode(
   agent: AgentDefinition,
-  defaults: AppDefaults | null,
+  defaults: AgentTemplates | null,
   behavior: ModeBehavior = "edit",
 ): AgentModeDefinition {
   const existingIds = agent.modes.map((mode) => mode.id);

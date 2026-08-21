@@ -3,19 +3,17 @@ import Badge from "@/components/Badge";
 import Spinner from "@/components/Spinner";
 import MarkdownMessage from "@/components/MarkdownMessage";
 import type {
-  AgentLoopState,
   McpListItem,
   RunEvent,
   SessionMessage,
   SessionState,
 } from "@/types/api";
 import type { PendingPrompt, StreamingTurnState } from "./types";
-import AgentTurnBubble from "./AgentTurnBubble";
+import AgentStepBubble from "./AgentStepBubble";
 import MessageAssets from "./MessageAssets";
 import PendingPromptCard from "./PendingPromptCard";
-import ToolCallCards from "./ToolCallCards";
-import { buildToolCards, collectAssetRefs, collectReasoning, collectText, collectToolUses } from "./messageBlocks";
-import { buildStreamingTurnGroup, groupMessages } from "./messageGrouping";
+import { collectAssetRefs, collectReasoning, collectText } from "./messageBlocks";
+import { buildStreamingStepGroups, groupMessages } from "./messageGrouping";
 import {
   CardContent,
   EmptyState,
@@ -37,7 +35,6 @@ type Props = {
   streaming: boolean;
   streamTurn: StreamingTurnState | null;
   streamRunEvents: RunEvent[];
-  loopState: AgentLoopState | null;
   pendingPrompt: PendingPrompt | null;
   customAnswer: string;
   messagesRef: RefObject<HTMLDivElement | null>;
@@ -49,8 +46,6 @@ type Props = {
 function renderSingleMessage(
   message: SessionMessage,
   session: SessionState,
-  currentAgentName: string,
-  mcps: McpListItem[],
 ) {
   if (message.role === "tool") return null;
 
@@ -59,16 +54,13 @@ function renderSingleMessage(
   const assetRefs = collectAssetRefs(message.content);
   const assetsById = new Map(session.assets.map((asset) => [asset.id, asset]));
   const assets = assetRefs.map((ref) => assetsById.get(ref.assetId)).filter((asset) => asset !== undefined);
-  const toolCalls = message.role === "assistant" ? buildToolCards(collectToolUses(message.content)) : [];
   const timestamp = formatChatTime(message.timestamp);
 
   return (
     <MessageBubble key={message.id} $role={message.role}>
       {message.role !== "user" && (
         <RoleLabel>
-          <Badge variant={message.role === "system" ? "warning" : "info"}>
-            {message.role === "system" ? "system" : currentAgentName}
-          </Badge>
+          <Badge variant="warning">system</Badge>
         </RoleLabel>
       )}
 
@@ -79,16 +71,10 @@ function renderSingleMessage(
         </ReasoningCard>
       )}
 
-      {text && (message.role === "assistant" || message.role === "system"
-        ? <MarkdownMessage content={text} />
-        : text)}
+      {text && (message.role === "system" ? <MarkdownMessage content={text} /> : text)}
 
       {assets.length > 0 && (
         <MessageAssets sessionId={session.id} assets={assets} />
-      )}
-
-      {toolCalls.length > 0 && (
-        <ToolCallCards mcps={mcps} toolCalls={toolCalls} />
       )}
 
       {message.role !== "system" && (
@@ -109,13 +95,20 @@ function formatChatTime(value: string): string {
 function groupMessageIds(group: ReturnType<typeof groupMessages>[number]): string[] {
   return group.kind === "single"
     ? [group.message.id]
-    : group.steps.map((step) => step.assistant.id);
+    : [group.step.assistant.id];
 }
 
 function renderRunEvent(event: RunEvent) {
+  const label = event.kind === "context_compacted"
+    ? "Context"
+    : event.severity === "error"
+      ? "Error"
+      : event.severity === "warning"
+        ? "Warning"
+        : "Info";
   return (
     <SystemNotice key={event.id} $severity={event.severity}>
-      <strong>{event.severity === "error" ? "Error" : event.severity === "warning" ? "Warning" : "Info"}</strong>
+      <strong>{label}</strong>
       {` · ${event.message}`}
     </SystemNotice>
   );
@@ -128,7 +121,6 @@ export default function ChatMessages({
   streaming,
   streamTurn,
   streamRunEvents,
-  loopState,
   pendingPrompt,
   customAnswer,
   messagesRef,
@@ -137,8 +129,17 @@ export default function ChatMessages({
   onPromptResponse,
 }: Props) {
   const messageGroups = groupMessages(session.messages);
-  const streamingGroup = streamTurn ? buildStreamingTurnGroup(streamTurn.steps) : null;
-  const persistedEvents = session.runs.flatMap((run) => run.events);
+  const streamingStepGroups = streamTurn ? buildStreamingStepGroups(streamTurn.steps) : [];
+  const lastStepIdByUserMessage = new Map<string, string>();
+  for (const group of messageGroups) {
+    if (group.kind === "agent-step" && group.userMessageId) {
+      lastStepIdByUserMessage.set(group.userMessageId, group.step.assistant.id);
+    }
+  }
+  const persistedEvents = session.runs
+    .flatMap((run) => run.events)
+    .filter((event) => event.visibility === "user");
+  const visibleStreamRunEvents = streamRunEvents.filter((event) => event.visibility === "user");
   const renderedEventIds = new Set<string>();
 
   return (
@@ -155,17 +156,19 @@ export default function ChatMessages({
         for (const event of events) renderedEventIds.add(event.id);
         return (
           <Fragment key={group.key}>
-            {group.kind === "agent-turn"
-              ? <AgentTurnBubble
+            {group.kind === "agent-step"
+              ? <AgentStepBubble
                   sessionId={session.id}
                   currentAgentName={currentAgentName}
                   mcps={mcps}
-                  turn={group}
-                  artifacts={(session.runs.find((run) => run.userMessageId === group.userMessageId)?.artifactIds ?? [])
+                  step={group.step}
+                  artifacts={(group.userMessageId && lastStepIdByUserMessage.get(group.userMessageId) === group.step.assistant.id
+                    ? (session.runs.find((run) => run.userMessageId === group.userMessageId)?.artifactIds ?? [])
+                    : [])
                     .map((assetId) => session.assets.find((asset) => asset.id === assetId))
                     .filter((asset) => asset !== undefined)}
                 />
-              : renderSingleMessage(group.message, session, currentAgentName, mcps)}
+              : renderSingleMessage(group.message, session)}
             {events.map(renderRunEvent)}
           </Fragment>
         );
@@ -173,20 +176,20 @@ export default function ChatMessages({
 
       {persistedEvents.filter((event) => !renderedEventIds.has(event.id)).map(renderRunEvent)}
 
-      {streamingGroup && (
-        <AgentTurnBubble
-          key={streamingGroup.key}
+      {streamingStepGroups.map((group) => (
+        <AgentStepBubble
+          key={group.key}
           sessionId={session.id}
           currentAgentName={currentAgentName}
           mcps={mcps}
-          turn={streamingGroup}
-          loopState={loopState}
+          step={group.step}
+          streaming={group.streaming}
         />
-      )}
+      ))}
 
-      {streamRunEvents.map(renderRunEvent)}
+      {visibleStreamRunEvents.map(renderRunEvent)}
 
-      {streaming && !streamingGroup && !pendingPrompt && (
+      {streaming && streamingStepGroups.length === 0 && !pendingPrompt && (
         <LoadingWrap>
           <Spinner />
         </LoadingWrap>

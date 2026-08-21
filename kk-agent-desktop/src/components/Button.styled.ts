@@ -3,7 +3,7 @@ import styled, { css } from "styled-components";
 const variants = {
   primary: css`
     background: var(--accent);
-    color: #fff;
+    color: var(--accent-foreground);
     &:hover:not(:disabled) {
       background: var(--accent-hover);
     }

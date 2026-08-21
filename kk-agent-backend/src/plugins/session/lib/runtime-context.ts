@@ -1,4 +1,3 @@
-import { basename } from "node:path";
 import type { SessionState } from "../types.js";
 import { getSystemVariables, buildPrompt } from "../../systemprompt/lib/builder.js";
 import { buildResolvedSystemToolRuntime, getMemoryPromptContext, getTaskSummary } from "../../tools/service.js";
@@ -24,7 +23,7 @@ export interface SessionModeRuntimeConfig extends ModeRuntimeConfig {
 }
 
 export function buildModeRuntimeConfig(
-  session: Pick<SessionState, "activeToolIds" | "activeMcpIds" | "activeSkillIds" | "model">,
+  session: Pick<SessionState, "activeToolIds" | "activeMcpIds" | "activeSkillIds" | "approvalMode" | "model">,
   agent: AgentDefinition,
   modeId: string,
 ): SessionModeRuntimeConfig {
@@ -41,6 +40,7 @@ export function buildModeRuntimeConfig(
     activeToolIds,
     config.toolAccessScopes,
     config.toolInstructions,
+    session.approvalMode,
   );
   const runtimeToolCollection = buildRuntimeToolCollection(
     systemToolRuntime,
@@ -77,7 +77,7 @@ export function buildModeRuntimeConfig(
 
 export function buildCurrentSystemPrompt(
   sessionId: string,
-  session: Pick<SessionState, "activeToolIds" | "activeMcpIds" | "activeSkillIds" | "activeModeId" | "model">,
+  session: Pick<SessionState, "activeToolIds" | "activeMcpIds" | "activeSkillIds" | "activeModeId" | "approvalMode" | "model">,
   agent: AgentDefinition,
 ): string {
   const modeRuntimeConfig = buildModeRuntimeConfig(session, agent, session.activeModeId);
@@ -101,19 +101,12 @@ export function buildCurrentSystemPrompt(
   );
 }
 
-function getRuntimeShellHint(): string {
-  const shellCandidate = process.env.SHELL?.trim()
-    || process.env.ComSpec?.trim()
-    || process.env.COMSPEC?.trim()
-    || process.env.TERM_PROGRAM?.trim();
-
-  if (!shellCandidate) return "unknown";
-  return basename(shellCandidate);
-}
-
-function buildAccessSection(title: string, lines: string[]): string[] {
-  if (lines.length === 0) return [];
-  return ["", title, ...lines];
+function escapeXml(value: string): string {
+  return value
+    .replaceAll("&", "&amp;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;");
 }
 
 function readStringArray(value: unknown): string[] {
@@ -142,43 +135,38 @@ export function buildRuntimeContext(input: {
   const filesystemActive = typeof filesystemScope === "string" && filesystemScope !== "nicht aktiv";
   const terminalActive = typeof terminalScope === "string" && terminalScope !== "nicht aktiv";
   const skillContexts = readStringArray(input.toolContext?.values.loadedSkillContexts);
-  return [
+  const filesystemRoot = input.runtimeVariables?.FILESYSTEM_ROOT;
+  const terminalRoot = input.runtimeVariables?.TERMINAL_ROOT;
+  const terminalCwd = input.runtimeVariables?.TERMINAL_CWD;
+  const modeLabel = input.modeName === input.modeId ? input.modeId : `${input.modeName} (${input.modeId})`;
+  const lines = [
     "<runtime_context>",
-    `Current date: ${variables.CURRENT_DATE ?? ""}`,
-    `Current time: ${variables.CURRENT_TIME ?? ""}`,
-    `Current timestamp: ${variables.CURRENT_TIMESTAMP ?? ""}`,
-    "",
-    "Environment:",
-    `platform=${process.platform}`,
-    `shell=${getRuntimeShellHint()}`,
-    "",
-    `Current model: ${variables.CURRENT_MODEL ?? input.model}`,
-    `Current mode: ${input.modeName}`,
-    `Current mode id: ${input.modeId}`,
-    "",
-    "Current tasks:",
+    `  <environment timestamp="${escapeXml(variables.CURRENT_TIMESTAMP ?? "")}" platform="${escapeXml(process.platform)}" model="${escapeXml(variables.CURRENT_MODEL ?? input.model)}" mode="${escapeXml(modeLabel)}" />`,
+    "  <tasks>",
     getTaskSummary(input.sessionId),
-    "",
-    "Session memory:",
+    "  </tasks>",
+    "  <memory scope=\"session\">",
     memory.sessionMemory,
-    "",
-    "User memory:",
+    "  </memory>",
+    "  <memory scope=\"user\">",
     memory.userMemory,
-    ...buildAccessSection("Filesystem access:", filesystemActive ? [
-      `scope=${filesystemScope}`,
-      `basePath=${input.runtimeVariables?.FILESYSTEM_BASE_PATH ?? "nicht verfuegbar"}`,
-      `allowedRoot=${input.runtimeVariables?.FILESYSTEM_ALLOWED_ROOT ?? "nicht verfuegbar"}`,
-    ] : []),
-    ...buildAccessSection("Terminal access:", terminalActive ? [
-      `scope=${terminalScope}`,
-      `workingDirectory=${input.runtimeVariables?.TERMINAL_WORKING_DIRECTORY ?? "nicht verfuegbar"}`,
-      `allowedRoot=${input.runtimeVariables?.TERMINAL_ALLOWED_ROOT ?? "nicht verfuegbar"}`,
-      `elevation=${input.runtimeVariables?.TERMINAL_ELEVATION ?? "nicht aktiv"}`,
-    ] : []),
-    ...(input.assetContext ? ["", input.assetContext] : []),
-    ...(skillContexts.length > 0 ? ["", "Loaded skills:", ...skillContexts] : []),
-    "</runtime_context>",
-  ].join("\n");
+    "  </memory>",
+  ];
+  if (filesystemActive && filesystemRoot) {
+    lines.push(`  <filesystem scope="${escapeXml(filesystemScope)}" root="${escapeXml(filesystemRoot)}" />`);
+  }
+  if (terminalActive && terminalRoot) {
+    const cwdAttribute = terminalCwd && terminalCwd !== terminalRoot
+      ? ` cwd="${escapeXml(terminalCwd)}"`
+      : "";
+    lines.push(
+      `  <terminal scope="${escapeXml(terminalScope)}" approval="${escapeXml(input.runtimeVariables?.TERMINAL_APPROVAL_MODE ?? "unavailable")}" root="${escapeXml(terminalRoot)}"${cwdAttribute} shell="${escapeXml(input.runtimeVariables?.TERMINAL_SHELL ?? "unavailable")}" />`,
+    );
+  }
+  if (input.assetContext) lines.push("  <assets>", input.assetContext, "  </assets>");
+  if (skillContexts.length > 0) lines.push("  <loaded_skills>", ...skillContexts, "  </loaded_skills>");
+  lines.push("</runtime_context>");
+  return lines.join("\n");
 }
 
 export function buildAssetRuntimeContext(input: {

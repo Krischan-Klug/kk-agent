@@ -2,12 +2,12 @@ import styled from "styled-components";
 
 export const MasterDetailLayout = styled.div`
   display: flex;
-  gap: var(--space-lg);
-  height: calc(100vh - 120px);
+  align-items: flex-start;
+  gap: var(--space-md);
+  min-height: 0;
 
   @media (max-width: 900px) {
     flex-direction: column;
-    height: auto;
   }
 `;
 
@@ -17,11 +17,8 @@ export const SidebarList = styled.div`
   display: flex;
   flex-direction: column;
   gap: var(--space-sm);
-  overflow-y: auto;
-
   @media (max-width: 900px) {
     width: 100%;
-    max-height: none;
   }
 `;
 

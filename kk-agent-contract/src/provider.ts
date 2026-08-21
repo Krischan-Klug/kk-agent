@@ -169,3 +169,25 @@ export interface ProviderTurnDebug {
   outputCount?: number;
   resolvedRequestConfig?: ResolvedLlmRequestConfig;
 }
+
+export interface ModelInputDebug {
+  id: string;
+  step: number;
+  attempt: number;
+  createdAt: string;
+  endpoint: EndpointType;
+  profileId: string;
+  instructions: string;
+  messages: import("./transcript.js").TranscriptMessage[];
+  projectedContent: Record<string, Array<
+    | { type: "text"; text: string }
+    | { type: "image"; detail?: "auto" | "low" | "high"; binaryOmitted: true }
+  >>;
+  tools: Array<{
+    name: string;
+    description: string;
+    inputSchema: Record<string, unknown>;
+  }>;
+  requestConfig: ResolvedLlmRequestConfig;
+  providerRequestBody: Record<string, unknown>;
+}

@@ -24,6 +24,7 @@ export interface UnifiedRequest {
   llmRequestConfig?: LlmRequestConfig;
   resolvedLlmRequestConfig?: ResolvedLlmRequestConfig;
   providerRequestBody?: Record<string, unknown>;
+  maxOutputTokens?: number;
   transportProfile?: EndpointTransportProfile;
   transportState?: ProviderTransportState;
   modelContentByMessageId?: Record<string, ModelContentPart[]>;

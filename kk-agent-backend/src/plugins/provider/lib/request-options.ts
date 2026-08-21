@@ -34,12 +34,21 @@ export function normalizeRequestOptions(
       ? model.capabilities.endpointCapabilities.temperatureRange
       : undefined,
   });
+  const maxOutputTokens = typeof request.maxOutputTokens === "number" && Number.isFinite(request.maxOutputTokens)
+    ? Math.max(1, Math.floor(request.maxOutputTokens))
+    : undefined;
+  const providerRequestBody = {
+    ...compiled.body,
+    ...(maxOutputTokens
+      ? { [profile.endpoint === "responses" ? "max_output_tokens" : "max_tokens"]: maxOutputTokens }
+      : {}),
+  };
 
   return {
     endpoint: profile.endpoint,
     transportProfile: profile.transport,
     resolvedLlmRequestConfig: compiled.resolved,
-    providerRequestBody: compiled.body,
+    providerRequestBody,
     instructions: compiled.instructions,
     messages: compiled.messages,
     tools: model.capabilities.tools.mode === "native" ? request.tools : undefined,

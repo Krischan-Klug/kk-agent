@@ -38,7 +38,7 @@ Use the root `npm run dev` command to start backend, renderer, and Electron toge
 - `/mcp`: external MCP management
 - `/skills`: Agent Skills discovery, import, inspection, and managed deletion
 - `/settings/appearance`: theme settings
-- `/settings/defaults`: prompt and runtime defaults
+- `/settings/security`: access-scope and approval defaults
 - `/settings/provider`: providers, explicit model profiles, and request overrides
 - `/settings/tools`: internal tool configuration
 

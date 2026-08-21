@@ -24,6 +24,16 @@ export const TitleBarBrand = styled.div`
   height: 100%;
   padding: 0 16px;
   pointer-events: none;
+
+  svg {
+    width: 18px;
+    height: 18px;
+    flex: 0 0 auto;
+    stroke: var(--accent);
+    stroke-linecap: square;
+    stroke-linejoin: miter;
+    stroke-width: 1.7;
+  }
 `;
 
 export const TitleBarIdentity = styled.span`
@@ -43,16 +53,6 @@ export const TitleBarName = styled.span`
   text-overflow: ellipsis;
   text-transform: uppercase;
   white-space: nowrap;
-`;
-
-export const TitleBarEdition = styled.span`
-  color: var(--accent-hover);
-  font-family: var(--font-mono);
-  font-size: 9px;
-  font-weight: 650;
-  letter-spacing: 0.08em;
-  line-height: 1;
-  text-transform: uppercase;
 `;
 
 export const TitleBarDragArea = styled.div`

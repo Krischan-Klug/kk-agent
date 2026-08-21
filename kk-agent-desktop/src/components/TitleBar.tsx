@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react";
+import BrandMark from "@/components/BrandMark";
 import {
   TitleBarBrand,
   TitleBarDragArea,
-  TitleBarEdition,
   TitleBarIdentity,
   TitleBarName,
   TitleBarWrapper,
@@ -36,9 +36,9 @@ export default function TitleBar() {
   return (
     <TitleBarWrapper onDoubleClick={toggleMaximize}>
       <TitleBarBrand>
+        <BrandMark />
         <TitleBarIdentity>
           <TitleBarName>KK Agent</TitleBarName>
-          <TitleBarEdition>Local Agent</TitleBarEdition>
         </TitleBarIdentity>
       </TitleBarBrand>
       <TitleBarDragArea />

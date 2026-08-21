@@ -1,5 +1,6 @@
-import type { ProviderTurnDebug, LlmRequestConfig } from "./provider.js";
+import type { ModelInputDebug, ProviderTurnDebug, LlmRequestConfig } from "./provider.js";
 import type { AgentLoopState, AgentPromptSections, ModeBehavior } from "./agent.js";
+import type { ApprovalMode } from "./mcp.js";
 import type { ToolExecutionStatus, TranscriptBlock, TranscriptMessage } from "./transcript.js";
 
 export type AssetKind = "image" | "pdf" | "document" | "presentation" | "spreadsheet" | "text";
@@ -17,6 +18,34 @@ export interface AssetMeta {
   pageCount?: number;
 }
 
+export type ContextUsageSource = "provider" | "estimated" | "unknown";
+
+export interface SessionContextUsage {
+  limitTokens: number;
+  inputTokens: number;
+  outputTokens: number;
+  reasoningTokens: number;
+  usedTokens: number;
+  remainingTokens: number;
+  source: ContextUsageSource;
+  updatedAt: string;
+}
+
+export interface SessionContextCompaction {
+  id: string;
+  summary: string;
+  throughMessageId: string;
+  beforeTokens: number;
+  afterTokens: number;
+  createdAt: string;
+}
+
+export interface SessionContextState {
+  usage?: SessionContextUsage;
+  activeCompaction?: SessionContextCompaction;
+  consecutiveCompactionFailures: number;
+}
+
 export interface SessionState {
   id: string;
   name: string;
@@ -24,6 +53,7 @@ export interface SessionState {
   model: string;
   agentId: string;
   activeModeId: string;
+  approvalMode: ApprovalMode;
   activeToolIds: string[];
   activeMcpIds: string[];
   activeSkillIds: string[];
@@ -31,6 +61,7 @@ export interface SessionState {
   messages: TranscriptMessage[];
   runs: AgentRun[];
   assets: AssetMeta[];
+  contextState: SessionContextState;
   providerDebug?: ProviderTurnDebug;
   createdAt: string;
   updatedAt: string;
@@ -38,12 +69,22 @@ export interface SessionState {
 
 export type AgentRunStatus = "running" | "completed" | "stopped" | "failed" | "aborted";
 export type RunEventSeverity = "info" | "warning" | "error";
+export type RunEventVisibility = "debug" | "user";
+export type RunErrorCategory =
+  | "tool"
+  | "provider_transient"
+  | "provider_fatal"
+  | "configuration"
+  | "abort"
+  | "limit"
+  | "internal";
 export type RunEventKind =
   | "provider_retry"
   | "provider_notice"
   | "context_compacted"
   | "model_retry"
   | "tool_error"
+  | "tool_approval"
   | "output_limit"
   | "run_limit"
   | "run_failed"
@@ -56,6 +97,9 @@ export interface RunEvent {
   anchorMessageId: string;
   kind: RunEventKind;
   severity: RunEventSeverity;
+  visibility: RunEventVisibility;
+  terminal: boolean;
+  errorCategory?: RunErrorCategory;
   message: string;
   code?: string;
   detail?: string;
@@ -75,6 +119,7 @@ export interface AgentRun {
   updatedAt: string;
   completedAt?: string;
   events: RunEvent[];
+  modelInputs: ModelInputDebug[];
   artifactIds: string[];
 }
 
@@ -82,6 +127,7 @@ export interface CreateSessionBody {
   agentId: string;
   providerId?: string;
   activeModeId?: string;
+  approvalMode?: ApprovalMode;
   model?: string;
   activeToolIds?: string[];
   activeMcpIds?: string[];
@@ -93,6 +139,7 @@ export interface UpdateSessionBody {
   agentId?: string;
   providerId?: string;
   activeModeId?: string;
+  approvalMode?: ApprovalMode;
   model?: string;
   activeToolIds?: string[];
   activeMcpIds?: string[];
@@ -139,6 +186,16 @@ export interface SessionPromptDebug {
   runtimeTools: SessionRuntimeToolDebug[];
   runtimeMcps: SessionRuntimeMcpDebug[];
   runtimeSkills: SessionRuntimeSkillDebug[];
+  modelInputs: ModelInputDebug[];
+  harnessInstructions: HarnessInstructionDebug[];
+  runtimeDiagnostics: Record<string, unknown>;
+}
+
+export interface HarnessInstructionDebug {
+  id: string;
+  source: string;
+  activation: string;
+  text: string;
 }
 
 export interface TaskItem {
@@ -192,6 +249,12 @@ export type StreamEvent =
   | { type: "turn_state"; state: AgentLoopState }
   | { type: "run_event"; event: RunEvent }
   | { type: "stats"; inputTokens: number; outputTokens: number; reasoningTokens: number; source: "provider" | "estimated" | "unknown" }
-  | { type: "user_prompt"; promptId: string; question: string; choices: { key: string; label: string }[] }
+  | {
+      type: "user_prompt";
+      purpose: "question" | "approval";
+      promptId: string;
+      question: string;
+      choices: { key: string; label: string }[];
+    }
   | { type: "done"; session: SessionState }
   | { type: "transport_error"; message: string };

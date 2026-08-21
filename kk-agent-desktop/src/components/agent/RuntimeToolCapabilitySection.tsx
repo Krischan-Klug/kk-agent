@@ -1,5 +1,7 @@
-import type { Dispatch, ReactNode, SetStateAction } from "react";
+import { useState } from "react";
+import type { ReactNode } from "react";
 import type { AgentModeConfig, McpListItem } from "@/types/api";
+import SkillIcon from "@/components/SkillIcon";
 import { toggleId } from "@/lib/idLists";
 import {
   CapabilityRow,
@@ -7,7 +9,6 @@ import {
 import {
   getCapabilityToolNames,
   getConcreteRuntimeTools,
-  hasAllowedToolForCapability,
   normalizeAllowedToolNames,
   setCapabilityInstruction,
 } from "./AgentEditor.helpers";
@@ -16,7 +17,7 @@ import {
   CapabilityToggleHeader,
   NestedCapabilityToolList,
 } from "./CapabilitySection";
-import { Section, SectionTitle } from "@/components/PageForm";
+import { FieldLabel, FormField, Section, SectionTitle } from "@/components/PageForm";
 
 type RuntimeCapabilityIdField = "toolIds" | "mcpIds";
 type RuntimeCapabilityInstructionField = "toolInstructions" | "mcpInstructions";
@@ -29,11 +30,6 @@ type Props = {
   selectedModeConfig: AgentModeConfig;
   internalTools: McpListItem[];
   mcps: McpListItem[];
-  expanded: Record<string, boolean>;
-  visibleInstructions: Record<string, boolean>;
-  setExpanded: Dispatch<SetStateAction<Record<string, boolean>>>;
-  setVisibleInstructions: Dispatch<SetStateAction<Record<string, boolean>>>;
-  detailsOpenLabel?: string;
   emojiFallback: string;
   getEffectiveInstruction: (group: McpListItem) => string;
   getInstructionFallback: (group: McpListItem) => string;
@@ -49,11 +45,6 @@ export default function RuntimeToolCapabilitySection({
   selectedModeConfig,
   internalTools,
   mcps,
-  expanded,
-  visibleInstructions,
-  setExpanded,
-  setVisibleInstructions,
-  detailsOpenLabel,
   emojiFallback,
   getEffectiveInstruction,
   getInstructionFallback,
@@ -61,15 +52,21 @@ export default function RuntimeToolCapabilitySection({
   updateModeConfig,
 }: Props) {
   const activeIds = selectedModeConfig[idField];
+  const [expanded, setExpanded] = useState<Record<string, boolean>>({});
 
   return (
     <Section>
       <SectionTitle>{title}</SectionTitle>
       {groups.map((group) => {
         const isActive = activeIds.includes(group.id);
-        const capabilityToolNames = getCapabilityToolNames(group);
         const isExpanded = expanded[group.id] ?? false;
-        const showInstruction = visibleInstructions[group.id] ?? false;
+        const capabilityToolNames = getCapabilityToolNames(group);
+        const explicitlyAllowedToolNames = selectedModeConfig.allowedToolNames
+          .filter((name) => capabilityToolNames.includes(name));
+        // An empty allow-list for a capability means that all of its tools are enabled.
+        const activeToolNames = explicitlyAllowedToolNames.length > 0
+          ? explicitlyAllowedToolNames
+          : capabilityToolNames;
         const effectiveInstruction = getEffectiveInstruction(group);
         const instructionFallback = getInstructionFallback(group);
         const isCustomized = effectiveInstruction.trim() !== instructionFallback.trim();
@@ -78,13 +75,10 @@ export default function RuntimeToolCapabilitySection({
           <CapabilityRow key={group.id} $active={isActive}>
             <CapabilityToggleHeader
               active={isActive}
-              emoji={group.emoji || emojiFallback}
+              icon={group.id === "skill" ? <SkillIcon /> : group.emoji || emojiFallback}
               name={group.name}
               running={group.runtime.status === "running"}
-              showDetails
-              detailsOpen={isExpanded}
-              detailsOpenLabel={detailsOpenLabel}
-              instructionOpen={showInstruction}
+              expanded={isExpanded}
               customized={isCustomized}
               onToggle={() => {
                 const nextIds = toggleId(activeIds, group.id);
@@ -100,8 +94,10 @@ export default function RuntimeToolCapabilitySection({
                   ),
                 });
               }}
-              onToggleDetails={() => setExpanded((previous) => ({ ...previous, [group.id]: !isExpanded }))}
-              onToggleInstruction={() => setVisibleInstructions((previous) => ({ ...previous, [group.id]: !showInstruction }))}
+              onToggleExpanded={() => setExpanded((current) => ({
+                ...current,
+                [group.id]: !isExpanded,
+              }))}
               onResetInstruction={() => updateModeConfig({
                 ...selectedModeConfig,
                 [instructionField]: setCapabilityInstruction(
@@ -112,9 +108,10 @@ export default function RuntimeToolCapabilitySection({
                 ),
               } as AgentModeConfig)}
             />
-            {isActive && (
+            {isActive && isExpanded && (
               <>
-                {showInstruction && (
+                <FormField>
+                  <FieldLabel>Tool Instruction</FieldLabel>
                   <CapabilityInstructionEditor
                     value={effectiveInstruction}
                     rows={4}
@@ -128,30 +125,32 @@ export default function RuntimeToolCapabilitySection({
                       ),
                     } as AgentModeConfig)}
                   />
-                )}
+                </FormField>
                 {renderActiveControls?.(group)}
-                {isExpanded && (
-                  <NestedCapabilityToolList
-                    tools={group.tools}
-                    allowedToolNames={selectedModeConfig.allowedToolNames}
-                    onToggleTool={(toolName, allowed) => {
-                      const updated = allowed
-                        ? selectedModeConfig.allowedToolNames.filter((entry) => entry !== toolName)
-                        : [...new Set([...selectedModeConfig.allowedToolNames, toolName])];
-                      const nextIds = hasAllowedToolForCapability(updated, capabilityToolNames)
-                        ? activeIds
-                        : activeIds.filter((entry) => entry !== group.id);
-                      const nextModeConfig: AgentModeConfig = { ...selectedModeConfig, [idField]: nextIds };
-                      updateModeConfig({
-                        ...nextModeConfig,
-                        allowedToolNames: normalizeAllowedToolNames(
-                          updated,
-                          getConcreteRuntimeTools(nextModeConfig, internalTools, mcps),
-                        ),
-                      });
-                    }}
-                  />
-                )}
+                <NestedCapabilityToolList
+                  tools={group.tools}
+                  activeToolNames={activeToolNames}
+                  onToggleTool={(toolName) => {
+                    const nextActiveToolNames = activeToolNames.includes(toolName)
+                      ? activeToolNames.filter((name) => name !== toolName)
+                      : [...activeToolNames, toolName];
+                    const nextIds = nextActiveToolNames.length > 0
+                      ? activeIds
+                      : activeIds.filter((id) => id !== group.id);
+                    const nextAllowedRaw = [
+                      ...selectedModeConfig.allowedToolNames.filter((name) => !capabilityToolNames.includes(name)),
+                      ...nextActiveToolNames,
+                    ];
+                    const nextModeConfig: AgentModeConfig = { ...selectedModeConfig, [idField]: nextIds };
+                    updateModeConfig({
+                      ...nextModeConfig,
+                      allowedToolNames: normalizeAllowedToolNames(
+                        nextAllowedRaw,
+                        getConcreteRuntimeTools(nextModeConfig, internalTools, mcps),
+                      ),
+                    });
+                  }}
+                />
               </>
             )}
           </CapabilityRow>

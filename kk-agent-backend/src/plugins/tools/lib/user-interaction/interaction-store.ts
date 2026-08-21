@@ -4,6 +4,7 @@ import type { ToolCallResult } from "../../../mcp/types.js";
 const PROMPT_TIMEOUT_MS = 5 * 60 * 1000;
 
 export interface UserPromptPayload {
+  purpose: "question" | "approval";
   promptId: string;
   question: string;
   choices: { key: string; label: string }[];

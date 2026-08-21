@@ -7,6 +7,9 @@ import type {
   TaskItem,
   MemoryFact,
   AgentLoopState,
+  RunEvent,
+  ModelInputDebug,
+  HarnessInstructionDebug,
   SkillDefinition,
   SessionRuntimeMcpDebug,
   SessionRuntimeSkillDebug,
@@ -23,7 +26,7 @@ import SelectMenu, { type SelectMenuOption } from "@/components/SelectMenu";
 import { InputLikeSelect } from "@/components/FormControls.styled";
 import { getSessionModelRef } from "@/lib/modelRefs";
 
-export type ChatDebugTab = "prompt" | "runtime" | "tools" | "mcps" | "skills" | "session" | "messages" | "tasks" | "memory";
+export type ChatDebugTab = "model-input" | "prompt" | "runtime" | "harness" | "tools" | "mcps" | "skills" | "runs" | "session" | "messages" | "tasks" | "memory";
 
 const DebugPanel = styled.div`
   border: 1px solid var(--border);
@@ -114,11 +117,15 @@ type Props = {
   onTabChange: (tab: ChatDebugTab | null) => void;
   session: SessionState | null;
   loopState: AgentLoopState | null;
+  streamRunEvents: RunEvent[];
   debugPrompt: string | null;
   debugRuntimeContext: string | null;
   debugRuntimeTools: SessionRuntimeToolDebug[] | null;
   debugRuntimeMcps: SessionRuntimeMcpDebug[] | null;
   debugRuntimeSkills: SessionRuntimeSkillDebug[] | null;
+  debugModelInputs: ModelInputDebug[] | null;
+  debugHarnessInstructions: HarnessInstructionDebug[] | null;
+  debugRuntimeDiagnostics: Record<string, unknown> | null;
   internalTools: McpListItem[];
   debugMcps: McpListItem[];
   skills: SkillDefinition[];
@@ -172,11 +179,15 @@ export default function ChatDebugPanel({
   onTabChange,
   session,
   loopState,
+  streamRunEvents,
   debugPrompt,
   debugRuntimeContext,
   debugRuntimeTools,
   debugRuntimeMcps,
   debugRuntimeSkills,
+  debugModelInputs,
+  debugHarnessInstructions,
+  debugRuntimeDiagnostics,
   internalTools,
   debugMcps,
   skills,
@@ -304,16 +315,102 @@ export default function ChatDebugPanel({
       .join("\n\n");
   }
 
-  if (debugTab === "prompt") {
+  function renderModelInputs(inputs: ModelInputDebug[] | null): string {
+    if (inputs === null) return "Loading...";
+    if (inputs.length === 0) return "No provider attempt has been prepared for the latest run.";
+    return inputs.map((input) => [
+      `-- step ${input.step}, attempt ${input.attempt} · ${input.endpoint} · ${input.profileId} --`,
+      `createdAt=${input.createdAt}`,
+      "",
+      "[FINAL INSTRUCTIONS]",
+      input.instructions,
+      "",
+      "[PROJECTED MESSAGES]",
+      JSON.stringify(input.messages, null, 2),
+      "",
+      "[REQUEST-SCOPED ASSET CONTENT]",
+      JSON.stringify(input.projectedContent, null, 2),
+      "",
+      "[TOOLS]",
+      JSON.stringify(input.tools, null, 2),
+      "",
+      "[RESOLVED REQUEST CONFIG]",
+      JSON.stringify(input.requestConfig, null, 2),
+      "",
+      "[PROFILE REQUEST BODY]",
+      JSON.stringify(input.providerRequestBody, null, 2),
+    ].join("\n")).join("\n\n");
+  }
+
+  function renderHarnessInstructions(instructions: HarnessInstructionDebug[] | null): string {
+    if (instructions === null) return "Loading...";
+    return instructions.map((instruction) => [
+      `-- ${instruction.id} --`,
+      `source=${instruction.source}`,
+      `activation=${instruction.activation}`,
+      instruction.text,
+    ].join("\n")).join("\n\n") || "No conditional harness instructions registered.";
+  }
+
+  if (debugTab === "model-input") {
+    content = renderModelInputs(debugModelInputs);
+  } else if (debugTab === "prompt") {
     content = debugPrompt ?? "Loading...";
   } else if (debugTab === "runtime") {
-    content = debugRuntimeContext ?? "Loading...";
+    content = debugRuntimeContext === null
+      ? "Loading..."
+      : `${debugRuntimeContext}\n\n-- Runtime diagnostics (not sent to the model) --\n${JSON.stringify(debugRuntimeDiagnostics ?? {}, null, 2)}`;
+  } else if (debugTab === "harness") {
+    content = renderHarnessInstructions(debugHarnessInstructions);
   } else if (debugTab === "tools") {
     content = renderRuntimeTools(debugRuntimeTools);
   } else if (debugTab === "mcps") {
     content = renderRuntimeMcps(debugRuntimeMcps);
   } else if (debugTab === "skills") {
     content = renderRuntimeSkills(debugRuntimeSkills);
+  } else if (debugTab === "runs") {
+    const eventIds = new Set<string>();
+    const lines: string[] = [];
+    for (const run of session.runs) {
+      lines.push(`-- run ${run.id} --`);
+      lines.push(`status=${run.status} step=${run.step} attempt=${run.attempt} toolBatch=${run.toolBatch}`);
+      lines.push(`startedAt=${run.startedAt} completedAt=${run.completedAt ?? "-"}`);
+      for (const event of run.events) {
+        eventIds.add(event.id);
+        lines.push([
+          `  [${event.createdAt}] ${event.kind}`,
+          `severity=${event.severity}`,
+          `visibility=${event.visibility}`,
+          `terminal=${event.terminal}`,
+          `category=${event.errorCategory ?? "-"}`,
+          `code=${event.code ?? "-"}`,
+          `step=${event.step}`,
+          `attempt=${event.attempt}`,
+          `message=${event.message}`,
+          ...(event.detail ? [`detail=${event.detail}`] : []),
+        ].join("\n    "));
+      }
+      lines.push("");
+    }
+    const liveEvents = streamRunEvents.filter((event) => !eventIds.has(event.id));
+    if (liveEvents.length > 0) {
+      lines.push("-- live events --");
+      for (const event of liveEvents) {
+        lines.push([
+          `[${event.createdAt}] ${event.kind}`,
+          `severity=${event.severity}`,
+          `visibility=${event.visibility}`,
+          `terminal=${event.terminal}`,
+          `category=${event.errorCategory ?? "-"}`,
+          `code=${event.code ?? "-"}`,
+          `step=${event.step}`,
+          `attempt=${event.attempt}`,
+          `message=${event.message}`,
+          ...(event.detail ? [`detail=${event.detail}`] : []),
+        ].join("\n  "));
+      }
+    }
+    content = lines.join("\n") || "No runs recorded.";
   } else if (debugTab === "session") {
     content = JSON.stringify(
       {
@@ -367,11 +464,14 @@ export default function ChatDebugPanel({
   return (
     <DebugPanel>
       <DebugTabs>
+        <DebugTab $active={debugTab === "model-input"} onClick={() => toggleTab("model-input")}>Model Input</DebugTab>
         <DebugTab $active={debugTab === "prompt"} onClick={() => toggleTab("prompt")}>System Prompt</DebugTab>
         <DebugTab $active={debugTab === "runtime"} onClick={() => toggleTab("runtime")}>Runtime Context</DebugTab>
+        <DebugTab $active={debugTab === "harness"} onClick={() => toggleTab("harness")}>Harness</DebugTab>
         <DebugTab $active={debugTab === "tools"} onClick={() => toggleTab("tools")}>Tools</DebugTab>
         <DebugTab $active={debugTab === "mcps"} onClick={() => toggleTab("mcps")}>MCPs</DebugTab>
         <DebugTab $active={debugTab === "skills"} onClick={() => toggleTab("skills")}>Skills</DebugTab>
+        <DebugTab $active={debugTab === "runs"} onClick={() => toggleTab("runs")}>Runs</DebugTab>
         <DebugTab $active={debugTab === "session"} onClick={() => toggleTab("session")}>Session</DebugTab>
         <DebugTab $active={debugTab === "messages"} onClick={() => toggleTab("messages")}>Messages</DebugTab>
         <DebugTab $active={debugTab === "tasks"} onClick={() => toggleTab("tasks")}>Tasks</DebugTab>
@@ -444,7 +544,7 @@ export default function ChatDebugPanel({
         </DebugControls>
       </DebugTabs>
 
-      {(debugTab === "prompt" || debugTab === "runtime" || debugTab === "tools" || debugTab === "mcps" || debugTab === "skills" || debugTab === "messages") && (
+      {(debugTab === "model-input" || debugTab === "prompt" || debugTab === "runtime" || debugTab === "harness" || debugTab === "tools" || debugTab === "mcps" || debugTab === "skills" || debugTab === "runs" || debugTab === "messages") && (
         <DebugContent>{content}</DebugContent>
       )}
 

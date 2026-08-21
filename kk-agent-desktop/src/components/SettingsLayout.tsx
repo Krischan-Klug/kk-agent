@@ -5,7 +5,7 @@ import { PageBody } from "./Layout.styled";
 import Spinner from "./Spinner";
 
 const settingsNav = [
-  { href: "/settings/defaults", label: "📋 Defaults" },
+  { href: "/settings/security", label: "🔒 Security" },
   { href: "/settings/appearance", label: "🎨 Appearance" },
   { href: "/settings/tools", label: "🛠️ Tools" },
   { href: "/settings/provider", label: "🔌 Provider" },

@@ -1,8 +1,9 @@
 import styled from "styled-components";
+import type { ReactNode } from "react";
 import { useDropdown } from "@/hooks/useDropdown";
+import SkillIcon from "./SkillIcon";
 import Toggle from "./Toggle";
 
-const SKILL_EMOJI = "\u{1F4DA}";
 const SYSTEM_CAPABILITY_EMOJI = "\u{1F6E0}\uFE0F";
 const CUSTOM_CAPABILITY_EMOJI = "\u{1F50C}";
 const DROPDOWN_CARET = "\u25BE";
@@ -37,7 +38,7 @@ const Trigger = styled.button<{ $warn?: boolean }>`
 
   &:hover {
     background: ${(p) => (p.$warn ? "var(--warning)" : "var(--accent)")};
-    color: var(--bg-base);
+    color: var(--accent-foreground);
   }
 
   &::after {
@@ -121,9 +122,10 @@ function isAvailable(item: CapabilityItem): boolean {
   return item.runtime ? item.runtime.status === "running" : item.active !== false;
 }
 
-function getCapabilityEmoji(item: CapabilityItem, kind: Props["kind"]): string {
+function getCapabilityIcon(item: CapabilityItem, kind: Props["kind"]): ReactNode {
+  if (item.id === "skill") return <SkillIcon />;
   if (item.emoji) return item.emoji;
-  if (kind === "skill") return SKILL_EMOJI;
+  if (kind === "skill") return <SkillIcon />;
   return item.source === "system" ? SYSTEM_CAPABILITY_EMOJI : CUSTOM_CAPABILITY_EMOJI;
 }
 
@@ -156,7 +158,7 @@ export default function CapabilitySelect({
                 <CapabilityRow key={item.id}>
                   <CapabilityLabelGroup>
                     <StatusDot $available={available} />
-                    <CapabilityEmoji>{getCapabilityEmoji(item, kind)}</CapabilityEmoji>
+                <CapabilityEmoji>{getCapabilityIcon(item, kind)}</CapabilityEmoji>
                     <CapabilityLabel $unavailable={!available}>{item.name}</CapabilityLabel>
                   </CapabilityLabelGroup>
                   <Toggle

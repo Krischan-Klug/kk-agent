@@ -1,6 +1,7 @@
 import type { RuntimeToolDefinition } from "../loop/types.js";
 import type {
   AccessScope,
+  ApprovalMode,
   McpServerConfig,
   McpToolDefinition,
   SystemMcpKey,
@@ -13,19 +14,23 @@ import { clearTasks, getTaskSummary, listTasks, replaceTasks } from "./lib/task-
 import type { MemoryFact, TaskItem } from "./types.js";
 import {
   getDefaultPathForScope,
-  getTerminalElevationLabel,
   resolveAccessScope,
-  resolveFilesystemSystemConfig,
-  resolveTerminalSystemConfig,
 } from "./lib/access-paths.js";
 import { NotFoundError } from "../../lib/errors.js";
 import { getDefaultSystemMcpMap } from "./lib/index.js";
 import { normalizeSystemConfig } from "./lib/system-config.js";
+import { isReadOnlyShellCommand } from "./lib/terminal/command-policy.js";
 import {
-  getShellPermissionPrompt,
-  isDestructiveShellCommand,
-  isReadOnlyShellCommand,
-} from "./lib/terminal/command-policy.js";
+  getTerminalApprovalInstruction,
+  resolveApprovalMode,
+  resolveTerminalCommandPermission,
+} from "./lib/terminal/approval-policy.js";
+import {
+  getTerminalShellProfile,
+  getTerminalShellResolution,
+  initializeTerminalShell,
+} from "./lib/terminal/shell-profile.js";
+import { getSecuritySettings } from "../security/service.js";
 
 let cachedSystemMcps: McpServerConfig[] = [];
 
@@ -42,8 +47,8 @@ const SELF_BOUNDED_READ_SYSTEM_TOOLS = new Set([
 ]);
 
 function isConcurrencySafeSystemTool(toolName: string, input: Record<string, unknown>): boolean {
-  if (toolName === "Bash") {
-    return isReadOnlyShellCommand(String(input.command ?? ""));
+  if (toolName === "Terminal") {
+    return isReadOnlyShellCommand(String(input.command ?? ""), getTerminalShellProfile()?.dialect);
   }
 
   return new Set([
@@ -67,31 +72,21 @@ function buildSystemToolResultPolicy(mcp: McpServerConfig, toolName: string) {
   };
 }
 
-function buildSystemToolPermissionResolver(toolName: string): RuntimeToolDefinition["resolvePermission"] | undefined {
-  if (toolName !== "Bash") return undefined;
+function buildSystemToolPermissionResolver(
+  toolName: string,
+  approvalMode: ApprovalMode,
+): RuntimeToolDefinition["resolvePermission"] | undefined {
+  if (toolName !== "Terminal") return undefined;
 
   return (_resolvedToolName, args, mode) => {
     const command = String(args.command ?? "").trim();
-    if (!command) {
-      return { kind: "deny", reason: "Bash requires a command." };
-    }
-    if (mode.behavior === "plan" && !isReadOnlyShellCommand(command)) {
-      return {
-        kind: "deny",
-        reason: "Im Plan-Mode ist Bash nur fuer read-only Diagnose, Suche und Inspektion erlaubt.",
-      };
-    }
-    if (mode.behavior === "edit" && isDestructiveShellCommand(command)) {
-      const prompt = getShellPermissionPrompt(command);
-      return {
-        kind: "prompt",
-        question: prompt.question,
-        choices: prompt.choices,
-        allowKeys: prompt.allowKeys,
-        deniedMessage: prompt.deniedMessage,
-      };
-    }
-    return { kind: "allow" };
+    const profile = getTerminalShellProfile();
+    return resolveTerminalCommandPermission({
+      command,
+      modeBehavior: mode.behavior,
+      shellDialect: profile?.dialect,
+      approvalMode,
+    });
   };
 }
 
@@ -112,23 +107,26 @@ function normalizeSystemConfigForMcp(id: string, systemConfig?: McpServerConfig[
 
 function buildRuntimeVariablesForMcp(mcp: McpServerConfig): Record<string, string> {
   if (mcp.systemKey === "filesystem") {
-    const config = resolveFilesystemSystemConfig(mcp.systemConfig);
-    const allowedRoot = getDefaultPathForScope(resolveAccessScope(config.accessScope));
+    const scope = resolveAccessScope(mcp.systemConfig?.accessScope);
+    const root = getDefaultPathForScope(scope);
     return {
-      FILESYSTEM_ACCESS_SCOPE: resolveAccessScope(config.accessScope),
-      FILESYSTEM_BASE_PATH: config.basePath ?? getDefaultPathForScope(resolveAccessScope(config.accessScope)),
-      FILESYSTEM_ALLOWED_ROOT: allowedRoot,
+      FILESYSTEM_ACCESS_SCOPE: scope,
+      FILESYSTEM_ROOT: root,
     };
   }
 
   if (mcp.systemKey === "terminal") {
-    const config = resolveTerminalSystemConfig(mcp.systemConfig);
-    const allowedRoot = getDefaultPathForScope(resolveAccessScope(config.accessScope));
+    const scope = resolveAccessScope(mcp.systemConfig?.accessScope);
+    const root = getDefaultPathForScope(scope);
+    const profile = getTerminalShellProfile();
     return {
-      TERMINAL_ACCESS_SCOPE: resolveAccessScope(config.accessScope),
-      TERMINAL_WORKING_DIRECTORY: config.workingDirectory ?? getDefaultPathForScope(resolveAccessScope(config.accessScope)),
-      TERMINAL_ALLOWED_ROOT: allowedRoot,
-      TERMINAL_ELEVATION: getTerminalElevationLabel(config.accessScope),
+      TERMINAL_ACCESS_SCOPE: scope,
+      TERMINAL_APPROVAL_MODE: resolveApprovalMode(mcp.systemConfig?.approvalMode),
+      TERMINAL_ROOT: root,
+      TERMINAL_CWD: root,
+      ...(profile ? {
+        TERMINAL_SHELL: `${profile.displayName} ${profile.version}`,
+      } : {}),
     };
   }
 
@@ -147,26 +145,59 @@ function resolveSystemMcp(
   id: string,
   accessScopeOverride?: AccessScope,
   instructionOverride?: string,
+  approvalModeOverride?: ApprovalMode,
 ): { mcp: McpServerConfig; instruction: string; tools: McpToolDefinition[]; accessContext?: string } | null {
   const systemMcp = getSystemMcpById(id);
   if (!systemMcp) return null;
+  if (id === "terminal" && getTerminalShellResolution().status === "unavailable") return null;
 
+  const security = getSecuritySettings();
+  const accessScope = accessScopeOverride ?? security.accessScope;
+  const approvalMode = approvalModeOverride ?? security.approvalMode;
+  const toolConfig = normalizeSystemConfigForMcp(id, systemMcp.systemConfig);
   const mcp: McpServerConfig = {
     ...systemMcp,
-    systemConfig: normalizeSystemConfigForMcp(id, {
-      ...systemMcp.systemConfig,
-      ...(accessScopeOverride ? { accessScope: accessScopeOverride } : {}),
-    }),
+    systemConfig: {
+      ...toolConfig,
+      ...((id === "filesystem" || id === "terminal") ? {
+        accessScope,
+        ...(id === "filesystem" ? { basePath: getDefaultPathForScope(accessScope) } : {}),
+        ...(id === "terminal" ? {
+          workingDirectory: getDefaultPathForScope(accessScope),
+          approvalMode,
+        } : {}),
+      } : {}),
+    },
   };
 
+  const baseInstruction = instructionOverride ?? mcp.instruction;
+  const profile = id === "terminal" ? getTerminalShellProfile() : undefined;
+  const approvalInstruction = id === "terminal"
+    ? getTerminalApprovalInstruction(mcp.systemConfig?.approvalMode)
+    : undefined;
+  const contextInstruction = id === "filesystem"
+    ? "The filesystem root in runtime context is the hard path boundary for this request."
+    : id === "terminal"
+      ? "In runtime context, root is the hard path boundary, optional cwd is the starting directory, and shell determines the required command syntax."
+      : undefined;
   return {
     mcp,
-    instruction: instructionOverride ?? mcp.instruction,
+    instruction: profile
+      ? [
+          baseInstruction,
+          contextInstruction,
+          approvalInstruction,
+          profile.pathConvention,
+          profile.syntaxRules,
+          "The active shell profile is fixed for this run. Do not assume or silently switch to a different shell dialect.",
+        ].join(" ")
+      : [baseInstruction, contextInstruction].filter(Boolean).join(" "),
     tools: getSystemToolsForMcp(id),
   };
 }
 
 export async function initToolsService(): Promise<void> {
+  initializeTerminalShell();
   cachedSystemMcps = buildSystemMcps(await loadSystemMcpOverrides());
   await persistSystemOverrides();
   await initMemoryState();
@@ -185,12 +216,23 @@ export function getKnownSystemMcpIds(): string[] {
 }
 
 export function getRunnableSystemMcpIds(): string[] {
-  return cachedSystemMcps.filter((mcp) => mcp.active).map((mcp) => mcp.id);
+  return cachedSystemMcps
+    .filter((mcp) => getSystemMcpRuntimeState(mcp).status === "running")
+    .map((mcp) => mcp.id);
+}
+
+export function getSystemMcpRuntimeState(mcp: McpServerConfig): { status: "running" | "stopped" | "unavailable"; error?: string } {
+  if (!mcp.active) return { status: "stopped" };
+  if (mcp.systemKey === "terminal") {
+    const resolution = getTerminalShellResolution();
+    if (resolution.status === "unavailable") return { status: "unavailable", error: resolution.error };
+  }
+  return { status: "running" };
 }
 
 export function getActiveToolInstructions(): { id: string; name: string; instruction: string }[] {
   return cachedSystemMcps
-    .filter((mcp) => mcp.active)
+    .filter((mcp) => getSystemMcpRuntimeState(mcp).status === "running")
     .map((mcp) => ({ id: mcp.id, name: mcp.name, instruction: mcp.instruction }));
 }
 
@@ -208,30 +250,42 @@ export function buildResolvedSystemToolRuntime(
   activeToolIds: string[],
   accessScopeOverrides: Record<string, AccessScope> = {},
   instructionOverrides: Record<string, string> = {},
+  approvalModeOverride?: ApprovalMode,
 ): ResolvedSystemToolRuntime {
   const instructionsById: Record<string, string> = {};
   const runtimeToolsByName: Record<string, RuntimeToolDefinition> = {};
   const runtimeVariables: Record<string, string> = {};
 
   for (const toolId of activeToolIds) {
-    const resolved = resolveSystemMcp(toolId, accessScopeOverrides[toolId], instructionOverrides[toolId]);
+    const resolved = resolveSystemMcp(
+      toolId,
+      accessScopeOverrides[toolId],
+      instructionOverrides[toolId],
+      approvalModeOverride,
+    );
     if (!resolved || !resolved.mcp.active) continue;
 
     instructionsById[toolId] = resolved.instruction;
     Object.assign(runtimeVariables, buildRuntimeVariablesForMcp(resolved.mcp));
 
     for (const tool of resolved.tools) {
+      const description = tool.name === "Terminal"
+        ? `${tool.description} ${getTerminalApprovalInstruction(resolved.mcp.systemConfig?.approvalMode)}`
+        : tool.description;
       runtimeToolsByName[tool.name] = {
         name: tool.name,
-        description: tool.description,
+        description,
         parameters: tool.inputSchema,
         source: "system",
         capabilityId: toolId,
-        accessScope: accessScopeOverrides[toolId],
+        accessScope: resolveAccessScope(resolved.mcp.systemConfig?.accessScope),
         isConcurrencySafe: (input) => isConcurrencySafeSystemTool(tool.name, input),
         resultPolicy: buildSystemToolResultPolicy(resolved.mcp, tool.name),
         permissionPolicy: { kind: "allow" },
-        resolvePermission: buildSystemToolPermissionResolver(tool.name),
+        resolvePermission: buildSystemToolPermissionResolver(
+          tool.name,
+          resolveApprovalMode(resolved.mcp.systemConfig?.approvalMode),
+        ),
       };
     }
   }

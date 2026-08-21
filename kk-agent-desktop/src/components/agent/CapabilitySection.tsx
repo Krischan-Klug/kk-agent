@@ -1,7 +1,9 @@
 import TextArea from "@/components/TextArea";
+import type { ReactNode } from "react";
 import {
   CapabilityHeader,
-  CheckboxRow,
+  CapabilityIdentity,
+  CapabilityToggle,
   ExpandButton,
   HeaderActions,
   IconActionButton,
@@ -9,7 +11,6 @@ import {
   NestedToolList,
   OverrideMark,
   StatusDot,
-  ToolDescription,
   ToolName,
 } from "./AgentEditor.styled";
 import { OVERRIDE_EMOJI, RESET_EMOJI } from "./AgentEditor.helpers";
@@ -35,56 +36,53 @@ export function OverrideActions({ onReset }: OverrideActionsProps) {
 
 type CapabilityToggleHeaderProps = {
   active: boolean;
-  emoji: string;
+  icon: ReactNode;
   name: string;
   running?: boolean;
-  showDetails?: boolean;
-  detailsOpen?: boolean;
-  detailsOpenLabel?: string;
-  detailsClosedLabel?: string;
-  instructionOpen?: boolean;
+  expanded?: boolean;
   customized?: boolean;
   onToggle: () => void;
-  onToggleDetails?: () => void;
-  onToggleInstruction?: () => void;
+  onToggleExpanded?: () => void;
   onResetInstruction?: () => void;
 };
 
 export function CapabilityToggleHeader({
   active,
-  emoji,
+  icon,
   name,
   running,
-  showDetails,
-  detailsOpen,
-  detailsOpenLabel = "Less",
-  detailsClosedLabel = "Details",
-  instructionOpen,
+  expanded,
   customized,
   onToggle,
-  onToggleDetails,
-  onToggleInstruction,
+  onToggleExpanded,
   onResetInstruction,
 }: CapabilityToggleHeaderProps) {
   return (
     <CapabilityHeader>
-      <CheckboxRow>
-        <input type="checkbox" checked={active} onChange={onToggle} />
-        <span style={{ fontSize: "1.1em" }}>{emoji}</span>
+      <CapabilityIdentity>
+        <CapabilityToggle
+          type="button"
+          $active={active}
+          role="switch"
+          aria-checked={active}
+          aria-label={`${name} ${active ? "deaktivieren" : "aktivieren"}`}
+          onClick={onToggle}
+        />
+        <span style={{ fontSize: "1.1em", lineHeight: 1, display: "inline-flex" }}>{icon}</span>
         <span style={{ fontWeight: 500 }}>{name}</span>
         {running !== undefined && <StatusDot $running={running} />}
-      </CheckboxRow>
+      </CapabilityIdentity>
       {active && (
         <HeaderActions>
-          {showDetails && onToggleDetails && (
-            <ExpandButton type="button" onClick={onToggleDetails}>
-              {detailsOpen ? detailsOpenLabel : detailsClosedLabel}
-            </ExpandButton>
-          )}
-          {onToggleInstruction && (
-            <ExpandButton type="button" onClick={onToggleInstruction}>
-              {instructionOpen ? "Hide instruction" : "Show instruction"}
-            </ExpandButton>
+          {onToggleExpanded && (
+            <ExpandButton
+              type="button"
+              $expanded={expanded}
+              aria-expanded={expanded}
+              aria-label={expanded ? `${name} einklappen` : `${name} aufklappen`}
+              title={expanded ? "Einklappen" : "Aufklappen"}
+              onClick={onToggleExpanded}
+            />
           )}
           {customized && onResetInstruction && (
             <OverrideActions onReset={onResetInstruction} />
@@ -118,26 +116,32 @@ type NestedCapabilityTool = {
 
 type NestedCapabilityToolListProps = {
   tools: NestedCapabilityTool[];
-  allowedToolNames: string[];
-  onToggleTool: (toolName: string, allowed: boolean) => void;
+  activeToolNames: string[];
+  onToggleTool: (toolName: string) => void;
 };
 
-export function NestedCapabilityToolList({ tools, allowedToolNames, onToggleTool }: NestedCapabilityToolListProps) {
+export function NestedCapabilityToolList({
+  tools,
+  activeToolNames,
+  onToggleTool,
+}: NestedCapabilityToolListProps) {
+  const activeNames = new Set(activeToolNames);
+
   return (
     <NestedToolList>
       {tools.map((tool) => {
-        const allowed = allowedToolNames.includes(tool.name);
+        const active = activeNames.has(tool.name);
         return (
-          <NestedToolCard key={tool.name} $active={allowed}>
-            <CheckboxRow>
-              <input
-                type="checkbox"
-                checked={allowed}
-                onChange={() => onToggleTool(tool.name, allowed)}
-              />
-              <ToolName>{tool.name}</ToolName>
-            </CheckboxRow>
-            <ToolDescription>{tool.description}</ToolDescription>
+          <NestedToolCard key={tool.name} $active title={tool.description}>
+            <CapabilityToggle
+              type="button"
+              $active={active}
+              role="switch"
+              aria-checked={active}
+              aria-label={`${tool.name} ${active ? "deaktivieren" : "aktivieren"}`}
+              onClick={() => onToggleTool(tool.name)}
+            />
+            <ToolName>{tool.name}</ToolName>
           </NestedToolCard>
         );
       })}

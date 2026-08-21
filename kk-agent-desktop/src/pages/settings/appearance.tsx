@@ -3,6 +3,7 @@ import styled from "styled-components";
 import SettingsLayout from "@/components/SettingsLayout";
 import Button from "@/components/Button";
 import Input from "@/components/Input";
+import Toggle from "@/components/Toggle";
 import {
   defaultThemes,
   getAllThemes,
@@ -10,8 +11,12 @@ import {
   saveAndApplyTheme,
   addCustomTheme,
   deleteCustomTheme,
+  setThemeColorMode,
   buildVariablesFromAccent,
+  resolveThemeColorMode,
   type Theme,
+  type ThemeColorMode,
+  type ThemePreferenceMode,
 } from "@/lib/themes";
 
 /* Styled */
@@ -21,6 +26,14 @@ const SectionTitle = styled.h3`
   font-weight: 600;
   color: var(--text-primary);
   margin: 0 0 var(--space-md) 0;
+`;
+
+const PageHeader = styled.div`
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-md);
+  margin-bottom: var(--space-md);
 `;
 
 const ThemeGrid = styled.div`
@@ -35,9 +48,12 @@ const ThemeCard = styled.div<{ $active: boolean; $accentColor: string }>`
     ${(p) => (p.$active ? p.$accentColor : "var(--border)")};
   border-radius: var(--radius-md);
   padding: var(--space-lg);
+  height: 184px;
   cursor: pointer;
   transition: border-color 0.15s ease;
   position: relative;
+  display: flex;
+  flex-direction: column;
 
   &:hover {
     border-color: ${(p) => p.$accentColor};
@@ -48,18 +64,28 @@ const ThemeName = styled.h4`
   font-size: var(--font-size-base);
   font-weight: 600;
   color: var(--text-primary);
+  height: 24px;
   margin: 0 0 var(--space-xs) 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 `;
 
 const ThemeDesc = styled.p`
   font-size: var(--font-size-sm);
   color: var(--text-secondary);
-  margin: 0 0 var(--space-md) 0;
+  height: 42px;
+  margin: 0 0 var(--space-sm) 0;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
 `;
 
 const ColorPreview = styled.div`
   display: flex;
   gap: var(--space-sm);
+  margin-top: auto;
 `;
 
 const ColorDot = styled.div<{ $color: string }>`
@@ -67,6 +93,9 @@ const ColorDot = styled.div<{ $color: string }>`
   height: 24px;
   border-radius: 50%;
   background: ${(p) => p.$color};
+  border: 1px solid rgba(0, 0, 0, 0.35);
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.55);
+  flex: 0 0 24px;
 `;
 
 const DeleteBtn = styled.button`
@@ -97,6 +126,7 @@ const AddCard = styled.div`
   align-items: center;
   justify-content: center;
   min-height: 140px;
+  height: 184px;
   transition: border-color 0.15s;
   color: var(--text-muted);
   font-size: var(--font-size-lg);
@@ -168,6 +198,67 @@ const PreviewStrip = styled.div`
   margin-top: var(--space-xs);
 `;
 
+const ModeField = styled.div`
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+`;
+
+const ModeControl = styled.div`
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  height: 36px;
+  color: var(--text-secondary);
+  font-size: var(--font-size-sm);
+`;
+
+const ThemeMode = styled.span`
+  font-size: 0.6875rem;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+`;
+
+const ThemeModeControl = styled.div`
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+`;
+
+const ThemeToggle = styled.button`
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
+  min-height: 32px;
+  padding: 0 var(--space-sm);
+  color: var(--text-secondary);
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+
+  &:hover {
+    color: var(--text-primary);
+    border-color: var(--accent);
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+`;
+
+const themeModeMeta: Record<ThemePreferenceMode, { emoji: string; label: string }> = {
+  system: { emoji: "💻", label: "System" },
+  light: { emoji: "☀️", label: "Hell" },
+  dark: { emoji: "🌙", label: "Dunkel" },
+};
+
+function getNextThemeMode(mode: ThemePreferenceMode): ThemePreferenceMode {
+  return mode === "system" ? "light" : mode === "light" ? "dark" : "system";
+}
+
 /* Page */
 
 export default function AppearancePage() {
@@ -178,6 +269,7 @@ export default function AppearancePage() {
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [accent, setAccent] = useState(defaultTheme.variables["--accent"]);
+  const [colorMode, setColorMode] = useState<ThemeColorMode>(resolveThemeColorMode(defaultTheme.colorMode));
 
   function selectTheme(theme: Theme) {
     saveAndApplyTheme(theme.id);
@@ -192,7 +284,8 @@ export default function AppearancePage() {
       name: name.trim(),
       description: description.trim(),
       custom: true,
-      variables: buildVariablesFromAccent(accent),
+      colorMode,
+      variables: buildVariablesFromAccent(accent, colorMode),
     };
     addCustomTheme(theme);
     setThemes(getAllThemes());
@@ -202,6 +295,7 @@ export default function AppearancePage() {
     setName("");
     setDescription("");
     setAccent(defaultTheme.variables["--accent"]);
+    setColorMode(resolveThemeColorMode(defaultTheme.colorMode));
   }
 
   function handleDelete(id: string) {
@@ -214,11 +308,34 @@ export default function AppearancePage() {
     }
   }
 
-  const previewVars = buildVariablesFromAccent(accent);
+  function handleModeChange(theme: Theme, colorMode: ThemePreferenceMode) {
+    setThemeColorMode(theme.id, colorMode);
+    const updated = getAllThemes();
+    setThemes(updated);
+    if (activeId === theme.id) saveAndApplyTheme(theme.id);
+  }
+
+  const previewVars = buildVariablesFromAccent(accent, colorMode);
+  const activeTheme = themes.find((theme) => theme.id === activeId) ?? defaultTheme;
+  const activeThemeMode = activeTheme.colorMode ?? "system";
+  const activeThemeModeMeta = themeModeMeta[activeThemeMode];
 
   return (
     <SettingsLayout>
-      <SectionTitle>🎨 Theme</SectionTitle>
+      <PageHeader>
+        <SectionTitle>🎨 Theme</SectionTitle>
+        <ThemeModeControl>
+          <ThemeToggle
+            type="button"
+            title={`${activeThemeModeMeta.label}: klicken zum Wechseln`}
+            aria-label={`Erscheinungsbild: ${activeThemeModeMeta.label}. Klicken zum Wechseln.`}
+            onClick={() => handleModeChange(activeTheme, getNextThemeMode(activeThemeMode))}
+          >
+            <span aria-hidden>{activeThemeModeMeta.emoji}</span>
+            <ThemeMode>{activeThemeModeMeta.label}</ThemeMode>
+          </ThemeToggle>
+        </ThemeModeControl>
+      </PageHeader>
       <ThemeGrid>
         {themes.map((theme) => (
           <ThemeCard
@@ -279,6 +396,16 @@ export default function AppearancePage() {
                 onChange={(e) => setAccent(e.target.value)}
               />
             </ColorField>
+            <ModeField>
+              <FieldLabel>Appearance</FieldLabel>
+              <ModeControl>
+                <span>{colorMode === "dark" ? "Dark" : "Light"}</span>
+                <Toggle
+                  checked={colorMode === "dark"}
+                  onChange={(dark) => setColorMode(dark ? "dark" : "light")}
+                />
+              </ModeControl>
+            </ModeField>
             <PreviewStrip>
               <ColorDot $color={previewVars["--accent"]} />
               <ColorDot $color={previewVars["--accent-hover"]} />

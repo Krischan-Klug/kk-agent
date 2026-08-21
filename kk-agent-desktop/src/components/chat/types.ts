@@ -5,7 +5,7 @@ export interface ActiveToolCall {
   name: string;
   input: Record<string, unknown>;
   status: ToolExecutionStatus;
-  result?: { content: string; isError: boolean };
+  result?: { content: string; isError: boolean; metadata?: Record<string, unknown> };
   displayText?: string;
   detail?: string;
   summary?: string;
@@ -25,9 +25,11 @@ export interface TokenDisplayStats {
   input: number;
   output: number;
   reasoning: number;
+  used?: number;
 }
 
 export interface PendingPrompt {
+  purpose: "question" | "approval";
   promptId: string;
   question: string;
   choices: { key: string; label: string }[];

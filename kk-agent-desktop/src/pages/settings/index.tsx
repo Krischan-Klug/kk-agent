@@ -4,7 +4,7 @@ import { useRouter } from "next/router";
 export default function SettingsRedirect() {
   const router = useRouter();
   useEffect(() => {
-    router.replace("/settings/defaults");
+    router.replace("/settings/security");
   }, [router]);
   return null;
 }

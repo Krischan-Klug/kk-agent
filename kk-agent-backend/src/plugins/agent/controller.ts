@@ -10,6 +10,7 @@ import {
   updateAgent,
   deleteAgent,
   listSystemVariables,
+  getAgentTemplates,
 } from "./service.js";
 
 export async function doList(_req: Request, res: Response): Promise<Response> {
@@ -18,6 +19,10 @@ export async function doList(_req: Request, res: Response): Promise<Response> {
 
 export async function doListSystemVariables(_req: Request, res: Response): Promise<Response> {
   return res.json({ variables: listSystemVariables() });
+}
+
+export function doGetTemplates(_req: Request, res: Response): Response {
+  return res.json(getAgentTemplates());
 }
 
 export async function doCreate(req: Request, res: Response): Promise<Response> {

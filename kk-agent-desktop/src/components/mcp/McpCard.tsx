@@ -3,6 +3,7 @@ import type { McpListItem } from "@/types/api";
 import Card from "@/components/Card";
 import Button from "@/components/Button";
 import Input from "@/components/Input";
+import SkillIcon from "@/components/SkillIcon";
 import { ActionsRow, Section } from "@/components/PageForm";
 import { StatusDot } from "@/components/agent/AgentEditor.styled";
 import type { EditForm } from "./types";
@@ -73,6 +74,12 @@ const NameText = styled.span`
   font-weight: 600;
 `;
 
+const RuntimeNotice = styled.div`
+  color: var(--danger);
+  font-size: var(--font-size-sm);
+  overflow-wrap: anywhere;
+`;
+
 type Props = {
   mcp: McpListItem;
   instruction: string;
@@ -105,7 +112,7 @@ export default function McpCard({
   onSaveEdit,
 }: Props) {
   const handleEditToggle = editOpen ? onEditToggle : onOpenEdit;
-  const isActive = mcp.source === "system" ? mcp.active : mcp.runtime.status === "running";
+  const isActive = mcp.runtime.status === "running";
   const statusTitle = mcp.runtime.status === "unavailable"
     ? `Unavailable${mcp.runtime.error ? `: ${mcp.runtime.error}` : ""}`
     : isActive ? "Active" : "Inactive";
@@ -133,7 +140,9 @@ export default function McpCard({
               </>
             ) : (
               <>
-                <span style={{ fontSize: "1.2em" }}>{mcp.emoji || DEFAULT_MCP_EMOJI}</span>
+                <span style={{ fontSize: "1.2em", lineHeight: 1, display: "inline-flex" }}>
+                  {mcp.id === "skill" ? <SkillIcon /> : mcp.emoji || DEFAULT_MCP_EMOJI}
+                </span>
                 <NameText title={mcp.name}>{mcp.name}</NameText>
               </>
             )}
@@ -152,6 +161,9 @@ export default function McpCard({
             </Button>
           </Controls>
         </HeaderTop>
+        {mcp.runtime.status === "unavailable" && (
+          <RuntimeNotice>{mcp.runtime.error || "Unavailable"}</RuntimeNotice>
+        )}
       </Header>
 
       {editOpen && editForm && (

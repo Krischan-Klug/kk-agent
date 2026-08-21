@@ -1,6 +1,7 @@
 import type { AgentDefinition, McpListItem } from "@/types/api";
 import Badge from "@/components/Badge";
 import Button from "@/components/Button";
+import SkillIcon from "@/components/SkillIcon";
 import {
   SidebarItem,
   SidebarItemDescription,
@@ -37,7 +38,11 @@ export default function AgentList({ agents, mcps, selectedId, onSelect, onCreate
             <SidebarMeta>
               {capabilityIds.length > 0 && (
                 <Badge variant="success">
-                  {capabilityIds.map((id) => mcps.find((mcp) => mcp.id === id)?.emoji || "T").join("")}
+                  {capabilityIds.map((id) => (
+                    id === "skill"
+                      ? <SkillIcon key={id} />
+                      : <span key={id}>{mcps.find((mcp) => mcp.id === id)?.emoji || "T"}</span>
+                  ))}
                 </Badge>
               )}
             </SidebarMeta>

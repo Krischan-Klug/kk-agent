@@ -9,14 +9,19 @@ import type {
   ModelInfo,
   ProviderConfig,
   SkillDefinition,
+  SecuritySettings,
   ToolAccessScope,
 } from "@/types/api";
 import { getReasoningLevels } from "@/lib/modelCapabilities";
 import { compactLlmRequestConfig, mergeLlmRequestConfigs } from "@/lib/llmRequestConfig";
 import { getAgentModelRef, toModelRef } from "@/lib/modelRefs";
-import Button from "@/components/Button";
-import { ActionsRow, EmptyHint } from "@/components/PageForm";
-import { EditorArea } from "./AgentEditor.styled";
+import { EmptyHint } from "@/components/PageForm";
+import {
+  AgentWorkspacePanel,
+  AgentWorkspaceTab,
+  AgentWorkspaceTabs,
+  EditorArea,
+} from "./AgentEditor.styled";
 import { createCustomMode } from "./AgentEditor.helpers";
 import {
   AgentInfoSection,
@@ -36,7 +41,8 @@ type Props = {
   internalTools: McpListItem[];
   skills: SkillDefinition[];
   models: ModelInfo[];
-  defaults: AppDefaults | null;
+  templates: AppDefaults["agent"] | null;
+  securityDefaults: SecuritySettings | null;
   systemVariables: string[];
   saving: boolean;
   showSystemVariables: boolean;
@@ -46,6 +52,15 @@ type Props = {
   onDelete: () => void;
 };
 
+type AgentWorkspace = "prompts" | "tools" | "mcps" | "skills";
+
+const agentWorkspaces: Array<{ id: AgentWorkspace; label: string }> = [
+  { id: "prompts", label: "Prompts" },
+  { id: "tools", label: "Tools" },
+  { id: "mcps", label: "MCPs" },
+  { id: "skills", label: "Skills" },
+];
+
 export default function AgentEditor({
   agent,
   providers,
@@ -53,7 +68,8 @@ export default function AgentEditor({
   internalTools,
   skills,
   models,
-  defaults,
+  templates,
+  securityDefaults,
   systemVariables,
   saving,
   showSystemVariables,
@@ -63,10 +79,7 @@ export default function AgentEditor({
   onDelete,
 }: Props) {
   const [selectedModeId, setSelectedModeId] = useState<string>("edit");
-  const [expandedInternalTools, setExpandedInternalTools] = useState<Record<string, boolean>>({});
-  const [expandedMcps, setExpandedMcps] = useState<Record<string, boolean>>({});
-  const [visibleToolInstructions, setVisibleToolInstructions] = useState<Record<string, boolean>>({});
-  const [visibleMcpInstructions, setVisibleMcpInstructions] = useState<Record<string, boolean>>({});
+  const [selectedWorkspace, setSelectedWorkspace] = useState<AgentWorkspace>("prompts");
 
   if (!agent) {
     return (
@@ -89,11 +102,11 @@ export default function AgentEditor({
     : undefined;
   const reasoningLevels = getReasoningLevels(selectedModelInfo);
   const selectedModeConfig = selectedModeDefinition.config;
-  const modeTemplate = defaults?.agent.modeTemplates[selectedModeDefinition.behavior];
+  const modeTemplate = templates?.modeTemplates[selectedModeDefinition.behavior];
   const defaultModeInstruction = modeTemplate?.modeInstruction ?? "";
 
   function getPromptSectionDefault(section: keyof AgentModeConfig["promptSections"]): string {
-    return defaults?.agent.promptSections[section] ?? "";
+    return templates?.promptSections[section] ?? "";
   }
 
   function getToolInstructionFallback(toolId: string, fallback?: string): string {
@@ -104,13 +117,12 @@ export default function AgentEditor({
     return selectedModeConfig.toolInstructions[toolId] ?? getToolInstructionFallback(toolId, fallback);
   }
 
-  function getDefaultAccessScope(toolId: string): ToolAccessScope {
-    const tool = internalTools.find((entry) => entry.id === toolId);
-    return tool?.systemConfig?.accessScope === "system" ? "system" : "user";
+  function getDefaultAccessScope(): ToolAccessScope {
+    return securityDefaults?.accessScope ?? "user";
   }
 
   function getEffectiveAccessScope(toolId: string): ToolAccessScope {
-    return selectedModeConfig.toolAccessScopes[toolId] ?? getDefaultAccessScope(toolId);
+    return selectedModeConfig.toolAccessScopes[toolId] ?? getDefaultAccessScope();
   }
 
   function updateModeConfig(nextConfig: AgentModeConfig) {
@@ -144,7 +156,7 @@ export default function AgentEditor({
   }
 
   function addCustomMode() {
-    const nextMode = createCustomMode(currentAgent, defaults, selectedModeDefinition.behavior);
+    const nextMode = createCustomMode(currentAgent, templates, selectedModeDefinition.behavior);
     onChange({ ...currentAgent, modes: [...currentAgent.modes, nextMode] });
     setSelectedModeId(nextMode.id);
   }
@@ -181,82 +193,93 @@ export default function AgentEditor({
         setSelectedModeId={setSelectedModeId}
         addCustomMode={addCustomMode}
         updateReasoningConfig={updateReasoningConfig}
-        updateRequestConfig={(value) => onChange({
-          ...currentAgent,
-          llmRequestConfig: compactLlmRequestConfig(value),
-        })}
         onChange={onChange}
+        saving={saving}
+        onSave={onSave}
+        onDelete={onDelete}
       />
 
-      <ModeSettingsSection
-        currentAgent={currentAgent}
-        selectedModeDefinition={selectedModeDefinition}
-        isSelectedModeDefault={currentAgent.defaultModeId === selectedModeDefinition.id}
-        canDisableSelectedMode={!selectedModeDefinition.enabled || enabledModes.length > 1}
-        canDeleteSelectedMode={selectedModeDefinition.source === "custom" && currentAgent.modes.length > 1}
-        updateModeDefinition={updateModeDefinition}
-        updateSelectedModeBehavior={updateSelectedModeBehavior}
-        deleteCustomMode={deleteCustomMode}
-        onChange={onChange}
-      />
+      <AgentWorkspaceTabs role="tablist" aria-label="Agent-Arbeitsbereiche">
+        {agentWorkspaces.map((workspace) => (
+          <AgentWorkspaceTab
+            key={workspace.id}
+            type="button"
+            role="tab"
+            aria-selected={selectedWorkspace === workspace.id}
+            $active={selectedWorkspace === workspace.id}
+            onClick={() => setSelectedWorkspace(workspace.id)}
+          >
+            {workspace.label}
+          </AgentWorkspaceTab>
+        ))}
+      </AgentWorkspaceTabs>
 
-      <VariablesSection
-        currentAgent={currentAgent}
-        showSystemVariables={showSystemVariables}
-        systemVariables={systemVariables}
-        onToggleSystemVariables={onToggleSystemVariables}
-        onChange={onChange}
-      />
+      <AgentWorkspacePanel role="tabpanel">
+        {selectedWorkspace === "prompts" && (
+          <>
+            <VariablesSection
+              currentAgent={currentAgent}
+              showSystemVariables={showSystemVariables}
+              systemVariables={systemVariables}
+              onToggleSystemVariables={onToggleSystemVariables}
+              onChange={onChange}
+            />
+            <ModeSettingsSection
+              currentAgent={currentAgent}
+              selectedModeDefinition={selectedModeDefinition}
+              isSelectedModeDefault={currentAgent.defaultModeId === selectedModeDefinition.id}
+              canDisableSelectedMode={!selectedModeDefinition.enabled || enabledModes.length > 1}
+              canDeleteSelectedMode={selectedModeDefinition.source === "custom" && currentAgent.modes.length > 1}
+              updateModeDefinition={updateModeDefinition}
+              updateSelectedModeBehavior={updateSelectedModeBehavior}
+              deleteCustomMode={deleteCustomMode}
+              onChange={onChange}
+            />
+            <ModeInstructionSection
+              selectedModeConfig={selectedModeConfig}
+              defaultModeInstruction={defaultModeInstruction}
+              isCustomizedModeInstruction={selectedModeConfig.modeInstruction.trim() !== defaultModeInstruction.trim()}
+              updateModeConfig={updateModeConfig}
+            />
+            <PromptSectionsSection
+              selectedModeConfig={selectedModeConfig}
+              getPromptSectionDefault={getPromptSectionDefault}
+              updateModeConfig={updateModeConfig}
+            />
+          </>
+        )}
 
-      <PromptSectionsSection
-        selectedModeConfig={selectedModeConfig}
-        getPromptSectionDefault={getPromptSectionDefault}
-        updateModeConfig={updateModeConfig}
-      />
+        {selectedWorkspace === "tools" && (
+          <InternalToolsSection
+            selectedModeConfig={selectedModeConfig}
+            internalTools={internalTools}
+            mcps={mcps}
+            getEffectiveToolInstruction={getEffectiveToolInstruction}
+            getToolInstructionFallback={getToolInstructionFallback}
+            getDefaultAccessScope={getDefaultAccessScope}
+            getEffectiveAccessScope={getEffectiveAccessScope}
+            updateModeConfig={updateModeConfig}
+          />
+        )}
 
-      <ModeInstructionSection
-        selectedModeConfig={selectedModeConfig}
-        defaultModeInstruction={defaultModeInstruction}
-        isCustomizedModeInstruction={selectedModeConfig.modeInstruction.trim() !== defaultModeInstruction.trim()}
-        updateModeConfig={updateModeConfig}
-      />
+        {selectedWorkspace === "mcps" && (
+          <ExternalMcpsSection
+            selectedModeConfig={selectedModeConfig}
+            internalTools={internalTools}
+            mcps={mcps}
+            updateModeConfig={updateModeConfig}
+          />
+        )}
 
-      <InternalToolsSection
-        selectedModeConfig={selectedModeConfig}
-        internalTools={internalTools}
-        mcps={mcps}
-        expandedInternalTools={expandedInternalTools}
-        visibleToolInstructions={visibleToolInstructions}
-        setExpandedInternalTools={setExpandedInternalTools}
-        setVisibleToolInstructions={setVisibleToolInstructions}
-        getEffectiveToolInstruction={getEffectiveToolInstruction}
-        getToolInstructionFallback={getToolInstructionFallback}
-        getDefaultAccessScope={getDefaultAccessScope}
-        getEffectiveAccessScope={getEffectiveAccessScope}
-        updateModeConfig={updateModeConfig}
-      />
+        {selectedWorkspace === "skills" && (
+          <SkillsSection
+            selectedModeConfig={selectedModeConfig}
+            skills={skills}
+            updateModeConfig={updateModeConfig}
+          />
+        )}
+      </AgentWorkspacePanel>
 
-      <ExternalMcpsSection
-        selectedModeConfig={selectedModeConfig}
-        internalTools={internalTools}
-        mcps={mcps}
-        expandedMcps={expandedMcps}
-        visibleMcpInstructions={visibleMcpInstructions}
-        setExpandedMcps={setExpandedMcps}
-        setVisibleMcpInstructions={setVisibleMcpInstructions}
-        updateModeConfig={updateModeConfig}
-      />
-
-      <SkillsSection
-        selectedModeConfig={selectedModeConfig}
-        skills={skills}
-        updateModeConfig={updateModeConfig}
-      />
-
-      <ActionsRow>
-        <Button onClick={onSave} disabled={saving}>{saving ? "Saving..." : "Save"}</Button>
-        <Button variant="danger" onClick={onDelete}>Delete</Button>
-      </ActionsRow>
     </EditorArea>
   );
 }

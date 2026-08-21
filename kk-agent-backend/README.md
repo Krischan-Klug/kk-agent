@@ -143,8 +143,8 @@ Provider:
 
 Defaults:
 
-- `GET /settings/defaults`
-- `PUT /settings/defaults`
+- `GET /settings/security`
+- `PUT /settings/security`
 
 ## State
 

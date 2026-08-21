@@ -13,6 +13,7 @@ import type {
   UpdateAgentBody,
   ModelSettings,
   AppDefaults,
+  SecuritySettings,
   ProviderConfig,
   CreateProviderBody,
   UpdateProviderBody,
@@ -214,6 +215,8 @@ export const agent = {
 
   systemVariables: () => request<SystemVariablesResponse>("/agent/system-variables"),
 
+  templates: () => request<AppDefaults["agent"]>("/agent/templates"),
+
   create: (body: CreateAgentBody) =>
     request<AgentDefinition>("/agent", {
       method: "POST",
@@ -248,10 +251,10 @@ export const skills = {
 };
 
 export const settings = {
-  getDefaults: () => request<AppDefaults>("/settings/defaults"),
+  getSecurity: () => request<SecuritySettings>("/settings/security"),
 
-  updateDefaults: (body: Partial<AppDefaults>) =>
-    request<AppDefaults>("/settings/defaults", {
+  updateSecurity: (body: SecuritySettings) =>
+    request<SecuritySettings>("/settings/security", {
       method: "PUT",
       body: JSON.stringify(body),
     }),

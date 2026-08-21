@@ -1,5 +1,13 @@
 import { randomUUID } from "node:crypto";
-import type { AgentLoopState, RunEvent, RunEventKind, RunEventSeverity } from "kk-agent-contract";
+import type {
+  AgentLoopState,
+  RunErrorCategory,
+  RunEvent,
+  RunEventKind,
+  RunEventSeverity,
+  RunEventVisibility,
+  SessionContextState,
+} from "kk-agent-contract";
 import type { TranscriptMessage } from "kk-agent-contract";
 import {
   getMessageText,
@@ -9,12 +17,24 @@ import {
   repairTranscript,
 } from "kk-agent-contract";
 import type { LoopCheckpoint, LoopOptions, LoopResult, ToolRuntimeContext } from "../types.js";
+import type { UnifiedRequest } from "../../provider/lib/types.js";
 import { callProviderStream } from "../../provider/service.js";
 import { buildPrompt, getSystemVariables } from "../../systemprompt/lib/builder.js";
 import { StreamingToolExecutor } from "./tool-executor.js";
 import { getDefaults } from "../../lib/defaults.js";
 import { classifyProviderError, computeBackoffMs } from "../../provider/lib/errors.js";
 import { getErrorMessage } from "../../../lib/error.js";
+import {
+  COMPACTION_INSTRUCTIONS,
+  estimateMessagesTokens,
+  estimateTextTokens,
+  getCompactionMaxOutputTokens,
+  getCompactionReserveTokens,
+  MAX_AUTO_COMPACTION_FAILURES,
+  measureContextUsage,
+  projectContextMessages,
+  shouldCompactContext,
+} from "./context-compaction.js";
 import {
   estimateTranscriptChars,
   OUTPUT_CONTINUE_INSTRUCTION,
@@ -28,6 +48,25 @@ const MAX_OUTPUT_RECOVERY_RETRIES = 3;
 const PROMPT_SNIP_TARGET_RATIO = 0.6;
 const MAX_COMMITTED_STEPS_PER_RUN = 200;
 const MAX_TOOL_BATCHES_PER_RUN = 100;
+const IDENTICAL_TOOL_ERROR_LIMIT = 3;
+
+interface TerminalOutcome {
+  status: Exclude<LoopCheckpoint["status"], "running" | "completed">;
+  kind: Extract<RunEventKind, "run_limit" | "run_failed" | "run_aborted" | "output_limit">;
+  severity: RunEventSeverity;
+  errorCategory: RunErrorCategory;
+  code: string;
+  message: string;
+  detail?: string;
+  anchorMessageId?: string;
+}
+
+class RunFailure extends Error {
+  constructor(readonly outcome: TerminalOutcome) {
+    super(outcome.detail ?? outcome.message);
+    this.name = "RunFailure";
+  }
+}
 
 class AbortedError extends Error {
   constructor() {
@@ -102,6 +141,9 @@ async function emitRunEvent(
   input: {
     kind: RunEventKind;
     severity: RunEventSeverity;
+    visibility?: RunEventVisibility;
+    terminal?: boolean;
+    errorCategory?: RunErrorCategory;
     message: string;
     code?: string;
     detail?: string;
@@ -115,6 +157,9 @@ async function emitRunEvent(
     anchorMessageId: input.anchorMessageId ?? latestAnchorMessageId(messages, opts.userMessageId),
     kind: input.kind,
     severity: input.severity,
+    visibility: input.visibility ?? "debug",
+    terminal: input.terminal ?? false,
+    errorCategory: input.errorCategory,
     message: input.message,
     code: input.code,
     detail: input.detail?.slice(0, 4000),
@@ -123,6 +168,55 @@ async function emitRunEvent(
     createdAt: new Date().toISOString(),
   };
   await opts.onRunEvent?.(event);
+}
+
+function isProviderConfigurationError(error: unknown, status?: number): boolean {
+  const message = getErrorMessage(error).toLowerCase();
+  return status === 400
+    || status === 401
+    || status === 403
+    || status === 404
+    || message.includes("api key")
+    || message.includes("authentication")
+    || message.includes("unauthorized")
+    || message.includes("model not found")
+    || message.includes("provider config");
+}
+
+function providerRunFailure(error: unknown): RunFailure {
+  const classified = classifyProviderError(error);
+  const detail = getErrorMessage(error);
+  if (classified.kind === "prompt_too_long") {
+    return new RunFailure({
+      status: "failed",
+      kind: "run_failed",
+      severity: "error",
+      errorCategory: "limit",
+      code: "provider_context_limit_exhausted",
+      message: "The run could not continue because the model context limit was exhausted.",
+      detail,
+    });
+  }
+  if (isProviderConfigurationError(error, classified.status)) {
+    return new RunFailure({
+      status: "failed",
+      kind: "run_failed",
+      severity: "error",
+      errorCategory: "configuration",
+      code: "provider_configuration_required",
+      message: "The provider needs attention. Check its model, credentials, and configuration, then try again.",
+      detail,
+    });
+  }
+  return new RunFailure({
+    status: "failed",
+    kind: "run_failed",
+    severity: "error",
+    errorCategory: "provider_fatal",
+    code: "provider_recovery_exhausted",
+    message: "The provider could not complete the run after recovery attempts. The completed partial work was preserved.",
+    detail,
+  });
 }
 
 function buildInstructions(systemPrompt: string, runtimeContext: string, retryInstruction?: string): string {
@@ -135,16 +229,13 @@ function buildInstructions(systemPrompt: string, runtimeContext: string, retryIn
   ].filter(Boolean).join("\n\n");
 }
 
-async function runModelPass(
+function buildModelPassInput(
   opts: LoopOptions,
-  messages: TranscriptMessage[],
-  providerState: LoopOptions["providerState"],
+  runtimeContext: string,
   retryInstruction?: string,
-  runtimeContext = "",
-) {
+): { instructions: string; estimatedFixedTokens: number } {
   const modeConfig = opts.modeConfigs[opts.activeModeId];
   if (!modeConfig) throw new Error(`Missing mode config for mode "${opts.activeModeId}"`);
-
   const variables: Record<string, string> = {
     ...getSystemVariables({ CURRENT_MODEL: opts.model }),
     ...(modeConfig.runtimeVariables ?? {}),
@@ -159,6 +250,59 @@ async function runModelPass(
     variables,
     { sessionId: opts.sessionId, modeId: modeConfig.modeId, modeName: modeConfig.modePromptName },
   );
+  const instructions = buildInstructions(systemPrompt, runtimeContext, retryInstruction);
+  const estimatedFixedTokens = estimateTextTokens(instructions)
+    + estimateTextTokens(JSON.stringify(modeConfig.allTools))
+    + 64;
+  return { instructions, estimatedFixedTokens };
+}
+
+async function recordPreparedModelInput(
+  opts: LoopOptions,
+  prepared: UnifiedRequest,
+  step: number,
+  attempt: number,
+): Promise<void> {
+  if (!prepared.endpoint || !prepared.resolvedLlmRequestConfig) return;
+  await opts.onModelInput?.({
+    id: randomUUID(),
+    step,
+    attempt,
+    createdAt: new Date().toISOString(),
+    endpoint: prepared.endpoint,
+    profileId: prepared.resolvedLlmRequestConfig.profileId,
+    instructions: prepared.instructions,
+    messages: structuredClone(prepared.messages),
+    projectedContent: Object.fromEntries(
+      Object.entries(prepared.modelContentByMessageId ?? {}).map(([messageId, parts]) => [
+        messageId,
+        parts.map((part) => part.type === "text"
+          ? { type: "text" as const, text: part.text }
+          : { type: "image" as const, detail: part.detail, binaryOmitted: true as const }),
+      ]),
+    ),
+    tools: (prepared.tools ?? []).map((tool) => ({
+      name: tool.name,
+      description: tool.description,
+      inputSchema: structuredClone(tool.parameters),
+    })),
+    requestConfig: structuredClone(prepared.resolvedLlmRequestConfig),
+    providerRequestBody: structuredClone(prepared.providerRequestBody ?? {}),
+  });
+}
+
+async function runModelPass(
+  opts: LoopOptions,
+  messages: TranscriptMessage[],
+  providerState: LoopOptions["providerState"],
+  retryInstruction?: string,
+  runtimeContext = "",
+  step = 0,
+  attempt = 0,
+) {
+  const modeConfig = opts.modeConfigs[opts.activeModeId];
+  if (!modeConfig) throw new Error(`Missing mode config for mode "${opts.activeModeId}"`);
+  const modelPassInput = buildModelPassInput(opts, runtimeContext, retryInstruction);
 
   let receivedProviderStats = false;
   const streamedMessageIds = new Set<string>();
@@ -167,7 +311,7 @@ async function runModelPass(
     response = await callProviderStream({
       providerId: opts.providerId,
       model: opts.model,
-      instructions: buildInstructions(systemPrompt, runtimeContext, retryInstruction),
+      instructions: modelPassInput.instructions,
       messages: repairTranscript(messages),
       tools: modeConfig.allTools.length > 0 ? modeConfig.allTools : undefined,
       llmRequestConfig: opts.llmRequestConfig,
@@ -188,7 +332,7 @@ async function runModelPass(
         receivedProviderStats = true;
         opts.onStats?.(chunk.stats);
       }
-    });
+    }, (prepared) => recordPreparedModelInput(opts, prepared, step, attempt));
   } catch (error) {
     if (streamedMessageIds.size > 0) opts.onAssistantAttemptDiscarded?.([...streamedMessageIds]);
     throw error;
@@ -200,6 +344,40 @@ async function runModelPass(
   return response;
 }
 
+async function compactModelContext(
+  opts: LoopOptions,
+  contextMessages: TranscriptMessage[],
+  contextLimit: number,
+  step: number,
+  attempt: number,
+): Promise<string> {
+  const response = await callProviderStream({
+    providerId: opts.providerId,
+    model: opts.model,
+    instructions: COMPACTION_INSTRUCTIONS,
+    messages: repairTranscript(contextMessages),
+    llmRequestConfig: {
+      ...opts.llmRequestConfig,
+      reasoning: { effort: "none", history: "discard" },
+    },
+    maxOutputTokens: getCompactionMaxOutputTokens(contextLimit),
+    modelContentByMessageId: opts.modelContentByMessageId,
+  }, () => undefined, (prepared) => recordPreparedModelInput(opts, prepared, step, attempt));
+  const summary = getMessageText(response.message).trim();
+  if (response.finishReason === "length") throw new Error("The context summary reached its output-token limit.");
+  if (!summary) throw new Error("The model returned an empty context summary.");
+  return summary;
+}
+
+function hasEnoughNewContextToCompact(
+  contextMessages: TranscriptMessage[],
+  contextState: SessionContextState,
+  reserveTokens: number,
+): boolean {
+  if (!contextState.activeCompaction) return contextMessages.length > 0;
+  return estimateMessagesTokens(contextMessages.slice(1)) >= Math.max(1_000, Math.floor(reserveTokens / 2));
+}
+
 function createCheckpoint(input: {
   messages: TranscriptMessage[];
   status: LoopCheckpoint["status"];
@@ -207,6 +385,7 @@ function createCheckpoint(input: {
   toolContext: ToolRuntimeContext;
   providerState: LoopOptions["providerState"];
   providerDebug: LoopCheckpoint["providerDebug"];
+  contextState: SessionContextState;
 }): LoopCheckpoint {
   return {
     messages: repairTranscript(input.messages),
@@ -217,12 +396,17 @@ function createCheckpoint(input: {
     toolContext: cloneToolContext(input.toolContext),
     providerState: input.providerState,
     providerDebug: input.providerDebug,
+    contextState: structuredClone(input.contextState),
   };
 }
 
 export async function runAgentLoop(opts: LoopOptions): Promise<LoopResult> {
   const messages = repairTranscript([...opts.messages]);
-  let contextMessages = [...messages];
+  let contextState = {
+    ...structuredClone(opts.contextState),
+    consecutiveCompactionFailures: 0,
+  };
+  let contextMessages = projectContextMessages(messages, contextState);
   const state = buildLoopState(opts);
   opts.onLoopState?.({ ...state });
 
@@ -235,7 +419,11 @@ export async function runAgentLoop(opts: LoopOptions): Promise<LoopResult> {
   let transientRetries = 0;
   let providerState = opts.providerState;
   let providerDebug: LoopCheckpoint["providerDebug"];
+  let contextLimitChecks = 0;
   let toolContext = cloneToolContext(opts.toolContext ?? { values: {} });
+  let lastToolErrorSignature = "";
+  let identicalToolErrorRepeats = 0;
+  let terminalOutcome: TerminalOutcome | undefined;
   const defaults = getDefaults();
 
   let status: Exclude<LoopCheckpoint["status"], "running"> = "completed";
@@ -251,12 +439,14 @@ export async function runAgentLoop(opts: LoopOptions): Promise<LoopResult> {
           ? "tool batch limit reached"
           : undefined;
       if (safetyStopReason) {
-        await emitRunEvent(opts, messages, state, {
+        terminalOutcome = {
+          status: "stopped",
           kind: "run_limit",
           severity: "warning",
+          errorCategory: "limit",
           code: "run_safety_limit_reached",
           message: `Run stopped because its ${safetyStopReason}.`,
-        });
+        };
         status = "stopped";
         break;
       }
@@ -274,6 +464,112 @@ export async function runAgentLoop(opts: LoopOptions): Promise<LoopResult> {
         step: state.step,
         toolContext,
       }) ?? "";
+      const modelPassInput = buildModelPassInput(opts, runtimeContext, retryInstruction);
+      let effectiveContextLimit = contextState.usage?.limitTokens;
+      if (contextLimitChecks === 0) {
+        contextLimitChecks += 1;
+        try {
+          effectiveContextLimit = await opts.resolveContextLimit() ?? effectiveContextLimit;
+        } catch {
+          // A temporary model-discovery failure must not stop an otherwise usable run.
+        }
+      }
+
+      if (effectiveContextLimit) {
+        const usage = measureContextUsage({
+          messages: contextMessages,
+          limitTokens: effectiveContextLimit,
+          estimatedFixedTokens: modelPassInput.estimatedFixedTokens,
+        });
+        contextState = { ...contextState, usage };
+        const reserveTokens = getCompactionReserveTokens(effectiveContextLimit);
+        const compactable = hasEnoughNewContextToCompact(contextMessages, contextState, reserveTokens);
+        if (
+          compactable
+          && shouldCompactContext(usage.usedTokens, effectiveContextLimit)
+          && contextState.consecutiveCompactionFailures < MAX_AUTO_COMPACTION_FAILURES
+        ) {
+          try {
+            const summary = await compactModelContext(
+              opts,
+              contextMessages,
+              effectiveContextLimit,
+              state.step,
+              state.attempt,
+            );
+            const boundary = messages.at(-1);
+            if (!boundary) throw new Error("Cannot compact an empty transcript.");
+            const createdAt = new Date().toISOString();
+            contextState = {
+              consecutiveCompactionFailures: 0,
+              activeCompaction: {
+                id: randomUUID(),
+                summary,
+                throughMessageId: boundary.id,
+                beforeTokens: usage.usedTokens,
+                afterTokens: 0,
+                createdAt,
+              },
+            };
+            contextMessages = projectContextMessages(messages, contextState);
+            const compactedUsage = measureContextUsage({
+              messages: contextMessages,
+              limitTokens: effectiveContextLimit,
+              estimatedFixedTokens: modelPassInput.estimatedFixedTokens,
+              timestamp: createdAt,
+            });
+            contextState = {
+              ...contextState,
+              usage: compactedUsage,
+              activeCompaction: {
+                ...contextState.activeCompaction!,
+                afterTokens: compactedUsage.usedTokens,
+              },
+            };
+            providerState = undefined;
+            await emitRunEvent(opts, messages, state, {
+              kind: "context_compacted",
+              severity: "warning",
+              visibility: "user",
+              errorCategory: "limit",
+              code: "automatic_context_compaction",
+              message: `Context compacted from about ${usage.usedTokens.toLocaleString()} to ${compactedUsage.usedTokens.toLocaleString()} tokens.`,
+            });
+            await opts.onCheckpoint?.(createCheckpoint({
+              messages,
+              status: "running",
+              state,
+              toolContext,
+              providerState,
+              providerDebug,
+              contextState,
+            }));
+          } catch (error) {
+            const failures = contextState.consecutiveCompactionFailures + 1;
+            contextState = { ...contextState, consecutiveCompactionFailures: failures };
+            await opts.onCheckpoint?.(createCheckpoint({
+              messages,
+              status: "running",
+              state,
+              toolContext,
+              providerState,
+              providerDebug,
+              contextState,
+            }));
+            if (failures === MAX_AUTO_COMPACTION_FAILURES) {
+              await emitRunEvent(opts, messages, state, {
+                kind: "provider_notice",
+                severity: "warning",
+                visibility: "user",
+                errorCategory: "limit",
+                code: "automatic_context_compaction_failed",
+                message: "Automatic context compaction failed repeatedly. The run is continuing without it.",
+                detail: getErrorMessage(error),
+              });
+            }
+          }
+        }
+      }
 
       let response;
       try {
@@ -283,6 +579,8 @@ export async function runAgentLoop(opts: LoopOptions): Promise<LoopResult> {
           providerState,
           retryInstruction,
           runtimeContext,
+          state.step,
+          state.attempt,
         );
       } catch (error) {
         if (error instanceof AbortedError) throw error;
@@ -291,7 +589,7 @@ export async function runAgentLoop(opts: LoopOptions): Promise<LoopResult> {
           const before = estimateTranscriptChars(contextMessages);
           const target = Math.max(2000, Math.floor(before * PROMPT_SNIP_TARGET_RATIO));
           const snipped = snipOldestToolCycles(contextMessages, target);
-          if (snipped.removed === 0) throw error;
+          if (snipped.removed === 0) throw providerRunFailure(error);
           promptTooLongRetries += 1;
           contextMessages = snipped.messages;
           providerState = undefined;
@@ -299,6 +597,8 @@ export async function runAgentLoop(opts: LoopOptions): Promise<LoopResult> {
           await emitRunEvent(opts, messages, state, {
             kind: "context_compacted",
             severity: "warning",
+            visibility: "user",
+            errorCategory: "limit",
             code: "prompt_too_long",
             message: `Context limit reached. Removed ${snipped.removed} older context messages and retrying.`,
           });
@@ -313,6 +613,7 @@ export async function runAgentLoop(opts: LoopOptions): Promise<LoopResult> {
           await emitRunEvent(opts, messages, state, {
             kind: "provider_retry",
             severity: "warning",
+            errorCategory: "provider_transient",
             code: classified.kind,
             message: `Provider ${classified.kind} error. Retrying in ${Math.round(delayMs / 100) / 10}s (${transientRetries}/${TRANSIENT_RETRY_BUDGET}).`,
             detail: getErrorMessage(error),
@@ -320,7 +621,7 @@ export async function runAgentLoop(opts: LoopOptions): Promise<LoopResult> {
           await waitForRetry(delayMs, opts.abortSignal);
           continue;
         }
-        throw error;
+        throw providerRunFailure(error);
       }
 
       retryInstruction = undefined;
@@ -342,10 +643,11 @@ export async function runAgentLoop(opts: LoopOptions): Promise<LoopResult> {
         opts.onAssistantAttemptDiscarded?.([assistantMessage.id]);
         if (hasToolParseErrors && invalidToolRetries < EMPTY_RESPONSE_RETRY_BUDGET) {
           invalidToolRetries += 1;
-          retryInstruction = `${defaults.retry.invalidToolInstruction} If you call a tool, use only registered tool names and valid JSON object arguments.`;
+          retryInstruction = defaults.retry.invalidToolInstruction;
           await emitRunEvent(opts, messages, state, {
             kind: "model_retry",
             severity: "warning",
+            errorCategory: "internal",
             code: "invalid_tool_call",
             message: "Model produced an invalid tool call. Retrying the same step.",
           });
@@ -357,6 +659,7 @@ export async function runAgentLoop(opts: LoopOptions): Promise<LoopResult> {
           await emitRunEvent(opts, messages, state, {
             kind: "model_retry",
             severity: "warning",
+            errorCategory: "internal",
             code: "empty_response",
             message: "Model returned an empty response. Retrying the same step.",
           });
@@ -374,6 +677,24 @@ export async function runAgentLoop(opts: LoopOptions): Promise<LoopResult> {
       finalResponse = assistantText || finalResponse;
       providerState = response.transportState ?? providerState;
       providerDebug = response.debug ?? providerDebug;
+      if (!effectiveContextLimit && contextLimitChecks < 2) {
+        contextLimitChecks += 1;
+        try {
+          effectiveContextLimit = await opts.resolveContextLimit() ?? effectiveContextLimit;
+        } catch {
+          // Provider usage still remains valid when runtime model discovery is temporarily unavailable.
+        }
+      }
+      if (effectiveContextLimit) {
+        contextState = {
+          ...contextState,
+          usage: measureContextUsage({
+            messages: contextMessages,
+            limitTokens: effectiveContextLimit,
+            estimatedFixedTokens: modelPassInput.estimatedFixedTokens,
+          }),
+        };
+      }
       await opts.onCheckpoint?.(createCheckpoint({
         messages,
         status: "running",
@@ -381,6 +702,7 @@ export async function runAgentLoop(opts: LoopOptions): Promise<LoopResult> {
         toolContext,
         providerState,
         providerDebug,
+        contextState,
       }));
 
       if (response.finishReason === "length" && toolUses.length === 0) {
@@ -390,6 +712,7 @@ export async function runAgentLoop(opts: LoopOptions): Promise<LoopResult> {
           await emitRunEvent(opts, messages, state, {
             kind: "output_limit",
             severity: "warning",
+            errorCategory: "limit",
             code: "max_output_tokens",
             message: `Response reached the output limit. Continuing (${maxOutputRetries}/${MAX_OUTPUT_RECOVERY_RETRIES}).`,
             anchorMessageId: assistantMessage.id,
@@ -397,13 +720,15 @@ export async function runAgentLoop(opts: LoopOptions): Promise<LoopResult> {
           state.attempt = 0;
           continue;
         }
-        await emitRunEvent(opts, messages, state, {
-          kind: "output_limit",
+        terminalOutcome = {
+          status: "failed",
+          kind: "run_failed",
           severity: "error",
+          errorCategory: "limit",
           code: "max_output_retries_exhausted",
           message: "Response reached the output limit repeatedly. The run was stopped.",
           anchorMessageId: assistantMessage.id,
-        });
+        };
         status = "failed";
         break;
       }
@@ -443,17 +768,34 @@ export async function runAgentLoop(opts: LoopOptions): Promise<LoopResult> {
         contextMessages.push(...toolResults);
         state.toolBatch += 1;
 
-        for (const resultMessage of toolResults) {
-          for (const result of getToolResults(resultMessage).filter((entry) => entry.is_error)) {
-            const toolUse = toolUses.find((entry) => entry.id === result.tool_use_id);
-            await emitRunEvent(opts, messages, state, {
-              kind: "tool_error",
-              severity: "error",
-              code: "tool_execution_failed",
-              message: `${toolUse?.name ?? "Tool"} failed: ${result.content.slice(0, 1000)}`,
-              anchorMessageId: assistantMessage.id,
-            });
+        const batchResults = toolResults.flatMap((resultMessage) => getToolResults(resultMessage));
+        const batchErrors = batchResults.filter((entry) => entry.is_error);
+        for (const result of batchErrors) {
+          const toolUse = toolUses.find((entry) => entry.id === result.tool_use_id);
+          await emitRunEvent(opts, messages, state, {
+            kind: "tool_error",
+            severity: "error",
+            errorCategory: "tool",
+            code: "tool_execution_failed",
+            message: `${toolUse?.name ?? "Tool"} failed.`,
+            detail: result.content,
+            anchorMessageId: assistantMessage.id,
+          });
+        }
+
+        if (batchErrors.length > 0 && batchErrors.length === batchResults.length) {
+          const signature = batchErrors
+            .map((result) => `${toolUses.find((entry) => entry.id === result.tool_use_id)?.name ?? "Tool"}:${result.content}`)
+            .sort()
+            .join("\n---\n");
+          if (signature === lastToolErrorSignature) identicalToolErrorRepeats += 1;
+          else {
+            lastToolErrorSignature = signature;
+            identicalToolErrorRepeats = 1;
           }
+        } else {
+          lastToolErrorSignature = "";
+          identicalToolErrorRepeats = 0;
         }
 
         await opts.onCheckpoint?.(createCheckpoint({
@@ -463,7 +805,22 @@ export async function runAgentLoop(opts: LoopOptions): Promise<LoopResult> {
           toolContext,
           providerState,
           providerDebug,
+          contextState,
         }));
+        if (identicalToolErrorRepeats >= IDENTICAL_TOOL_ERROR_LIMIT) {
+          terminalOutcome = {
+            status: "stopped",
+            kind: "run_limit",
+            severity: "warning",
+            errorCategory: "limit",
+            code: "repeated_tool_error_limit",
+            message: "The run stopped after the same tool error repeated without progress.",
+            detail: batchErrors.map((result) => result.content).join("\n\n").slice(0, 4000),
+            anchorMessageId: assistantMessage.id,
+          };
+          status = "stopped";
+          break;
+        }
         throwIfAborted(opts.abortSignal);
         state.attempt = 0;
         continue;
@@ -474,23 +831,45 @@ export async function runAgentLoop(opts: LoopOptions): Promise<LoopResult> {
   } catch (error) {
     if (error instanceof AbortedError || opts.abortSignal?.aborted) {
       status = "aborted";
-      await emitRunEvent(opts, messages, state, {
+      terminalOutcome = {
+        status: "aborted",
         kind: "run_aborted",
         severity: "info",
+        errorCategory: "abort",
         code: "user_aborted",
         message: "Run aborted by the user.",
-      }).catch(() => undefined);
+      };
+    } else if (error instanceof RunFailure) {
+      status = error.outcome.status;
+      terminalOutcome = error.outcome;
     } else {
       status = "failed";
       const detail = getErrorMessage(error);
-      await emitRunEvent(opts, messages, state, {
+      terminalOutcome = {
+        status: "failed",
         kind: "run_failed",
         severity: "error",
+        errorCategory: "internal",
         code: "unhandled_run_error",
         message: "The agent run failed. The completed partial work was preserved.",
         detail,
-      }).catch(() => undefined);
+      };
     }
+  }
+
+  if (terminalOutcome) {
+    status = terminalOutcome.status;
+    await emitRunEvent(opts, messages, state, {
+      kind: terminalOutcome.kind,
+      severity: terminalOutcome.severity,
+      visibility: "user",
+      terminal: true,
+      errorCategory: terminalOutcome.errorCategory,
+      code: terminalOutcome.code,
+      message: terminalOutcome.message,
+      detail: terminalOutcome.detail,
+      anchorMessageId: terminalOutcome.anchorMessageId,
+    }).catch(() => undefined);
   }
 
   const repaired = repairTranscript(messages);
@@ -502,6 +881,7 @@ export async function runAgentLoop(opts: LoopOptions): Promise<LoopResult> {
     toolContext,
     providerState,
     providerDebug,
+    contextState,
   }));
 
   return {

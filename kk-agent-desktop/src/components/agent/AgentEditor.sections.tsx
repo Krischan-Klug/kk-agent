@@ -8,10 +8,10 @@ import type {
   ModelInfo,
   ProviderConfig,
   ReasoningEffort,
-  ReasoningHistory,
   SkillDefinition,
   ToolAccessScope,
 } from "@/types/api";
+import SkillIcon from "@/components/SkillIcon";
 import { normalizeCanonicalReasoningEffort } from "@/lib/modelCapabilities";
 import { getAgentModelRef, getModelLabel, parseModelRef, toModelRef } from "@/lib/modelRefs";
 import { toggleId } from "@/lib/idLists";
@@ -30,7 +30,6 @@ import {
   SectionTitle,
 } from "@/components/PageForm";
 import {
-  CapabilityRow,
   CheckboxRow,
   HeaderActions,
   InlineSelect,
@@ -39,18 +38,21 @@ import {
   ModeTab,
   ModeTabContent,
   ModeTabs,
+  PromptSectionField,
+  PromptSectionsGrid,
   ScopeRow,
   Select,
+  SkillCapabilityRow,
+  SkillsGrid,
+  AgentActions,
 } from "./AgentEditor.styled";
 import {
   isScopeCapableTool,
   MODE_BEHAVIORS,
   PROMPT_SECTION_META,
-  SKILL_EMOJI,
 } from "./AgentEditor.helpers";
 import { CapabilityToggleHeader, OverrideActions } from "./CapabilitySection";
 import RuntimeToolCapabilitySection from "./RuntimeToolCapabilitySection";
-import SamplingSettings from "@/components/SamplingSettings";
 
 type AgentInfoSectionProps = {
   currentAgent: AgentDefinition;
@@ -63,8 +65,10 @@ type AgentInfoSectionProps = {
   setSelectedModeId: Dispatch<SetStateAction<string>>;
   addCustomMode: () => void;
   updateReasoningConfig: (patch: NonNullable<AgentDefinition["llmRequestConfig"]>["reasoning"]) => void;
-  updateRequestConfig: (value: AgentDefinition["llmRequestConfig"]) => void;
   onChange: (agent: AgentDefinition) => void;
+  saving: boolean;
+  onSave: () => void;
+  onDelete: () => void;
 };
 
 export function AgentInfoSection({
@@ -78,8 +82,10 @@ export function AgentInfoSection({
   setSelectedModeId,
   addCustomMode,
   updateReasoningConfig,
-  updateRequestConfig,
   onChange,
+  saving,
+  onSave,
+  onDelete,
 }: AgentInfoSectionProps) {
   return (
     <Section>
@@ -161,27 +167,13 @@ export function AgentInfoSection({
                 {reasoningLevels.map((level) => <option key={level} value={level}>{level}</option>)}
               </Select>
             </FormField>
-            <FormField>
-              <FieldLabel>Reasoning History</FieldLabel>
-              <Select
-                value={currentAgent.llmRequestConfig?.reasoning?.history ?? "auto"}
-                onChange={(e) => updateReasoningConfig({
-                  history: e.target.value as ReasoningHistory,
-                })}
-              >
-                <option value="auto">Manufacturer default</option>
-                <option value="discard">Current turn only</option>
-                <option value="tool-turns">Tool turns only</option>
-                <option value="all">Preserve all</option>
-              </Select>
-            </FormField>
           </>
         )}
+        <AgentActions>
+          <Button onClick={onSave} disabled={saving}>{saving ? "Saving..." : "Save"}</Button>
+          <Button variant="danger" onClick={onDelete}>Delete</Button>
+        </AgentActions>
       </FormRow>
-      <SamplingSettings
-        value={currentAgent.llmRequestConfig}
-        onChange={updateRequestConfig}
-      />
     </Section>
   );
 }
@@ -211,7 +203,43 @@ export function ModeSettingsSection({
 }: ModeSettingsSectionProps) {
   return (
     <Section>
-      <SectionTitle>Mode Settings</SectionTitle>
+      <FormRow style={{ justifyContent: "space-between", alignItems: "center" }}>
+        <SectionTitle>Mode Settings</SectionTitle>
+        <ActionsRow>
+          <CheckboxRow>
+            <input
+              type="checkbox"
+              checked={selectedModeDefinition.enabled}
+              disabled={!canDisableSelectedMode}
+              onChange={(e) => updateModeDefinition(selectedModeDefinition.id, (mode) => ({
+                ...mode,
+                enabled: e.target.checked,
+              }))}
+            />
+            <span>Enabled</span>
+          </CheckboxRow>
+          {!isSelectedModeDefault && selectedModeDefinition.enabled && (
+            <Button
+              type="button"
+              size="sm"
+              variant="secondary"
+              onClick={() => onChange({ ...currentAgent, defaultModeId: selectedModeDefinition.id })}
+            >
+              Set as default
+            </Button>
+          )}
+          {canDeleteSelectedMode && (
+            <Button
+              type="button"
+              size="sm"
+              variant="danger"
+              onClick={() => deleteCustomMode(selectedModeDefinition.id)}
+            >
+              Delete
+            </Button>
+          )}
+        </ActionsRow>
+      </FormRow>
       <FormRow>
         <FormField $flex={1} $minWidth="220px">
           <FieldLabel>Mode Label</FieldLabel>
@@ -236,46 +264,6 @@ export function ModeSettingsSection({
             ))}
           </Select>
         </FormField>
-        <FormField $minWidth="220px">
-          <FieldLabel>Mode Status</FieldLabel>
-          <ActionsRow>
-            <CheckboxRow>
-              <input
-                type="checkbox"
-                checked={selectedModeDefinition.enabled}
-                disabled={!canDisableSelectedMode}
-                onChange={(e) => updateModeDefinition(selectedModeDefinition.id, (mode) => ({
-                  ...mode,
-                  enabled: e.target.checked,
-                }))}
-              />
-              <span>Enabled</span>
-            </CheckboxRow>
-            {!isSelectedModeDefault && selectedModeDefinition.enabled && (
-              <Button
-                type="button"
-                size="sm"
-                variant="secondary"
-                onClick={() => onChange({ ...currentAgent, defaultModeId: selectedModeDefinition.id })}
-              >
-                Set as default
-              </Button>
-            )}
-            {canDeleteSelectedMode && (
-              <Button
-                type="button"
-                size="sm"
-                variant="danger"
-                onClick={() => deleteCustomMode(selectedModeDefinition.id)}
-              >
-                Delete
-              </Button>
-            )}
-          </ActionsRow>
-          <MutedText>
-            Source: {selectedModeDefinition.source} | Id: {selectedModeDefinition.id}
-          </MutedText>
-        </FormField>
       </FormRow>
     </Section>
   );
@@ -298,13 +286,29 @@ export function VariablesSection({
 }: VariablesSectionProps) {
   return (
     <Section>
-      <SectionTitle>Variables</SectionTitle>
-      <KeyValueEditor values={currentAgent.variables} onChange={(value) => onChange({ ...currentAgent, variables: value })} />
-      <ActionsRow>
-        <Button size="sm" variant="secondary" onClick={onToggleSystemVariables}>
-          {showSystemVariables ? "Hide system variables" : "Show system variables"}
-        </Button>
-      </ActionsRow>
+      <FormRow style={{ alignItems: "center" }}>
+        <SectionTitle>Variables</SectionTitle>
+        <ActionsRow>
+          <Button
+            size="sm"
+            variant="secondary"
+            onClick={() => onChange({
+              ...currentAgent,
+              variables: { ...currentAgent.variables, [`VAR_${Object.keys(currentAgent.variables).length + 1}`]: "" },
+            })}
+          >
+            + Variable
+          </Button>
+          <Button size="sm" variant="secondary" onClick={onToggleSystemVariables}>
+            {showSystemVariables ? "Hide system variables" : "Show system variables"}
+          </Button>
+        </ActionsRow>
+      </FormRow>
+      <KeyValueEditor
+        values={currentAgent.variables}
+        onChange={(value) => onChange({ ...currentAgent, variables: value })}
+        showAddButton={false}
+      />
       {showSystemVariables && <MutedText>{systemVariables.join(", ")}</MutedText>}
     </Section>
   );
@@ -324,10 +328,11 @@ export function PromptSectionsSection({
   return (
     <Section>
       <SectionTitle>Prompt Sections</SectionTitle>
-      {PROMPT_SECTION_META.map((entry) => {
+      <PromptSectionsGrid>
+        {PROMPT_SECTION_META.map((entry) => {
         const isCustomized = selectedModeConfig.promptSections[entry.key].trim() !== getPromptSectionDefault(entry.key).trim();
         return (
-          <FormField key={entry.key}>
+          <PromptSectionField key={entry.key}>
             <LabelRow>
               <FieldLabel>{entry.label}</FieldLabel>
               {isCustomized && (
@@ -353,9 +358,10 @@ export function PromptSectionsSection({
               })}
               placeholder={getPromptSectionDefault(entry.key)}
             />
-          </FormField>
+          </PromptSectionField>
         );
-      })}
+        })}
+      </PromptSectionsGrid>
     </Section>
   );
 }
@@ -399,10 +405,6 @@ type InternalToolsSectionProps = {
   selectedModeConfig: AgentModeConfig;
   internalTools: McpListItem[];
   mcps: McpListItem[];
-  expandedInternalTools: Record<string, boolean>;
-  visibleToolInstructions: Record<string, boolean>;
-  setExpandedInternalTools: Dispatch<SetStateAction<Record<string, boolean>>>;
-  setVisibleToolInstructions: Dispatch<SetStateAction<Record<string, boolean>>>;
   getEffectiveToolInstruction: (toolId: string, fallback?: string) => string;
   getToolInstructionFallback: (toolId: string, fallback?: string) => string;
   getDefaultAccessScope: (toolId: string) => ToolAccessScope;
@@ -414,10 +416,6 @@ export function InternalToolsSection({
   selectedModeConfig,
   internalTools,
   mcps,
-  expandedInternalTools,
-  visibleToolInstructions,
-  setExpandedInternalTools,
-  setVisibleToolInstructions,
   getEffectiveToolInstruction,
   getToolInstructionFallback,
   getDefaultAccessScope,
@@ -433,10 +431,6 @@ export function InternalToolsSection({
       selectedModeConfig={selectedModeConfig}
       internalTools={internalTools}
       mcps={mcps}
-      expanded={expandedInternalTools}
-      visibleInstructions={visibleToolInstructions}
-      setExpanded={setExpandedInternalTools}
-      setVisibleInstructions={setVisibleToolInstructions}
       emojiFallback="T"
       getEffectiveInstruction={(tool) => getEffectiveToolInstruction(tool.id, tool.instruction)}
       getInstructionFallback={(tool) => getToolInstructionFallback(tool.id, tool.instruction)}
@@ -486,10 +480,6 @@ type ExternalMcpsSectionProps = {
   selectedModeConfig: AgentModeConfig;
   internalTools: McpListItem[];
   mcps: McpListItem[];
-  expandedMcps: Record<string, boolean>;
-  visibleMcpInstructions: Record<string, boolean>;
-  setExpandedMcps: Dispatch<SetStateAction<Record<string, boolean>>>;
-  setVisibleMcpInstructions: Dispatch<SetStateAction<Record<string, boolean>>>;
   updateModeConfig: (nextConfig: AgentModeConfig) => void;
 };
 
@@ -497,10 +487,6 @@ export function ExternalMcpsSection({
   selectedModeConfig,
   internalTools,
   mcps,
-  expandedMcps,
-  visibleMcpInstructions,
-  setExpandedMcps,
-  setVisibleMcpInstructions,
   updateModeConfig,
 }: ExternalMcpsSectionProps) {
   return (
@@ -512,11 +498,6 @@ export function ExternalMcpsSection({
       selectedModeConfig={selectedModeConfig}
       internalTools={internalTools}
       mcps={mcps}
-      expanded={expandedMcps}
-      visibleInstructions={visibleMcpInstructions}
-      setExpanded={setExpandedMcps}
-      setVisibleInstructions={setVisibleMcpInstructions}
-      detailsOpenLabel="Weniger"
       emojiFallback="M"
       getEffectiveInstruction={(mcp) => selectedModeConfig.mcpInstructions[mcp.id] ?? mcp.instruction ?? ""}
       getInstructionFallback={(mcp) => mcp.instruction ?? ""}
@@ -538,15 +519,16 @@ export function SkillsSection({
 }: SkillsSectionProps) {
   return (
     <Section>
-      <SectionTitle>{SKILL_EMOJI} Skills</SectionTitle>
+      <SectionTitle><SkillIcon style={{ marginRight: "var(--space-xs)", verticalAlign: "-0.1em" }} />Skills</SectionTitle>
+      <SkillsGrid>
       {skills.map((skill) => {
         const isActive = selectedModeConfig.skillIds.includes(skill.id);
 
         return (
-          <CapabilityRow key={skill.id} $active={isActive}>
+          <SkillCapabilityRow key={skill.id} $active={isActive} title={skill.path}>
             <CapabilityToggleHeader
               active={isActive}
-              emoji={SKILL_EMOJI}
+              icon={<SkillIcon />}
               name={skill.name}
               onToggle={() => {
                 updateModeConfig({
@@ -557,9 +539,10 @@ export function SkillsSection({
             />
             <MutedText>{skill.description}</MutedText>
             <MutedText>{skill.source} · {skill.path}</MutedText>
-          </CapabilityRow>
+          </SkillCapabilityRow>
         );
       })}
+      </SkillsGrid>
       {skills.length === 0 && <EmptyHint>No skills configured.</EmptyHint>}
     </Section>
   );

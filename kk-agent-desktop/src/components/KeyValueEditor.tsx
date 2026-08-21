@@ -10,6 +10,7 @@ type Props = {
   keyPlaceholder?: string;
   valuePlaceholder?: string;
   sensitiveValues?: boolean;
+  showAddButton?: boolean;
 };
 
 const SENSITIVE_KEY_PATTERN = /(token|key|secret|password)/i;
@@ -25,6 +26,7 @@ export default function KeyValueEditor({
   keyPlaceholder = "KEY",
   valuePlaceholder = "Value",
   sensitiveValues = false,
+  showAddButton = true,
 }: Props) {
   const entries = Object.entries(values);
   const [revealedKeys, setRevealedKeys] = useState<Set<string>>(() => new Set());
@@ -97,15 +99,17 @@ export default function KeyValueEditor({
           </FormRow>
         );
       })}
-      <ActionsRow>
-        <Button
-          size="sm"
-          variant="secondary"
-          onClick={() => onChange({ ...values, [getNextKey(values)]: "" })}
-        >
-          {addLabel}
-        </Button>
-      </ActionsRow>
+      {showAddButton && (
+        <ActionsRow>
+          <Button
+            size="sm"
+            variant="secondary"
+            onClick={() => onChange({ ...values, [getNextKey(values)]: "" })}
+          >
+            {addLabel}
+          </Button>
+        </ActionsRow>
+      )}
     </>
   );
 }

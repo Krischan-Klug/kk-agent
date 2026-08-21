@@ -34,7 +34,7 @@ Backend features register through a fixed, explicit initializer list. There is n
 - `/agent`: Agent editor
 - `/skills`: Skill bundles
 - `/mcp`: External user MCPs only
-- `/settings/defaults`: Global prompt- and runtime-relevant defaults
+- `/settings/security`: Global access-scope and approval defaults
 - `/settings/appearance`: Theme and UI appearance
 - `/settings/tools`: Internal tools configuration
 - `/settings/provider`: Providers and models
@@ -48,12 +48,13 @@ Backend features register through a fixed, explicit initializer list. There is n
 - Agents separate `toolIds`, `mcpIds`, and `skillIds`.
 - Sessions separate `activeToolIds`, `activeMcpIds`, and `activeSkillIds`.
 - Conversation state is one versioned `session.json` snapshot plus its asset directory; incompatible snapshots are deleted instead of migrated. Tool-owned task and memory files remain separate.
+- Automatic context compaction keeps the full transcript, persists a summary boundary and usage snapshot, triggers only from the provider's effective runtime context length, and resets provider continuation state after projection changes.
 - Task and memory state lives exclusively in the `tools` plugin.
 - Chat uploads use an internal `attachment` tool, not the normal filesystem tool.
 - Session files use one asset pipeline: transcript input refs contain only `assetId`, generated artifacts belong to runs, and binary/model projections are request-scoped.
 - `src/plugins/lib` is utility code only, not a plugin.
 - Runtime data belongs in existing `state/*.json` stores unless there is a clear architectural reason.
-- Prompt-relevant defaults must be editable in Settings.
+- Prompt templates are code-owned defaults; Security settings own the editable access-scope and approval defaults.
 - New prompt variables must be registered, populated at runtime, and visible in the Agent editor.
 - Prompt structure must stay consistent as XML.
 - Loop behavior remains configurable per agent; `simple` loops must work without forced plan/verify steps.
@@ -63,12 +64,14 @@ Backend features register through a fixed, explicit initializer list. There is n
 - Sampling defaults beyond optional user `temperature` and `top_p` overrides belong to versioned model profiles.
 - User-configurable sampling is limited to optional `temperature` and `top_p` overrides; arbitrary request-body passthrough belongs in the inference provider.
 - Internal tools are registered in the `tools` plugin, not the user MCP area.
+- Terminal resolves one stable shell profile at startup (Git Bash, then PowerShell on Windows); unavailable shells remove the tool and its instructions from runtime context.
+- Terminal `accessScope` and `approvalMode` are independent; tool settings provide defaults, sessions persist their approval mode, and effective values are fixed per run. The harness owns approval prompts, while `ask_user` is only for missing user information or decisions.
 - MCP `active` is persisted intent; runtime availability is reported separately and connection failures never stop the backend.
 - Large tool results must be truncated for model context; keep full output only where UI/debug needs it.
 - Runtime context and loaded skill instructions are request-scoped provider instructions, never transcript messages.
 - Runs persist typed events and incremental transcript checkpoints; retries advance attempts, only valid model outputs advance steps.
-- Frontend debug content stays in debug surfaces, not the main chat transcript.
-- Settings > Defaults contains only values that affect the final LLM prompt or LLM behavior.
+- Run events declare debug/user visibility and terminality; frontend debug content stays in debug surfaces, not the main chat transcript.
+- Debug exposes the exact request-scoped model input and conditional harness instructions read-only.
 
 ## Maintenance
 - Keep this file short and up to date.

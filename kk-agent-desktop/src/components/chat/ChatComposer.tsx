@@ -2,7 +2,7 @@ import { useRef, useState, useCallback, useLayoutEffect } from "react";
 import styled from "styled-components";
 import type {
   AgentDefinition,
-  AgentLoopState,
+  ApprovalMode,
   TaskItem,
 } from "@/types/api";
 import type { PendingAsset } from "@/hooks/useAssets";
@@ -119,6 +119,26 @@ const TasksList = styled.div`
   display: flex;
   flex-direction: column;
   gap: 6px;
+  max-height: 234px;
+  overflow-y: auto;
+  padding-right: 4px;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
+
+  &::-webkit-scrollbar {
+    width: 6px;
+  }
+
+  &::-webkit-scrollbar-thumb {
+    background: var(--border);
+    border-radius: 999px;
+  }
+`;
+
+const CompletedTasksDivider = styled.div`
+  height: 1px;
+  margin: 4px 0;
+  background: var(--border);
 `;
 
 const TaskRow = styled.div<{ $status: TaskItem["status"] }>`
@@ -127,6 +147,7 @@ const TaskRow = styled.div<{ $status: TaskItem["status"] }>`
   align-items: start;
   gap: 8px;
   padding: 4px 0;
+  min-height: 42px;
   color: ${({ $status }) =>
     $status === "completed" ? "var(--text-muted)" : "var(--text-primary)"};
 `;
@@ -152,6 +173,9 @@ const TaskText = styled.span<{ $status: TaskItem["status"] }>`
   line-height: 1.35;
   text-decoration: ${(p) =>
     p.$status === "completed" ? "line-through" : "none"};
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 `;
 
 const TaskNotes = styled.span`
@@ -160,6 +184,9 @@ const TaskNotes = styled.span`
   font-size: 11px;
   line-height: 1.35;
   color: var(--text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 `;
 
 const TasksButtonEmoji = styled.span`
@@ -263,7 +290,7 @@ const IconButton = styled.button`
 
 const SendIconButton = styled(IconButton)`
   background: var(--accent);
-  color: var(--bg-base);
+  color: var(--accent-foreground);
 `;
 
 const AttachIconButton = styled(IconButton)`
@@ -385,16 +412,17 @@ type Props = {
   reasoningValue?: string;
   reasoningOptions: SelectMenuOption[];
   activeModeId: string;
+  approvalMode: ApprovalMode;
   maxCtx: number;
   tokenStats: TokenDisplayStats | null;
   tasks: TaskItem[];
-  loopState: AgentLoopState | null;
   pendingAssets: PendingAsset[];
   onInputChange: (value: string) => void;
   onKeyDown: (e: React.KeyboardEvent<HTMLTextAreaElement>) => void;
   onAgentSwitch: (agentId: string) => void;
   onReasoningSelect: (effort: string) => void;
   onModeSwitch: (modeId: string) => void;
+  onApprovalModeSwitch: (approvalMode: ApprovalMode) => void;
   onSend: () => void;
   onAbort?: () => void;
   onFilesSelected: (files: FileList) => void;
@@ -409,6 +437,7 @@ export default function ChatComposer({
   reasoningValue,
   reasoningOptions,
   activeModeId,
+  approvalMode,
   maxCtx,
   tokenStats,
   tasks,
@@ -418,6 +447,7 @@ export default function ChatComposer({
   onAgentSwitch,
   onReasoningSelect,
   onModeSwitch,
+  onApprovalModeSwitch,
   onSend,
   onAbort,
   onFilesSelected,
@@ -428,6 +458,9 @@ export default function ChatComposer({
   const [dragOver, setDragOver] = useState(false);
   const [tasksOpen, setTasksOpen] = useState(false);
   const currentAgent = agents.find((agent) => agent.id === currentAgentId);
+  const openTasks = tasks.filter((task) => task.status !== "completed");
+  const completedTasks = tasks.filter((task) => task.status === "completed");
+  const usedContextTokens = tokenStats?.used ?? ((tokenStats?.input ?? 0) + (tokenStats?.output ?? 0));
   const modeOptions = (currentAgent?.modes ?? [])
     .filter((mode) => mode.enabled)
     .map((mode) => ({
@@ -501,7 +534,25 @@ export default function ChatComposer({
               </TasksHeader>
               {tasks.length > 0 && (
                 <TasksList>
-                  {tasks.map((task) => (
+                  {openTasks.map((task) => (
+                    <TaskRow
+                      key={task.id}
+                      $status={task.status}
+                      title={
+                        task.notes
+                          ? `${task.title} - ${task.notes}`
+                          : task.title
+                      }
+                    >
+                      <TaskStatusDot $status={task.status} />
+                      <div>
+                        <TaskText $status={task.status}>{task.title}</TaskText>
+                        {task.notes && <TaskNotes>{task.notes}</TaskNotes>}
+                      </div>
+                    </TaskRow>
+                  ))}
+                  {openTasks.length > 0 && completedTasks.length > 0 && <CompletedTasksDivider />}
+                  {completedTasks.map((task) => (
                     <TaskRow
                       key={task.id}
                       $status={task.status}
@@ -557,6 +608,18 @@ export default function ChatComposer({
                     variant="neutral"
                   />
                 </ControlGroup>
+                <ControlGroup>
+                  <SelectMenu
+                    value={approvalMode}
+                    options={[
+                      { value: "ask_approval", label: "Ask approval" },
+                      { value: "full_access", label: "Full access" },
+                    ]}
+                    onSelect={(value) => onApprovalModeSwitch(value as ApprovalMode)}
+                    direction="up"
+                    variant={approvalMode === "full_access" ? "warning" : "neutral"}
+                  />
+                </ControlGroup>
                 {agents.length > 0 && (
                   <SelectMenu
                     value={currentAgentId}
@@ -600,11 +663,11 @@ export default function ChatComposer({
                 )}
                 {maxCtx > 0 && tokenStats && (
                   <ContextIndicator
-                    title={`Input: ${tokenStats.input.toLocaleString()} | Output: ${tokenStats.output.toLocaleString()} | Reasoning: ${tokenStats.reasoning.toLocaleString()}`}
+                    title={`Context: ${usedContextTokens.toLocaleString()} / ${maxCtx.toLocaleString()} | Input: ${tokenStats.input.toLocaleString()} | Output: ${tokenStats.output.toLocaleString()} | Reasoning: ${tokenStats.reasoning.toLocaleString()}`}
                   >
-                    <ContextRing used={tokenStats.input} max={maxCtx} />
+                    <ContextRing used={usedContextTokens} max={maxCtx} />
                     <span>
-                      {formatTokens(tokenStats.input)} / {formatTokens(maxCtx)}
+                      {formatTokens(usedContextTokens)} / {formatTokens(maxCtx)}
                     </span>
                   </ContextIndicator>
                 )}

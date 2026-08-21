@@ -76,6 +76,13 @@ export function getToolCardMetadataSummary(toolCall: ActiveToolCall): string | u
     return url ? `Fetch ${url}` : undefined;
   }
 
+  if (name === "Terminal" && meta) {
+    const cwd = String(meta.cwd ?? "");
+    const version = String(meta.shellVersion ?? "");
+    const elevated = meta.elevated === true ? "elevated" : "normal";
+    return [cwd, version && `version ${version}`, elevated].filter(Boolean).join(" - ") || undefined;
+  }
+
   return undefined;
 }
 

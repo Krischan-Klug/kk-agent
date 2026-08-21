@@ -42,7 +42,7 @@ const Trigger = styled.button<{ $variant: TriggerVariant; $optionColor?: string 
         ? `border-color: ${p.$optionColor}; background: var(--bg-hover); color: ${p.$optionColor};`
         : p.$variant === "neutral"
         ? "border-color: var(--accent);"
-        : "background: var(--accent); color: var(--bg-base); border-color: var(--accent);"}
+        : "background: var(--accent); color: var(--accent-foreground); border-color: var(--accent);"}
   }
 
   &::after {

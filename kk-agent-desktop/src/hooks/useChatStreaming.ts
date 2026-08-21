@@ -235,11 +235,11 @@ function buildOptimisticUserMessage(message: string, assets: PendingAsset[]): Se
   };
 }
 
-function getToolResult(message: SessionMessage | undefined): { content: string; isError: boolean } | undefined {
+function getToolResult(message: SessionMessage | undefined): { content: string; isError: boolean; metadata?: Record<string, unknown> } | undefined {
   if (!message) return undefined;
   const block = message.content.find((entry): entry is TranscriptToolResultBlock => entry.type === "tool_result");
   if (!block) return undefined;
-  return { content: block.content, isError: block.is_error === true };
+  return { content: block.content, isError: block.is_error === true, metadata: block.metadata };
 }
 
 function createTransportRunEvent(session: SessionState, message: string): RunEvent {
@@ -250,8 +250,12 @@ function createTransportRunEvent(session: SessionState, message: string): RunEve
     anchorMessageId: session.messages.at(-1)?.id ?? session.id,
     kind: "run_failed",
     severity: "error",
+    visibility: "user",
+    terminal: true,
+    errorCategory: "internal",
     code: "transport_error",
-    message,
+    message: "The connection to the agent was interrupted. The last saved state was restored.",
+    detail: message,
     step: 0,
     attempt: 0,
     createdAt: new Date().toISOString(),
@@ -327,6 +331,7 @@ export function useChatStreaming({
     const optimisticAssets = pendingAssets;
     const assetIds = optimisticAssets.map((asset) => asset.id);
     const previousMessageIds = new Set(session.messages.map((entry) => entry.id));
+    const previousRunIds = new Set(session.runs.map((entry) => entry.id));
     let completed = false;
     let transportError: string | undefined;
 
@@ -407,14 +412,24 @@ export function useChatStreaming({
             if (event.source === "provider") {
               updateChatStreamSnapshot(session.id, (previous) => ({
                 ...previous,
-                tokenStats: { input: event.inputTokens, output: event.outputTokens, reasoning: event.reasoningTokens },
+                tokenStats: {
+                  input: event.inputTokens,
+                  output: event.outputTokens,
+                  reasoning: event.reasoningTokens,
+                  used: event.inputTokens + event.outputTokens,
+                },
               }));
             }
             break;
           case "user_prompt":
             updateChatStreamSnapshot(session.id, (previous) => ({
               ...previous,
-              pendingPrompt: { promptId: event.promptId, question: event.question, choices: event.choices },
+              pendingPrompt: {
+                purpose: event.purpose,
+                promptId: event.promptId,
+                question: event.question,
+                choices: event.choices,
+              },
             }));
             break;
           case "done":
@@ -457,7 +472,11 @@ export function useChatStreaming({
         ...previous,
         sending: false,
         streaming: false,
-        streamRunEvents: [...previous.streamRunEvents, createTransportRunEvent(currentSession, errorMessage)],
+        streamRunEvents: currentSession.runs
+          .filter((run) => !previousRunIds.has(run.id))
+          .some((run) => run.events.some((event) => event.terminal))
+          ? previous.streamRunEvents
+          : [...previous.streamRunEvents, createTransportRunEvent(currentSession, errorMessage)],
       }));
     } finally {
       if (!completed) {

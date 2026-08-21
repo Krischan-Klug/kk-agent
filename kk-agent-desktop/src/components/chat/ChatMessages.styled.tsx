@@ -33,8 +33,14 @@ export const SystemNotice = styled.div<{ $severity: "info" | "warning" | "error"
   padding: var(--space-sm) var(--space-md);
   border: 1px solid ${(p) => p.$severity === "error" ? "var(--danger)" : p.$severity === "warning" ? "var(--warning)" : "var(--border)"};
   border-radius: var(--radius-md);
-  background: var(--bg-elevated);
-  color: ${(p) => p.$severity === "error" ? "var(--danger)" : "var(--text-secondary)"};
+  background: ${(p) => p.$severity === "warning"
+    ? "color-mix(in srgb, var(--warning) 10%, var(--bg-elevated))"
+    : "var(--bg-elevated)"};
+  color: ${(p) => p.$severity === "error"
+    ? "var(--danger)"
+    : p.$severity === "warning"
+      ? "color-mix(in srgb, var(--warning) 78%, var(--text-primary))"
+      : "var(--text-secondary)"};
   font-size: var(--font-size-sm);
   text-align: center;
 `;
@@ -64,19 +70,6 @@ export const RoleLabel = styled.div`
   align-items: center;
   gap: var(--space-sm);
   width: 100%;
-`;
-
-export const RoleMetaGroup = styled.button`
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-sm);
-  margin-left: auto;
-  padding: 0;
-  border: 0;
-  background: transparent;
-  cursor: pointer;
-  color: inherit;
-  font: inherit;
 `;
 
 const CollapsibleCard = styled.details`
@@ -259,14 +252,23 @@ export const StreamingDot = styled.span`
   }
 `;
 
-export const PromptCard = styled.div`
+export const PromptCard = styled.div<{ $purpose: "question" | "approval" }>`
   align-self: center;
   max-width: 720px;
   width: 100%;
   padding: var(--space-md);
-  border: 2px solid var(--accent);
+  border: 2px solid ${(p) => p.$purpose === "approval" ? "var(--warning)" : "var(--accent)"};
   border-radius: var(--radius-md);
   background: var(--bg-elevated);
+`;
+
+export const PromptKind = styled.div`
+  margin-bottom: var(--space-xs);
+  color: var(--text-secondary);
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
 `;
 
 export const PromptQuestion = styled.div`
@@ -326,57 +328,8 @@ export const CustomInput = styled.input`
   }
 `;
 
-export const StepPill = styled.span`
-  padding: 1px var(--space-sm);
-  background: var(--accent-muted);
-  color: var(--accent);
-  border-radius: var(--radius-sm);
-  font-size: 11px;
-  font-weight: 500;
-  font-family: var(--font-mono);
-  flex-shrink: 0;
-`;
-
-export const PhasePill = styled.span`
-  padding: 1px var(--space-sm);
-  background: var(--bg-elevated);
-  color: var(--text-secondary);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  font-size: 11px;
-  font-weight: 500;
-  font-family: var(--font-mono);
-  flex-shrink: 0;
-`;
-
 export const LoadingWrap = styled.div`
   align-self: flex-start;
-`;
-
-export const StepSection = styled.div`
-  padding-left: var(--space-md);
-  border-left: 2px solid var(--border);
-  margin-bottom: var(--space-sm);
-
-  &:last-child {
-    margin-bottom: var(--space-sm);
-  }
-`;
-
-export const StepHeader = styled.div`
-  display: flex;
-  align-items: center;
-  gap: var(--space-sm);
-  margin-bottom: var(--space-xs);
-  font-size: var(--font-size-sm);
-  color: var(--text-muted);
-`;
-
-export const ExpandArrow = styled.span<{ $expanded: boolean }>`
-  margin-left: auto;
-  font-size: 10px;
-  transition: transform 0.15s;
-  transform: rotate(${(p) => (p.$expanded ? "90deg" : "0deg")});
 `;
 
 export const MessageFooter = styled.div`

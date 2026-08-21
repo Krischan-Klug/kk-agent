@@ -1,4 +1,6 @@
-const READ_ONLY_COMMAND_PREFIXES = [
+import type { TerminalShellDialect } from "./shell-profile.js";
+
+const COMMON_READ_ONLY_COMMAND_PREFIXES = [
   "pwd",
   "ls",
   "dir",
@@ -22,18 +24,25 @@ const READ_ONLY_COMMAND_PREFIXES = [
   "git rev-parse",
   "git ls-files",
   "git grep",
-  "get-childitem",
-  "get-content",
-  "select-string",
-  "test-path",
-  "get-item",
-  "resolve-path",
   "node --version",
   "npm -v",
   "pnpm -v",
   "yarn -v",
   "python --version",
   "python -V",
+];
+
+const POWERSHELL_READ_ONLY_COMMAND_PREFIXES = [
+  "get-childitem",
+  "get-content",
+  "select-string",
+  "test-path",
+  "get-item",
+  "resolve-path",
+  "get-location",
+  "get-filehash",
+  "get-process",
+  "get-service",
 ];
 
 const SEMANTIC_NEUTRAL_COMMAND_PREFIXES = [
@@ -55,6 +64,7 @@ const READ_ONLY_BLOCK_PATTERNS = [
 ];
 
 const DESTRUCTIVE_PATTERNS = [
+  /\b(remove-item|clear-content|move-item|rename-item)\b/,
   /\brm\b/,
   /\bdel\b/,
   /\berase\b/,
@@ -77,9 +87,9 @@ function stripSafeStderrRedirection(command: string): string {
     .replace(/\s2>>?\s*\/dev\/null\b/gi, "");
 }
 
-function splitCommandSegments(command: string): string[] {
+function splitCommandSegments(command: string, dialect: TerminalShellDialect): string[] {
   return command
-    .split(/\s*(?:\|\||&&|\||;)\s*/g)
+    .split(dialect === "powershell" ? /\s*(?:\||;)\s*/g : /\s*(?:\|\||&&|\||;)\s*/g)
     .map((part) => part.trim())
     .filter((part) => part.length > 0);
 }
@@ -88,7 +98,7 @@ function containsUnsupportedRedirection(command: string): boolean {
   return /(^|[^\d])>>?|<</.test(command) || /\s[01]>>?/.test(command) || /\s<\s*/.test(command);
 }
 
-function isReadOnlyCommandSegment(segment: string): boolean {
+function isReadOnlyCommandSegment(segment: string, dialect: TerminalShellDialect): boolean {
   const normalized = normalizeShellCommand(stripSafeStderrRedirection(segment));
   const lower = normalized.toLowerCase();
   if (!lower) return false;
@@ -97,36 +107,22 @@ function isReadOnlyCommandSegment(segment: string): boolean {
   if (SEMANTIC_NEUTRAL_COMMAND_PREFIXES.some((prefix) => lower === prefix || lower.startsWith(`${prefix} `))) {
     return true;
   }
-  return READ_ONLY_COMMAND_PREFIXES.some((prefix) => lower === prefix || lower.startsWith(`${prefix} `));
+  const prefixes = dialect === "powershell"
+    ? [...COMMON_READ_ONLY_COMMAND_PREFIXES, ...POWERSHELL_READ_ONLY_COMMAND_PREFIXES]
+    : COMMON_READ_ONLY_COMMAND_PREFIXES;
+  return prefixes.some((prefix) => lower === prefix || lower.startsWith(`${prefix} `));
 }
 
-export function isReadOnlyShellCommand(command: string): boolean {
+export function isReadOnlyShellCommand(command: string, dialect: TerminalShellDialect = "posix"): boolean {
   const normalized = normalizeShellCommand(command);
   const lower = normalized.toLowerCase();
   if (!lower) return false;
-  const segments = splitCommandSegments(lower);
+  const segments = splitCommandSegments(lower, dialect);
   if (segments.length === 0) return false;
-  return segments.every((segment) => isReadOnlyCommandSegment(segment));
+  return segments.every((segment) => isReadOnlyCommandSegment(segment, dialect));
 }
 
 export function isDestructiveShellCommand(command: string): boolean {
   const normalized = normalizeShellCommand(command).toLowerCase();
   return DESTRUCTIVE_PATTERNS.some((pattern) => pattern.test(normalized));
-}
-
-export function getShellPermissionPrompt(command: string): {
-  question: string;
-  choices: { key: string; label: string }[];
-  allowKeys: string[];
-  deniedMessage: string;
-} {
-  return {
-    question: `Der Befehl aendert wahrscheinlich den lokalen Zustand. Wirklich ausfuehren?\n\n${command}`,
-    choices: [
-      { key: "allow_once", label: "Einmal erlauben" },
-      { key: "deny", label: "Abbrechen" },
-    ],
-    allowKeys: ["allow_once"],
-    deniedMessage: "The shell command was rejected by the user.",
-  };
 }

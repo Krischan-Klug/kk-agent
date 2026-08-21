@@ -24,9 +24,9 @@ const Trigger = styled.button<{ $variant: TriggerVariant; $optionColor?: string 
   padding: 2px var(--space-sm);
   background: var(--bg-surface);
   color: var(--text-primary);
-  border: 1px solid ${(p) =>
-    p.$optionColor ??
-    (p.$variant === "warning" ? "var(--warning)" : p.$variant === "info" ? "var(--info)" : p.$variant === "neutral" ? "var(--border)" : "var(--accent)")};
+  border: 1px solid ${(p) => p.$optionColor
+    ? `color-mix(in srgb, ${p.$optionColor} 58%, var(--border))`
+    : p.$variant === "warning" ? "var(--warning)" : p.$variant === "info" ? "var(--info)" : p.$variant === "neutral" ? "var(--border)" : "var(--accent)"};
   border-radius: var(--radius-sm);
   font-size: var(--font-size-sm);
   font-weight: 500;
@@ -34,16 +34,10 @@ const Trigger = styled.button<{ $variant: TriggerVariant; $optionColor?: string 
   white-space: nowrap;
 
   &:hover {
-    ${(p) =>
-      p.$optionColor
-        ? `border-color: ${p.$optionColor}; background: var(--bg-hover);`
-        : p.$variant === "neutral"
-        ? "border-color: var(--accent);"
-        : p.$variant === "info"
-        ? "background: var(--bg-hover); border-color: var(--info);"
-        : p.$variant === "warning"
-        ? "background: var(--bg-hover); border-color: var(--warning);"
-        : "background: var(--bg-hover); border-color: var(--accent);"}
+    background: var(--bg-hover);
+    border-color: ${(p) => p.$optionColor
+      ? `color-mix(in srgb, ${p.$optionColor} 72%, var(--border))`
+      : "var(--border-focus)"};
   }
 
   &::after {
@@ -67,18 +61,16 @@ const Dropdown = styled.div<{ $direction: Direction; $align: Align; $minWidth?: 
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
 `;
 
-const Option = styled.button<{ $active: boolean; $mono?: boolean; $color?: string }>`
+const Option = styled.button<{ $active: boolean; $mono?: boolean }>`
   display: flex;
   flex-direction: column;
   align-items: flex-start;
   width: calc(100% - 4px);
   margin: 2px;
   padding: 2px var(--space-sm);
-  background: ${(p) => p.$active
-    ? p.$color ? `color-mix(in srgb, ${p.$color} 14%, transparent)` : "var(--accent-muted)"
-    : "transparent"};
+  background: ${(p) => p.$active ? "var(--bg-hover)" : "transparent"};
   color: var(--text-primary);
-  border: 1px solid ${(p) => p.$color ?? "transparent"};
+  border: 1px solid transparent;
   border-radius: var(--radius-sm);
   cursor: pointer;
   font-size: var(--font-size-sm);
@@ -86,14 +78,15 @@ const Option = styled.button<{ $active: boolean; $mono?: boolean; $color?: strin
   font-family: ${(p) => (p.$mono ? "var(--font-mono)" : "inherit")};
 
   &:hover {
-    background: ${(p) => p.$active && p.$color
-      ? `color-mix(in srgb, ${p.$color} 20%, transparent)`
-      : "var(--bg-hover)"};
+    background: var(--bg-hover);
   }
 `;
 
-const OptionTitle = styled.span<{ $active: boolean }>`
+const OptionTitle = styled.span<{ $active: boolean; $color?: string }>`
   font-weight: 500;
+  color: ${(p) => p.$color
+    ? `color-mix(in srgb, ${p.$color} 72%, var(--text-primary))`
+    : "inherit"};
 
   &::after {
     content: "${(p) => (p.$active ? " ✓" : "")}";
@@ -146,13 +139,12 @@ export default function SelectMenu({
               type="button"
               $active={option.value === value}
               $mono={mono}
-              $color={option.color}
               onClick={() => {
                 onSelect(option.value);
                 close();
               }}
             >
-              <OptionTitle $active={option.value === value}>
+              <OptionTitle $active={option.value === value} $color={option.color}>
                 {option.label}
               </OptionTitle>
               {option.description && <OptionDescription>{option.description}</OptionDescription>}

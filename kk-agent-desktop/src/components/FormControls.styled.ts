@@ -56,23 +56,77 @@ export const ModeTabs = styled.div`
   flex-wrap: wrap;
 `;
 
-export const ModeTab = styled.button<{ $active: boolean; $enabled?: boolean; $variant?: "info" | "warning"; $color?: string }>`
+export const ModeTab = styled.button<{ $active: boolean; $enabled?: boolean; $variant?: "accent" | "info" | "warning"; $color?: string }>`
   padding: 2px var(--space-sm);
-  background: ${({ $active, $enabled = true, $variant = "warning", $color }) => !$enabled
+  background: ${({ $active, $enabled = true, $variant = "accent", $color }) => !$enabled
     ? "var(--bg-surface)"
     : $active
-    ? `color-mix(in srgb, ${$color ?? `var(--${$variant})`} 14%, transparent)`
+    ? `color-mix(in srgb, ${$color ?? `var(--${$variant})`} 8%, transparent)`
     : "var(--bg-surface)"};
   color: ${({ $enabled = true }) => $enabled ? "var(--text-primary)" : "var(--text-muted)"};
-  border: 1px solid ${({ $enabled = true, $variant = "warning", $color }) => $enabled ? ($color ?? `var(--${$variant})`) : "var(--border)"};
+  border: 1px solid ${({ $enabled = true, $variant = "accent", $color }) => $enabled
+    ? `color-mix(in srgb, ${$color ?? `var(--${$variant})`} 58%, var(--border))`
+    : "var(--border)"};
   border-radius: var(--radius-sm);
   font-size: var(--font-size-sm);
   cursor: pointer;
-  opacity: ${({ $enabled = true }) => $enabled ? 1 : 0.65};
+  opacity: ${({ $enabled = true }) => $enabled ? 1 : 0.6};
 
-  &:hover {
-    background: ${({ $enabled = true, $variant = "warning", $color }) => $enabled
-      ? `color-mix(in srgb, ${$color ?? `var(--${$variant})`} 20%, transparent)`
+  &:hover:not(:disabled) {
+    background: ${({ $enabled = true, $variant = "accent", $color }) => $enabled
+      ? `color-mix(in srgb, ${$color ?? `var(--${$variant})`} 12%, transparent)`
       : "var(--bg-hover)"};
   }
+`;
+
+export const ToggleSwitch = styled.button<{ $active: boolean }>`
+  width: 32px;
+  height: 18px;
+  flex: 0 0 auto;
+  position: relative;
+  padding: 0;
+  background: ${({ $active }) => $active
+    ? "color-mix(in srgb, var(--accent) 24%, var(--bg-elevated))"
+    : "var(--bg-elevated)"};
+  border: 1px solid ${({ $active }) => $active
+    ? "color-mix(in srgb, var(--accent) 62%, var(--border))"
+    : "var(--border)"};
+  border-radius: 999px;
+  cursor: pointer;
+  transition: background 120ms ease, border-color 120ms ease;
+
+  &::after {
+    content: "";
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background: var(--text-secondary);
+    transform: translateX(${({ $active }) => ($active ? "14px" : "0")});
+    transition: transform 120ms ease, background 120ms ease;
+  }
+
+  &:hover:not(:disabled) {
+    border-color: var(--accent);
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+
+  &:disabled {
+    cursor: not-allowed;
+    opacity: 0.5;
+  }
+`;
+
+export const ToggleLabel = styled.label`
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
+  color: var(--text-secondary);
+  font-size: var(--font-size-sm);
 `;

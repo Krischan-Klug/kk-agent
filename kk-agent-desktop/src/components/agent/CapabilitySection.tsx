@@ -3,7 +3,6 @@ import type { ReactNode } from "react";
 import {
   CapabilityHeader,
   CapabilityIdentity,
-  CapabilityToggle,
   ExpandButton,
   HeaderActions,
   IconActionButton,
@@ -12,6 +11,7 @@ import {
   OverrideMark,
   StatusDot,
   ToolName,
+  ToggleSwitch,
 } from "./AgentEditor.styled";
 import { OVERRIDE_EMOJI, RESET_EMOJI } from "./AgentEditor.helpers";
 
@@ -60,7 +60,7 @@ export function CapabilityToggleHeader({
   return (
     <CapabilityHeader>
       <CapabilityIdentity>
-        <CapabilityToggle
+        <ToggleSwitch
           type="button"
           $active={active}
           role="switch"
@@ -133,7 +133,7 @@ export function NestedCapabilityToolList({
         const active = activeNames.has(tool.name);
         return (
           <NestedToolCard key={tool.name} $active title={tool.description}>
-            <CapabilityToggle
+            <ToggleSwitch
               type="button"
               $active={active}
               role="switch"

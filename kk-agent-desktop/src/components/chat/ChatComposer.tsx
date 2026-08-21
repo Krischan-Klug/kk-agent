@@ -602,6 +602,19 @@ export default function ChatComposer({
             />
             <ComposerFooter>
               <ComposerMeta>
+                {agents.length > 0 && (
+                  <SelectMenu
+                    value={currentAgentId}
+                    direction="up"
+                    minWidth="220px"
+                    options={agents.map((agent) => ({
+                      value: agent.id,
+                      label: agent.name,
+                      description: agent.description || undefined,
+                    }))}
+                    onSelect={onAgentSwitch}
+                  />
+                )}
                 <ControlGroup>
                   <SelectMenu
                     value={activeModeId}
@@ -625,19 +638,6 @@ export default function ChatComposer({
                     variant={approvalMode === "full_access" ? "warning" : "info"}
                   />
                 </ControlGroup>
-                {agents.length > 0 && (
-                  <SelectMenu
-                    value={currentAgentId}
-                    direction="up"
-                    minWidth="220px"
-                    options={agents.map((agent) => ({
-                      value: agent.id,
-                      label: agent.name,
-                      description: agent.description || undefined,
-                    }))}
-                    onSelect={onAgentSwitch}
-                  />
-                )}
                 {reasoningValue && reasoningOptions.length > 0 && (
                   <SelectMenu
                     value={reasoningValue}

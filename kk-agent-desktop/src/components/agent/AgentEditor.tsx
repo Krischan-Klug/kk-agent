@@ -18,9 +18,9 @@ import { getAgentModelRef, toModelRef } from "@/lib/modelRefs";
 import { EmptyHint } from "@/components/PageForm";
 import {
   AgentWorkspacePanel,
-  AgentWorkspaceTab,
   AgentWorkspaceTabs,
   EditorArea,
+  ModeTab,
 } from "./AgentEditor.styled";
 import { createCustomMode } from "./AgentEditor.helpers";
 import {
@@ -201,16 +201,17 @@ export default function AgentEditor({
 
       <AgentWorkspaceTabs role="tablist" aria-label="Agent-Arbeitsbereiche">
         {agentWorkspaces.map((workspace) => (
-          <AgentWorkspaceTab
+          <ModeTab
             key={workspace.id}
             type="button"
             role="tab"
             aria-selected={selectedWorkspace === workspace.id}
             $active={selectedWorkspace === workspace.id}
+            $variant="accent"
             onClick={() => setSelectedWorkspace(workspace.id)}
           >
             {workspace.label}
-          </AgentWorkspaceTab>
+          </ModeTab>
         ))}
       </AgentWorkspaceTabs>
 

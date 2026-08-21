@@ -30,7 +30,6 @@ import {
   SectionTitle,
 } from "@/components/PageForm";
 import {
-  CheckboxRow,
   HeaderActions,
   InlineSelect,
   LabelRow,
@@ -46,6 +45,8 @@ import {
   Select,
   SkillCapabilityRow,
   SkillsGrid,
+  ToggleLabel,
+  ToggleSwitch,
   AgentActions,
 } from "./AgentEditor.styled";
 import {
@@ -214,18 +215,21 @@ export function ModeSettingsSection({
       <FormRow style={{ justifyContent: "space-between", alignItems: "center" }}>
         <SectionTitle>Mode Settings</SectionTitle>
         <ActionsRow>
-          <CheckboxRow>
-            <input
-              type="checkbox"
-              checked={selectedModeDefinition.enabled}
+          <ToggleLabel>
+            <ToggleSwitch
+              type="button"
+              $active={selectedModeDefinition.enabled}
+              role="switch"
+              aria-checked={selectedModeDefinition.enabled}
+              aria-label="Mode aktivieren"
               disabled={!canDisableSelectedMode}
-              onChange={(e) => updateModeDefinition(selectedModeDefinition.id, (mode) => ({
+              onClick={() => updateModeDefinition(selectedModeDefinition.id, (mode) => ({
                 ...mode,
-                enabled: e.target.checked,
+                enabled: !mode.enabled,
               }))}
             />
             <span>Enabled</span>
-          </CheckboxRow>
+          </ToggleLabel>
           {!isSelectedModeDefault && selectedModeDefinition.enabled && (
             <Button
               type="button"
@@ -477,9 +481,9 @@ export function InternalToolsSection({
 
         return (
           <ScopeRow>
-            <CheckboxRow as="div">
+            <ToggleLabel as="span">
               <span>Access Scope</span>
-            </CheckboxRow>
+            </ToggleLabel>
             <HeaderActions>
               <InlineSelect
                 value={effectiveAccessScope}

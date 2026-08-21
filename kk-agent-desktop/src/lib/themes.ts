@@ -5,7 +5,6 @@ export interface Theme {
   name: string;
   description: string;
   custom?: boolean;
-  colorMode?: ThemePreferenceMode;
   variables: Record<string, string>;
 }
 
@@ -21,7 +20,7 @@ const THEME_VARIABLE_KEYS = [
 
 const THEME_STORAGE_KEY = "kk-agent-theme";
 const CUSTOM_THEMES_KEY = "kk-agent-custom-themes";
-const THEME_MODE_OVERRIDES_KEY = "kk-agent-theme-mode-overrides";
+const THEME_COLOR_MODE_STORAGE_KEY = "kk-agent-color-mode";
 const FALLBACK_ACCENT = "#c15f3c";
 
 type Rgb = { r: number; g: number; b: number };
@@ -87,56 +86,59 @@ export function buildVariablesFromAccent(inputAccent: string, colorMode: ThemeCo
   return isLightCanvas
     ? {
         "--bg-base": "#ffffff", "--bg-surface": "#fafafa", "--bg-elevated": "#ffffff", "--bg-hover": "#f2f2f2",
-        "--text-primary": "#1b1b1b", "--text-secondary": "#5f5f5f", "--text-muted": "#858585",
+        "--text-primary": "#353535", "--text-secondary": "#747474", "--text-muted": "#929292",
         "--accent": accentHex, "--accent-hover": toHex(mix(accent, black, 0.14)), "--accent-muted": `rgba(${accent.r}, ${accent.g}, ${accent.b}, 0.12)`, "--accent-foreground": accentForeground,
         "--border": "#d8d8d8", "--border-focus": accentHex,
       }
     : {
         "--bg-base": "#191919", "--bg-surface": "#212121", "--bg-elevated": "#2a2a2a", "--bg-hover": "#333333",
-        "--text-primary": "#f2f2f2", "--text-secondary": "#c4c4c4", "--text-muted": "#8f8f8f",
+        "--text-primary": "#e8e8e8", "--text-secondary": "#c2c2c2", "--text-muted": "#929292",
         "--accent": accentHex, "--accent-hover": toHex(mix(accent, white, 0.18)), "--accent-muted": `rgba(${accent.r}, ${accent.g}, ${accent.b}, 0.18)`, "--accent-foreground": accentForeground,
         "--border": "#3b3b3b", "--border-focus": accentHex,
       };
 }
 
-export const defaultThemes: Theme[] = [{
-  id: "swagos",
-  name: "Swagos",
-  description: "Warm copper that follows your system appearance.",
-  colorMode: "system",
-  variables: buildVariablesFromAccent(FALLBACK_ACCENT, "light"),
-}];
+export const defaultThemes: Theme[] = [
+  {
+    id: "white",
+    name: "White",
+    description: "Crisp, quiet, and ready to focus.",
+    variables: buildVariablesFromAccent("#777777", "light"),
+  },
+  {
+    id: "copper",
+    name: "Copper",
+    description: "Warm contrast for hands-on work.",
+    variables: buildVariablesFromAccent(FALLBACK_ACCENT, "light"),
+  },
+  {
+    id: "purple",
+    name: "Purple",
+    description: "Soft focus with a deeper mood.",
+    variables: buildVariablesFromAccent("#8a6a86", "light"),
+  },
+];
 
 function getCustomThemes(): Theme[] { return getStoredJson<Theme[]>(CUSTOM_THEMES_KEY, []); }
 function saveCustomThemes(themes: Theme[]): void { setStoredJson(CUSTOM_THEMES_KEY, themes); }
-function getModeOverrides(): Record<string, ThemePreferenceMode> { return getStoredJson<Record<string, ThemePreferenceMode>>(THEME_MODE_OVERRIDES_KEY, {}); }
-function saveModeOverrides(overrides: Record<string, ThemePreferenceMode>): void { setStoredJson(THEME_MODE_OVERRIDES_KEY, overrides); }
+export function getSavedThemeColorMode(): ThemePreferenceMode {
+  const mode = getStoredString(THEME_COLOR_MODE_STORAGE_KEY);
+  return mode === "light" || mode === "dark" || mode === "system" ? mode : "light";
+}
+
+export function setThemeColorMode(colorMode: ThemePreferenceMode): void {
+  setStoredString(THEME_COLOR_MODE_STORAGE_KEY, colorMode);
+}
+
 export function getAllThemes(): Theme[] {
-  const overrides = getModeOverrides();
-  return [
-    ...defaultThemes.map((theme) => {
-      const colorMode = overrides[theme.id] ?? theme.colorMode ?? "system";
-      return { ...theme, colorMode, variables: buildVariablesFromAccent(theme.variables["--accent"], resolveThemeColorMode(colorMode)) };
-    }),
-    ...getCustomThemes(),
-  ];
+  const colorMode = resolveThemeColorMode(getSavedThemeColorMode());
+  return [...defaultThemes, ...getCustomThemes()].map((theme) => ({
+    ...theme,
+    variables: buildVariablesFromAccent(theme.variables["--accent"], colorMode),
+  }));
 }
 export function addCustomTheme(theme: Theme): void { const customs = getCustomThemes(); customs.push({ ...theme, custom: true }); saveCustomThemes(customs); }
 export function deleteCustomTheme(id: string): void { saveCustomThemes(getCustomThemes().filter((theme) => theme.id !== id)); }
-export function setThemeColorMode(id: string, colorMode: ThemePreferenceMode): void {
-  const customThemes = getCustomThemes();
-  const customTheme = customThemes.find((theme) => theme.id === id);
-  if (customTheme) {
-    customTheme.colorMode = colorMode;
-    customTheme.variables = buildVariablesFromAccent(
-      customTheme.variables["--accent"] ?? FALLBACK_ACCENT,
-      resolveThemeColorMode(colorMode),
-    );
-    saveCustomThemes(customThemes);
-    return;
-  }
-  saveModeOverrides({ ...getModeOverrides(), [id]: colorMode });
-}
 export function getSavedThemeId(): string { return getStoredString(THEME_STORAGE_KEY) || defaultThemes[0].id; }
 function getThemeById(id: string): Theme { return getAllThemes().find((theme) => theme.id === id) || defaultThemes[0]; }
 
@@ -144,7 +146,7 @@ function applyTheme(theme: Theme): void {
   const root = document.documentElement;
   const variables = buildVariablesFromAccent(
     theme.variables["--accent"] ?? FALLBACK_ACCENT,
-    resolveThemeColorMode(theme.colorMode),
+    resolveThemeColorMode(getSavedThemeColorMode()),
   );
   for (const key of THEME_VARIABLE_KEYS) root.style.setProperty(key, variables[key]);
   root.style.colorScheme = relativeLuminance(parseHex(variables["--bg-base"]) ?? parseHex("#ffffff")!) < 0.5 ? "dark" : "light";

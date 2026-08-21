@@ -1,6 +1,6 @@
 import styled from "styled-components";
 import { FormRow } from "@/components/PageForm";
-export { InlineSelect, ModeTab, ModeTabs, Select } from "@/components/FormControls.styled";
+export { InlineSelect, ModeTab, ModeTabs, Select, ToggleLabel, ToggleSwitch } from "@/components/FormControls.styled";
 
 export const EditorArea = styled.div`
   flex: 1 1 0;
@@ -24,26 +24,16 @@ export const AgentWorkspaceTabs = styled.div`
   flex-wrap: wrap;
   padding-bottom: var(--space-sm);
   border-bottom: 1px solid var(--border);
-`;
 
-export const AgentWorkspaceTab = styled.button<{ $active: boolean }>`
-  padding: 7px 12px;
-  color: ${({ $active }) => ($active ? "var(--accent-foreground)" : "var(--text-secondary)")};
-  background: ${({ $active }) => ($active ? "var(--accent)" : "transparent")};
-  border: 1px solid ${({ $active }) => ($active ? "var(--accent)" : "transparent")};
-  border-radius: var(--radius-sm);
-  font: inherit;
-  font-size: var(--font-size-sm);
-  cursor: pointer;
-
-  &:hover {
-    color: ${({ $active }) => ($active ? "var(--accent-foreground)" : "var(--text-primary)")};
-    background: ${({ $active }) => ($active ? "var(--accent)" : "var(--bg-hover)")};
+  > button[aria-selected="false"] {
+    color: var(--text-secondary);
   }
 
-  &:focus-visible {
-    outline: 2px solid var(--accent);
-    outline-offset: 2px;
+  > button[aria-selected="true"] {
+    background: color-mix(in srgb, var(--accent) 12%, transparent);
+    border-color: color-mix(in srgb, var(--accent) 72%, var(--border));
+    box-shadow: inset 0 -1px 0 var(--accent);
+    font-weight: 600;
   }
 `;
 
@@ -119,18 +109,8 @@ export const ModeCustomColorPicker = styled.label`
   place-items: center;
   border-radius: 50%;
   background: conic-gradient(#f87171, #fbbf24, #4ade80, #60a5fa, #a78bfa, #f472b6, #f87171);
-  color: var(--text-primary);
   box-shadow: 0 0 0 1px var(--border);
   cursor: pointer;
-
-  &::after {
-    content: "+";
-    font-size: 16px;
-    line-height: 1;
-    font-weight: 700;
-    text-shadow: 0 1px 2px var(--bg-surface);
-    pointer-events: none;
-  }
 
   &:focus-within {
     outline: 2px solid var(--accent);
@@ -227,54 +207,6 @@ export const CapabilityIdentity = styled.div`
   align-items: center;
   gap: var(--space-sm);
   min-width: 0;
-`;
-
-export const CapabilityToggle = styled.button<{ $active: boolean }>`
-  width: 32px;
-  height: 18px;
-  flex: 0 0 auto;
-  position: relative;
-  padding: 0;
-  background: ${({ $active }) => ($active ? "var(--accent)" : "var(--bg-elevated)")};
-  border: 1px solid ${({ $active }) => ($active ? "var(--accent)" : "var(--border)")};
-  border-radius: 999px;
-  cursor: pointer;
-  transition: background 120ms ease, border-color 120ms ease;
-
-  &::after {
-    content: "";
-    position: absolute;
-    top: 2px;
-    left: 2px;
-    width: 12px;
-    height: 12px;
-    border-radius: 50%;
-    background: var(--text-primary);
-    transform: translateX(${({ $active }) => ($active ? "14px" : "0")});
-    transition: transform 120ms ease;
-  }
-
-  &:hover {
-    border-color: var(--accent);
-  }
-
-  &:focus-visible {
-    outline: 2px solid var(--accent);
-    outline-offset: 2px;
-  }
-`;
-
-export const CheckboxRow = styled.label`
-  display: flex;
-  align-items: center;
-  gap: var(--space-sm);
-  font-size: var(--font-size-sm);
-  color: var(--text-secondary);
-  cursor: pointer;
-
-  input {
-    accent-color: var(--accent);
-  }
 `;
 
 export const StatusDot = styled.span<{ $running: boolean }>`

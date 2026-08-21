@@ -2,10 +2,11 @@ import styled, { css } from "styled-components";
 
 const variants = {
   primary: css`
-    background: var(--accent);
-    color: var(--accent-foreground);
+    background: var(--bg-elevated);
+    color: var(--text-primary);
+    border: 1px solid color-mix(in srgb, var(--accent) 58%, var(--border));
     &:hover:not(:disabled) {
-      background: var(--accent-hover);
+      background: var(--bg-hover);
     }
   `,
   secondary: css`

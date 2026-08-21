@@ -46,30 +46,13 @@ const ChatWrapper = styled.div`
   max-height: calc(100vh - 2 * var(--space-lg));
 `;
 
-const FloatingDebugButton = styled.button`
+const FloatingDebugButton = styled(Button).attrs({ size: "sm" })`
   position: fixed;
-  right: var(--space-lg);
+  left: var(--space-lg);
   bottom: var(--space-lg);
   z-index: 40;
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-xs);
-  padding: 2px var(--space-sm);
-  background: var(--accent-muted);
-  color: var(--accent);
-  border: 1px solid var(--accent);
-  border-radius: var(--radius-sm);
-  font-size: var(--font-size-sm);
-  font-weight: 500;
-  cursor: pointer;
   white-space: nowrap;
   box-shadow: var(--shadow-sm);
-
-  &:hover {
-    background: var(--accent);
-    color: var(--accent-foreground);
-    border-color: var(--accent);
-  }
 `;
 
 export default function ChatPage() {

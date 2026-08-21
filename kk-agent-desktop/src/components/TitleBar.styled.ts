@@ -6,12 +6,12 @@ export const TitleBarWrapper = styled.header`
   display: flex;
   align-items: center;
   width: 100%;
-  height: 48px;
-  flex: 0 0 48px;
+  height: 42px;
+  flex: 0 0 42px;
   color: var(--text-secondary);
   background: var(--bg-surface);
   border-bottom: 1px solid var(--border);
-  box-shadow: 0 3px 18px rgba(0, 0, 0, 0.22);
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.12);
   user-select: none;
   -webkit-app-region: drag;
 `;
@@ -19,15 +19,14 @@ export const TitleBarWrapper = styled.header`
 export const TitleBarBrand = styled.div`
   display: flex;
   align-items: center;
-  gap: 11px;
   min-width: 0;
   height: 100%;
   padding: 0 16px;
   pointer-events: none;
 
   svg {
-    width: 18px;
-    height: 18px;
+    width: 24px;
+    height: 24px;
     flex: 0 0 auto;
     stroke: var(--accent);
     stroke-linecap: square;
@@ -36,52 +35,19 @@ export const TitleBarBrand = styled.div`
   }
 `;
 
-export const TitleBarIdentity = styled.span`
-  display: flex;
-  align-items: baseline;
-  gap: 9px;
-  min-width: 0;
-`;
-
-export const TitleBarName = styled.span`
-  overflow: hidden;
-  color: var(--text-primary);
-  font-size: 11px;
-  font-weight: 750;
-  letter-spacing: 0.11em;
-  line-height: 1;
-  text-overflow: ellipsis;
-  text-transform: uppercase;
-  white-space: nowrap;
-`;
-
 export const TitleBarDragArea = styled.div`
   min-width: 24px;
   height: 100%;
   flex: 1;
 `;
 
-export const WindowControls = styled.div`
-  display: flex;
-  align-items: center;
-  align-self: center;
-  height: 32px;
-  gap: 3px;
-  margin-right: 8px;
-  padding: 3px;
-  background: rgba(10, 10, 10, 0.28);
-  border: 1px solid rgba(255, 255, 255, 0.055);
-  border-radius: 9px;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.025);
-  -webkit-app-region: no-drag;
-`;
-
 export const WindowControlButton = styled.button<{ $close?: boolean }>`
   display: grid;
-  width: 34px;
-  height: 24px;
+  width: 30px;
+  height: 22px;
   place-items: center;
   padding: 0;
+  margin-right: 2px;
   color: var(--text-secondary);
   background: transparent;
   border: 0;
@@ -89,6 +55,10 @@ export const WindowControlButton = styled.button<{ $close?: boolean }>`
   cursor: default;
   -webkit-app-region: no-drag;
   transition: color 100ms ease, background 100ms ease;
+
+  &:last-child {
+    margin-right: 6px;
+  }
 
   svg {
     width: 11px;

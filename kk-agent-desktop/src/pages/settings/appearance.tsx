@@ -3,10 +3,10 @@ import styled from "styled-components";
 import SettingsLayout from "@/components/SettingsLayout";
 import Button from "@/components/Button";
 import Input from "@/components/Input";
-import Toggle from "@/components/Toggle";
 import {
   defaultThemes,
   getAllThemes,
+  getSavedThemeColorMode,
   getSavedThemeId,
   saveAndApplyTheme,
   addCustomTheme,
@@ -15,7 +15,6 @@ import {
   buildVariablesFromAccent,
   resolveThemeColorMode,
   type Theme,
-  type ThemeColorMode,
   type ThemePreferenceMode,
 } from "@/lib/themes";
 
@@ -198,21 +197,6 @@ const PreviewStrip = styled.div`
   margin-top: var(--space-xs);
 `;
 
-const ModeField = styled.div`
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-`;
-
-const ModeControl = styled.div`
-  display: flex;
-  align-items: center;
-  gap: var(--space-sm);
-  height: 36px;
-  color: var(--text-secondary);
-  font-size: var(--font-size-sm);
-`;
-
 const ThemeMode = styled.span`
   font-size: 0.6875rem;
   color: var(--text-muted);
@@ -269,7 +253,7 @@ export default function AppearancePage() {
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [accent, setAccent] = useState(defaultTheme.variables["--accent"]);
-  const [colorMode, setColorMode] = useState<ThemeColorMode>(resolveThemeColorMode(defaultTheme.colorMode));
+  const [colorMode, setColorMode] = useState<ThemePreferenceMode>(getSavedThemeColorMode());
 
   function selectTheme(theme: Theme) {
     saveAndApplyTheme(theme.id);
@@ -284,8 +268,7 @@ export default function AppearancePage() {
       name: name.trim(),
       description: description.trim(),
       custom: true,
-      colorMode,
-      variables: buildVariablesFromAccent(accent, colorMode),
+      variables: buildVariablesFromAccent(accent, resolveThemeColorMode(colorMode)),
     };
     addCustomTheme(theme);
     setThemes(getAllThemes());
@@ -295,7 +278,6 @@ export default function AppearancePage() {
     setName("");
     setDescription("");
     setAccent(defaultTheme.variables["--accent"]);
-    setColorMode(resolveThemeColorMode(defaultTheme.colorMode));
   }
 
   function handleDelete(id: string) {
@@ -308,17 +290,16 @@ export default function AppearancePage() {
     }
   }
 
-  function handleModeChange(theme: Theme, colorMode: ThemePreferenceMode) {
-    setThemeColorMode(theme.id, colorMode);
+  function handleModeChange(colorMode: ThemePreferenceMode) {
+    setThemeColorMode(colorMode);
+    setColorMode(colorMode);
     const updated = getAllThemes();
     setThemes(updated);
-    if (activeId === theme.id) saveAndApplyTheme(theme.id);
+    saveAndApplyTheme(activeId);
   }
 
-  const previewVars = buildVariablesFromAccent(accent, colorMode);
-  const activeTheme = themes.find((theme) => theme.id === activeId) ?? defaultTheme;
-  const activeThemeMode = activeTheme.colorMode ?? "system";
-  const activeThemeModeMeta = themeModeMeta[activeThemeMode];
+  const previewVars = buildVariablesFromAccent(accent, resolveThemeColorMode(colorMode));
+  const activeThemeModeMeta = themeModeMeta[colorMode];
 
   return (
     <SettingsLayout>
@@ -329,7 +310,7 @@ export default function AppearancePage() {
             type="button"
             title={`${activeThemeModeMeta.label}: klicken zum Wechseln`}
             aria-label={`Erscheinungsbild: ${activeThemeModeMeta.label}. Klicken zum Wechseln.`}
-            onClick={() => handleModeChange(activeTheme, getNextThemeMode(activeThemeMode))}
+            onClick={() => handleModeChange(getNextThemeMode(colorMode))}
           >
             <span aria-hidden>{activeThemeModeMeta.emoji}</span>
             <ThemeMode>{activeThemeModeMeta.label}</ThemeMode>
@@ -396,16 +377,6 @@ export default function AppearancePage() {
                 onChange={(e) => setAccent(e.target.value)}
               />
             </ColorField>
-            <ModeField>
-              <FieldLabel>Appearance</FieldLabel>
-              <ModeControl>
-                <span>{colorMode === "dark" ? "Dark" : "Light"}</span>
-                <Toggle
-                  checked={colorMode === "dark"}
-                  onChange={(dark) => setColorMode(dark ? "dark" : "light")}
-                />
-              </ModeControl>
-            </ModeField>
             <PreviewStrip>
               <ColorDot $color={previewVars["--accent"]} />
               <ColorDot $color={previewVars["--accent-hover"]} />

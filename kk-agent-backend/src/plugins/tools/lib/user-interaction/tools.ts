@@ -3,10 +3,7 @@ import type { McpToolDefinition } from "../../../mcp/types.js";
 export const userInteractionTools: McpToolDefinition[] = [
   {
     name: "ask_user",
-    description:
-      "Present a multiple-choice question only when you genuinely need missing information, a user preference, or a user-owned decision. " +
-      "Never use this tool for command, filesystem, tool-call, safety, or risk approval; configured approvals are handled automatically by the harness. " +
-      "Returns the selected choice key as JSON.",
+    description: "Present one multiple-choice question and return the selected key.",
     inputSchema: {
       type: "object",
       properties: {

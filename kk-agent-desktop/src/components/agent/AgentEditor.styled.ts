@@ -89,13 +89,79 @@ export const ModeTabContent = styled.span`
   gap: 8px;
 `;
 
-export const ModeStatusDot = styled.span<{ $enabled: boolean; $variant: "info" | "warning" }>`
+export const ModeStatusDot = styled.span<{ $enabled: boolean; $color: string }>`
   width: 8px;
   height: 8px;
   border-radius: 50%;
   flex-shrink: 0;
-  background: ${({ $enabled, $variant }) => $enabled ? `var(--${$variant})` : "var(--text-muted)"};
+  background: ${({ $enabled, $color }) => $enabled ? $color : "var(--text-muted)"};
   opacity: ${({ $enabled }) => ($enabled ? 1 : 0.85)};
+`;
+
+export const ModeColorPicker = styled.div`
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-xs);
+`;
+
+export const ModeColorButton = styled.button<{ $active: boolean; $color: string }>`
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 2px solid ${({ $active, $color }) => ($active ? $color : "var(--bg-surface)")};
+  border-radius: 50%;
+  background: ${({ $color }) => $color};
+  box-shadow: 0 0 0 ${({ $active }) => ($active ? "1px var(--text-primary)" : "1px var(--border)")};
+  cursor: pointer;
+  transition: transform 120ms ease, box-shadow 120ms ease;
+
+  &:hover {
+    transform: scale(1.12);
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+`;
+
+export const ModeCustomColorPicker = styled.label`
+  width: 22px;
+  height: 22px;
+  position: relative;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: conic-gradient(#f87171, #fbbf24, #4ade80, #60a5fa, #a78bfa, #f472b6, #f87171);
+  color: var(--text-primary);
+  box-shadow: 0 0 0 1px var(--border);
+  cursor: pointer;
+
+  &::after {
+    content: "+";
+    font-size: 16px;
+    line-height: 1;
+    font-weight: 700;
+    text-shadow: 0 1px 2px var(--bg-surface);
+    pointer-events: none;
+  }
+
+  &:focus-within {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+`;
+
+export const ModeColorInput = styled.input`
+  width: 22px;
+  height: 22px;
+  position: absolute;
+  inset: 0;
+  padding: 0;
+  border: none;
+  opacity: 0;
+  cursor: pointer;
 `;
 
 export const CapabilityRow = styled.div<{ $active: boolean }>`

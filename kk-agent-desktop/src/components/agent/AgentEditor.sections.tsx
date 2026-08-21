@@ -35,6 +35,10 @@ import {
   InlineSelect,
   LabelRow,
   ModeStatusDot,
+  ModeColorButton,
+  ModeCustomColorPicker,
+  ModeColorInput,
+  ModeColorPicker,
   ModeTab,
   ModeTabContent,
   ModeTabs,
@@ -53,6 +57,7 @@ import {
 } from "./AgentEditor.helpers";
 import { CapabilityToggleHeader, OverrideActions } from "./CapabilitySection";
 import RuntimeToolCapabilitySection from "./RuntimeToolCapabilitySection";
+import { getModeColor, MODE_COLOR_OPTIONS } from "@/lib/modeColors";
 
 type AgentInfoSectionProps = {
   currentAgent: AgentDefinition;
@@ -126,7 +131,7 @@ export function AgentInfoSection({
                 onClick={() => setSelectedModeId(mode.id)}
               >
                 <ModeTabContent>
-                  <ModeStatusDot $enabled={mode.enabled} $variant={mode.behavior === "plan" ? "info" : "warning"} />
+                  <ModeStatusDot $enabled={mode.enabled} $color={getModeColor(mode.color, mode.behavior)} />
                   <span>{mode.label}</span>
                 </ModeTabContent>
               </ModeTab>
@@ -269,6 +274,34 @@ export function ModeSettingsSection({
               <option key={behavior} value={behavior}>{behavior}</option>
             ))}
           </Select>
+        </FormField>
+        <FormField $minWidth="180px">
+          <FieldLabel>Mode Color</FieldLabel>
+          <ModeColorPicker>
+            {MODE_COLOR_OPTIONS.map((color) => {
+              const active = getModeColor(selectedModeDefinition.color, selectedModeDefinition.behavior) === color.value;
+              return (
+                <ModeColorButton
+                  key={color.value}
+                  type="button"
+                  $active={active}
+                  $color={color.value}
+                  aria-label={`${color.label} auswählen`}
+                  aria-pressed={active}
+                  title={color.label}
+                  onClick={() => updateModeDefinition(selectedModeDefinition.id, (mode) => ({ ...mode, color: color.value }))}
+                />
+              );
+            })}
+            <ModeCustomColorPicker title="Eigene Farbe wÃ¤hlen">
+              <ModeColorInput
+                type="color"
+                value={getModeColor(selectedModeDefinition.color, selectedModeDefinition.behavior)}
+                aria-label="Eigene Farbe wÃ¤hlen"
+                onChange={(e) => updateModeDefinition(selectedModeDefinition.id, (mode) => ({ ...mode, color: e.target.value }))}
+              />
+            </ModeCustomColorPicker>
+          </ModeColorPicker>
         </FormField>
       </FormRow>
     </Section>

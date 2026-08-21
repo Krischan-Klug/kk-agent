@@ -6,6 +6,7 @@ interface BuiltInModeMeta {
   label: string;
   behavior: ModeBehavior;
   source: AgentModeDefinition["source"];
+  color: string;
 }
 
 const READ_ONLY_TOOL_NAMES = [
@@ -59,12 +60,14 @@ const BUILT_IN_MODE_META: Record<ModeBehavior, BuiltInModeMeta> = {
     label: "Plan",
     behavior: "plan",
     source: "builtin",
+    color: "#60a5fa",
   },
   edit: {
     id: "edit",
     label: "Edit",
     behavior: "edit",
     source: "builtin",
+    color: "#fbbf24",
   },
 };
 

@@ -44,7 +44,6 @@ export interface RuntimeToolDefinition extends UnifiedToolDefinition {
     args: Record<string, unknown>,
     mode: ModeRuntimeRef,
   ) => Promise<RuntimeToolPermissionPolicy> | RuntimeToolPermissionPolicy;
-  displayOnlyInputKeys?: string[];
 }
 
 export interface ToolExecutionResult {

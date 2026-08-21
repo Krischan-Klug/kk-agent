@@ -1,6 +1,6 @@
 import type { SessionState } from "../types.js";
 import { getSystemVariables, buildPrompt } from "../../systemprompt/lib/builder.js";
-import { buildResolvedSystemToolRuntime, getMemoryPromptContext, getTaskSummary } from "../../tools/service.js";
+import { buildResolvedSystemToolRuntime, getInternalToolState, getMemoryPromptContext, getTaskSummary } from "../../tools/service.js";
 import { buildActiveSkillCatalogSection } from "../../skills/service.js";
 import type { ModeRuntimeConfig } from "../../loop/types.js";
 import { getAgentMode } from "../../agent/lib/mode-config.js";
@@ -10,6 +10,7 @@ import type { ToolRuntimeContext } from "../../loop/types.js";
 import { buildRunnableMcpInstructions } from "./tool-selection.js";
 import { buildRuntimeToolCollection } from "./runtime-tools.js";
 import { getDefaults } from "../../lib/defaults.js";
+import { escapeXml, toCData } from "../../lib/xml.js";
 
 function intersectIds(sessionIds: string[], modeIds: string[]): string[] {
   const sessionSet = new Set(sessionIds);
@@ -101,14 +102,6 @@ export function buildCurrentSystemPrompt(
   );
 }
 
-function escapeXml(value: string): string {
-  return value
-    .replaceAll("&", "&amp;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;");
-}
-
 function readStringArray(value: unknown): string[] {
   return Array.isArray(value)
     ? value.filter((entry): entry is string => typeof entry === "string" && entry.trim().length > 0)
@@ -129,7 +122,10 @@ export function buildRuntimeContext(input: {
     mode: input.modeName,
     ...(input.runtimeVariables ?? {}),
   });
-  const memory = getMemoryPromptContext(input.sessionId);
+  const internalState = getInternalToolState(input.sessionId);
+  const memory = internalState.sessionFacts.length > 0 || internalState.userFacts.length > 0
+    ? getMemoryPromptContext(input.sessionId)
+    : null;
   const filesystemScope = input.runtimeVariables?.FILESYSTEM_ACCESS_SCOPE;
   const terminalScope = input.runtimeVariables?.TERMINAL_ACCESS_SCOPE;
   const filesystemActive = typeof filesystemScope === "string" && filesystemScope !== "nicht aktiv";
@@ -138,20 +134,19 @@ export function buildRuntimeContext(input: {
   const filesystemRoot = input.runtimeVariables?.FILESYSTEM_ROOT;
   const terminalRoot = input.runtimeVariables?.TERMINAL_ROOT;
   const terminalCwd = input.runtimeVariables?.TERMINAL_CWD;
-  const modeLabel = input.modeName === input.modeId ? input.modeId : `${input.modeName} (${input.modeId})`;
   const lines = [
     "<runtime_context>",
-    `  <environment timestamp="${escapeXml(variables.CURRENT_TIMESTAMP ?? "")}" platform="${escapeXml(process.platform)}" model="${escapeXml(variables.CURRENT_MODEL ?? input.model)}" mode="${escapeXml(modeLabel)}" />`,
-    "  <tasks>",
-    getTaskSummary(input.sessionId),
-    "  </tasks>",
-    "  <memory scope=\"session\">",
-    memory.sessionMemory,
-    "  </memory>",
-    "  <memory scope=\"user\">",
-    memory.userMemory,
-    "  </memory>",
+    `  <environment timestamp="${escapeXml(variables.CURRENT_TIMESTAMP ?? "")}" platform="${escapeXml(process.platform)}" model="${escapeXml(variables.CURRENT_MODEL ?? input.model)}" />`,
   ];
+  if (internalState.tasks.length > 0) {
+    lines.push("  <tasks>", `    ${toCData(getTaskSummary(input.sessionId))}`, "  </tasks>");
+  }
+  if (memory && internalState.sessionFacts.length > 0) {
+    lines.push("  <memory scope=\"session\">", `    ${toCData(memory.sessionMemory)}`, "  </memory>");
+  }
+  if (memory && internalState.userFacts.length > 0) {
+    lines.push("  <memory scope=\"user\">", `    ${toCData(memory.userMemory)}`, "  </memory>");
+  }
   if (filesystemActive && filesystemRoot) {
     lines.push(`  <filesystem scope="${escapeXml(filesystemScope)}" root="${escapeXml(filesystemRoot)}" />`);
   }
@@ -160,10 +155,10 @@ export function buildRuntimeContext(input: {
       ? ` cwd="${escapeXml(terminalCwd)}"`
       : "";
     lines.push(
-      `  <terminal scope="${escapeXml(terminalScope)}" approval="${escapeXml(input.runtimeVariables?.TERMINAL_APPROVAL_MODE ?? "unavailable")}" root="${escapeXml(terminalRoot)}"${cwdAttribute} shell="${escapeXml(input.runtimeVariables?.TERMINAL_SHELL ?? "unavailable")}" />`,
+      `  <terminal scope="${escapeXml(terminalScope)}" root="${escapeXml(terminalRoot)}"${cwdAttribute} shell="${escapeXml(input.runtimeVariables?.TERMINAL_SHELL ?? "unavailable")}" />`,
     );
   }
-  if (input.assetContext) lines.push("  <assets>", input.assetContext, "  </assets>");
+  if (input.assetContext) lines.push("  <assets>", `    ${toCData(input.assetContext)}`, "  </assets>");
   if (skillContexts.length > 0) lines.push("  <loaded_skills>", ...skillContexts, "  </loaded_skills>");
   lines.push("</runtime_context>");
   return lines.join("\n");

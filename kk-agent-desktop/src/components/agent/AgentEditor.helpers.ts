@@ -46,7 +46,6 @@ function buildModeConfigFromDefaults(behavior: ModeBehavior, defaults: AgentTemp
       identity: "",
       system: "",
       runtime: "",
-      tasks: "",
       security: "",
       toolUsage: "",
       communication: "",
@@ -73,6 +72,7 @@ export function createCustomMode(
     label: "Custom Mode",
     behavior,
     source: "custom",
+    color: behavior === "plan" ? "#60a5fa" : "#fbbf24",
     enabled: true,
     config: {
       ...buildModeConfigFromDefaults(behavior, defaults),

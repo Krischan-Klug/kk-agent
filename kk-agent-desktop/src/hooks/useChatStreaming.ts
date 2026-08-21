@@ -75,7 +75,7 @@ function syncStepToolCalls(assistant: SessionMessage, existingToolCalls: ActiveT
 
   const synced = toolUses.map((toolUse) => {
     const existing = existingById.get(toolUse.id);
-    const displayText = getToolCallDisplayText(toolUse.input);
+    const displayText = getToolCallDisplayText(toolUse.input, toolUse.name);
     return existing
       ? {
           ...existing,
@@ -192,7 +192,7 @@ function updateStepToolCall(previous: StreamingTurnState | null, event: Extract<
     ? step.toolCalls[toolCallIndex]!
     : { id: event.toolUseId, name: event.toolName, input: event.input ?? {}, status: event.status };
   const input = event.input ?? currentToolCall.input;
-  const displayText = getToolCallDisplayText(input);
+  const displayText = getToolCallDisplayText(input, event.toolName);
 
   const updatedToolCall: ActiveToolCall = {
     ...currentToolCall,

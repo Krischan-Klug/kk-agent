@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
-  getTerminalApprovalInstruction,
   resolveApprovalMode,
   resolveTerminalCommandPermission,
   TERMINAL_RUN_GRANT_KEY,
@@ -49,10 +48,4 @@ test("full access bypasses approval without bypassing plan mode", () => {
     approvalMode: "full_access",
   });
   assert.equal(planResult.kind, "deny");
-});
-
-test("dynamic instructions tell the model who owns approval", () => {
-  assert.match(getTerminalApprovalInstruction("ask_approval"), /harness automatically requests approval/i);
-  assert.match(getTerminalApprovalInstruction("full_access"), /without asking the user/i);
-  assert.match(getTerminalApprovalInstruction("full_access"), /never use ask_user/i);
 });

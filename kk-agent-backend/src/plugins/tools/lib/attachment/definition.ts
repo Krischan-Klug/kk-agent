@@ -4,10 +4,8 @@ export const attachmentDefinition = defineSystemMcp({
   id: "attachment",
   name: "Assets",
   instruction: [
-    "Use this tool for managed session inputs and downloadable run artifacts.",
-    "Use list_assets, search_asset, and read_asset for inputs; publish generated files with publish_artifact.",
-    "Always use assetId because filenames may be ambiguous.",
-    "Never encode binary file content in a tool call.",
+    "Use asset tools for managed session inputs and downloadable artifacts.",
+    "Address inputs by assetId and never encode binary content in a tool call.",
   ].join(" "),
   emoji: "📎",
 });

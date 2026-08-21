@@ -1,15 +1,16 @@
 import { escapeXml, toCData } from "../../lib/xml.js";
 import type { SkillDefinition } from "../types.js";
 
-const MAX_CATALOG_CHARS = 8_000;
+const MAX_CATALOG_CHARS = 2_500;
+const MAX_DESCRIPTION_CHARS = 240;
 const MAX_RESOURCE_ENTRIES = 200;
+const CATALOG_NOTICE_RESERVE_CHARS = 160;
 
 function buildSkillEntry(skill: SkillDefinition, description: string): string {
   return [
     "  <skill>",
     `    <name>${escapeXml(skill.name)}</name>`,
     `    <description>${escapeXml(description)}</description>`,
-    `    <location>${escapeXml(skill.path)}</location>`,
     "  </skill>",
   ].join("\n");
 }
@@ -18,13 +19,16 @@ export function buildSkillsCatalogSection(skills: SkillDefinition[]): string {
   if (skills.length === 0) return "";
   const lines = [
     "<available_skills>",
-    "The following Agent Skills provide specialized instructions. When a task matches a description, load the skill with Skill before proceeding.",
   ];
-  let usedChars = lines.join("\n").length + "\n</available_skills>".length;
+  let usedChars = lines.join("\n").length
+    + "\n</available_skills>".length
+    + CATALOG_NOTICE_RESERVE_CHARS;
   let omitted = 0;
 
   for (const skill of skills) {
-    let description = skill.description;
+    let description = skill.description.length > MAX_DESCRIPTION_CHARS
+      ? `${skill.description.slice(0, MAX_DESCRIPTION_CHARS - 3).trimEnd()}...`
+      : skill.description;
     let entry = buildSkillEntry(skill, description);
     const remaining = MAX_CATALOG_CHARS - usedChars;
     if (entry.length > remaining && remaining > 240) {

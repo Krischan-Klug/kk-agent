@@ -7,7 +7,6 @@ export interface AgentPromptSections {
   identity: string;
   system: string;
   runtime: string;
-  tasks: string;
   security: string;
   toolUsage: string;
   communication: string;
@@ -30,6 +29,7 @@ export interface AgentModeDefinition {
   label: string;
   behavior: ModeBehavior;
   source: AgentModeSource;
+  color?: string;
   enabled: boolean;
   config: AgentModeConfig;
 }

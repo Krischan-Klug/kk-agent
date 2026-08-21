@@ -20,6 +20,7 @@ export interface PersistedAgentModeDefinition {
   label: string;
   behavior: ModeBehavior;
   source: AgentModeSource;
+  color?: string;
   enabled: boolean;
   configOverrides?: Partial<AgentModeConfig>;
 }

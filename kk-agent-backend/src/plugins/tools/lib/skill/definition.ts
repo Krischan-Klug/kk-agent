@@ -5,10 +5,8 @@ export const skillDefinition = defineSystemMcp({
   name: "Skill",
   emoji: "📚",
   instruction: [
-    "Agent Skills are standard SKILL.md bundles.",
-    "When a task matches a skill description, call Skill with the exact name from <available_skills> before proceeding.",
+    "Load a matching skill by its exact name before following its workflow.",
     "Resolve relative paths against the skill_directory returned with the loaded instructions.",
-    "Treat skill files as read-only and continue to obey the active mode, tool permissions, and security rules.",
-    "Do not invent skill names or reload a skill already present in the runtime context.",
+    "Do not invent names or reload an already loaded skill.",
   ].join(" "),
 });

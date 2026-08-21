@@ -14,7 +14,7 @@ import type {
 } from "../types.js";
 import { getErrorMessage } from "../../../lib/error.js";
 import { fitToolResultsToBudget } from "./tool-result-budget.js";
-import { stripDisplayOnlyInputKeys } from "../../session/lib/tool-call-description.js";
+import { withHarnessToolCallDescription } from "../../session/lib/tool-call-description.js";
 
 interface ToolExecutionUpdate {
   toolUseId: string;
@@ -30,6 +30,7 @@ interface ToolExecutionUpdate {
 type TrackedTool = {
   toolUse: TranscriptToolUseBlock;
   executionInput: Record<string, unknown>;
+  displayInput: Record<string, unknown>;
   runtimeTool?: RuntimeToolDefinition;
   status: ToolExecutionStatus;
   isConcurrencySafe: boolean;
@@ -101,12 +102,11 @@ export class StreamingToolExecutor {
     if (this.tools.some((entry) => entry.toolUse.id === toolUse.id)) return;
 
     const runtimeTool = this.runtimeToolsByName[toolUse.name];
-    const executionInput = runtimeTool
-      ? stripDisplayOnlyInputKeys(toolUse.input, runtimeTool.displayOnlyInputKeys)
-      : toolUse.input;
+    const executionInput = toolUse.input;
     const tracked: TrackedTool = {
       toolUse,
       executionInput,
+      displayInput: withHarnessToolCallDescription(toolUse.name, toolUse.input),
       runtimeTool,
       status: runtimeTool ? "queued" : "invalid",
       isConcurrencySafe: runtimeTool ? runtimeTool.isConcurrencySafe(executionInput) : false,
@@ -203,7 +203,7 @@ export class StreamingToolExecutor {
     this.onUpdate?.({
       toolUseId: tracked.toolUse.id,
       toolName: tracked.toolUse.name,
-      input: tracked.toolUse.input,
+      input: tracked.displayInput,
       ...update,
     });
   }

@@ -3,7 +3,7 @@ import type { McpToolDefinition } from "../../../mcp/types.js";
 export const skillTools: McpToolDefinition[] = [
   {
     name: "Skill",
-    description: "Load one Agent Skill from <available_skills> before following its workflow.",
+    description: "Load one listed Agent Skill.",
     inputSchema: {
       type: "object",
       properties: {

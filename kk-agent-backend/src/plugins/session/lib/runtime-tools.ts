@@ -3,9 +3,6 @@ import { executeToolForMcp } from "../../mcp/service.js";
 import type { RuntimeToolDefinition, ToolExecutionResult } from "../../loop/types.js";
 import type { UnifiedToolDefinition } from "../../provider/lib/types.js";
 import { executeSystemToolForId, type ResolvedSystemToolRuntime } from "../../tools/service.js";
-import {
-  withToolCallDescriptionSchema,
-} from "./tool-call-description.js";
 
 type RuntimeToolCollection = {
   allTools: UnifiedToolDefinition[];
@@ -20,39 +17,28 @@ type RuntimeToolBucket = {
 };
 
 function buildSystemRuntimeBuckets(systemRuntime: ResolvedSystemToolRuntime): RuntimeToolBucket[] {
-  return Object.values(systemRuntime.runtimeToolsByName).map((tool) => {
-    const augmented = withToolCallDescriptionSchema(tool.parameters);
-    return {
-      tool: {
-        ...tool,
-        parameters: augmented.schema,
-        displayOnlyInputKeys: [...(tool.displayOnlyInputKeys ?? []), ...augmented.displayOnlyInputKeys],
-      },
-      description: tool.description,
-      parameters: augmented.schema,
-    };
-  });
+  return Object.values(systemRuntime.runtimeToolsByName).map((tool) => ({
+    tool,
+    description: tool.description,
+    parameters: tool.parameters,
+  }));
 }
 
 function buildMcpRuntimeBuckets(activeMcpIds: string[]): RuntimeToolBucket[] {
-  return getAllMcpTools(activeMcpIds).map((tool) => {
-    const augmented = withToolCallDescriptionSchema(tool.inputSchema);
-    return {
-      tool: {
-        name: tool.name,
-        description: tool.description,
-        parameters: augmented.schema,
-        source: "mcp",
-        capabilityId: tool.mcpId,
-        isConcurrencySafe: () => false,
-        resultPolicy: {},
-        permissionPolicy: { kind: "allow" },
-        displayOnlyInputKeys: augmented.displayOnlyInputKeys,
-      },
+  return getAllMcpTools(activeMcpIds).map((tool) => ({
+    tool: {
+      name: tool.name,
       description: tool.description,
-      parameters: augmented.schema,
-    };
-  });
+      parameters: tool.inputSchema,
+      source: "mcp",
+      capabilityId: tool.mcpId,
+      isConcurrencySafe: () => false,
+      resultPolicy: {},
+      permissionPolicy: { kind: "allow" },
+    },
+    description: tool.description,
+    parameters: tool.inputSchema,
+  }));
 }
 
 function bucketRuntimeTools(

@@ -1,6 +1,7 @@
 import { getActiveInstructions as getCustomActiveInstructions } from "../../mcp/service.js";
 import { getActiveToolInstructions, getInternalToolState, getMemoryPromptContext, getTaskSummary } from "../../tools/service.js";
 import type { AgentPromptSections } from "../../agent/types.js";
+import { escapeXml, toCData } from "../../lib/xml.js";
 
 interface SystemVariableDefinition {
   name: string;
@@ -110,7 +111,7 @@ export function buildCapabilityInstructions(
     .map((capability) => {
       const instruction = agentInstructions?.[capability.id] ?? capability.instruction;
       if (!instruction) return null;
-      return `<tool_instruction id="${capability.id}" name="${capability.name}">\n${instruction}\n</tool_instruction>`;
+      return `<tool_instruction id="${escapeXml(capability.id)}" name="${escapeXml(capability.name)}">\n${toCData(instruction)}\n</tool_instruction>`;
     })
     .filter(Boolean);
 
@@ -150,29 +151,36 @@ function resolveVariables(text: string, variables: Record<string, string>): stri
 
 function buildBaseSections(sections: AgentPromptSections, variables: Record<string, string>): string[] {
   return [
-    "<identity>",
-    resolveVariables(sections.identity, variables),
-    "</identity>",
-    "<system>",
-    resolveVariables(sections.system, variables),
-    "</system>",
+    buildOptionalTextSection("identity", sections.identity, variables),
+    buildOptionalTextSection("core_policy", sections.system, variables),
   ];
 }
 
-function buildRuntimeSection(runtime: string, variables: Record<string, string>): string {
-  return [
-    "<runtime>",
-    resolveVariables(runtime, variables),
-    "</runtime>",
-  ].join("\n");
+function buildOptionalTextSection(
+  name: string,
+  value: string,
+  variables: Record<string, string>,
+): string {
+  const resolved = resolveVariables(value, variables).trim();
+  return resolved ? `<${name}>\n${toCData(resolved)}\n</${name}>` : "";
+}
+
+function resolveCDataVariables(xml: string, variables: Record<string, string>): string {
+  return xml.replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, (_match, content: string) =>
+    toCData(resolveVariables(content, variables)));
+}
+
+function buildOptionalCDataXmlSection(
+  name: string,
+  value: string,
+  variables: Record<string, string>,
+): string {
+  const resolved = resolveCDataVariables(value, variables).trim();
+  return resolved ? `<${name}>\n${resolved}\n</${name}>` : "";
 }
 
 function buildToolUsageSection(toolUsage: string, variables: Record<string, string>): string {
-  return [
-    "<tool_usage>",
-    resolveVariables(toolUsage, variables),
-    "</tool_usage>",
-  ].join("\n");
+  return buildOptionalTextSection("tool_policy", toolUsage, variables);
 }
 
 function buildModeSection(
@@ -183,8 +191,8 @@ function buildModeSection(
 ): string {
   const effectiveModeName = modeName ?? modeId ?? "edit";
   return [
-    `<mode_context mode="${effectiveModeName}">`,
-    resolveVariables(modeInstruction, variables),
+    `<mode_context mode="${escapeXml(effectiveModeName)}">`,
+    toCData(resolveVariables(modeInstruction, variables)),
     "</mode_context>",
   ].join("\n");
 }
@@ -215,6 +223,7 @@ export function buildPrompt(
   skillsCatalog: string,
   variables: Record<string, string>,
   context: PromptBuildContext = {},
+  runtimeContext = "",
 ): string {
   const resolvedVariables = {
     ...variables,
@@ -226,23 +235,17 @@ export function buildPrompt(
   const stableParts = [
     "<agent_runtime_prompt>",
     ...buildBaseSections(promptSections, resolvedVariables),
-    "<security>",
-    resolveVariables(promptSections.security, resolvedVariables),
-    "</security>",
+    buildOptionalTextSection("action_policy", promptSections.security, resolvedVariables),
     buildToolUsageSection(promptSections.toolUsage, resolvedVariables),
-    resolveVariables(mcpInstructions, resolvedVariables),
-    resolveVariables(skillsCatalog, resolvedVariables),
-    "<communication>",
-    resolveVariables(promptSections.communication, resolvedVariables),
-    "</communication>",
-    "<tasks>",
-    resolveVariables(promptSections.tasks, resolvedVariables),
-    "</tasks>",
-    buildRuntimeSection(promptSections.runtime, resolvedVariables),
+    buildOptionalCDataXmlSection("capability_instructions", mcpInstructions, resolvedVariables),
+    skillsCatalog,
+    buildOptionalTextSection("communication", promptSections.communication, resolvedVariables),
+    buildOptionalTextSection("context_policy", promptSections.runtime, resolvedVariables),
   ];
 
   const volatileParts = [
     "<!-- DYNAMIC_CONTEXT_BOUNDARY -->",
+    runtimeContext.trim(),
     buildModeSection(modeInstruction, context.modeId, context.modeName, resolvedVariables),
     "</agent_runtime_prompt>",
   ];

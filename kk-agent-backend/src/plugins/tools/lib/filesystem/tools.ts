@@ -4,9 +4,7 @@ export const filesystemTools: McpToolDefinition[] = [
   {
     name: "Read",
     description:
-      "Read a local file with line numbers. Prefer absolute paths. " +
-      "Always read a file before editing it. " +
-      "When output is truncated, narrow the read with offset and limit.",
+      "Read a local file with line numbers. Use offset and limit for large files.",
     inputSchema: {
       type: "object",
       properties: {
@@ -21,10 +19,7 @@ export const filesystemTools: McpToolDefinition[] = [
   {
     name: "Edit",
     description:
-      "Perform an exact string replacement in an existing file. " +
-      "Read the file first and use this for targeted edits. " +
-      "old_string and new_string must differ. " +
-      "If old_string appears more than once, set replace_all=true to replace every occurrence.",
+      "Replace exact text in an existing file. The match must be unique unless replace_all is true.",
     inputSchema: {
       type: "object",
       properties: {
@@ -39,10 +34,7 @@ export const filesystemTools: McpToolDefinition[] = [
   },
   {
     name: "Write",
-    description:
-      "Write a file to the local filesystem. " +
-      "Use this for new files or deliberate full rewrites. " +
-      "For existing files, a current full Read is required first to protect against overwriting unseen changes.",
+    description: "Create or fully rewrite a local file.",
     inputSchema: {
       type: "object",
       properties: {
@@ -55,9 +47,7 @@ export const filesystemTools: McpToolDefinition[] = [
   },
   {
     name: "Glob",
-    description:
-      "Fast file pattern matching for finding files by path pattern, such as **/*.ts. " +
-      "Results are sorted by recent modification where possible.",
+    description: "Find files by path pattern, such as **/*.ts.",
     inputSchema: {
       type: "object",
       properties: {
@@ -71,9 +61,7 @@ export const filesystemTools: McpToolDefinition[] = [
   {
     name: "Grep",
     description:
-      "Search file contents using ripgrep-style patterns. Prefer this over shell grep or rg when available. " +
-      "Use output_mode to choose between matching lines, matching files, or a total count. " +
-      "Use head_limit and offset to paginate large result sets.",
+      "Search file contents by regex. Select lines, files, or count with output_mode.",
     inputSchema: {
       type: "object",
       properties: {

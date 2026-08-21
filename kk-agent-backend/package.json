@@ -11,7 +11,7 @@
     "prestart": "npm run build",
     "start": "node dist/index.js",
     "dev": "tsx watch index.ts",
-    "test": "npm --prefix .. --workspace kk-agent-contract run build && tsx --test src/plugins/loop/lib/context-compaction.test.ts src/plugins/provider/lib/model-profiles/compiler.test.ts src/plugins/provider/lib/request-options.test.ts src/plugins/security/service.test.ts src/plugins/session/lib/runtime-context.test.ts src/plugins/tools/lib/system-config.test.ts src/plugins/tools/lib/terminal/shell-profile.test.ts src/plugins/tools/lib/terminal/command-policy.test.ts src/plugins/tools/lib/terminal/approval-policy.test.ts src/plugins/tools/lib/terminal/runtime.test.ts",
+    "test": "npm --prefix .. --workspace kk-agent-contract run build && tsx --test src/plugins/agent/lib/mode-config.test.ts src/plugins/loop/lib/context-compaction.test.ts src/plugins/provider/lib/model-profiles/compiler.test.ts src/plugins/provider/lib/request-options.test.ts src/plugins/security/service.test.ts src/plugins/session/lib/runtime-context.test.ts src/plugins/session/lib/tool-call-description.test.ts src/plugins/skills/lib/xml.test.ts src/plugins/systemprompt/lib/builder.test.ts src/plugins/tools/lib/system-config.test.ts src/plugins/tools/lib/terminal/shell-profile.test.ts src/plugins/tools/lib/terminal/command-policy.test.ts src/plugins/tools/lib/terminal/approval-policy.test.ts src/plugins/tools/lib/terminal/runtime.test.ts",
     "lint": "npm --prefix .. --workspace kk-agent-contract run build && tsc --noEmit"
   },
   "engines": {

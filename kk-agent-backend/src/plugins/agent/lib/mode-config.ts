@@ -14,6 +14,11 @@ import type { PersistedAgentModeDefinition } from "./persisted-types.js";
 import { getBuiltInModeBehaviors, getBuiltInModeMeta, isModeBehavior } from "./modes.js";
 
 const REQUIRED_TOOL_IDS = ["attachment"];
+function normalizeModeColor(value: unknown, behavior: ModeBehavior): string {
+  return typeof value === "string" && /^#[0-9a-fA-F]{6}$/.test(value)
+    ? value.toLowerCase()
+    : getBuiltInModeMeta(behavior).color;
+}
 
 function normalizeToolIds(toolIds: string[]): string[] {
   return dedupeIds(toolIds, REQUIRED_TOOL_IDS);
@@ -31,7 +36,14 @@ function normalizeToolAccessScopes(scopes: Record<string, ToolAccessScope> = {})
 }
 
 function mergePromptSections(current: AgentPromptSections, patch?: Partial<AgentPromptSections>): AgentPromptSections {
-  return { ...current, ...(patch ?? {}) };
+  return {
+    identity: patch?.identity ?? current.identity,
+    system: patch?.system ?? current.system,
+    runtime: patch?.runtime ?? current.runtime,
+    security: patch?.security ?? current.security,
+    toolUsage: patch?.toolUsage ?? current.toolUsage,
+    communication: patch?.communication ?? current.communication,
+  };
 }
 
 function resolveModeBehavior(value: unknown): ModeBehavior {
@@ -106,6 +118,7 @@ export function expandPersistedMode(mode: PersistedAgentModeDefinition): AgentMo
     label: mode.label,
     behavior: mode.behavior,
     source: mode.source,
+    color: mode.color,
     enabled: mode.enabled,
     config: expandModeConfig(mode.behavior, mode.configOverrides),
   };
@@ -117,6 +130,7 @@ export function compactEffectiveMode(mode: AgentModeDefinition): PersistedAgentM
     label: mode.label,
     behavior: mode.behavior,
     source: mode.source,
+    color: mode.color,
     enabled: mode.enabled,
     configOverrides: compactModeConfig(mode.behavior, mode.config),
   };
@@ -130,6 +144,7 @@ export function buildDefaultModes(): AgentModeDefinition[] {
       label: meta.label,
       behavior,
       source: meta.source,
+      color: meta.color,
       enabled: true,
       config: buildDefaultModeConfig(behavior),
     };
@@ -151,6 +166,7 @@ export function normalizeModeDefinitions(modes?: AgentModeDefinition[]): AgentMo
         label: meta.label,
         behavior,
         source,
+        color: normalizeModeColor(mode.color, behavior),
         enabled: mode.enabled !== false,
         config: normalizeModeConfig(behavior, mode.config),
       };
@@ -169,6 +185,7 @@ export function normalizeModeDefinitions(modes?: AgentModeDefinition[]): AgentMo
       label,
       behavior,
       source,
+      color: normalizeModeColor(mode.color, behavior),
       enabled: mode.enabled !== false,
       config: normalizeModeConfig(behavior, mode.config),
     };

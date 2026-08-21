@@ -21,7 +21,6 @@ import { getDefaultSystemMcpMap } from "./lib/index.js";
 import { normalizeSystemConfig } from "./lib/system-config.js";
 import { isReadOnlyShellCommand } from "./lib/terminal/command-policy.js";
 import {
-  getTerminalApprovalInstruction,
   resolveApprovalMode,
   resolveTerminalCommandPermission,
 } from "./lib/terminal/approval-policy.js";
@@ -172,26 +171,16 @@ function resolveSystemMcp(
 
   const baseInstruction = instructionOverride ?? mcp.instruction;
   const profile = id === "terminal" ? getTerminalShellProfile() : undefined;
-  const approvalInstruction = id === "terminal"
-    ? getTerminalApprovalInstruction(mcp.systemConfig?.approvalMode)
-    : undefined;
-  const contextInstruction = id === "filesystem"
-    ? "The filesystem root in runtime context is the hard path boundary for this request."
-    : id === "terminal"
-      ? "In runtime context, root is the hard path boundary, optional cwd is the starting directory, and shell determines the required command syntax."
-      : undefined;
   return {
     mcp,
     instruction: profile
       ? [
           baseInstruction,
-          contextInstruction,
-          approvalInstruction,
           profile.pathConvention,
           profile.syntaxRules,
           "The active shell profile is fixed for this run. Do not assume or silently switch to a different shell dialect.",
         ].join(" ")
-      : [baseInstruction, contextInstruction].filter(Boolean).join(" "),
+      : baseInstruction,
     tools: getSystemToolsForMcp(id),
   };
 }
@@ -269,12 +258,9 @@ export function buildResolvedSystemToolRuntime(
     Object.assign(runtimeVariables, buildRuntimeVariablesForMcp(resolved.mcp));
 
     for (const tool of resolved.tools) {
-      const description = tool.name === "Terminal"
-        ? `${tool.description} ${getTerminalApprovalInstruction(resolved.mcp.systemConfig?.approvalMode)}`
-        : tool.description;
       runtimeToolsByName[tool.name] = {
         name: tool.name,
-        description,
+        description: tool.description,
         parameters: tool.inputSchema,
         source: "system",
         capabilityId: toolId,

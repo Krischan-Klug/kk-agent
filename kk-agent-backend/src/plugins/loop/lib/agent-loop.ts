@@ -219,10 +219,9 @@ function providerRunFailure(error: unknown): RunFailure {
   });
 }
 
-function buildInstructions(systemPrompt: string, runtimeContext: string, retryInstruction?: string): string {
+function buildInstructions(systemPrompt: string, retryInstruction?: string): string {
   return [
     systemPrompt.trim(),
-    runtimeContext.trim(),
     retryInstruction?.trim()
       ? `<retry_directive>\n${retryInstruction.trim()}\n</retry_directive>`
       : "",
@@ -249,8 +248,9 @@ function buildModelPassInput(
     modeConfig.skillsCatalog,
     variables,
     { sessionId: opts.sessionId, modeId: modeConfig.modeId, modeName: modeConfig.modePromptName },
+    runtimeContext,
   );
-  const instructions = buildInstructions(systemPrompt, runtimeContext, retryInstruction);
+  const instructions = buildInstructions(systemPrompt, retryInstruction);
   const estimatedFixedTokens = estimateTextTokens(instructions)
     + estimateTextTokens(JSON.stringify(modeConfig.allTools))
     + 64;

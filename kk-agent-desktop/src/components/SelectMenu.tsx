@@ -22,14 +22,8 @@ const Trigger = styled.button<{ $variant: TriggerVariant; $optionColor?: string 
   align-items: center;
   gap: var(--space-xs);
   padding: 2px var(--space-sm);
-  background: ${(p) =>
-    p.$optionColor ? `color-mix(in srgb, ${p.$optionColor} 14%, transparent)`
-      : p.$variant === "warning" ? "color-mix(in srgb, var(--warning) 14%, transparent)"
-      : p.$variant === "info" ? "color-mix(in srgb, var(--info) 14%, transparent)"
-        : p.$variant === "neutral" ? "var(--bg-surface)" : "var(--accent-muted)"};
-  color: ${(p) =>
-    p.$optionColor ??
-    (p.$variant === "warning" ? "var(--warning)" : p.$variant === "info" ? "var(--info)" : p.$variant === "neutral" ? "var(--text-primary)" : "var(--accent)")};
+  background: var(--bg-surface);
+  color: var(--text-primary);
   border: 1px solid ${(p) =>
     p.$optionColor ??
     (p.$variant === "warning" ? "var(--warning)" : p.$variant === "info" ? "var(--info)" : p.$variant === "neutral" ? "var(--border)" : "var(--accent)")};
@@ -42,14 +36,14 @@ const Trigger = styled.button<{ $variant: TriggerVariant; $optionColor?: string 
   &:hover {
     ${(p) =>
       p.$optionColor
-        ? `border-color: ${p.$optionColor}; background: var(--bg-hover); color: ${p.$optionColor};`
+        ? `border-color: ${p.$optionColor}; background: var(--bg-hover);`
         : p.$variant === "neutral"
         ? "border-color: var(--accent);"
         : p.$variant === "info"
-        ? "background: color-mix(in srgb, var(--info) 22%, transparent); color: var(--info); border-color: var(--info);"
+        ? "background: var(--bg-hover); border-color: var(--info);"
         : p.$variant === "warning"
-        ? "background: color-mix(in srgb, var(--warning) 22%, transparent); color: var(--warning); border-color: var(--warning);"
-        : "background: var(--accent); color: var(--accent-foreground); border-color: var(--accent);"}
+        ? "background: var(--bg-hover); border-color: var(--warning);"
+        : "background: var(--bg-hover); border-color: var(--accent);"}
   }
 
   &::after {
@@ -73,32 +67,37 @@ const Dropdown = styled.div<{ $direction: Direction; $align: Align; $minWidth?: 
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
 `;
 
-const Option = styled.button<{ $active: boolean; $mono?: boolean }>`
+const Option = styled.button<{ $active: boolean; $mono?: boolean; $color?: string }>`
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  width: 100%;
-  padding: var(--space-sm) var(--space-md);
-  background: ${(p) => (p.$active ? "var(--accent-muted)" : "transparent")};
+  width: calc(100% - 4px);
+  margin: 2px;
+  padding: 2px var(--space-sm);
+  background: ${(p) => p.$active
+    ? p.$color ? `color-mix(in srgb, ${p.$color} 14%, transparent)` : "var(--accent-muted)"
+    : "transparent"};
   color: var(--text-primary);
-  border: none;
+  border: 1px solid ${(p) => p.$color ?? "transparent"};
+  border-radius: var(--radius-sm);
   cursor: pointer;
   font-size: var(--font-size-sm);
   text-align: left;
   font-family: ${(p) => (p.$mono ? "var(--font-mono)" : "inherit")};
 
   &:hover {
-    background: var(--bg-hover);
+    background: ${(p) => p.$active && p.$color
+      ? `color-mix(in srgb, ${p.$color} 20%, transparent)`
+      : "var(--bg-hover)"};
   }
 `;
 
-const OptionTitle = styled.span<{ $active: boolean; $color?: string }>`
+const OptionTitle = styled.span<{ $active: boolean }>`
   font-weight: 500;
-  color: ${(p) => p.$color ?? "inherit"};
 
   &::after {
     content: "${(p) => (p.$active ? " ✓" : "")}";
-    color: ${(p) => p.$color ?? "var(--accent)"};
+    color: var(--text-muted);
     font-size: 12px;
   }
 `;
@@ -146,12 +145,13 @@ export default function SelectMenu({
               type="button"
               $active={option.value === value}
               $mono={mono}
+              $color={option.color}
               onClick={() => {
                 onSelect(option.value);
                 close();
               }}
             >
-              <OptionTitle $active={option.value === value} $color={option.color}>
+              <OptionTitle $active={option.value === value}>
                 {option.label}
               </OptionTitle>
               {option.description && <OptionDescription>{option.description}</OptionDescription>}

@@ -38,7 +38,6 @@ const AgentPromptSectionsSchema = z.object({
   identity: z.string(),
   system: z.string(),
   runtime: z.string(),
-  tasks: z.string(),
   security: z.string(),
   toolUsage: z.string(),
   communication: z.string(),
@@ -61,6 +60,7 @@ const AgentModeDefinitionSchema = z.object({
   label: NonEmptyStringSchema,
   behavior: z.enum(["plan", "edit"]),
   source: z.enum(["builtin", "custom"]),
+  color: z.string().regex(/^#[0-9a-fA-F]{6}$/).optional(),
   enabled: z.boolean(),
   config: AgentModeConfigSchema,
 });

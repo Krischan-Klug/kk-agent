@@ -7,6 +7,7 @@ import type {
 } from "@/types/api";
 import type { PendingAsset } from "@/hooks/useAssets";
 import SelectMenu, { type SelectMenuOption } from "@/components/SelectMenu";
+import { getModeColor } from "@/lib/modeColors";
 import Spinner from "@/components/Spinner";
 import AssetPreview from "./AssetPreview";
 import type { TokenDisplayStats } from "./types";
@@ -466,7 +467,7 @@ export default function ChatComposer({
     .map((mode) => ({
       value: mode.id,
       label: mode.label,
-      color: mode.behavior === "plan" ? "var(--info)" : "var(--warning)",
+      color: getModeColor(mode.color, mode.behavior),
     }));
   const activeModeBehavior = currentAgent?.modes.find((mode) => mode.id === activeModeId)?.behavior ?? "edit";
 

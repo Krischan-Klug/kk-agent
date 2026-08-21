@@ -53,12 +53,12 @@ export const MessageBubble = styled.div<{ $role: string }>`
   border-radius: var(--radius-md);
   align-self: ${(p) => (p.$role === "user" ? "flex-end" : "flex-start")};
   background: ${(p) =>
-    p.$role === "user"
-      ? "var(--accent-muted)"
-      : p.$role === "tool"
-        ? "var(--bg-elevated)"
+    p.$role === "tool"
+      ? "var(--bg-elevated)"
+      : p.$role === "user" || p.$role === "assistant"
+        ? "transparent"
         : "var(--bg-surface)"};
-  border: 1px solid ${(p) => (p.$role === "user" ? "var(--accent)" : "var(--border)")};
+  border: 1px solid var(--border);
   ${(p) => p.$role === "user" && "white-space: pre-wrap;"}
   word-break: break-word;
   font-size: var(--font-size-base);

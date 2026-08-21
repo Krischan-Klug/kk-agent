@@ -56,14 +56,23 @@ export const ModeTabs = styled.div`
   flex-wrap: wrap;
 `;
 
-export const ModeTab = styled.button<{ $active: boolean; $variant?: "info" | "warning" }>`
-  padding: 6px 10px;
-  background: ${({ $active, $variant = "warning" }) => $active
-    ? `color-mix(in srgb, var(--${$variant}) 20%, transparent)`
+export const ModeTab = styled.button<{ $active: boolean; $enabled?: boolean; $variant?: "info" | "warning"; $color?: string }>`
+  padding: 2px var(--space-sm);
+  background: ${({ $active, $enabled = true, $variant = "warning", $color }) => !$enabled
+    ? "var(--bg-surface)"
+    : $active
+    ? `color-mix(in srgb, ${$color ?? `var(--${$variant})`} 14%, transparent)`
     : "var(--bg-surface)"};
-  color: ${({ $variant = "warning" }) => `var(--${$variant})`};
-  border: 1px solid ${({ $variant = "warning" }) => `var(--${$variant})`};
+  color: ${({ $enabled = true }) => $enabled ? "var(--text-primary)" : "var(--text-muted)"};
+  border: 1px solid ${({ $enabled = true, $variant = "warning", $color }) => $enabled ? ($color ?? `var(--${$variant})`) : "var(--border)"};
   border-radius: var(--radius-sm);
   font-size: var(--font-size-sm);
   cursor: pointer;
+  opacity: ${({ $enabled = true }) => $enabled ? 1 : 0.65};
+
+  &:hover {
+    background: ${({ $enabled = true, $variant = "warning", $color }) => $enabled
+      ? `color-mix(in srgb, ${$color ?? `var(--${$variant})`} 20%, transparent)`
+      : "var(--bg-hover)"};
+  }
 `;

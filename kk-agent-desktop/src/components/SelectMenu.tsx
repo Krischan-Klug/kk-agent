@@ -99,6 +99,7 @@ const OptionTitle = styled.span<{ $active: boolean }>`
     content: "${(p) => (p.$active ? " ✓" : "")}";
     color: var(--text-muted);
     font-size: 12px;
+    display: none;
   }
 `;
 

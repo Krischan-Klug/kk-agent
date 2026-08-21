@@ -83,21 +83,6 @@ export const SkillCapabilityRow = styled.div<{ $active: boolean }>`
   }
 `;
 
-export const ModeTabContent = styled.span`
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-`;
-
-export const ModeStatusDot = styled.span<{ $enabled: boolean; $color: string }>`
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  flex-shrink: 0;
-  background: ${({ $enabled, $color }) => $enabled ? $color : "var(--text-muted)"};
-  opacity: ${({ $enabled }) => ($enabled ? 1 : 0.85)};
-`;
-
 export const ModeColorPicker = styled.div`
   display: flex;
   align-items: center;

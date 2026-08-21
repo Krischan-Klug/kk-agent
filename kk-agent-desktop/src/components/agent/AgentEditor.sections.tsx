@@ -34,13 +34,11 @@ import {
   HeaderActions,
   InlineSelect,
   LabelRow,
-  ModeStatusDot,
   ModeColorButton,
   ModeCustomColorPicker,
   ModeColorInput,
   ModeColorPicker,
   ModeTab,
-  ModeTabContent,
   ModeTabs,
   PromptSectionField,
   PromptSectionsGrid,
@@ -127,13 +125,12 @@ export function AgentInfoSection({
                 key={mode.id}
                 type="button"
                 $active={mode.id === effectiveSelectedModeId}
+                $enabled={mode.enabled}
                 $variant={mode.behavior === "plan" ? "info" : "warning"}
+                $color={getModeColor(mode.color, mode.behavior)}
                 onClick={() => setSelectedModeId(mode.id)}
               >
-                <ModeTabContent>
-                  <ModeStatusDot $enabled={mode.enabled} $color={getModeColor(mode.color, mode.behavior)} />
-                  <span>{mode.label}</span>
-                </ModeTabContent>
+                {mode.label}
               </ModeTab>
             ))}
           </ModeTabs>

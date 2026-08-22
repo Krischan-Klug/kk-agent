@@ -1,4 +1,5 @@
 import type { McpServerConfig, ToolCallResult } from "../../../mcp/types.js";
+import type { ToolRuntimeContext } from "../../../loop/types.js";
 
 const REQUEST_TIMEOUT = 10000;
 const FETCH_CHAR_LIMIT = 12000;
@@ -56,12 +57,15 @@ function extractTitle(html: string): string | null {
   return match ? stripHtml(match[1]) : null;
 }
 
-function fetchWithTimeout(url: string, timeoutMs = REQUEST_TIMEOUT): Promise<Response> {
+function fetchWithTimeout(url: string, timeoutMs = REQUEST_TIMEOUT, abortSignal?: AbortSignal): Promise<Response> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
+  const signal = abortSignal
+    ? AbortSignal.any([controller.signal, abortSignal])
+    : controller.signal;
   return fetch(url, {
     headers: { "User-Agent": "Mozilla/5.0 kk-agent" },
-    signal: controller.signal,
+    signal,
     redirect: "follow",
   }).finally(() => clearTimeout(timer));
 }
@@ -178,6 +182,7 @@ export async function executeWebSearchTool(
   _config: McpServerConfig,
   toolName: string,
   args: Record<string, unknown>,
+  context?: ToolRuntimeContext,
 ): Promise<ToolCallResult | null> {
   if (toolName === "WebSearch") {
     const query = String(args.query ?? "").trim();
@@ -199,7 +204,7 @@ export async function executeWebSearchTool(
     }
 
     const url = `https://html.duckduckgo.com/html/?q=${encodeURIComponent(query)}`;
-    const response = await fetchWithTimeout(url);
+    const response = await fetchWithTimeout(url, REQUEST_TIMEOUT, context?.abortSignal);
     const html = await response.text();
 
     const matches = [
@@ -285,7 +290,7 @@ export async function executeWebSearchTool(
       finalUrl = cached.url;
       bytes = Buffer.byteLength(markdown, "utf-8");
     } else {
-      const response = await fetchWithTimeout(url);
+      const response = await fetchWithTimeout(url, REQUEST_TIMEOUT, context?.abortSignal);
       finalUrl = response.url;
 
       // Detect cross-host redirect

@@ -141,5 +141,5 @@ export async function executeRuntimeTool(
     ) ?? { content: `Tool "${toolName}" is not available.`, isError: true };
   }
 
-  return executeToolForMcp(runtimeTool.capabilityId, toolName, args);
+  return executeToolForMcp(runtimeTool.capabilityId, toolName, args, context?.abortSignal);
 }

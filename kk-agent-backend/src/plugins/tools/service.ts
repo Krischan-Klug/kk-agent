@@ -47,6 +47,9 @@ const SELF_BOUNDED_READ_SYSTEM_TOOLS = new Set([
 
 function isConcurrencySafeSystemTool(toolName: string, input: Record<string, unknown>): boolean {
   if (toolName === "Terminal") {
+    const action = input.action === undefined ? "run" : String(input.action).trim().toLowerCase();
+    if (action === "status") return true;
+    if (action !== "run") return false;
     return isReadOnlyShellCommand(String(input.command ?? ""), getTerminalShellProfile()?.dialect);
   }
 
@@ -81,7 +84,9 @@ function buildSystemToolPermissionResolver(
     const command = String(args.command ?? "").trim();
     const profile = getTerminalShellProfile();
     return resolveTerminalCommandPermission({
+      action: args.action,
       command,
+      taskId: args.taskId,
       modeBehavior: mode.behavior,
       shellDialect: profile?.dialect,
       approvalMode,
@@ -125,6 +130,7 @@ function buildRuntimeVariablesForMcp(mcp: McpServerConfig): Record<string, strin
       TERMINAL_CWD: root,
       ...(profile ? {
         TERMINAL_SHELL: `${profile.displayName} ${profile.version}`,
+        TERMINAL_PRIVILEGE: "current_user",
       } : {}),
     };
   }
@@ -178,6 +184,8 @@ function resolveSystemMcp(
           baseInstruction,
           profile.pathConvention,
           profile.syntaxRules,
+          "Commands run with the current operating-system user privileges. Access scope never grants administrator or root privileges.",
+          "For background commands, keep the returned taskId and use Terminal action=status or action=stop; never construct raw process-kill commands.",
           "The active shell profile is fixed for this run. Do not assume or silently switch to a different shell dialect.",
         ].join(" ")
       : baseInstruction,

@@ -76,6 +76,18 @@ const DESTRUCTIVE_PATTERNS = [
   /\bgit\s+(reset|clean|checkout|restore|push|rebase|pull)\b/,
 ];
 
+const UNMANAGED_PROCESS_TERMINATION_PATTERNS = [
+  /\btaskkill(?:\.exe)?\b/,
+  /\btskill(?:\.exe)?\b/,
+  /\bstop-process\b/,
+  /\b(?:pkill|killall)\b/,
+  /\bkill\s+(?:-[a-z0-9]+\s+)*(?:--\s+)?(?:[$%`(]|-?\d)/,
+  /\bprocess\.kill\s*\(/,
+  /\.kill\s*\(/,
+  /\bwmic\b.*\bprocess\b.*\b(?:delete|terminate)\b/,
+  /\binvoke-cimmethod\b.*\bterminate\b/,
+];
+
 function normalizeShellCommand(command: string): string {
   return command.trim().replace(/\s+/g, " ");
 }
@@ -125,4 +137,9 @@ export function isReadOnlyShellCommand(command: string, dialect: TerminalShellDi
 export function isDestructiveShellCommand(command: string): boolean {
   const normalized = normalizeShellCommand(command).toLowerCase();
   return DESTRUCTIVE_PATTERNS.some((pattern) => pattern.test(normalized));
+}
+
+export function isUnmanagedProcessTerminationCommand(command: string): boolean {
+  const normalized = normalizeShellCommand(command).toLowerCase();
+  return UNMANAGED_PROCESS_TERMINATION_PATTERNS.some((pattern) => pattern.test(normalized));
 }

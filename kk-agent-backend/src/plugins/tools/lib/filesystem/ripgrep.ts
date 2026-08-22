@@ -42,6 +42,7 @@ export interface GlobRipgrepOptions {
   root: string;
   pattern: string;
   limit: number;
+  abortSignal?: AbortSignal;
 }
 
 export interface GlobRipgrepResult {
@@ -68,12 +69,22 @@ export async function globWithRipgrep(options: GlobRipgrepOptions): Promise<Glob
   return new Promise((resolve, reject) => {
     let settled = false;
     let timer: ReturnType<typeof setTimeout>;
+    const abort = () => {
+      proc.kill();
+      finish(() => reject(abortError()));
+    };
     const finish = (callback: () => void): void => {
       if (settled) return;
       settled = true;
       clearTimeout(timer);
+      options.abortSignal?.removeEventListener("abort", abort);
       callback();
     };
+    if (options.abortSignal?.aborted) {
+      abort();
+      return;
+    }
+    options.abortSignal?.addEventListener("abort", abort, { once: true });
     timer = setTimeout(() => {
       proc.kill();
       finish(() => reject(new Error("rg glob timed out")));
@@ -121,6 +132,13 @@ export interface GrepRipgrepOptions {
   caseSensitive: boolean;
   multiline: boolean;
   maxResultBytes: number;
+  abortSignal?: AbortSignal;
+}
+
+function abortError(): Error {
+  const error = new Error("Filesystem search aborted");
+  error.name = "AbortError";
+  return error;
 }
 
 interface GrepMatch {
@@ -166,12 +184,22 @@ export async function grepWithRipgrep(options: GrepRipgrepOptions): Promise<Grep
   return new Promise((resolve, reject) => {
     let settled = false;
     let timer: ReturnType<typeof setTimeout>;
+    const abort = () => {
+      proc.kill();
+      finish(() => reject(abortError()));
+    };
     const finish = (callback: () => void): void => {
       if (settled) return;
       settled = true;
       clearTimeout(timer);
+      options.abortSignal?.removeEventListener("abort", abort);
       callback();
     };
+    if (options.abortSignal?.aborted) {
+      abort();
+      return;
+    }
+    options.abortSignal?.addEventListener("abort", abort, { once: true });
     timer = setTimeout(() => {
       proc.kill();
       finish(() => reject(new Error("rg grep timed out")));

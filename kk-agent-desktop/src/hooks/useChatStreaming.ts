@@ -23,6 +23,11 @@ import type { ActiveToolCall, StreamingTurnState } from "@/components/chat/types
 import { getToolCallDisplayText } from "@/components/chat/messageBlocks";
 
 const logger = createLogger("chat-stream");
+const ABORT_STREAM_GRACE_MS = 2_500;
+
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
 
 type Options = {
   session: SessionState | null;
@@ -293,6 +298,10 @@ export function useChatStreaming({
   const [input, setInput] = useState("");
   const [streamSnapshot, setStreamSnapshot] = useState(() => getChatStreamSnapshot(session?.id));
   const mountedRef = useRef(true);
+  const streamControllerRef = useRef<AbortController | null>(null);
+  const streamCompletionRef = useRef<Promise<void> | null>(null);
+  const resolveStreamCompletionRef = useRef<(() => void) | null>(null);
+  const abortRequestedRef = useRef(false);
 
   const setCustomAnswer = useCallback((value: string) => {
     if (!session) {
@@ -334,12 +343,20 @@ export function useChatStreaming({
     const previousRunIds = new Set(session.runs.map((entry) => entry.id));
     let completed = false;
     let transportError: string | undefined;
+    const streamController = new AbortController();
+    const streamCompletion = new Promise<void>((resolve) => {
+      resolveStreamCompletionRef.current = resolve;
+    });
+    streamControllerRef.current = streamController;
+    streamCompletionRef.current = streamCompletion;
+    abortRequestedRef.current = false;
 
     setInput("");
     updateChatStreamSnapshot(session.id, (previous) => ({
       ...previous,
       sending: true,
       streaming: true,
+      aborting: false,
       streamTurn: null,
       streamRunEvents: [],
       loopState: null,
@@ -421,6 +438,25 @@ export function useChatStreaming({
               }));
             }
             break;
+          case "context_usage":
+            updateChatStreamSnapshot(session.id, (previous) => ({
+              ...previous,
+              tokenStats: {
+                input: event.usage.inputTokens,
+                output: event.usage.outputTokens,
+                reasoning: event.usage.reasoningTokens,
+                used: event.usage.usedTokens,
+              },
+            }));
+            if (mountedRef.current) {
+              setSession((previous) => previous?.id === session.id
+                ? {
+                    ...previous,
+                    contextState: { ...previous.contextState, usage: event.usage },
+                  }
+                : previous);
+            }
+            break;
           case "user_prompt":
             updateChatStreamSnapshot(session.id, (previous) => ({
               ...previous,
@@ -450,10 +486,11 @@ export function useChatStreaming({
             transportError = event.message;
             break;
         }
-      }, assetIds.length > 0 ? assetIds : undefined);
+      }, assetIds.length > 0 ? assetIds : undefined, streamController.signal);
       if (!completed) throw new Error(transportError ?? "The chat stream ended before completion.");
     } catch (err) {
-      logger.error(err);
+      const userAborted = abortRequestedRef.current || streamController.signal.aborted;
+      if (!userAborted) logger.error(err);
       const errorMessage = err instanceof Error ? err.message : String(err);
       let currentSession = session;
       try {
@@ -472,15 +509,27 @@ export function useChatStreaming({
         ...previous,
         sending: false,
         streaming: false,
+        aborting: false,
         streamRunEvents: currentSession.runs
           .filter((run) => !previousRunIds.has(run.id))
           .some((run) => run.events.some((event) => event.terminal))
           ? previous.streamRunEvents
-          : [...previous.streamRunEvents, createTransportRunEvent(currentSession, errorMessage)],
+          : userAborted
+            ? previous.streamRunEvents
+            : [...previous.streamRunEvents, createTransportRunEvent(currentSession, errorMessage)],
       }));
     } finally {
+      resolveStreamCompletionRef.current?.();
+      resolveStreamCompletionRef.current = null;
+      if (streamControllerRef.current === streamController) streamControllerRef.current = null;
+      if (streamCompletionRef.current === streamCompletion) streamCompletionRef.current = null;
       if (!completed) {
-        updateChatStreamSnapshot(session.id, (previous) => ({ ...previous, sending: false, streaming: false }));
+        updateChatStreamSnapshot(session.id, (previous) => ({
+          ...previous,
+          sending: false,
+          streaming: false,
+          aborting: false,
+        }));
       }
     }
   }, [
@@ -495,6 +544,47 @@ export function useChatStreaming({
     setSession,
     streamSnapshot.sending,
   ]);
+
+  const handleAbort = useCallback(async () => {
+    if (!session || !streamSnapshot.sending || streamSnapshot.aborting) return;
+    abortRequestedRef.current = true;
+    updateChatStreamSnapshot(session.id, (previous) => ({ ...previous, aborting: true }));
+
+    try {
+      await sessionApi.abort(session.id);
+      const completion = streamCompletionRef.current;
+      if (completion) {
+        const completedWithinGrace = await Promise.race([
+          completion.then(() => true),
+          delay(ABORT_STREAM_GRACE_MS).then(() => false),
+        ]);
+        if (!completedWithinGrace) {
+          streamControllerRef.current?.abort();
+          await Promise.race([completion, delay(1_000)]);
+        }
+      }
+    } catch (error) {
+      logger.warn(error);
+      streamControllerRef.current?.abort();
+    } finally {
+      const current = getChatStreamSnapshot(session.id);
+      if (current.sending || current.streaming || current.aborting) {
+        try {
+          const refreshed = await sessionApi.get(session.id);
+          if (mountedRef.current) setSession(refreshed);
+        } catch (error) {
+          logger.warn(error);
+        }
+        updateChatStreamSnapshot(session.id, (previous) => ({
+          ...previous,
+          sending: false,
+          streaming: false,
+          aborting: false,
+          pendingPrompt: null,
+        }));
+      }
+    }
+  }, [session, setSession, streamSnapshot.aborting, streamSnapshot.sending]);
 
   const handlePromptResponse = useCallback(async (selectedKey: string) => {
     if (!session || !streamSnapshot.pendingPrompt) return;
@@ -529,6 +619,7 @@ export function useChatStreaming({
     setInput,
     sending: streamSnapshot.sending,
     streaming: streamSnapshot.streaming,
+    aborting: streamSnapshot.aborting,
     streamTurn: streamSnapshot.streamTurn,
     streamRunEvents: streamSnapshot.streamRunEvents,
     loopState: streamSnapshot.loopState,
@@ -537,6 +628,7 @@ export function useChatStreaming({
     customAnswer: streamSnapshot.customAnswer,
     setCustomAnswer,
     handleSend,
+    handleAbort,
     handlePromptResponse,
     handleKeyDown,
     handleAgentSwitch,

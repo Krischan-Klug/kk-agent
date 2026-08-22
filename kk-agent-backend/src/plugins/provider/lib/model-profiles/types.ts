@@ -2,6 +2,7 @@ import type {
   EndpointCapabilities,
   EndpointTransportProfile,
   ModelInputModality,
+  ModelCompactionProfile,
   ModelOutputModality,
   ModelReasoningCapabilities,
   ModelToolCapabilities,
@@ -31,6 +32,7 @@ export interface ModelProfile {
     thinking?: ResolvedSamplingConfig;
     direct?: ResolvedSamplingConfig;
   };
+  compaction: ModelCompactionProfile;
   resolveEffort: (requested: ReasoningEffort | undefined) => {
     effectiveEffort?: ReasoningEffort;
     enabled: boolean;

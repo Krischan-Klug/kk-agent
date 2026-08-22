@@ -273,6 +273,7 @@ async function postResponses(
     method: "POST",
     headers: { "Content-Type": "application/json", ...headers },
     body: JSON.stringify(prepared.body),
+    signal: request.signal,
   });
 
   if (!res.ok) {

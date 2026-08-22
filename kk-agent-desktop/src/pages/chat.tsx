@@ -279,6 +279,7 @@ export default function ChatPage() {
       <ChatComposer
         input={streaming.input}
         sending={streaming.sending || assets.uploading}
+        aborting={streaming.aborting}
         agents={sessionData.agents}
         currentAgentId={activeSession.agentId}
         reasoningValue={resolvedEffort}
@@ -296,7 +297,7 @@ export default function ChatPage() {
         onModeSwitch={(mode) => void sessionData.handleModeSwitch(mode)}
         onApprovalModeSwitch={(approvalMode) => void sessionData.handleApprovalModeSwitch(approvalMode)}
         onSend={() => void streaming.handleSend()}
-        onAbort={() => void sessionApi.abort(activeSession.id)}
+        onAbort={() => void streaming.handleAbort()}
         onFilesSelected={(files) => { void assets.addFiles(activeSession.id, files); }}
         onRemoveAsset={assets.removeAsset}
       />

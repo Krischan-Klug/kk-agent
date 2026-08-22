@@ -28,6 +28,8 @@ export interface UnifiedRequest {
   transportProfile?: EndpointTransportProfile;
   transportState?: ProviderTransportState;
   modelContentByMessageId?: Record<string, ModelContentPart[]>;
+  purpose?: "agent" | "compaction";
+  signal?: AbortSignal;
 }
 
 export interface UnifiedToolDefinition {
@@ -102,6 +104,10 @@ interface ChatCompletionsTransportState {
   endpoint: "chat-completions";
 }
 
+interface LmStudioChatTransportState {
+  endpoint: "lmstudio-chat";
+}
+
 export interface ResponsesConversationItem extends Record<string, unknown> {
   type?: string;
 }
@@ -114,7 +120,7 @@ export interface ResponsesTransportState {
   lastResponseId?: string;
 }
 
-export type ProviderTransportState = ChatCompletionsTransportState | ResponsesTransportState;
+export type ProviderTransportState = ChatCompletionsTransportState | LmStudioChatTransportState | ResponsesTransportState;
 
 export interface UnifiedResponse {
   message: TranscriptMessage;

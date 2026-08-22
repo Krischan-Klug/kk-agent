@@ -249,6 +249,7 @@ export type StreamEvent =
   | { type: "turn_state"; state: AgentLoopState }
   | { type: "run_event"; event: RunEvent }
   | { type: "stats"; inputTokens: number; outputTokens: number; reasoningTokens: number; source: "provider" | "estimated" | "unknown" }
+  | { type: "context_usage"; usage: SessionContextUsage }
   | {
       type: "user_prompt";
       purpose: "question" | "approval";

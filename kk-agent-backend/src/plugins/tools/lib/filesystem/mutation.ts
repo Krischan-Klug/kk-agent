@@ -1,7 +1,7 @@
 import type { Stats } from "node:fs";
 import { readFile, stat, writeFile } from "node:fs/promises";
 import type { ToolCallResult } from "../../../mcp/types.js";
-import { recordReadForSession, verifyReadStateForSession } from "./read-state.js";
+import { recordKnownContentForSession, verifyReadStateForSession } from "./read-state.js";
 import { getSessionIdOrThrow, isBinaryBuffer } from "./path-utils.js";
 import { countChangedLines, detectLineEnding, generateUnifiedDiff, normalizeLineEndings } from "./diff.js";
 
@@ -56,6 +56,6 @@ export function buildTextChangeDiff(path: string, before: string, after: string)
 export async function writeTextAndRecordRead(sessionId: string, path: string, content: string): Promise<Stats> {
   await writeFile(path, content, "utf-8");
   const updatedInfo = await stat(path);
-  await recordReadForSession(sessionId, path, updatedInfo.mtimeMs, updatedInfo.size, true);
+  recordKnownContentForSession(sessionId, path, updatedInfo.mtimeMs, updatedInfo.size, content);
   return updatedInfo;
 }

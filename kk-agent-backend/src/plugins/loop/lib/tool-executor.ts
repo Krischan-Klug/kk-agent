@@ -73,6 +73,8 @@ function partitionCanRunTogether(executing: TrackedTool[], next: TrackedTool): b
 export class StreamingToolExecutor {
   private readonly tools: TrackedTool[] = [];
   private discarded = false;
+  private readonly discardedPromise: Promise<void>;
+  private resolveDiscarded!: () => void;
   private runtimeContext: ToolRuntimeContext = { values: {} };
 
   constructor(
@@ -93,8 +95,12 @@ export class StreamingToolExecutor {
     private readonly onUpdate?: (update: ToolExecutionUpdate) => void,
     initialContext: ToolRuntimeContext = { values: {} },
   ) {
+    this.discardedPromise = new Promise((resolve) => {
+      this.resolveDiscarded = resolve;
+    });
     this.runtimeContext = {
       values: { ...initialContext.values },
+      abortSignal: initialContext.abortSignal,
     };
   }
 
@@ -129,18 +135,25 @@ export class StreamingToolExecutor {
   }
 
   discardPending(reason = "Tool execution was discarded before completion."): void {
+    if (this.discarded) return;
     this.discarded = true;
     for (const tracked of this.tools) {
       if (tracked.yielded || tracked.status === "completed" || tracked.status === "error" || tracked.status === "invalid") {
         continue;
       }
+      tracked.metadata = {
+        interrupted: true,
+        errorKind: "abort",
+        code: "user_aborted",
+      };
       this.finishWithSyntheticError(tracked, "discarded", reason, { flush: false });
     }
+    this.resolveDiscarded();
   }
 
   async getFinalResults(): Promise<TranscriptMessage[]> {
     await this.waitForAllTools();
-    this.flushReadyResults();
+    if (!this.discarded) this.flushReadyResults();
 
     const ordered = this.tools.map((tool) => ({
       tool,
@@ -179,7 +192,7 @@ export class StreamingToolExecutor {
       || tool.status === "invalid"
       || tool.status === "discarded";
 
-    while (this.tools.some((tool) => !isTerminal(tool) || !tool.settled)) {
+    while (!this.discarded && this.tools.some((tool) => !isTerminal(tool) || !tool.settled)) {
       await this.processQueue();
       const inFlight = this.tools
         .filter((tool) => !tool.settled)
@@ -191,7 +204,7 @@ export class StreamingToolExecutor {
         }
         break;
       }
-      await Promise.all(inFlight);
+      await Promise.race([Promise.all(inFlight), this.discardedPromise]);
     }
   }
 
@@ -224,6 +237,7 @@ export class StreamingToolExecutor {
         status,
         result: tracked.streamedResult,
         detail: message,
+        metadata: tracked.metadata,
       });
     }
     if (flush) this.flushReadyResults();
@@ -260,6 +274,7 @@ export class StreamingToolExecutor {
 
         const runtimeTool = tracked.runtimeTool!;
         const permission = await this.resolveToolPermission(runtimeTool, tracked.toolUse.name, tracked.executionInput, this.mode);
+        if (this.discarded) return;
         if (!permission.allowed) {
           const message = permission.reason ?? `Tool "${tracked.toolUse.name}" was blocked by runtime permissions.`;
           this.finishWithSyntheticError(tracked, "error", message);
@@ -273,7 +288,10 @@ export class StreamingToolExecutor {
           this.runtimeContext,
         );
         if (this.discarded) {
-          this.finishWithSyntheticError(tracked, "discarded", "Tool execution was discarded after completion.");
+          this.finishWithSyntheticError(tracked, "discarded", "Tool execution was discarded after completion.", {
+            emit: false,
+            flush: false,
+          });
           return;
         }
 
@@ -300,7 +318,7 @@ export class StreamingToolExecutor {
         });
         this.flushReadyResults();
       } catch (error) {
-        this.finishWithSyntheticError(tracked, "error", getErrorMessage(error));
+        if (!this.discarded) this.finishWithSyntheticError(tracked, "error", getErrorMessage(error));
       } finally {
         tracked.settled = true;
         void this.processQueue();
@@ -316,7 +334,11 @@ export class StreamingToolExecutor {
       if (!tracked.streamedResult) break;
       tracked.yielded = true;
       if (tracked.contextModifier) {
-        this.runtimeContext = tracked.contextModifier(this.runtimeContext);
+        const nextContext = tracked.contextModifier(this.runtimeContext);
+        this.runtimeContext = {
+          ...nextContext,
+          abortSignal: this.runtimeContext.abortSignal,
+        };
       }
       this.emitUpdate(tracked, {
         status: tracked.result?.isError ? "error" : "yielded",

@@ -60,10 +60,10 @@ export default function SecurityPage() {
               value={settings.accessScope}
               onChange={(event) => setSettings({ ...settings, accessScope: event.target.value as SecuritySettings["accessScope"] })}
             >
-              <option value="user">User directory and descendants</option>
-              <option value="system">Entire system</option>
+              <option value="user">User directory</option>
+              <option value="system">System root</option>
             </Select>
-            <MutedText>This is the hard filesystem and terminal path boundary.</MutedText>
+            <MutedText>Sets the filesystem boundary and Terminal root. Commands always use the current operating-system user and never receive administrator rights.</MutedText>
           </FormField>
           <FormField>
             <FieldLabel>Approval mode</FieldLabel>
@@ -72,9 +72,9 @@ export default function SecurityPage() {
               onChange={(event) => setSettings({ ...settings, approvalMode: event.target.value as SecuritySettings["approvalMode"] })}
             >
               <option value="ask_approval">Ask approval</option>
-              <option value="full_access">Full access</option>
+              <option value="full_access">Do not ask</option>
             </Select>
-            <MutedText>Full access skips command confirmation but never expands the access scope.</MutedText>
+            <MutedText>Controls confirmation prompts only. It never expands the access scope or process privileges.</MutedText>
           </FormField>
           <ActionsRow>
             <Button onClick={() => void save()} disabled={saving}>{saving ? "Saving..." : "Save"}</Button>

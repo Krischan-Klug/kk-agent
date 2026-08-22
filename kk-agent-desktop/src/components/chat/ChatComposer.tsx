@@ -408,6 +408,7 @@ function formatTokens(n: number): string {
 type Props = {
   input: string;
   sending: boolean;
+  aborting?: boolean;
   agents: AgentDefinition[];
   currentAgentId: string;
   reasoningValue?: string;
@@ -433,6 +434,7 @@ type Props = {
 export default function ChatComposer({
   input,
   sending,
+  aborting = false,
   agents,
   currentAgentId,
   reasoningValue,
@@ -630,7 +632,7 @@ export default function ChatComposer({
                     value={approvalMode}
                     options={[
                       { value: "ask_approval", label: "Ask approval", color: "var(--info)" },
-                      { value: "full_access", label: "Full access", color: "var(--warning)" },
+                      { value: "full_access", label: "Do not ask", color: "var(--warning)" },
                     ]}
                     onSelect={(value) => onApprovalModeSwitch(value as ApprovalMode)}
                     direction="up"
@@ -699,10 +701,11 @@ export default function ChatComposer({
                 {sending && onAbort ? (
                   <SendIconButton
                     onClick={onAbort}
-                    aria-label="Abort"
-                    title="Abort"
+                    disabled={aborting}
+                    aria-label={aborting ? "Stopping" : "Abort"}
+                    title={aborting ? "Stopping..." : "Abort"}
                   >
-                    x
+                    {aborting ? <Spinner size={12} /> : "x"}
                   </SendIconButton>
                 ) : (
                   <SendIconButton

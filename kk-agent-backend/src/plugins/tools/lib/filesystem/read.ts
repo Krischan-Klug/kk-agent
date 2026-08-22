@@ -82,14 +82,18 @@ export async function executeRead(
   const truncated = truncateSelfBoundedReadOutput(fullOutput);
   const isTruncated = truncated !== fullOutput;
 
-  await recordReadForSession(
+  recordReadForSession(
     getSessionIdOrThrow(),
     path,
-    info.mtimeMs,
-    info.size,
-    showingAll,
-    offset,
-    limit,
+    {
+      mtimeMs: info.mtimeMs,
+      size: info.size,
+      content: raw,
+      totalLines: total,
+      startLine: offset,
+      endLine,
+      outputTruncated: isTruncated,
+    },
   );
 
   return {

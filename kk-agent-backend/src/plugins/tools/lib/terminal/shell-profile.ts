@@ -207,13 +207,3 @@ export function buildShellCommandArgs(profile: TerminalShellProfile, command: st
   }
   return ["-lc", command];
 }
-
-export function buildShellScript(profile: TerminalShellProfile, command: string): string {
-  return profile.dialect === "powershell"
-    ? `${powershellUtf8Preamble()}\n${command}\nif (-not $?) { exit 1 }\nif ($null -ne $LASTEXITCODE) { exit $LASTEXITCODE }\nexit 0\n`
-    : command.endsWith("\n") ? command : `${command}\n`;
-}
-
-export function getShellScriptExtension(profile: TerminalShellProfile): ".ps1" | ".sh" {
-  return profile.dialect === "powershell" ? ".ps1" : ".sh";
-}

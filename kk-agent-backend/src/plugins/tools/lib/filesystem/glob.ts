@@ -7,6 +7,7 @@ import { GLOB_RESULT_LIMIT, globToRegex, walkForGlob } from "./search.js";
 export async function executeGlob(
   config: McpServerConfig,
   args: Record<string, unknown>,
+  abortSignal?: AbortSignal,
 ): Promise<ToolCallResult> {
   const start = resolveFilesystemPath(config, args.path);
   const pattern = String(args.pattern ?? "").trim();
@@ -18,10 +19,11 @@ export async function executeGlob(
   const useRipgrep = await isRipgrepAvailable();
   if (useRipgrep) {
     try {
-      const rgResult = await globWithRipgrep({ root: start, pattern, limit: GLOB_RESULT_LIMIT });
+      const rgResult = await globWithRipgrep({ root: start, pattern, limit: GLOB_RESULT_LIMIT, abortSignal });
       results = rgResult.paths.map((p) => resolve(start, p));
       truncated = rgResult.truncated;
-    } catch {
+    } catch (error) {
+      if (abortSignal?.aborted) throw error;
       // fallback to JS traversal
       results = [];
     }
@@ -29,7 +31,7 @@ export async function executeGlob(
 
   if (results.length === 0) {
     const manualResults: string[] = [];
-    await walkForGlob(start, start, globToRegex(pattern), manualResults);
+    await walkForGlob(start, start, globToRegex(pattern), manualResults, abortSignal);
     results = manualResults;
     truncated = results.length >= GLOB_RESULT_LIMIT;
     if (truncated) results = results.slice(0, GLOB_RESULT_LIMIT);

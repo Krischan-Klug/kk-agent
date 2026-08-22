@@ -47,6 +47,7 @@ export const SystemNotice = styled.div<{ $severity: "info" | "warning" | "error"
 
 export const MessageBubble = styled.div<{ $role: string }>`
   max-width: 80%;
+  min-width: min(260px, 80%);
   position: relative;
   padding: var(--space-md);
   padding-bottom: calc(var(--space-md) + 18px);

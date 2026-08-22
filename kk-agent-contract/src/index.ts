@@ -25,6 +25,7 @@ export type {
   EndpointType,
   LlmRequestConfig,
   ModelCapabilities,
+  ModelCompactionProfile,
   ModelCompatibilityIssue,
   ModelInfo,
   ModelInputModality,

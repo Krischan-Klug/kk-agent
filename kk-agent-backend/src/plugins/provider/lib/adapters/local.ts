@@ -1,7 +1,8 @@
 import type { ProviderAdapter, DiscoveredModel } from "../adapter.js";
 import type { ProviderConfig } from "../../types.js";
-import * as chatCompletions from "../endpoints/chat-completions.js";
-import * as responses from "../endpoints/responses.js";
+import { chatStream as chatCompletionsStream } from "../endpoints/chat-completions.js";
+import { chatStream as lmStudioChatStream } from "../endpoints/lmstudio-chat.js";
+import { chatStream as responsesStream } from "../endpoints/responses.js";
 import { getErrorMessage } from "../../../../lib/error.js";
 
 interface NativeLmStudioModel {
@@ -88,8 +89,10 @@ export function createLocalProviderAdapter(config: ProviderConfig): ProviderAdap
   return {
     type: "local",
     chatStream(request, onChunk) {
-      const endpoint = request.endpoint === "responses" ? responses : chatCompletions;
-      return endpoint.chatStream(request, baseUrl, onChunk, headers);
+      const endpoint = request.endpoint === "responses"
+        ? responsesStream
+        : request.endpoint === "lmstudio-chat" ? lmStudioChatStream : chatCompletionsStream;
+      return endpoint(request, baseUrl, onChunk, headers);
     },
     listModels() {
       return detectModels(baseUrl, headers, config.id);

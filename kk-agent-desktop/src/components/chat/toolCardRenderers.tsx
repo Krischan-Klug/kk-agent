@@ -79,8 +79,8 @@ export function getToolCardMetadataSummary(toolCall: ActiveToolCall): string | u
   if (name === "Terminal" && meta) {
     const cwd = String(meta.cwd ?? "");
     const version = String(meta.shellVersion ?? "");
-    const elevated = meta.elevated === true ? "elevated" : "normal";
-    return [cwd, version && `version ${version}`, elevated].filter(Boolean).join(" - ") || undefined;
+    const privilege = meta.privilege === "current_user" ? "current user" : "";
+    return [cwd, version && `version ${version}`, privilege].filter(Boolean).join(" - ") || undefined;
   }
 
   return undefined;

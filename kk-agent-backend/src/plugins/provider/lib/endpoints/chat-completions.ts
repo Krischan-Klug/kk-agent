@@ -35,6 +35,7 @@ export async function chatStream(
     method: "POST",
     headers: { "Content-Type": "application/json", ...headers },
     body: JSON.stringify(buildChatCompletionsBody(request)),
+    signal: request.signal,
   });
 
   if (!res.ok) {

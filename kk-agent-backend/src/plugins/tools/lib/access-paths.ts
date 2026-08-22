@@ -35,7 +35,3 @@ export function resolveTerminalSystemConfig(config?: SystemMcpConfig): SystemMcp
   const workingDirectory = resolve(configuredWorkingDirectory || getDefaultPathForScope(accessScope));
   return { ...config, accessScope, workingDirectory };
 }
-
-export function getTerminalElevationLabel(scope?: AccessScope): "normal" | "elevated" {
-  return resolveAccessScope(scope) === "system" ? "elevated" : "normal";
-}

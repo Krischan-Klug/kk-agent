@@ -6,6 +6,7 @@ import { GLOB_RESULT_LIMIT, GREP_RESULT_LIMIT, buildRegex, walkForGrep, type Gre
 export async function executeGrep(
   config: McpServerConfig,
   args: Record<string, unknown>,
+  abortSignal?: AbortSignal,
 ): Promise<ToolCallResult> {
   const pattern = String(args.pattern ?? "").trim();
   if (!pattern) throw new Error("pattern is required");
@@ -40,17 +41,28 @@ export async function executeGrep(
         caseSensitive,
         multiline,
         maxResultBytes: 2_000_000,
+        abortSignal,
       });
       results = rgResult.matches;
       truncated = rgResult.truncated;
-    } catch {
+    } catch (error) {
+      if (abortSignal?.aborted) throw error;
       results = [];
     }
   }
 
   if (results.length === 0 && !useRipgrep) {
     const manualResults: GrepMatch[] = [];
-    await walkForGrep(start, start, buildRegex(pattern, caseSensitive, multiline), glob, type, multiline, manualResults);
+    await walkForGrep(
+      start,
+      start,
+      buildRegex(pattern, caseSensitive, multiline),
+      glob,
+      type,
+      multiline,
+      manualResults,
+      abortSignal,
+    );
     results = manualResults;
     truncated = results.length >= GREP_RESULT_LIMIT;
     if (truncated) results = results.slice(0, GREP_RESULT_LIMIT);

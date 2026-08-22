@@ -25,7 +25,7 @@ import {
 import { getSessionAssetsByIds } from "./lib/assets.js";
 import { getHarnessInstructionCatalog } from "../lib/defaults.js";
 import { getTerminalShellResolution } from "../tools/lib/terminal/shell-profile.js";
-import { OUTPUT_CONTINUE_INSTRUCTION, PTL_SNIP_NOTICE } from "../loop/lib/recovery.js";
+import { OUTPUT_CONTINUE_INSTRUCTION } from "../loop/lib/recovery.js";
 import { COMPACTION_INSTRUCTIONS } from "../loop/lib/context-compaction.js";
 
 export { getSessionRecordOrThrow, normalizeSessionRequestConfig, toPublicSession } from "./lib/session-records.js";
@@ -152,12 +152,6 @@ export function getCurrentPromptDebug(sessionId: string): SessionPromptDebug {
         source: "Agent loop",
         activation: "Used in a separate no-tools model pass when the effective runtime context reaches its reserved threshold.",
         text: COMPACTION_INSTRUCTIONS,
-      },
-      {
-        id: "recovery.context-compacted",
-        source: "Agent loop",
-        activation: "Added only after older transcript context is removed to recover from a context overflow.",
-        text: PTL_SNIP_NOTICE,
       },
       {
         id: "recovery.output-continue",

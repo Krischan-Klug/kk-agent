@@ -11,6 +11,14 @@ import { buildRunnableMcpInstructions } from "./tool-selection.js";
 import { buildRuntimeToolCollection } from "./runtime-tools.js";
 import { getDefaults } from "../../lib/defaults.js";
 import { escapeXml, toCData } from "../../lib/xml.js";
+import { listActiveTerminalTasks } from "../../tools/lib/terminal/background-tasks.js";
+
+const MAX_CONTEXT_TERMINAL_TASKS = 20;
+
+function compactTerminalCommand(command: string): string {
+  const normalized = command.replace(/\s+/g, " ").trim();
+  return normalized.length <= 240 ? normalized : `${normalized.slice(0, 237)}...`;
+}
 
 function intersectIds(sessionIds: string[], modeIds: string[]): string[] {
   const sessionSet = new Set(sessionIds);
@@ -155,8 +163,21 @@ export function buildRuntimeContext(input: {
       ? ` cwd="${escapeXml(terminalCwd)}"`
       : "";
     lines.push(
-      `  <terminal scope="${escapeXml(terminalScope)}" root="${escapeXml(terminalRoot)}"${cwdAttribute} shell="${escapeXml(input.runtimeVariables?.TERMINAL_SHELL ?? "unavailable")}" />`,
+      `  <terminal scope="${escapeXml(terminalScope)}" root="${escapeXml(terminalRoot)}"${cwdAttribute} shell="${escapeXml(input.runtimeVariables?.TERMINAL_SHELL ?? "unavailable")}" privilege="${escapeXml(input.runtimeVariables?.TERMINAL_PRIVILEGE ?? "current_user")}" />`,
     );
+    const activeTerminalTasks = listActiveTerminalTasks(input.sessionId);
+    if (activeTerminalTasks.length > 0) {
+      const visibleTasks = activeTerminalTasks.slice(0, MAX_CONTEXT_TERMINAL_TASKS);
+      const taskSummary = visibleTasks
+        .map((task) => `- [id=${task.id}] [${task.status}] ${compactTerminalCommand(task.command)} (cwd: ${task.cwd})`)
+        .join("\n");
+      const omitted = activeTerminalTasks.length - visibleTasks.length;
+      lines.push(
+        "  <terminal_tasks>",
+        `    ${toCData(`${taskSummary}${omitted > 0 ? `\n- ${omitted} weitere aktive Tasks` : ""}`)}`,
+        "  </terminal_tasks>",
+      );
+    }
   }
   if (input.assetContext) lines.push("  <assets>", `    ${toCData(input.assetContext)}`, "  </assets>");
   if (skillContexts.length > 0) lines.push("  <loaded_skills>", ...skillContexts, "  </loaded_skills>");

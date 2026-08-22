@@ -4,6 +4,7 @@ import type { PendingPrompt, StreamingTurnState, TokenDisplayStats } from "@/com
 type ChatStreamSnapshot = {
   sending: boolean;
   streaming: boolean;
+  aborting: boolean;
   streamTurn: StreamingTurnState | null;
   streamRunEvents: RunEvent[];
   loopState: AgentLoopState | null;
@@ -15,6 +16,7 @@ type ChatStreamSnapshot = {
 const EMPTY_STREAM_SNAPSHOT: ChatStreamSnapshot = {
   sending: false,
   streaming: false,
+  aborting: false,
   streamTurn: null,
   streamRunEvents: [],
   loopState: null,

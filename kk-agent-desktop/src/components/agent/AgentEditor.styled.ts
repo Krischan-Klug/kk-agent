@@ -249,11 +249,6 @@ export const ToolName = styled.div`
   color: var(--text-primary);
 `;
 
-export const ToolDescription = styled.div`
-  font-size: var(--font-size-xs);
-  color: var(--text-muted);
-`;
-
 export const LabelRow = styled.div`
   display: flex;
   align-items: center;

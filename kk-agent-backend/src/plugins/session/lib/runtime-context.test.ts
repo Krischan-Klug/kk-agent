@@ -16,12 +16,13 @@ test("runtime context exposes concise model-facing facts without shell internals
       TERMINAL_ROOT: "C:\\Users\\Tester",
       TERMINAL_CWD: "C:\\Users\\Tester",
       TERMINAL_SHELL: "Git Bash 5.2.37",
+      TERMINAL_PRIVILEGE: "current_user",
     },
   });
 
   assert.match(context, /<environment [^>]*model="test-model"/);
   assert.match(context, /<filesystem scope="user" root="C:\\Users\\Tester" \/>/);
-  assert.match(context, /<terminal scope="user" root="C:\\Users\\Tester" shell="Git Bash 5\.2\.37" \/>/);
+  assert.match(context, /<terminal scope="user" root="C:\\Users\\Tester" shell="Git Bash 5\.2\.37" privilege="current_user" \/>/);
   assert.doesNotMatch(context, /<tasks>|<memory/);
   assert.doesNotMatch(context, /mode=/);
   assert.doesNotMatch(context, /approval=/);

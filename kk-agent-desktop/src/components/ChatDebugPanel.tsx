@@ -218,10 +218,18 @@ export default function ChatDebugPanel({
   const [sessionMemoryDraft, setSessionMemoryDraft] = useState(toFactDraft(debugSessionFacts));
   const [userMemoryDraft, setUserMemoryDraft] = useState(toFactDraft(debugUserFacts));
   const [saving, setSaving] = useState<"tasks" | "session" | "user" | null>(null);
+  const [selectedModelInputId, setSelectedModelInputId] = useState("");
 
   useEffect(() => setTaskDraft(debugTasks), [debugTasks]);
   useEffect(() => setSessionMemoryDraft(toFactDraft(debugSessionFacts)), [debugSessionFacts]);
   useEffect(() => setUserMemoryDraft(toFactDraft(debugUserFacts)), [debugUserFacts]);
+  useEffect(() => {
+    setSelectedModelInputId((current) => (
+      debugModelInputs?.some((input) => input.id === current)
+        ? current
+        : debugModelInputs?.at(-1)?.id ?? ""
+    ));
+  }, [debugModelInputs]);
 
   if (!open || !session) return null;
 
@@ -318,8 +326,9 @@ export default function ChatDebugPanel({
   function renderModelInputs(inputs: ModelInputDebug[] | null): string {
     if (inputs === null) return "Loading...";
     if (inputs.length === 0) return "No provider attempt has been prepared for the latest run.";
-    return inputs.map((input) => [
-      `-- step ${input.step}, attempt ${input.attempt} · ${input.endpoint} · ${input.profileId} --`,
+    const input = inputs.find((candidate) => candidate.id === selectedModelInputId) ?? inputs.at(-1)!;
+    return [
+      `-- ${input.purpose ?? "agent"} · step ${input.step}, attempt ${input.attempt} · ${input.endpoint} · ${input.profileId} --`,
       `createdAt=${input.createdAt}`,
       "",
       "[FINAL INSTRUCTIONS]",
@@ -339,7 +348,10 @@ export default function ChatDebugPanel({
       "",
       "[PROFILE REQUEST BODY]",
       JSON.stringify(input.providerRequestBody, null, 2),
-    ].join("\n")).join("\n\n");
+      "",
+      "[COMPACTION OUTCOME]",
+      input.outcome ? JSON.stringify(input.outcome, null, 2) : "(not a completed compaction request)",
+    ].join("\n");
   }
 
   function renderHarnessInstructions(instructions: HarnessInstructionDebug[] | null): string {
@@ -427,6 +439,7 @@ export default function ChatDebugPanel({
         temperature: session.llmRequestConfig?.sampling?.temperature ?? "profile default",
         llmRequestConfig: session.llmRequestConfig ?? null,
         providerDebug: session.providerDebug ?? null,
+        contextState: session.contextState,
         messageCount: session.messages.length,
         loopModeId: loopState?.modeId ?? null,
         loopModeBehavior: loopState?.modeBehavior ?? null,
@@ -452,7 +465,7 @@ export default function ChatDebugPanel({
           })
           .join("\n")
           .slice(0, 300) || "(empty)";
-        return `[${idx}] ${role}\n  message_id: ${m.id}\n  ${preview}${preview.length >= 300 ? "..." : ""}`;
+        return `[${idx}] ${role}\n  message_id: ${m.id}\n  ${preview}${preview.length >= 300 ? "\n  [preview truncated at 300 characters]" : ""}`;
       })
       .join("\n\n");
   }
@@ -544,8 +557,26 @@ export default function ChatDebugPanel({
         </DebugControls>
       </DebugTabs>
 
-      {(debugTab === "model-input" || debugTab === "prompt" || debugTab === "runtime" || debugTab === "harness" || debugTab === "tools" || debugTab === "mcps" || debugTab === "skills" || debugTab === "runs" || debugTab === "messages") && (
+      {(debugTab === "prompt" || debugTab === "runtime" || debugTab === "harness" || debugTab === "tools" || debugTab === "mcps" || debugTab === "skills" || debugTab === "runs" || debugTab === "messages") && (
         <DebugContent>{content}</DebugContent>
+      )}
+
+      {debugTab === "model-input" && (
+        <EditorWrap>
+          {debugModelInputs && debugModelInputs.length > 0 && (
+            <InputLikeSelect
+              value={selectedModelInputId || debugModelInputs.at(-1)?.id}
+              onChange={(event) => setSelectedModelInputId(event.target.value)}
+            >
+              {debugModelInputs.map((input, index) => (
+                <option key={input.id} value={input.id}>
+                  {`${index + 1}/${debugModelInputs.length} · ${input.purpose ?? "agent"} · step ${input.step} attempt ${input.attempt}`}
+                </option>
+              ))}
+            </InputLikeSelect>
+          )}
+          <DebugContent>{content}</DebugContent>
+        </EditorWrap>
       )}
 
       {debugTab === "session" && (

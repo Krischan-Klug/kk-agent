@@ -136,6 +136,7 @@ export async function executeToolForMcp(
   mcpId: string,
   toolName: string,
   args: Record<string, unknown>,
+  signal?: AbortSignal,
 ): Promise<{ content: string; isError: boolean }> {
-  return executeMcpTool(mcpId, toolName, args);
+  return executeMcpTool(mcpId, toolName, args, signal);
 }

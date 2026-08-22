@@ -67,7 +67,9 @@ export function buildRegex(pattern: string, caseSensitive = false, multiline = f
 async function walkDirectory(
   root: string,
   onEntry: (fullPath: string, entry: { isDirectory(): boolean; isFile(): boolean; name: string }) => Promise<boolean | void>,
+  abortSignal?: AbortSignal,
 ): Promise<void> {
+  if (abortSignal?.aborted) throw new DOMException("Aborted", "AbortError");
   let entries;
   try {
     entries = await readdir(root, { withFileTypes: true });
@@ -76,6 +78,7 @@ async function walkDirectory(
   }
 
   for (const entry of entries) {
+    if (abortSignal?.aborted) throw new DOMException("Aborted", "AbortError");
     if (entry.isDirectory() && IGNORED_DIRS.has(entry.name)) continue;
 
     const fullPath = resolve(root, entry.name);
@@ -85,7 +88,7 @@ async function walkDirectory(
     }
 
     if (entry.isDirectory()) {
-      await walkDirectory(fullPath, onEntry);
+      await walkDirectory(fullPath, onEntry, abortSignal);
     }
   }
 }
@@ -95,6 +98,7 @@ export async function walkForGlob(
   rootBase: string,
   matcher: RegExp,
   results: string[],
+  abortSignal?: AbortSignal,
 ): Promise<void> {
   await walkDirectory(root, async (fullPath) => {
     if (results.length >= GLOB_RESULT_LIMIT) return false;
@@ -102,7 +106,7 @@ export async function walkForGlob(
     if (matcher.test(relPath)) {
       results.push(fullPath);
     }
-  });
+  }, abortSignal);
 }
 
 export interface GrepMatch {
@@ -119,6 +123,7 @@ export async function walkForGrep(
   type: string | undefined,
   multiline: boolean,
   results: GrepMatch[],
+  abortSignal?: AbortSignal,
 ): Promise<void> {
   const globMatcher = glob ? globToRegex(glob) : null;
 
@@ -160,5 +165,5 @@ export async function walkForGrep(
     } catch {
       // ignore unreadable files
     }
-  });
+  }, abortSignal);
 }

@@ -49,3 +49,39 @@ test("full access bypasses approval without bypassing plan mode", () => {
   });
   assert.equal(planResult.kind, "deny");
 });
+
+test("managed task operations are validated and broad kills stay denied in full access", () => {
+  assert.deepEqual(resolveTerminalCommandPermission({
+    action: "status",
+    command: "",
+    taskId: "task-1",
+    modeBehavior: "plan",
+    shellDialect: "posix",
+    approvalMode: "full_access",
+  }), { kind: "allow" });
+
+  assert.equal(resolveTerminalCommandPermission({
+    action: "stop",
+    command: "",
+    taskId: "task-1",
+    modeBehavior: "plan",
+    shellDialect: "posix",
+    approvalMode: "full_access",
+  }).kind, "deny");
+
+  assert.deepEqual(resolveTerminalCommandPermission({
+    action: "stop",
+    command: "",
+    taskId: "task-1",
+    modeBehavior: "edit",
+    shellDialect: "posix",
+    approvalMode: "ask_approval",
+  }), { kind: "allow" });
+
+  assert.equal(resolveTerminalCommandPermission({
+    command: "taskkill /F /IM node.exe",
+    modeBehavior: "edit",
+    shellDialect: "powershell",
+    approvalMode: "full_access",
+  }).kind, "deny");
+});

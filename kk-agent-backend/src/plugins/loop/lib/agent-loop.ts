@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type {
   AgentLoopState,
+  ModelInputDebug,
   RunErrorCategory,
   RunEvent,
   RunEventKind,
@@ -18,34 +19,31 @@ import {
 } from "kk-agent-contract";
 import type { LoopCheckpoint, LoopOptions, LoopResult, ToolRuntimeContext } from "../types.js";
 import type { UnifiedRequest } from "../../provider/lib/types.js";
-import { callProviderStream } from "../../provider/service.js";
+import { callProviderStream, getModelCompactionProfile } from "../../provider/service.js";
 import { buildPrompt, getSystemVariables } from "../../systemprompt/lib/builder.js";
 import { StreamingToolExecutor } from "./tool-executor.js";
 import { getDefaults } from "../../lib/defaults.js";
 import { classifyProviderError, computeBackoffMs } from "../../provider/lib/errors.js";
 import { getErrorMessage } from "../../../lib/error.js";
 import {
+  buildValidatedCompactionProjection,
+  buildCompactionMessages,
   COMPACTION_INSTRUCTIONS,
   estimateMessagesTokens,
   estimateTextTokens,
-  getCompactionMaxOutputTokens,
   getCompactionReserveTokens,
-  MAX_AUTO_COMPACTION_FAILURES,
+  isValidCompactionSummary,
   measureContextUsage,
   projectContextMessages,
   shouldCompactContext,
+  validateCompactionSummary,
 } from "./context-compaction.js";
-import {
-  estimateTranscriptChars,
-  OUTPUT_CONTINUE_INSTRUCTION,
-  PTL_SNIP_NOTICE,
-  snipOldestToolCycles,
-} from "./recovery.js";
+import { runContextCompaction } from "./context-compaction-runner.js";
+import { OUTPUT_CONTINUE_INSTRUCTION } from "./recovery.js";
 const EMPTY_RESPONSE_RETRY_BUDGET = 1;
 const TRANSIENT_RETRY_BUDGET = 3;
-const PROMPT_TOO_LONG_RETRY_BUDGET = 3;
+const PROMPT_TOO_LONG_COMPACTION_BUDGET = 3;
 const MAX_OUTPUT_RECOVERY_RETRIES = 3;
-const PROMPT_SNIP_TARGET_RATIO = 0.6;
 const MAX_COMMITTED_STEPS_PER_RUN = 200;
 const MAX_TOOL_BATCHES_PER_RUN = 100;
 const IDENTICAL_TOOL_ERROR_LIMIT = 3;
@@ -95,7 +93,7 @@ async function waitForRetry(delayMs: number, signal?: AbortSignal): Promise<void
 }
 
 function cloneToolContext(context: ToolRuntimeContext): ToolRuntimeContext {
-  return { values: structuredClone(context.values) };
+  return { values: structuredClone(context.values), abortSignal: context.abortSignal };
 }
 
 function buildLoopState(opts: LoopOptions): AgentLoopState {
@@ -186,6 +184,17 @@ function isProviderConfigurationError(error: unknown, status?: number): boolean 
 function providerRunFailure(error: unknown): RunFailure {
   const classified = classifyProviderError(error);
   const detail = getErrorMessage(error);
+  if (classified.kind === "model_unloaded") {
+    return new RunFailure({
+      status: "failed",
+      kind: "run_failed",
+      severity: "error",
+      errorCategory: "configuration",
+      code: "provider_model_unloaded",
+      message: "The selected model is not loaded. Load it in the provider and start the run again.",
+      detail,
+    });
+  }
   if (classified.kind === "prompt_too_long") {
     return new RunFailure({
       status: "failed",
@@ -262,10 +271,13 @@ async function recordPreparedModelInput(
   prepared: UnifiedRequest,
   step: number,
   attempt: number,
-): Promise<void> {
-  if (!prepared.endpoint || !prepared.resolvedLlmRequestConfig) return;
+  purpose: "agent" | "compaction" | "recovery",
+): Promise<string | undefined> {
+  if (!prepared.endpoint || !prepared.resolvedLlmRequestConfig) return undefined;
+  const id = randomUUID();
   await opts.onModelInput?.({
-    id: randomUUID(),
+    id,
+    purpose,
     step,
     attempt,
     createdAt: new Date().toISOString(),
@@ -289,6 +301,7 @@ async function recordPreparedModelInput(
     requestConfig: structuredClone(prepared.resolvedLlmRequestConfig),
     providerRequestBody: structuredClone(prepared.providerRequestBody ?? {}),
   });
+  return id;
 }
 
 async function runModelPass(
@@ -299,6 +312,7 @@ async function runModelPass(
   runtimeContext = "",
   step = 0,
   attempt = 0,
+  purpose: "agent" | "recovery" = "agent",
 ) {
   const modeConfig = opts.modeConfigs[opts.activeModeId];
   if (!modeConfig) throw new Error(`Missing mode config for mode "${opts.activeModeId}"`);
@@ -317,6 +331,7 @@ async function runModelPass(
       llmRequestConfig: opts.llmRequestConfig,
       transportState: providerState,
       modelContentByMessageId: opts.modelContentByMessageId,
+      signal: opts.abortSignal,
     }, (chunk) => {
       if (chunk.type === "assistant_block_delta") {
         streamedMessageIds.add(chunk.messageId);
@@ -332,7 +347,9 @@ async function runModelPass(
         receivedProviderStats = true;
         opts.onStats?.(chunk.stats);
       }
-    }, (prepared) => recordPreparedModelInput(opts, prepared, step, attempt));
+    }, async (prepared) => {
+      await recordPreparedModelInput(opts, prepared, step, attempt, purpose);
+    });
   } catch (error) {
     if (streamedMessageIds.size > 0) opts.onAssistantAttemptDiscarded?.([...streamedMessageIds]);
     throw error;
@@ -350,23 +367,56 @@ async function compactModelContext(
   contextLimit: number,
   step: number,
   attempt: number,
-): Promise<string> {
-  const response = await callProviderStream({
-    providerId: opts.providerId,
-    model: opts.model,
-    instructions: COMPACTION_INSTRUCTIONS,
-    messages: repairTranscript(contextMessages),
-    llmRequestConfig: {
-      ...opts.llmRequestConfig,
-      reasoning: { effort: "none", history: "discard" },
+): Promise<{
+  summary: string;
+  debugInputId?: string;
+  outcome: NonNullable<ModelInputDebug["outcome"]>;
+}> {
+  const profile = getModelCompactionProfile(opts.providerId, opts.model);
+  return runContextCompaction({
+    messages: contextMessages,
+    contextLimit,
+    profile,
+    onOutcome: async (debugInputId, outcome) => {
+      await opts.onModelInputOutcome?.(debugInputId, outcome);
     },
-    maxOutputTokens: getCompactionMaxOutputTokens(contextLimit),
-    modelContentByMessageId: opts.modelContentByMessageId,
-  }, () => undefined, (prepared) => recordPreparedModelInput(opts, prepared, step, attempt));
-  const summary = getMessageText(response.message).trim();
-  if (response.finishReason === "length") throw new Error("The context summary reached its output-token limit.");
-  if (!summary) throw new Error("The model returned an empty context summary.");
-  return summary;
+    execute: async (passRequest) => {
+      const compactionMessages = buildCompactionMessages(
+        passRequest.evidence,
+        passRequest.repairCandidate,
+      );
+      let debugInputId: string | undefined;
+      try {
+        const response = await callProviderStream({
+          providerId: opts.providerId,
+          model: opts.model,
+          purpose: "compaction",
+          instructions: COMPACTION_INSTRUCTIONS,
+          messages: compactionMessages,
+          llmRequestConfig: {
+            ...opts.llmRequestConfig,
+            reasoning: { effort: profile.reasoningEffort, history: "discard" },
+          },
+          maxOutputTokens: profile.maxOutputTokens,
+          signal: opts.abortSignal,
+        }, () => undefined, async (prepared) => {
+          debugInputId = await recordPreparedModelInput(opts, prepared, step, attempt, "compaction");
+        });
+        return { response, debugInputId };
+      } catch (error) {
+        if (debugInputId) {
+          await opts.onModelInputOutcome?.(debugInputId, {
+            status: "failed",
+            compactionPass: passRequest.pass,
+            compactionStage: passRequest.stage,
+            evidenceChars: passRequest.evidence.length,
+            validationErrors: [getErrorMessage(error)],
+          });
+        }
+        throw error;
+      }
+    },
+  });
 }
 
 function hasEnoughNewContextToCompact(
@@ -402,10 +452,18 @@ function createCheckpoint(input: {
 
 export async function runAgentLoop(opts: LoopOptions): Promise<LoopResult> {
   const messages = repairTranscript([...opts.messages]);
-  let contextState = {
-    ...structuredClone(opts.contextState),
-    consecutiveCompactionFailures: 0,
-  };
+  const storedCompaction = opts.contextState.activeCompaction;
+  const invalidStoredCompaction = storedCompaction && !isValidCompactionSummary(storedCompaction.summary)
+    ? storedCompaction
+    : undefined;
+  let contextState = structuredClone(opts.contextState);
+  if (invalidStoredCompaction) {
+    contextState = {
+      ...contextState,
+      activeCompaction: undefined,
+      consecutiveCompactionFailures: 0,
+    };
+  }
   let contextMessages = projectContextMessages(messages, contextState);
   const state = buildLoopState(opts);
   opts.onLoopState?.({ ...state });
@@ -415,12 +473,16 @@ export async function runAgentLoop(opts: LoopOptions): Promise<LoopResult> {
   let emptyResponseRetries = 0;
   let invalidToolRetries = 0;
   let promptTooLongRetries = 0;
+  let forceContextCompaction = false;
   let maxOutputRetries = 0;
   let transientRetries = 0;
   let providerState = opts.providerState;
   let providerDebug: LoopCheckpoint["providerDebug"];
   let contextLimitChecks = 0;
-  let toolContext = cloneToolContext(opts.toolContext ?? { values: {} });
+  let toolContext = cloneToolContext({
+    ...(opts.toolContext ?? { values: {} }),
+    abortSignal: opts.abortSignal,
+  });
   let lastToolErrorSignature = "";
   let identicalToolErrorRepeats = 0;
   let terminalOutcome: TerminalOutcome | undefined;
@@ -429,6 +491,18 @@ export async function runAgentLoop(opts: LoopOptions): Promise<LoopResult> {
   let status: Exclude<LoopCheckpoint["status"], "running"> = "completed";
 
   try {
+    if (invalidStoredCompaction) {
+      await emitRunEvent(opts, messages, state, {
+        kind: "provider_notice",
+        severity: "warning",
+        visibility: "debug",
+        errorCategory: "internal",
+        code: "invalid_context_compaction_ignored",
+        message: "An invalid stored context summary was ignored. The full transcript will be compacted again before use.",
+        detail: validateCompactionSummary({ summary: invalidStoredCompaction.summary }).join("\n"),
+      });
+    }
+
     // Each cycle asks for one committed assistant step. Retries only advance attempt.
     // eslint-disable-next-line no-constant-condition
     while (true) {
@@ -482,50 +556,65 @@ export async function runAgentLoop(opts: LoopOptions): Promise<LoopResult> {
           estimatedFixedTokens: modelPassInput.estimatedFixedTokens,
         });
         contextState = { ...contextState, usage };
+        opts.onContextUsage?.(usage);
         const reserveTokens = getCompactionReserveTokens(effectiveContextLimit);
-        const compactable = hasEnoughNewContextToCompact(contextMessages, contextState, reserveTokens);
+        const compactable = forceContextCompaction
+          || hasEnoughNewContextToCompact(contextMessages, contextState, reserveTokens);
         if (
           compactable
-          && shouldCompactContext(usage.usedTokens, effectiveContextLimit)
-          && contextState.consecutiveCompactionFailures < MAX_AUTO_COMPACTION_FAILURES
+          && (forceContextCompaction || shouldCompactContext(usage.usedTokens, effectiveContextLimit))
         ) {
           try {
-            const summary = await compactModelContext(
+            const compaction = await compactModelContext(
               opts,
               contextMessages,
               effectiveContextLimit,
               state.step,
               state.attempt,
             );
+            const { summary } = compaction;
             const boundary = messages.at(-1);
             if (!boundary) throw new Error("Cannot compact an empty transcript.");
             const createdAt = new Date().toISOString();
-            contextState = {
-              consecutiveCompactionFailures: 0,
-              activeCompaction: {
-                id: randomUUID(),
+            let projection;
+            try {
+              projection = buildValidatedCompactionProjection({
+                messages,
                 summary,
-                throughMessageId: boundary.id,
+                boundaryMessageId: boundary.id,
                 beforeTokens: usage.usedTokens,
-                afterTokens: 0,
+                limitTokens: effectiveContextLimit,
+                estimatedFixedTokens: modelPassInput.estimatedFixedTokens,
+                compactionId: randomUUID(),
                 createdAt,
-              },
-            };
-            contextMessages = projectContextMessages(messages, contextState);
-            const compactedUsage = measureContextUsage({
-              messages: contextMessages,
-              limitTokens: effectiveContextLimit,
-              estimatedFixedTokens: modelPassInput.estimatedFixedTokens,
-              timestamp: createdAt,
-            });
-            contextState = {
-              ...contextState,
-              usage: compactedUsage,
-              activeCompaction: {
-                ...contextState.activeCompaction!,
-                afterTokens: compactedUsage.usedTokens,
-              },
-            };
+              });
+            } catch (error) {
+              if (compaction.debugInputId) {
+                await opts.onModelInputOutcome?.(compaction.debugInputId, {
+                  ...compaction.outcome,
+                  status: "rejected",
+                  validationErrors: [
+                    ...(compaction.outcome.validationErrors ?? []),
+                    getErrorMessage(error),
+                  ],
+                  contextBeforeTokens: usage.usedTokens,
+                });
+              }
+              throw error;
+            }
+            contextState = projection.contextState;
+            contextMessages = projection.contextMessages;
+            forceContextCompaction = false;
+            const compactedUsage = projection.contextState.usage!;
+            opts.onContextUsage?.(compactedUsage);
+            if (compaction.debugInputId) {
+              await opts.onModelInputOutcome?.(compaction.debugInputId, {
+                ...compaction.outcome,
+                status: "accepted",
+                contextBeforeTokens: usage.usedTokens,
+                contextAfterTokens: compactedUsage.usedTokens,
+              });
+            }
             providerState = undefined;
             await emitRunEvent(opts, messages, state, {
               kind: "context_compacted",
@@ -545,28 +634,32 @@ export async function runAgentLoop(opts: LoopOptions): Promise<LoopResult> {
               contextState,
             }));
           } catch (error) {
-            const failures = contextState.consecutiveCompactionFailures + 1;
-            contextState = { ...contextState, consecutiveCompactionFailures: failures };
-            await opts.onCheckpoint?.(createCheckpoint({
-              messages,
-              status: "running",
-              state,
-              toolContext,
-              providerState,
-              providerDebug,
-              contextState,
-            }));
-            if (failures === MAX_AUTO_COMPACTION_FAILURES) {
-              await emitRunEvent(opts, messages, state, {
-                kind: "provider_notice",
-                severity: "warning",
-                visibility: "user",
-                errorCategory: "limit",
-                code: "automatic_context_compaction_failed",
-                message: "Automatic context compaction failed repeatedly. The run is continuing without it.",
-                detail: getErrorMessage(error),
-              });
-            }
+            throwIfAborted(opts.abortSignal);
+            contextState = {
+              ...contextState,
+              consecutiveCompactionFailures: contextState.consecutiveCompactionFailures + 1,
+            };
+            terminalOutcome = classifyProviderError(error).kind === "model_unloaded"
+              ? {
+                  status: "failed",
+                  kind: "run_failed",
+                  severity: "error",
+                  errorCategory: "configuration",
+                  code: "provider_model_unloaded",
+                  message: "The selected model was unloaded during context compaction. Load it in the provider and start the run again.",
+                  detail: getErrorMessage(error),
+                }
+              : {
+                  status: "failed",
+                  kind: "run_failed",
+                  severity: "error",
+                  errorCategory: "limit",
+                  code: "context_compaction_failed",
+                  message: "The run stopped because no verified continuation state could be produced. The full transcript and completed work were preserved.",
+                  detail: getErrorMessage(error),
+                };
+            status = "failed";
+            break;
           }
         }
       }
@@ -581,26 +674,27 @@ export async function runAgentLoop(opts: LoopOptions): Promise<LoopResult> {
           runtimeContext,
           state.step,
           state.attempt,
+          retryInstruction || transientRetries > 0 || promptTooLongRetries > 0 ? "recovery" : "agent",
         );
       } catch (error) {
-        if (error instanceof AbortedError) throw error;
+        if (error instanceof AbortedError || opts.abortSignal?.aborted) throw new AbortedError();
         const classified = classifyProviderError(error);
-        if (classified.kind === "prompt_too_long" && promptTooLongRetries < PROMPT_TOO_LONG_RETRY_BUDGET) {
-          const before = estimateTranscriptChars(contextMessages);
-          const target = Math.max(2000, Math.floor(before * PROMPT_SNIP_TARGET_RATIO));
-          const snipped = snipOldestToolCycles(contextMessages, target);
-          if (snipped.removed === 0) throw providerRunFailure(error);
+        if (
+          classified.kind === "prompt_too_long"
+          && promptTooLongRetries < PROMPT_TOO_LONG_COMPACTION_BUDGET
+          && effectiveContextLimit
+        ) {
           promptTooLongRetries += 1;
-          contextMessages = snipped.messages;
+          forceContextCompaction = true;
           providerState = undefined;
-          retryInstruction = PTL_SNIP_NOTICE;
+          retryInstruction = undefined;
           await emitRunEvent(opts, messages, state, {
-            kind: "context_compacted",
+            kind: "model_retry",
             severity: "warning",
             visibility: "user",
             errorCategory: "limit",
             code: "prompt_too_long",
-            message: `Context limit reached. Removed ${snipped.removed} older context messages and retrying.`,
+            message: "The provider rejected the context window. Creating a validated continuation state before retrying.",
           });
           continue;
         }
@@ -671,6 +765,7 @@ export async function runAgentLoop(opts: LoopOptions): Promise<LoopResult> {
       emptyResponseRetries = 0;
       invalidToolRetries = 0;
       promptTooLongRetries = 0;
+      forceContextCompaction = false;
       state.step += 1;
       messages.push(assistantMessage);
       contextMessages.push(assistantMessage);
@@ -686,14 +781,16 @@ export async function runAgentLoop(opts: LoopOptions): Promise<LoopResult> {
         }
       }
       if (effectiveContextLimit) {
+        const usage = measureContextUsage({
+          messages: contextMessages,
+          limitTokens: effectiveContextLimit,
+          estimatedFixedTokens: modelPassInput.estimatedFixedTokens,
+        });
         contextState = {
           ...contextState,
-          usage: measureContextUsage({
-            messages: contextMessages,
-            limitTokens: effectiveContextLimit,
-            estimatedFixedTokens: modelPassInput.estimatedFixedTokens,
-          }),
+          usage,
         };
+        opts.onContextUsage?.(usage);
       }
       await opts.onCheckpoint?.(createCheckpoint({
         messages,
@@ -767,6 +864,19 @@ export async function runAgentLoop(opts: LoopOptions): Promise<LoopResult> {
         messages.push(...toolResults);
         contextMessages.push(...toolResults);
         state.toolBatch += 1;
+
+        if (opts.abortSignal?.aborted) {
+          await opts.onCheckpoint?.(createCheckpoint({
+            messages,
+            status: "running",
+            state,
+            toolContext,
+            providerState,
+            providerDebug,
+            contextState,
+          }));
+          throwIfAborted(opts.abortSignal);
+        }
 
         const batchResults = toolResults.flatMap((resultMessage) => getToolResults(resultMessage));
         const batchErrors = batchResults.filter((entry) => entry.is_error);

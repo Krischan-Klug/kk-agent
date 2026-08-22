@@ -4,7 +4,7 @@ import type {
   ResolvedReasoningHistory,
 } from "./common.js";
 
-export type EndpointType = "chat-completions" | "responses";
+export type EndpointType = "chat-completions" | "responses" | "lmstudio-chat";
 export type ReasoningControl = "none" | "binary" | "effort";
 export type ModelInputModality = "text" | "image" | "audio" | "video" | "file";
 export type ModelOutputModality = "text" | "image" | "audio";
@@ -25,6 +25,13 @@ export interface EndpointCapabilities {
 export interface EndpointTransportProfile {
   supportsConcatenatedJsonSplit: boolean;
   continuationMode: ContinuationMode;
+}
+
+export interface ModelCompactionProfile {
+  endpoint: EndpointType;
+  reasoningEffort: ReasoningEffort;
+  maxOutputTokens: number;
+  inputBudgetRatio: number;
 }
 
 export interface ProviderConfig {
@@ -103,6 +110,7 @@ export interface ModelProfileSummary {
     thinking?: ResolvedSamplingConfig;
     direct?: ResolvedSamplingConfig;
   };
+  compaction: ModelCompactionProfile;
 }
 
 export interface ModelInfo {
@@ -172,6 +180,7 @@ export interface ProviderTurnDebug {
 
 export interface ModelInputDebug {
   id: string;
+  purpose: "agent" | "compaction" | "recovery";
   step: number;
   attempt: number;
   createdAt: string;
@@ -190,4 +199,16 @@ export interface ModelInputDebug {
   }>;
   requestConfig: ResolvedLlmRequestConfig;
   providerRequestBody: Record<string, unknown>;
+  outcome?: {
+    status: "accepted" | "rejected" | "failed";
+    compactionPass?: number;
+    compactionStage?: "segment" | "merge" | "final" | "repair";
+    evidenceChars?: number;
+    finishReason?: import("./transcript.js").TranscriptStopReason;
+    usage?: import("./transcript.js").TranscriptUsage;
+    output?: string;
+    validationErrors?: string[];
+    contextBeforeTokens?: number;
+    contextAfterTokens?: number;
+  };
 }

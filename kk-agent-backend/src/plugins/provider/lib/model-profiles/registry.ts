@@ -65,6 +65,12 @@ const profiles: readonly ModelProfile[] = [
         repetitionPenalty: 1,
       },
     },
+    compaction: {
+      endpoint: "lmstudio-chat",
+      reasoningEffort: "none",
+      maxOutputTokens: 8_000,
+      inputBudgetRatio: 0.85,
+    },
     resolveEffort(requested) {
       const effort = requested ?? "xhigh";
       if (effort === "none") return { effectiveEffort: "none", enabled: false };
@@ -120,6 +126,12 @@ const profiles: readonly ModelProfile[] = [
       thinking: { temperature: 1, topP: 0.95, topK: 64 },
       direct: { temperature: 1, topP: 0.95, topK: 64 },
     },
+    compaction: {
+      endpoint: "chat-completions",
+      reasoningEffort: "none",
+      maxOutputTokens: 6_000,
+      inputBudgetRatio: 0.8,
+    },
     resolveEffort(requested) {
       const effort = requested ?? "none";
       if (effort === "none") return { effectiveEffort: "none", enabled: false };
@@ -167,6 +179,12 @@ const profiles: readonly ModelProfile[] = [
     sampling: {
       thinking: { temperature: 1, topP: 0.95, topK: 64 },
     },
+    compaction: {
+      endpoint: "chat-completions",
+      reasoningEffort: "low",
+      maxOutputTokens: 8_000,
+      inputBudgetRatio: 0.8,
+    },
     resolveEffort(requested) {
       const effort = requested ?? "high";
       if (effort === "none") {
@@ -212,6 +230,12 @@ const profiles: readonly ModelProfile[] = [
       defaultHistory: "discard",
     },
     sampling: {},
+    compaction: {
+      endpoint: "chat-completions",
+      reasoningEffort: "none",
+      maxOutputTokens: 6_000,
+      inputBudgetRatio: 0.8,
+    },
     resolveEffort() {
       return { enabled: false };
     },
@@ -241,6 +265,7 @@ function cloneProfileSummary(profile: ModelProfile): ModelProfileSummary {
       allowedEfforts: [...profile.reasoning.allowedEfforts],
     },
     sampling: structuredClone(profile.sampling),
+    compaction: structuredClone(profile.compaction),
   };
 }
 

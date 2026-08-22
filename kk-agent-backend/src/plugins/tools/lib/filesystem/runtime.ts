@@ -1,4 +1,5 @@
 import type { McpServerConfig, ToolCallResult } from "../../../mcp/types.js";
+import type { ToolRuntimeContext } from "../../../loop/types.js";
 import { executeRead } from "./read.js";
 import { executeEdit } from "./edit.js";
 import { executeWrite } from "./write.js";
@@ -9,11 +10,12 @@ export async function executeFilesystemTool(
   config: McpServerConfig,
   toolName: string,
   args: Record<string, unknown>,
+  context?: ToolRuntimeContext,
 ): Promise<ToolCallResult | null> {
   if (toolName === "Read") return executeRead(config, args);
   if (toolName === "Edit") return executeEdit(config, args);
   if (toolName === "Write") return executeWrite(config, args);
-  if (toolName === "Glob") return executeGlob(config, args);
-  if (toolName === "Grep") return executeGrep(config, args);
+  if (toolName === "Glob") return executeGlob(config, args, context?.abortSignal);
+  if (toolName === "Grep") return executeGrep(config, args, context?.abortSignal);
   return null;
 }

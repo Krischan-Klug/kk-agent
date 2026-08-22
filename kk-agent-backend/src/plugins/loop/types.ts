@@ -1,4 +1,4 @@
-import type { AgentLoopState, ModelInputDebug, RunEvent, RuntimeToolSource, SessionContextState, ToolExecutionStatus, TranscriptMessage } from "kk-agent-contract";
+import type { AgentLoopState, ModelInputDebug, RunEvent, RuntimeToolSource, SessionContextState, SessionContextUsage, ToolExecutionStatus, TranscriptMessage } from "kk-agent-contract";
 import type { ModelContentPart, ProviderTransportState, ProviderTurnDebug, TokenStats, UnifiedToolDefinition } from "../provider/lib/types.js";
 import type { ModeBehavior, AgentPromptSections } from "../agent/types.js";
 import type { LlmRequestConfig } from "../provider/types.js";
@@ -25,6 +25,7 @@ export type RuntimeToolPermissionPolicy =
 
 export interface ToolRuntimeContext {
   values: Record<string, unknown>;
+  abortSignal?: AbortSignal;
 }
 
 export interface ModeRuntimeRef {
@@ -105,6 +106,7 @@ export interface LoopOptions {
   onAssistantAttemptDiscarded?: (messageIds: string[]) => void;
   onRunEvent?: (event: RunEvent) => void | Promise<void>;
   onModelInput?: (input: ModelInputDebug) => void | Promise<void>;
+  onModelInputOutcome?: (inputId: string, outcome: NonNullable<ModelInputDebug["outcome"]>) => void | Promise<void>;
   onCheckpoint?: (checkpoint: LoopCheckpoint) => void | Promise<void>;
   onToolExecutionUpdate?: (
     toolUseId: string,
@@ -124,6 +126,7 @@ export interface LoopOptions {
   ) => Promise<{ allowed: boolean; reason?: string }>;
   onLoopState?: (state: AgentLoopState) => void;
   onStats?: (stats: TokenStats) => void;
+  onContextUsage?: (usage: SessionContextUsage) => void;
   abortSignal?: AbortSignal;
 }
 

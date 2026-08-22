@@ -312,11 +312,13 @@ export const session = {
     message: string,
     onEvent: (event: StreamEvent) => void | Promise<void>,
     assetIds?: string[],
+    signal?: AbortSignal,
   ): Promise<void> => {
     const res = await fetch(`${BASE}/session/${id}/chat/stream`, {
       method: "POST",
       headers: authHeaders({ "Content-Type": "application/json" }),
       body: JSON.stringify({ message, assetIds }),
+      signal,
     });
 
     await assertOk(res);

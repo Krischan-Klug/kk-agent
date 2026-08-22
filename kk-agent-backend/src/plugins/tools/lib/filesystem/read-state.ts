@@ -1,19 +1,33 @@
 import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 
+interface ReadRange {
+  startLine: number;
+  endLine: number;
+}
+
 interface ReadStateEntry {
   mtimeMs: number;
   size: number;
-  contentHash?: string;
-  fullRead: boolean;
-  offset?: number;
-  limit?: number;
+  contentHash: string;
+  totalLines: number;
+  ranges: ReadRange[];
+}
+
+export interface ReadObservation {
+  mtimeMs: number;
+  size: number;
+  content: string;
+  totalLines: number;
+  startLine: number;
+  endLine: number;
+  outputTruncated: boolean;
 }
 
 const readState = new Map<string, Map<string, ReadStateEntry>>();
 
 function normalizeKey(path: string): string {
-  return path.toLowerCase();
+  return process.platform === "win32" ? path.toLowerCase() : path;
 }
 
 function getSessionBucket(sessionId: string): Map<string, ReadStateEntry> {
@@ -25,34 +39,75 @@ function getSessionBucket(sessionId: string): Map<string, ReadStateEntry> {
 }
 
 function computeContentHash(content: string): string {
-  return createHash("sha256").update(content, "utf-8").digest("hex").slice(0, 16);
+  return createHash("sha256").update(content, "utf-8").digest("hex");
 }
 
-export async function recordReadForSession(
+function mergeRanges(ranges: ReadRange[]): ReadRange[] {
+  const sorted = ranges
+    .filter((range) => range.startLine > 0 && range.endLine >= range.startLine)
+    .sort((left, right) => left.startLine - right.startLine);
+  const merged: ReadRange[] = [];
+  for (const range of sorted) {
+    const previous = merged.at(-1);
+    if (!previous || range.startLine > previous.endLine + 1) {
+      merged.push({ ...range });
+    } else {
+      previous.endLine = Math.max(previous.endLine, range.endLine);
+    }
+  }
+  return merged;
+}
+
+function hasFullCoverage(entry: ReadStateEntry): boolean {
+  return entry.totalLines > 0
+    && entry.ranges.length === 1
+    && entry.ranges[0]!.startLine === 1
+    && entry.ranges[0]!.endLine >= entry.totalLines;
+}
+
+export function recordReadForSession(
+  sessionId: string,
+  path: string,
+  observation: ReadObservation,
+): void {
+  const bucket = getSessionBucket(sessionId);
+  const key = normalizeKey(path);
+  const contentHash = computeContentHash(observation.content);
+  const existing = bucket.get(key);
+  const sameVersion = existing?.contentHash === contentHash;
+  const deliveredRanges = observation.outputTruncated
+    ? []
+    : [{ startLine: observation.startLine, endLine: observation.endLine }];
+  const ranges = mergeRanges([
+    ...(sameVersion ? existing.ranges : []),
+    ...deliveredRanges,
+  ]);
+
+  bucket.set(key, {
+    mtimeMs: observation.mtimeMs,
+    size: observation.size,
+    contentHash,
+    totalLines: observation.totalLines,
+    ranges,
+  });
+}
+
+export function recordKnownContentForSession(
   sessionId: string,
   path: string,
   mtimeMs: number,
   size: number,
-  fullRead: boolean,
-  offset?: number,
-  limit?: number,
-): Promise<void> {
-  let contentHash: string | undefined;
-  if (fullRead) {
-    try {
-      const content = await readFile(path, "utf-8");
-      contentHash = computeContentHash(content);
-    } catch {
-      // ignore: if file becomes unreadable, hash stays undefined
-    }
-  }
-  getSessionBucket(sessionId).set(normalizeKey(path), {
+  content: string,
+): void {
+  const totalLines = content.split("\n").length;
+  recordReadForSession(sessionId, path, {
     mtimeMs,
     size,
-    contentHash,
-    fullRead,
-    offset,
-    limit,
+    content,
+    totalLines,
+    startLine: 1,
+    endLine: totalLines,
+    outputTruncated: false,
   });
 }
 
@@ -62,33 +117,26 @@ export async function verifyReadStateForSession(
   mtimeMs: number,
   size: number,
 ): Promise<{ allowed: boolean; reason?: string }> {
-  const entry = getSessionBucket(sessionId).get(normalizeKey(path));
+  const bucket = getSessionBucket(sessionId);
+  const key = normalizeKey(path);
+  const entry = bucket.get(key);
   if (!entry) {
     return { allowed: false, reason: "This file has not been read in the current conversation. Use Read before editing or overwriting it." };
   }
-  if (!entry.fullRead) {
-    return { allowed: false, reason: "This file was only partially read. Perform a full Read before editing or overwriting it." };
+  if (!hasFullCoverage(entry)) {
+    return { allowed: false, reason: "This file has not been fully read. Read all remaining sections before editing or overwriting it." };
   }
-  if (entry.mtimeMs === mtimeMs && entry.size === size) {
-    return { allowed: true };
-  }
-  // mtime or size changed; verify by content hash as fallback
+
   try {
     const content = await readFile(path, "utf-8");
-    const currentHash = computeContentHash(content);
-    if (entry.contentHash && entry.contentHash === currentHash) {
-      // Content is unchanged despite mtime/size change; update stored state
-      getSessionBucket(sessionId).set(normalizeKey(path), {
-        ...entry,
-        mtimeMs,
-        size,
-      });
-      return { allowed: true };
+    if (computeContentHash(content) !== entry.contentHash) {
+      return { allowed: false, reason: "This file has changed since it was last read. Use Read again before editing or overwriting it." };
     }
+    bucket.set(key, { ...entry, mtimeMs, size });
+    return { allowed: true };
   } catch {
-    // ignore
+    return { allowed: false, reason: "This file could not be verified after it was read. Use Read again before editing or overwriting it." };
   }
-  return { allowed: false, reason: "This file has changed since it was last read. Use Read again before editing or overwriting it." };
 }
 
 export function clearFilesystemReadState(sessionId: string): void {

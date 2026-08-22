@@ -37,17 +37,28 @@ export function normalizeRequestOptions(
   const maxOutputTokens = typeof request.maxOutputTokens === "number" && Number.isFinite(request.maxOutputTokens)
     ? Math.max(1, Math.floor(request.maxOutputTokens))
     : undefined;
-  const providerRequestBody = {
-    ...compiled.body,
-    ...(maxOutputTokens
-      ? { [profile.endpoint === "responses" ? "max_output_tokens" : "max_tokens"]: maxOutputTokens }
-      : {}),
-  };
+  const endpoint = request.purpose === "compaction" ? profile.compaction.endpoint : profile.endpoint;
+  const providerRequestBody = endpoint === "lmstudio-chat"
+    ? {
+        ...Object.fromEntries(Object.entries(compiled.body).filter(([key]) => (
+          key !== "chat_template_kwargs" && key !== "reasoning_effort"
+        ))),
+        reasoning: compiled.resolved.reasoning.enabled
+          ? compiled.resolved.reasoning.effectiveEffort === "xhigh" ? "high" : compiled.resolved.reasoning.effectiveEffort ?? "on"
+          : "off",
+        ...(maxOutputTokens ? { max_output_tokens: maxOutputTokens } : {}),
+      }
+    : {
+        ...compiled.body,
+        ...(maxOutputTokens
+          ? { [endpoint === "responses" ? "max_output_tokens" : "max_tokens"]: maxOutputTokens }
+          : {}),
+      };
 
   return {
-    endpoint: profile.endpoint,
+    endpoint,
     transportProfile: profile.transport,
-    resolvedLlmRequestConfig: compiled.resolved,
+    resolvedLlmRequestConfig: { ...compiled.resolved, endpoint },
     providerRequestBody,
     instructions: compiled.instructions,
     messages: compiled.messages,

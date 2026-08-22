@@ -1,7 +1,11 @@
 import type { ApprovalMode } from "../../../mcp/types.js";
 import type { ModeBehavior } from "../../../agent/types.js";
 import type { RuntimeToolPermissionPolicy } from "../../../loop/types.js";
-import { isDestructiveShellCommand, isReadOnlyShellCommand } from "./command-policy.js";
+import {
+  isDestructiveShellCommand,
+  isReadOnlyShellCommand,
+  isUnmanagedProcessTerminationCommand,
+} from "./command-policy.js";
 import type { TerminalShellDialect } from "./shell-profile.js";
 
 export const TERMINAL_RUN_GRANT_KEY = "terminal:destructive";
@@ -11,15 +15,37 @@ export function resolveApprovalMode(mode?: ApprovalMode): ApprovalMode {
 }
 
 export function resolveTerminalCommandPermission(input: {
+  action?: unknown;
   command: string;
+  taskId?: unknown;
   modeBehavior: ModeBehavior;
   shellDialect?: TerminalShellDialect;
   approvalMode?: ApprovalMode;
 }): RuntimeToolPermissionPolicy {
+  const action = input.action === undefined ? "run" : String(input.action).trim().toLowerCase();
+  if (!new Set(["run", "status", "stop"]).has(action)) {
+    return { kind: "deny", reason: `Unsupported Terminal action "${action}".` };
+  }
+  if (action === "status" || action === "stop") {
+    if (!String(input.taskId ?? "").trim()) {
+      return { kind: "deny", reason: `Terminal action "${action}" requires taskId.` };
+    }
+    if (action === "stop" && input.modeBehavior === "plan") {
+      return { kind: "deny", reason: "Im Plan-Mode duerfen Terminal-Tasks nicht gestoppt werden." };
+    }
+    return { kind: "allow" };
+  }
+
   const command = input.command.trim();
   if (!command) return { kind: "deny", reason: "Terminal requires a command." };
   if (!input.shellDialect) {
     return { kind: "deny", reason: "Terminal is unavailable because no supported shell was detected." };
+  }
+  if (isUnmanagedProcessTerminationCommand(command)) {
+    return {
+      kind: "deny",
+      reason: "Raw process-termination commands are disabled. Use Terminal action=\"stop\" with a managed taskId.",
+    };
   }
   if (input.modeBehavior === "plan" && !isReadOnlyShellCommand(command, input.shellDialect)) {
     return {

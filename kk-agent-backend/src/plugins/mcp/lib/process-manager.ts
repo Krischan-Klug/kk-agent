@@ -149,6 +149,7 @@ export async function executeToolForMcp(
   mcpId: string,
   toolName: string,
   args: Record<string, unknown>,
+  signal?: AbortSignal,
 ): Promise<ToolCallResult> {
   const entry = running.get(mcpId);
   if (!entry) {
@@ -160,7 +161,11 @@ export async function executeToolForMcp(
   }
 
   try {
-    const result = await entry.client.callTool({ name: toolName, arguments: args });
+    const result = await entry.client.callTool(
+      { name: toolName, arguments: args },
+      undefined,
+      { signal },
+    );
     const content = (result.content as Array<{ type: string; text?: string }>)
       .map((c) => c.text ?? "")
       .join("\n");

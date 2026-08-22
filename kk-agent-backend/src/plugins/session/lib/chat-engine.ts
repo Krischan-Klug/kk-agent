@@ -213,7 +213,7 @@ function buildLoopRequest(
   prepared: PreparedLoopRun,
   handlers: Partial<Pick<
     LoopOptions,
-    "onAssistantBlockDelta" | "onAssistantMessage" | "onAssistantAttemptDiscarded" | "onToolExecutionUpdate" | "onLoopState" | "onStats"
+    "onAssistantBlockDelta" | "onAssistantMessage" | "onAssistantAttemptDiscarded" | "onToolExecutionUpdate" | "onLoopState" | "onStats" | "onContextUsage"
   >> = {},
   emit?: (event: SSEEvent) => void,
 ): LoopOptions {
@@ -350,6 +350,15 @@ function buildLoopRequest(
           : { ...run, updatedAt: nowIso(), modelInputs: [...run.modelInputs, input] }
       ));
     },
+    onModelInputOutcome: async (inputId, outcome) => {
+      await updateRun(prepared.session.id, prepared.run.id, (run) => ({
+        ...run,
+        updatedAt: nowIso(),
+        modelInputs: run.modelInputs.map((input) => (
+          input.id === inputId ? { ...input, outcome: structuredClone(outcome) } : input
+        )),
+      }));
+    },
     onCheckpoint: (checkpoint) => persistCheckpoint(prepared, checkpoint),
     ...handlers,
   };
@@ -432,6 +441,7 @@ export async function chatStream(
           emit({ type: "tool_execution_update", toolUseId, toolName, input, status, result: resultMessage, detail, summary, metadata }),
         onLoopState: (state) => emit({ type: "turn_state", state }),
         onStats: (stats) => emit({ type: "stats", inputTokens: stats.inputTokens, outputTokens: stats.outputTokens, reasoningTokens: stats.reasoningTokens, source: stats.source }),
+        onContextUsage: (usage) => emit({ type: "context_usage", usage }),
       }, emit),
       abortSignal: abortController.signal,
     }));

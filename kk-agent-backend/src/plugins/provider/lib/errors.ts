@@ -1,5 +1,6 @@
 type ProviderErrorKind =
   | "prompt_too_long"
+  | "model_unloaded"
   | "rate_limit"
   | "transient"
   | "fatal";
@@ -25,6 +26,16 @@ export function classifyProviderError(error: unknown): ClassifiedProviderError {
   const message = error instanceof Error ? error.message : String(error);
   const lower = message.toLowerCase();
   const status = extractStatus(message);
+
+  if (
+    lower.includes("model_unloaded")
+    || lower.includes("model is not loaded")
+    || lower.includes("model isn't loaded")
+    || lower.includes("no model loaded")
+    || lower.includes("no models loaded")
+  ) {
+    return { kind: "model_unloaded", status, message, cause: error };
+  }
 
   if (
     status === 413 ||

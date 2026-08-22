@@ -310,6 +310,13 @@ export function getModelCapabilities(
   return profile ? buildProfiledCapabilities(profile, {}).capabilities : undefined;
 }
 
+export function getModelCompactionProfile(providerId: string, modelId: string) {
+  resolveProvider(providerId);
+  const profile = getModelProfile(getModelSettings(providerId, modelId).profileId);
+  if (!profile) throw new Error(`Model "${modelId}" has no valid inference profile.`);
+  return structuredClone(profile.compaction);
+}
+
 export function getAllModelSettings(providerId?: string): Record<string, ModelSettings> {
   return Object.fromEntries(
     Object.entries(state.modelSettings)

@@ -4,7 +4,8 @@ import {
   buildTextChangeDiff,
   normalizeToExistingLineEndings,
   readExistingTextForMutation,
-  writeTextAndRecordRead,
+  withFileMutationLock,
+  writeTextAtomically,
 } from "./mutation.js";
 
 export async function executeEdit(
@@ -32,49 +33,48 @@ export async function executeEdit(
     };
   }
 
-  const existing = await readExistingTextForMutation(path, "edit", "Cannot edit binary file");
-  if (!existing.ok) return existing.result;
-  const { sessionId, content } = existing;
+  return withFileMutationLock(path, async () => {
+    const existing = await readExistingTextForMutation(path, "edit", "Cannot edit binary file");
+    if (!existing.ok) return existing.result;
+    const { content, info } = existing;
+    const occurrences = content.split(oldString).length - 1;
 
-  const occurrences = content.split(oldString).length - 1;
+    if (occurrences === 0) {
+      const excerpt = oldString.length > 60 ? oldString.slice(0, 60) + "..." : oldString;
+      return {
+        content: `old_string not found in the current file.\n\nSearched for:\n${excerpt}`,
+        isError: true,
+        metadata: { filePath: path, operation: "edit", notFound: true },
+      };
+    }
 
-  if (occurrences === 0) {
-    const excerpt = oldString.length > 60 ? oldString.slice(0, 60) + "..." : oldString;
+    if (occurrences > 1 && !replaceAll) {
+      return {
+        content: `old_string found ${occurrences} times. Add more context or set replace_all=true.`,
+        isError: true,
+        metadata: { filePath: path, operation: "edit", occurrences, replaceAll: false },
+      };
+    }
+
+    const normalizedNewString = normalizeToExistingLineEndings(newString, content);
+    const updated = replaceAll
+      ? content.split(oldString).join(normalizedNewString)
+      : content.replace(oldString, normalizedNewString);
+    const { diff, changedLines } = buildTextChangeDiff(path, content, updated);
+
+    await writeTextAtomically(path, updated, info.mode);
+
     return {
-      content: `old_string not found in file. The exact string was not found.\n\nHint: re-read the file to get the current content, then try again with the exact text.\n\nSearched for:\n${excerpt}`,
-      isError: true,
-      metadata: { filePath: path, operation: "edit", notFound: true },
+      content: [`Edited file: ${path}`, diff ? `\n${diff}` : "", `\n[${replaceAll ? "All " : ""}${occurrences} occurrence(s) replaced, ${changedLines} line(s) changed]`].join("\n"),
+      isError: false,
+      metadata: {
+        filePath: path,
+        operation: "edit",
+        occurrences: replaceAll ? occurrences : 1,
+        changedLines,
+        created: false,
+        diff,
+      },
     };
-  }
-
-  if (occurrences > 1 && !replaceAll) {
-    return {
-      content: `old_string found ${occurrences} times. Add more context or set replace_all=true.`,
-      isError: true,
-      metadata: { filePath: path, operation: "edit", occurrences, replaceAll: false },
-    };
-  }
-
-  const normalizedNewString = normalizeToExistingLineEndings(newString, content);
-
-  const updated = replaceAll
-    ? content.split(oldString).join(normalizedNewString)
-    : content.replace(oldString, normalizedNewString);
-
-  const { diff, changedLines } = buildTextChangeDiff(path, content, updated);
-
-  await writeTextAndRecordRead(sessionId, path, updated);
-
-  return {
-    content: [`Edited file: ${path}`, diff ? `\n${diff}` : "", `\n[${replaceAll ? "All " : ""}${occurrences} occurrence(s) replaced, ${changedLines} line(s) changed]`].join("\n"),
-    isError: false,
-    metadata: {
-      filePath: path,
-      operation: "edit",
-      occurrences: replaceAll ? occurrences : 1,
-      changedLines,
-      created: false,
-      diff,
-    },
-  };
+  });
 }

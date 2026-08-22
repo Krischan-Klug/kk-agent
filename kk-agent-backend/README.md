@@ -68,7 +68,7 @@ Each usable model has an explicitly selected, versioned inference profile. Profi
 
 Model settings contain only the profile ID plus optional canonical reasoning/history and compact `temperature` / `top_p` overrides. Arbitrary provider request bodies are never persisted as user configuration.
 
-Reasoning history is `auto|discard|tool-turns|all`: `auto` selects the profile default, `discard` keeps only the active turn, `tool-turns` also retains historical tool-call reasoning, and `all` preserves the complete reasoning trace.
+Reasoning history is `auto|discard|latest|tool-turns|all`: `auto` selects the profile default, `discard` omits historical reasoning, `latest` replays only the immediately preceding assistant step, `tool-turns` retains tool-call reasoning, and `all` preserves the complete reasoning trace. Canonical transcripts remain unchanged for debug and compaction.
 
 The provider layer keeps the wrapper small:
 

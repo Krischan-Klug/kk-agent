@@ -70,7 +70,7 @@ function posixProfile(
     pathConvention: kind === "git-bash"
       ? "Use POSIX paths and forward slashes. Windows drives are available as /c/..., and the null device is /dev/null."
       : "Use POSIX paths with forward slashes and /dev/null as the null device.",
-    syntaxRules: "Use POSIX shell syntax, including &&, ||, pipes, redirects, and shell quoting. Do not use PowerShell or cmd.exe syntax.",
+    syntaxRules: "Use POSIX shell syntax, including &&, ||, pipes, redirects, and shell quoting. Pipeline failures propagate through pipefail. Do not use PowerShell or cmd.exe syntax.",
   };
 }
 
@@ -205,5 +205,6 @@ export function buildShellCommandArgs(profile: TerminalShellProfile, command: st
   if (profile.dialect === "powershell") {
     return ["-NoLogo", "-NoProfile", "-NonInteractive", "-Command", `${powershellUtf8Preamble()}\n${command}`];
   }
-  return ["-lc", command];
+  const pipelineSafeCommand = profile.kind === "sh" ? command : `set -o pipefail\n${command}`;
+  return ["-lc", pipelineSafeCommand];
 }

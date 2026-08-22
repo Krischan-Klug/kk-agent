@@ -45,7 +45,7 @@ const profiles: readonly ModelProfile[] = [
       control: "effort",
       allowedEfforts: ["none", "low", "medium", "xhigh"],
       defaultEffort: "xhigh",
-      defaultHistory: "all",
+      defaultHistory: "latest",
     },
     sampling: {
       thinking: {
@@ -87,7 +87,7 @@ const profiles: readonly ModelProfile[] = [
       return { effectiveEffort: "xhigh", enabled: true };
     },
     resolveHistory(requested) {
-      return resolveHistoryWithDefault(requested, "all");
+      return resolveHistoryWithDefault(requested, "latest");
     },
     buildDirectives({ effectiveEffort, enabled, history }) {
       return {

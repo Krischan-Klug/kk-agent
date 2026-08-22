@@ -28,6 +28,7 @@ test("default prompt keeps one compact policy source and places mode last", () =
   assert.doesNotMatch(prompt, /<tasks>/);
   assert.doesNotMatch(prompt, /default first action is create_tasks/);
   assert.equal(prompt.match(/The harness handles tool approval\./g)?.length, 1);
+  assert.equal(prompt.match(/do not claim runtime or interactive behavior was verified unless it was exercised\./g)?.length, 1);
   assert.ok(prompt.indexOf("<runtime_context>") < prompt.indexOf("<mode_context"));
   assert.ok(prompt.indexOf("<mode_context") < prompt.indexOf("</agent_runtime_prompt>"));
 });

@@ -43,7 +43,7 @@ function historyFixture() {
   ];
 }
 
-test("Qwen 3.8 uses its official thinking defaults and preserves reasoning history", () => {
+test("Qwen 3.8 uses its thinking defaults and replays only the latest reasoning step", () => {
   const selectedProfile = profile("qwen/qwen3.8-27b@v1");
   const compiled = compileModelRequest({
     profile: selectedProfile,
@@ -60,8 +60,9 @@ test("Qwen 3.8 uses its official thinking defaults and preserves reasoning histo
   assert.equal(compiled.body.temperature, 1);
   assert.equal(compiled.body.top_p, 0.95);
   assert.equal(compiled.body.top_k, 20);
-  assert.equal(getMessageReasoning(compiled.messages[0]!), "plain thought");
-  assert.equal(compiled.resolved.reasoning.effectiveHistory, "all");
+  assert.equal(getMessageReasoning(compiled.messages[0]!), "");
+  assert.equal(getMessageReasoning(compiled.messages[1]!), "tool thought");
+  assert.equal(compiled.resolved.reasoning.effectiveHistory, "latest");
 });
 
 test("Qwen 3.8 none switches thinking off and selects the direct sampling recipe", () => {
@@ -83,7 +84,7 @@ test("Qwen 3.8 none switches thinking off and selects the direct sampling recipe
   assert.equal(getMessageReasoning(compiled.messages[0]!), "");
 });
 
-test("Discarded history still keeps reasoning from the active tool turn", () => {
+test("discard removes historical reasoning including the active tool turn", () => {
   const messages = [
     ...historyFixture(),
     createTranscriptMessage({
@@ -100,6 +101,26 @@ test("Discarded history still keeps reasoning from the active tool turn", () => 
   });
 
   assert.equal(getMessageReasoning(compiled.messages[0]!), "");
+  assert.equal(getMessageReasoning(compiled.messages[3]!), "");
+});
+
+test("latest retains only the immediately preceding assistant reasoning", () => {
+  const messages = [
+    ...historyFixture(),
+    createTranscriptMessage({
+      id: "assistant-current-tool",
+      role: "assistant",
+      content: [reasoningBlock("current thought"), toolUseBlock("call-2", "Read", { path: "b" })],
+    }),
+  ];
+  const compiled = compileModelRequest({
+    profile: profile("qwen/qwen3.8-27b@v1"),
+    config: { reasoning: { history: "latest" } },
+    instructions: "system",
+    messages,
+  });
+
+  assert.equal(getMessageReasoning(compiled.messages[1]!), "");
   assert.equal(getMessageReasoning(compiled.messages[3]!), "current thought");
 });
 

@@ -1,10 +1,8 @@
 import { readFile, stat } from "node:fs/promises";
 import type { McpServerConfig, ToolCallResult } from "../../../mcp/types.js";
 import { truncateSelfBoundedReadOutput } from "../read-output.js";
-import { recordReadForSession } from "./read-state.js";
 import {
   detectImagePdf,
-  getSessionIdOrThrow,
   isBinaryByExtension,
   isBlockedDevicePath,
   resolveFilesystemPath,
@@ -81,20 +79,6 @@ export async function executeRead(
   const fullOutput = header + numbered + footer;
   const truncated = truncateSelfBoundedReadOutput(fullOutput);
   const isTruncated = truncated !== fullOutput;
-
-  recordReadForSession(
-    getSessionIdOrThrow(),
-    path,
-    {
-      mtimeMs: info.mtimeMs,
-      size: info.size,
-      content: raw,
-      totalLines: total,
-      startLine: offset,
-      endLine,
-      outputTruncated: isTruncated,
-    },
-  );
 
   return {
     content: truncated,

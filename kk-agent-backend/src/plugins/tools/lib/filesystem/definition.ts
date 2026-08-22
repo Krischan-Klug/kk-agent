@@ -5,7 +5,8 @@ export const filesystemDefinition = defineSystemMcp({
   name: "Filesystem",
   instruction:
     "Use filesystem tools for local file work and Terminal only for commands that need a shell. " +
-    "Read existing files before modifying them. Narrow truncated results with the tool's range or limit options.",
+    "Read files when their contents are needed for the task. Edit and Write validate the current file internally. " +
+    "Narrow truncated results with the tool's range or limit options.",
   emoji: "📁",
   systemConfig: {
     resultPolicy: { previewThresholdChars: 16000, previewChars: 2400 },

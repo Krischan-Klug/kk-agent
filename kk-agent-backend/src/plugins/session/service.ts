@@ -5,7 +5,6 @@ import { getAgent } from "../agent/service.js";
 import { isLoopActive } from "../loop/lib/run-registry.js";
 import { clearSessionFacts, clearTasks } from "../tools/service.js";
 import { getSecuritySettings } from "../security/service.js";
-import { clearFilesystemReadState } from "../tools/lib/filesystem/read-state.js";
 import { resolveSessionDefaults } from "./lib/session-resolution.js";
 import { getModelCapabilities } from "../provider/service.js";
 import { buildLoadedSkillContexts, listSkills } from "../skills/service.js";
@@ -71,7 +70,6 @@ export async function deleteSession(id: string): Promise<void> {
   if (!(await store.deleteSession(id))) throw new NotFoundError("Session", id);
   clearTasks(id);
   clearSessionFacts(id);
-  clearFilesystemReadState(id);
 }
 
 export function getCurrentPromptDebug(sessionId: string): SessionPromptDebug {

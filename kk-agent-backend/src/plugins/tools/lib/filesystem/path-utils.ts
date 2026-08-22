@@ -1,6 +1,5 @@
 import { extname, resolve, sep } from "node:path";
 import { getDefaultPathForScope, resolveAccessScope, resolveFilesystemSystemConfig } from "../access-paths.js";
-import { getCurrentSessionId } from "../user-interaction/interaction-store.js";
 import type { McpServerConfig } from "../../../mcp/types.js";
 
 const BINARY_EXTENSIONS = new Set([
@@ -91,10 +90,4 @@ function resolveWithinRoot(allowedRoot: string, basePath: string, target?: unkno
 
 export function resolveFilesystemPath(config: McpServerConfig, target?: unknown): string {
   return resolveWithinRoot(getFilesystemAllowedRoot(config), getFilesystemBasePath(config), target);
-}
-
-export function getSessionIdOrThrow(): string {
-  const sessionId = getCurrentSessionId();
-  if (!sessionId) throw new Error("No active session context for filesystem tool.");
-  return sessionId;
 }

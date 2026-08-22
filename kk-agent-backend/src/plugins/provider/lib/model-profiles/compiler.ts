@@ -22,17 +22,16 @@ function projectReasoningHistory(
   history: ResolvedReasoningHistory,
 ): TranscriptMessage[] {
   if (history === "all") return structuredClone(messages);
-  let latestUserIndex = -1;
+  let latestAssistantIndex = -1;
   messages.forEach((message, index) => {
-    if (message.role === "user") latestUserIndex = index;
+    if (message.role === "assistant") latestAssistantIndex = index;
   });
   return messages.map((message, index) => {
     if (message.role !== "assistant") return structuredClone(message);
     const cloned = structuredClone(message);
-    const belongsToCurrentTurn = index > latestUserIndex;
-    const keepReasoning = belongsToCurrentTurn || (
-      history === "tool-turns" && getToolUses(message).length > 0
-    );
+    const keepReasoning = history === "latest"
+      ? index === latestAssistantIndex
+      : history === "tool-turns" && getToolUses(message).length > 0;
     return {
       ...cloned,
       content: cloned.content.filter((block) => block.type !== "reasoning" || keepReasoning),

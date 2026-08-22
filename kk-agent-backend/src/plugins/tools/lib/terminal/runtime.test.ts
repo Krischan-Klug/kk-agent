@@ -102,6 +102,29 @@ test("non-zero shell exits are returned as model-visible tool errors", async (t)
   assert.equal(result.metadata?.errorKind, "exit_code");
 });
 
+test("POSIX pipelines propagate a failing command through pipefail", async (t) => {
+  initializeTerminalShell();
+  const resolution = getTerminalShellResolution();
+  if (resolution.status === "unavailable") {
+    t.skip(resolution.error);
+    return;
+  }
+  if (resolution.profile.dialect !== "posix" || resolution.profile.kind === "sh") {
+    t.skip("The active shell does not provide Bash-compatible pipefail semantics.");
+    return;
+  }
+
+  const result = await executeTerminalTool(terminalDefinition, "Terminal", {
+    command: "node -e \"process.exit(7)\" | node -e \"process.stdin.resume()\"",
+    cwd: process.cwd(),
+  });
+
+  assert.ok(result);
+  assert.equal(result.isError, true);
+  assert.match(result.content, /\[exit code: 7\]/);
+  assert.equal(result.metadata?.errorKind, "exit_code");
+});
+
 test("background execution uses the same detected shell and writes status and UTF-8 output", async (t) => {
   initializeTerminalShell();
   const resolution = getTerminalShellResolution();

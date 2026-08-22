@@ -8,7 +8,7 @@ const LlmRequestConfigSchema = z
     reasoning: z
       .object({
         effort: z.enum(["none", "low", "medium", "high", "xhigh"]).optional(),
-        history: z.enum(["auto", "discard", "tool-turns", "all"]).optional(),
+        history: z.enum(["auto", "discard", "latest", "tool-turns", "all"]).optional(),
       })
       .optional(),
     sampling: z

@@ -85,5 +85,8 @@ test("POSIX detection prefers Bash and binds POSIX command arguments", () => {
   assert.equal(result.status, "available");
   if (result.status !== "available") return;
   assert.equal(result.profile.kind, "bash");
-  assert.deepEqual(buildShellCommandArgs(result.profile, "node -v && npm -v"), ["-lc", "node -v && npm -v"]);
+  assert.deepEqual(buildShellCommandArgs(result.profile, "node -v && npm -v"), [
+    "-lc",
+    "set -o pipefail\nnode -v && npm -v",
+  ]);
 });

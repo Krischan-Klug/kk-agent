@@ -333,12 +333,13 @@ export default function ModelSettingsSection({
                         value={settings.llmRequestConfig?.reasoning?.history ?? "auto"}
                         onChange={(event) => handleLlmConfigChange(model, {
                           reasoning: {
-                            history: event.target.value as "auto" | "discard" | "tool-turns" | "all",
+                            history: event.target.value as "auto" | "discard" | "latest" | "tool-turns" | "all",
                           },
                         })}
                       >
                         <option value="auto">manufacturer default</option>
-                        <option value="discard">current turn only</option>
+                        <option value="discard">discard history</option>
+                        <option value="latest">latest step only</option>
                         <option value="tool-turns">tool turns only</option>
                         <option value="all">preserve all</option>
                       </Select>

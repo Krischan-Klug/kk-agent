@@ -1,13 +1,38 @@
+import { randomUUID } from "node:crypto";
 import type { Stats } from "node:fs";
-import { readFile, stat, writeFile } from "node:fs/promises";
+import { open, readFile, rename, rm, stat } from "node:fs/promises";
+import { basename, dirname, join } from "node:path";
 import type { ToolCallResult } from "../../../mcp/types.js";
-import { recordKnownContentForSession, verifyReadStateForSession } from "./read-state.js";
-import { getSessionIdOrThrow, isBinaryBuffer } from "./path-utils.js";
+import { isBinaryBuffer } from "./path-utils.js";
 import { countChangedLines, detectLineEnding, generateUnifiedDiff, normalizeLineEndings } from "./diff.js";
 
 type ExistingTextResult =
-  | { ok: true; sessionId: string; info: Stats; content: string }
+  | { ok: true; info: Stats; content: string }
   | { ok: false; result: ToolCallResult };
+
+const mutationQueues = new Map<string, Promise<void>>();
+
+function mutationKey(path: string): string {
+  return process.platform === "win32" ? path.toLowerCase() : path;
+}
+
+export async function withFileMutationLock<T>(path: string, mutate: () => Promise<T>): Promise<T> {
+  const key = mutationKey(path);
+  const previous = mutationQueues.get(key) ?? Promise.resolve();
+  let release!: () => void;
+  const held = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const current = previous.then(() => held);
+  mutationQueues.set(key, current);
+  await previous;
+  try {
+    return await mutate();
+  } finally {
+    release();
+    if (mutationQueues.get(key) === current) mutationQueues.delete(key);
+  }
+}
 
 export async function readExistingTextForMutation(
   path: string,
@@ -16,19 +41,6 @@ export async function readExistingTextForMutation(
   info?: Stats,
 ): Promise<ExistingTextResult> {
   const existingInfo = info ?? await stat(path);
-  const sessionId = getSessionIdOrThrow();
-  const verify = await verifyReadStateForSession(sessionId, path, existingInfo.mtimeMs, existingInfo.size);
-  if (!verify.allowed) {
-    return {
-      ok: false,
-      result: {
-        content: verify.reason!,
-        isError: true,
-        metadata: { filePath: path, operation, stale: true },
-      },
-    };
-  }
-
   const content = await readFile(path, "utf-8");
   if (isBinaryBuffer(Buffer.from(content, "utf-8"))) {
     return {
@@ -41,7 +53,7 @@ export async function readExistingTextForMutation(
     };
   }
 
-  return { ok: true, sessionId, info: existingInfo, content };
+  return { ok: true, info: existingInfo, content };
 }
 
 export function normalizeToExistingLineEndings(content: string, existingContent: string): string {
@@ -53,9 +65,21 @@ export function buildTextChangeDiff(path: string, before: string, after: string)
   return { diff, changedLines: countChangedLines(diff) };
 }
 
-export async function writeTextAndRecordRead(sessionId: string, path: string, content: string): Promise<Stats> {
-  await writeFile(path, content, "utf-8");
-  const updatedInfo = await stat(path);
-  recordKnownContentForSession(sessionId, path, updatedInfo.mtimeMs, updatedInfo.size, content);
-  return updatedInfo;
+export async function writeTextAtomically(path: string, content: string, mode?: number): Promise<Stats> {
+  const temporaryPath = join(dirname(path), `.${basename(path)}.kk-agent-${randomUUID()}.tmp`);
+  const handle = await open(temporaryPath, "wx", mode);
+  let closed = false;
+  try {
+    await handle.writeFile(content, "utf-8");
+    await handle.sync();
+    await handle.close();
+    closed = true;
+    await rename(temporaryPath, path);
+    return await stat(path);
+  } catch (error) {
+    if (!closed) await handle.close().catch(() => undefined);
+    throw error;
+  } finally {
+    await rm(temporaryPath, { force: true }).catch(() => undefined);
+  }
 }

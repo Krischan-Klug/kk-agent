@@ -513,7 +513,8 @@ export default function ChatDebugPanel({
                 value={resolvedReasoningHistory}
                 options={[
                   { value: "auto", label: "history: manufacturer" },
-                  { value: "discard", label: "history: current turn" },
+                  { value: "discard", label: "history: none" },
+                  { value: "latest", label: "history: latest step" },
                   { value: "tool-turns", label: "history: tool turns" },
                   { value: "all", label: "history: all" },
                 ]}

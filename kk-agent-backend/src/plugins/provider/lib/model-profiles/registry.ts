@@ -11,7 +11,35 @@ import type { ModelProfile } from "./types.js";
 const CHAT_TRANSPORT = {
   supportsConcatenatedJsonSplit: true,
   continuationMode: "none",
+  streamMode: "sse",
+  instructionRole: "system",
+  includeUsageInStream: true,
+  maxOutputTokensField: "max_tokens",
+  reasoningHistoryField: "reasoning_content",
+  parallelToolCalls: true,
+  samplingFields: {
+    topK: "top_k",
+    minP: "min_p",
+    repetitionPenalty: "repetition_penalty",
+  },
 } as const;
+
+const RESPONSES_TRANSPORT = {
+  supportsConcatenatedJsonSplit: true,
+  continuationMode: "previous-response-id",
+  streamMode: "sse",
+  maxOutputTokensField: "max_output_tokens",
+  strictToolSchemas: false,
+  parallelToolCalls: true,
+  samplingFields: {
+    topK: "top_k",
+    minP: "min_p",
+    repetitionPenalty: "repetition_penalty",
+  },
+} as const;
+
+const CHAT_JSON_TRANSPORT = { ...CHAT_TRANSPORT, streamMode: "json" } as const;
+const RESPONSES_JSON_TRANSPORT = { ...RESPONSES_TRANSPORT, streamMode: "json" } as const;
 
 const STANDARD_SAMPLING_CAPABILITIES = {
   temperatureSupported: true,
@@ -25,19 +53,19 @@ function resolveHistoryWithDefault(
   return { effectiveHistory: requested === "auto" ? defaultHistory : requested };
 }
 
-const profiles: readonly ModelProfile[] = [
-  {
-    id: "qwen/qwen3.8-27b@v1",
+type Qwen38ProfileIdentity = Pick<
+  ModelProfile,
+  "id" | "modelName" | "label" | "sourceUrl" | "aliases"
+>;
+
+function createQwen38Profile(identity: Qwen38ProfileIdentity): ModelProfile {
+  return {
+    ...identity,
     manufacturer: "Qwen",
-    modelName: "Qwen3.8 27B",
-    profileVersion: 1,
-    label: "Qwen / Qwen3.8 27B / v1",
-    sourceUrl: "https://huggingface.co/Qwen/Qwen3.8-27B",
-    aliases: ["qwen/qwen3.8-27b"],
     endpoint: "chat-completions",
     endpointCapabilities: STANDARD_SAMPLING_CAPABILITIES,
     transport: CHAT_TRANSPORT,
-    inputModalities: ["text", "image", "video"],
+    inputModalities: ["text", "image"],
     outputModalities: ["text"],
     tools: { mode: "native", protocol: "qwen" },
     modalityOrder: "preserve",
@@ -66,7 +94,6 @@ const profiles: readonly ModelProfile[] = [
       },
     },
     compaction: {
-      endpoint: "lmstudio-chat",
       reasoningEffort: "none",
       maxOutputTokens: 8_000,
       inputBudgetRatio: 0.85,
@@ -100,19 +127,35 @@ const profiles: readonly ModelProfile[] = [
           : undefined,
       };
     },
-  },
+  };
+}
+
+const profiles: readonly ModelProfile[] = [
+  createQwen38Profile({
+    id: "qwen/qwen3.8-27b",
+    modelName: "Qwen3.8 27B",
+    label: "Qwen / Qwen3.8 27B",
+    sourceUrl: "https://huggingface.co/Qwen/Qwen3.8-27B",
+    aliases: ["qwen/qwen3.8-27b", "unsloth/qwen3.8-27b-gguf"],
+  }),
+  createQwen38Profile({
+    id: "qwen/qwen3.8-flash-next",
+    modelName: "Qwen3.8 Flash Next",
+    label: "Qwen / Qwen3.8 Flash Next",
+    sourceUrl: "https://huggingface.co/Qwen/Qwen3.8-Flash-Next",
+    aliases: ["qwen/qwen3.8-flash-next", "unsloth/qwen3.8-flash-next-gguf"],
+  }),
   {
-    id: "google/gemma-4-31b-it@v1",
+    id: "google/gemma-4-31b-it",
     manufacturer: "Google",
     modelName: "Gemma 4 31B IT",
-    profileVersion: 1,
-    label: "Google / Gemma 4 31B IT / v1",
+    label: "Google / Gemma 4 31B IT",
     sourceUrl: "https://huggingface.co/google/gemma-4-31B-it",
     aliases: ["google/gemma-4-31b-it"],
     endpoint: "chat-completions",
     endpointCapabilities: STANDARD_SAMPLING_CAPABILITIES,
     transport: CHAT_TRANSPORT,
-    inputModalities: ["text", "image", "video"],
+    inputModalities: ["text", "image"],
     outputModalities: ["text"],
     tools: { mode: "native", protocol: "gemma" },
     modalityOrder: "images-first",
@@ -127,7 +170,6 @@ const profiles: readonly ModelProfile[] = [
       direct: { temperature: 1, topP: 0.95, topK: 64 },
     },
     compaction: {
-      endpoint: "chat-completions",
       reasoningEffort: "none",
       maxOutputTokens: 6_000,
       inputBudgetRatio: 0.8,
@@ -156,11 +198,10 @@ const profiles: readonly ModelProfile[] = [
     },
   },
   {
-    id: "meta/muse-glimmer-30b@v1",
+    id: "meta/muse-glimmer-30b",
     manufacturer: "Meta",
     modelName: "Muse Glimmer 30B",
-    profileVersion: 1,
-    label: "Meta / Muse Glimmer 30B / v1",
+    label: "Meta / Muse Glimmer 30B",
     sourceUrl: "https://huggingface.co/meta-models/Muse-Glimmer-30B",
     aliases: ["meta/muse-glimmer", "meta-models/muse-glimmer-30b"],
     endpoint: "chat-completions",
@@ -180,7 +221,6 @@ const profiles: readonly ModelProfile[] = [
       thinking: { temperature: 1, topP: 0.95, topK: 64 },
     },
     compaction: {
-      endpoint: "chat-completions",
       reasoningEffort: "low",
       maxOutputTokens: 8_000,
       inputBudgetRatio: 0.8,
@@ -211,18 +251,17 @@ const profiles: readonly ModelProfile[] = [
     },
   },
   {
-    id: "generic/openai-chat-text@v1",
+    id: "generic/openai-chat-text",
     manufacturer: "Generic",
     modelName: "OpenAI-compatible Chat Text",
-    profileVersion: 1,
-    label: "Generic / OpenAI Chat Text / v1",
+    label: "Generic / OpenAI Chat Text",
     aliases: [],
     endpoint: "chat-completions",
     endpointCapabilities: STANDARD_SAMPLING_CAPABILITIES,
     transport: CHAT_TRANSPORT,
     inputModalities: ["text"],
     outputModalities: ["text"],
-    tools: { mode: "none" },
+    tools: { mode: "native", protocol: "openai" },
     modalityOrder: "preserve",
     reasoning: {
       control: "none",
@@ -231,7 +270,6 @@ const profiles: readonly ModelProfile[] = [
     },
     sampling: {},
     compaction: {
-      endpoint: "chat-completions",
       reasoningEffort: "none",
       maxOutputTokens: 6_000,
       inputBudgetRatio: 0.8,
@@ -246,6 +284,80 @@ const profiles: readonly ModelProfile[] = [
       return {};
     },
   },
+  {
+    id: "generic/openai-responses-text",
+    manufacturer: "Generic",
+    modelName: "OpenAI-compatible Responses Text",
+    label: "Generic / OpenAI Responses Text",
+    aliases: [],
+    endpoint: "responses",
+    endpointCapabilities: STANDARD_SAMPLING_CAPABILITIES,
+    transport: RESPONSES_TRANSPORT,
+    inputModalities: ["text"],
+    outputModalities: ["text"],
+    tools: { mode: "native", protocol: "openai" },
+    modalityOrder: "preserve",
+    reasoning: {
+      control: "none",
+      allowedEfforts: [],
+      defaultHistory: "discard",
+    },
+    sampling: {},
+    compaction: {
+      reasoningEffort: "none",
+      maxOutputTokens: 6_000,
+      inputBudgetRatio: 0.8,
+    },
+    resolveEffort() {
+      return { enabled: false };
+    },
+    resolveHistory(requested) {
+      return resolveHistoryWithDefault(requested, "discard");
+    },
+    buildDirectives() {
+      return {};
+    },
+  },
+  {
+    id: "generic/openai-chat-json-text",
+    manufacturer: "Generic",
+    modelName: "OpenAI-compatible Chat JSON Text",
+    label: "Generic / OpenAI Chat JSON Text",
+    aliases: [],
+    endpoint: "chat-completions",
+    endpointCapabilities: STANDARD_SAMPLING_CAPABILITIES,
+    transport: CHAT_JSON_TRANSPORT,
+    inputModalities: ["text"],
+    outputModalities: ["text"],
+    tools: { mode: "native", protocol: "openai" },
+    modalityOrder: "preserve",
+    reasoning: { control: "none", allowedEfforts: [], defaultHistory: "discard" },
+    sampling: {},
+    compaction: { reasoningEffort: "none", maxOutputTokens: 6_000, inputBudgetRatio: 0.8 },
+    resolveEffort() { return { enabled: false }; },
+    resolveHistory(requested) { return resolveHistoryWithDefault(requested, "discard"); },
+    buildDirectives() { return {}; },
+  },
+  {
+    id: "generic/openai-responses-json-text",
+    manufacturer: "Generic",
+    modelName: "OpenAI-compatible Responses JSON Text",
+    label: "Generic / OpenAI Responses JSON Text",
+    aliases: [],
+    endpoint: "responses",
+    endpointCapabilities: STANDARD_SAMPLING_CAPABILITIES,
+    transport: RESPONSES_JSON_TRANSPORT,
+    inputModalities: ["text"],
+    outputModalities: ["text"],
+    tools: { mode: "native", protocol: "openai" },
+    modalityOrder: "preserve",
+    reasoning: { control: "none", allowedEfforts: [], defaultHistory: "discard" },
+    sampling: {},
+    compaction: { reasoningEffort: "none", maxOutputTokens: 6_000, inputBudgetRatio: 0.8 },
+    resolveEffort() { return { enabled: false }; },
+    resolveHistory(requested) { return resolveHistoryWithDefault(requested, "discard"); },
+    buildDirectives() { return {}; },
+  },
 ] as const;
 
 function cloneProfileSummary(profile: ModelProfile): ModelProfileSummary {
@@ -253,7 +365,6 @@ function cloneProfileSummary(profile: ModelProfile): ModelProfileSummary {
     id: profile.id,
     manufacturer: profile.manufacturer,
     modelName: profile.modelName,
-    profileVersion: profile.profileVersion,
     label: profile.label,
     sourceUrl: profile.sourceUrl,
     endpoint: profile.endpoint,
@@ -292,21 +403,34 @@ export function buildProfiledCapabilities(
   const inputModalities = profile.inputModalities.filter(
     (modality) => !unavailableVisualModalities.some((unavailable) => unavailable === modality),
   );
-  const issues = unavailableVisualModalities
+  const issues: ModelCompatibilityIssue[] = unavailableVisualModalities
     .map((modality): ModelCompatibilityIssue => ({
       code: "runtime_modality_unavailable",
       message: `${profile.label} supports ${modality}, but the provider reports it unavailable for this model artifact.`,
     }));
+  if (profile.tools.mode === "native" && runtime.nativeToolsSupported === false) {
+    issues.push({
+      code: "runtime_tools_unavailable",
+      message: `${profile.label} supports native tools, but the provider reports them unavailable for this model artifact.`,
+    });
+  }
+  if (profile.reasoning.control !== "none" && runtime.reasoningSupported === false) {
+    issues.push({
+      code: "runtime_reasoning_unavailable",
+      message: `${profile.label} supports reasoning, but the provider reports it unavailable for this model artifact.`,
+    });
+  }
   return {
     capabilities: {
       inputModalities,
       outputModalities: [...profile.outputModalities],
-      tools: { ...profile.tools },
-      reasoning: {
-        ...profile.reasoning,
-        allowedEfforts: [...profile.reasoning.allowedEfforts],
-      },
-      supportsStreaming: true,
+      tools: runtime.nativeToolsSupported === false ? { mode: "none" } : { ...profile.tools },
+      reasoning: runtime.reasoningSupported === false
+        ? { control: "none", allowedEfforts: [], defaultHistory: "discard" }
+        : {
+            ...profile.reasoning,
+            allowedEfforts: [...profile.reasoning.allowedEfforts],
+          },
       endpoint: profile.endpoint,
       endpointCapabilities: structuredClone(profile.endpointCapabilities),
       transport: structuredClone(profile.transport),

@@ -51,6 +51,7 @@ export function finalizeResponsesOutput(input: {
   usage?: TokenStats;
   tools?: UnifiedToolDefinition[];
   supportsConcatenatedJsonSplit?: boolean;
+  finishReason?: TranscriptStopReason;
 }): AssembledAssistantTurn {
   const normalized = normalizeResponsesToolCalls({
     output: input.output,
@@ -78,7 +79,7 @@ export function finalizeResponsesOutput(input: {
     text,
     reasoning,
     toolCalls: normalized.toolCalls,
-    finishReason: normalized.toolCalls.length > 0 ? "tool_use" : "stop",
+    finishReason: normalized.toolCalls.length > 0 ? "tool_use" : input.finishReason ?? "stop",
     usage: input.usage,
     output: input.output,
     notices: normalized.issues.map(issueToNotice),

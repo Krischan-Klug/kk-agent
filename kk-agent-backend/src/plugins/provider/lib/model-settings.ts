@@ -11,6 +11,7 @@ export function normalizeStoredModelSettings(settings: ModelSettings | undefined
 
   return compactModelSettings({
     profileId: settings?.profileId,
+    contextLimit: settings?.contextLimit,
     llmRequestConfig: compactLlmRequestConfig({
       reasoning: {
         effort: normalizedReasoningEffort,

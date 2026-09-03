@@ -181,22 +181,21 @@ export const CreateProviderBodySchema = z.object({
   name: NonEmptyStringSchema,
   baseUrl: NonEmptyStringSchema,
   apiKey: z.string().optional(),
-  models: z.array(NonEmptyStringSchema).optional(),
-});
+}).strict();
 
 export const UpdateProviderBodySchema = z.object({
   name: OptionalTrimmedStringSchema,
   baseUrl: OptionalTrimmedStringSchema,
   apiKey: z.string().optional(),
-  models: z.array(NonEmptyStringSchema).optional(),
-});
+}).strict();
 
 export const ModelSettingsBodySchema = z.object({
   providerId: NonEmptyStringSchema,
   settings: z.object({
     profileId: NonEmptyStringSchema.optional(),
+    contextLimit: z.number().int().positive().optional(),
     llmRequestConfig: LlmRequestConfigSchema,
-  }),
+  }).strict(),
 });
 
 /* Tools / Memory / Tasks */

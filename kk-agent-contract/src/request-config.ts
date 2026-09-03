@@ -63,6 +63,9 @@ export function compactModelSettings(settings: ModelSettings): ModelSettings {
     : undefined;
   return {
     ...(settings.profileId ? { profileId: settings.profileId } : {}),
+    ...(typeof settings.contextLimit === "number" && Number.isFinite(settings.contextLimit) && settings.contextLimit > 0
+      ? { contextLimit: Math.floor(settings.contextLimit) }
+      : {}),
     ...(normalizedConfig ? { llmRequestConfig: normalizedConfig } : {}),
   };
 }

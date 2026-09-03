@@ -19,6 +19,7 @@ export type {
 
 export type {
   ContinuationMode,
+  ChatInstructionRole,
   CreateProviderBody,
   EndpointCapabilities,
   EndpointTransportProfile,
@@ -30,12 +31,14 @@ export type {
   ModelInfo,
   ModelInputModality,
   ModelOutputModality,
+  MaxOutputTokensField,
   ModelProfileSummary,
   ModelReasoningCapabilities,
   ModelSettings,
   ModelToolCapabilities,
   NumericRange,
   ProviderConfig,
+  ProviderStreamMode,
   ProvidersState,
   ProviderTurnDebug,
   ModelInputDebug,

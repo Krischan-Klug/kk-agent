@@ -32,13 +32,6 @@ const HeaderActions = styled.div`
   margin-bottom: var(--space-md);
 `;
 
-function parseModelsText(text: string): string[] {
-  return text
-    .split("\n")
-    .map((line) => line.trim())
-    .filter((line) => line.length > 0);
-}
-
 export default function SettingsProviderPage() {
   const [providers, setProviders] = useState<ProviderConfig[]>([]);
   const [models, setModels] = useState<ModelInfo[]>([]);
@@ -62,7 +55,6 @@ export default function SettingsProviderPage() {
     name: "",
     baseUrl: DEFAULT_PROVIDER_BASE_URL,
     apiKey: "",
-    models: "",
   });
 
   const runProviderVerification = useCallback(
@@ -125,18 +117,16 @@ export default function SettingsProviderPage() {
   }, [loadData]);
 
   function resetCreateForm() {
-    setCreateForm({ name: "", baseUrl: DEFAULT_PROVIDER_BASE_URL, apiKey: "", models: "" });
+    setCreateForm({ name: "", baseUrl: DEFAULT_PROVIDER_BASE_URL, apiKey: "" });
   }
 
   async function handleCreate() {
     if (!createForm.name.trim() || !createForm.baseUrl.trim()) return;
     try {
-      const parsedModels = parseModelsText(createForm.models);
       const created = await providerApi.addProvider({
         name: createForm.name.trim(),
         baseUrl: createForm.baseUrl.trim(),
         apiKey: createForm.apiKey || undefined,
-        models: parsedModels.length > 0 ? parsedModels : undefined,
       });
       await loadCatalog();
       void runProviderVerification([created.id]);
@@ -184,12 +174,10 @@ export default function SettingsProviderPage() {
   }
 
   async function handleProviderSave(id: string, value: ProviderFormValue) {
-    const parsedModels = parseModelsText(value.models);
     await providerApi.updateProvider(id, {
       name: value.name.trim(),
       baseUrl: value.baseUrl.trim(),
       apiKey: value.apiKey,
-      models: parsedModels,
     });
     removeProviderVerification(id);
     setTestResults((prev) => Object.fromEntries(Object.entries(prev).filter(([key]) => key !== id)));
@@ -225,7 +213,7 @@ export default function SettingsProviderPage() {
           {providers.length === 0 ? (
             <Card>
               <span style={{ color: "var(--text-muted)" }}>
-                No local providers configured. Add one.
+                No providers configured. Add one.
               </span>
             </Card>
           ) : (

@@ -46,12 +46,23 @@ export function compileModelRequest(input: {
   messages: TranscriptMessage[];
   modelContentByMessageId?: Record<string, ModelContentPart[]>;
   temperatureRange?: { min: number; max: number; step?: number };
+  reasoningSupported?: boolean;
 }): CompiledModelRequest {
   const requestedEffort = input.config?.reasoning?.effort;
   const requestedHistory = input.config?.reasoning?.history ?? "auto";
-  const history = input.profile.resolveHistory(requestedHistory);
+  const reasoningUnavailable = input.reasoningSupported === false
+    && input.profile.reasoning.control !== "none";
+  const history = reasoningUnavailable
+    ? { effectiveHistory: "discard" as const }
+    : input.profile.resolveHistory(requestedHistory);
   const effectiveHistory = history.effectiveHistory;
-  const effort = input.profile.resolveEffort(requestedEffort);
+  const effort = reasoningUnavailable
+    ? {
+        effectiveEffort: undefined,
+        enabled: false,
+        warning: "The provider runtime reports reasoning unavailable; profile reasoning was disabled.",
+      }
+    : input.profile.resolveEffort(requestedEffort);
   const preset = effort.enabled
     ? input.profile.sampling.thinking
     : input.profile.sampling.direct;
@@ -64,11 +75,13 @@ export function compileModelRequest(input: {
       ? { topP: clampNumber(input.config.sampling.topP, { min: 0, max: 1 }) }
       : {}),
   };
-  const directives = input.profile.buildDirectives({
-    effectiveEffort: effort.effectiveEffort,
-    enabled: effort.enabled,
-    history: effectiveHistory,
-  });
+  const directives = reasoningUnavailable
+    ? {}
+    : input.profile.buildDirectives({
+        effectiveEffort: effort.effectiveEffort,
+        enabled: effort.enabled,
+        history: effectiveHistory,
+      });
   const instructions = directives.systemPrefix
     ? [directives.systemPrefix, input.instructions].filter(Boolean).join("\n")
     : input.instructions;
@@ -86,10 +99,13 @@ export function compileModelRequest(input: {
   }
   if (sampling.temperature !== undefined) body.temperature = sampling.temperature;
   if (sampling.topP !== undefined) body.top_p = sampling.topP;
-  if (sampling.topK !== undefined) body.top_k = sampling.topK;
-  if (sampling.minP !== undefined) body.min_p = sampling.minP;
+  const samplingFields = input.profile.transport.samplingFields;
+  if (sampling.topK !== undefined && samplingFields?.topK) body[samplingFields.topK] = sampling.topK;
+  if (sampling.minP !== undefined && samplingFields?.minP) body[samplingFields.minP] = sampling.minP;
   if (sampling.presencePenalty !== undefined) body.presence_penalty = sampling.presencePenalty;
-  if (sampling.repetitionPenalty !== undefined) body.repeat_penalty = sampling.repetitionPenalty;
+  if (sampling.repetitionPenalty !== undefined && samplingFields?.repetitionPenalty) {
+    body[samplingFields.repetitionPenalty] = sampling.repetitionPenalty;
+  }
 
   return {
     instructions,

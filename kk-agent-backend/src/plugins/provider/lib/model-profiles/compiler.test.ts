@@ -16,6 +16,7 @@ import {
   suggestModelProfile,
 } from "./registry.js";
 import type { ModelProfile } from "./types.js";
+import type { PreparedProviderRequest } from "../types.js";
 import {
   buildChatCompletionsBody,
   serializeAssistantMessageToResponsesInput,
@@ -44,14 +45,14 @@ function historyFixture() {
 }
 
 test("Qwen 3.8 uses its thinking defaults and replays only the latest reasoning step", () => {
-  const selectedProfile = profile("qwen/qwen3.8-27b@v1");
+  const selectedProfile = profile("qwen/qwen3.8-27b");
   const compiled = compileModelRequest({
     profile: selectedProfile,
     instructions: "system",
     messages: historyFixture(),
   });
 
-  assert.equal(selectedProfile.id, "qwen/qwen3.8-27b@v1");
+  assert.equal(selectedProfile.id, "qwen/qwen3.8-27b");
   assert.equal(compiled.body.reasoning_effort, "xhigh");
   assert.deepEqual(compiled.body.chat_template_kwargs, {
     enable_thinking: true,
@@ -65,9 +66,35 @@ test("Qwen 3.8 uses its thinking defaults and replays only the latest reasoning 
   assert.equal(compiled.resolved.reasoning.effectiveHistory, "latest");
 });
 
+test("Qwen 3.8 Flash Next has a distinct profile backed by the shared family recipe", () => {
+  const dense = profile("qwen/qwen3.8-27b");
+  const flash = profile("qwen/qwen3.8-flash-next");
+  const compiled = compileModelRequest({
+    profile: flash,
+    instructions: "system",
+    messages: historyFixture(),
+  });
+
+  assert.notEqual(flash, dense);
+  assert.equal(flash.sourceUrl, "https://huggingface.co/Qwen/Qwen3.8-Flash-Next");
+  assert.equal(suggestModelProfile("Qwen/Qwen3.8-Flash-Next"), flash.id);
+  assert.equal(suggestModelProfile("unsloth/Qwen3.8-Flash-Next-GGUF"), flash.id);
+  assert.equal(suggestModelProfile("community/Qwen3.8-Flash-Next-GGUF"), undefined);
+  assert.equal(flash.endpoint, dense.endpoint);
+  assert.deepEqual(flash.transport, dense.transport);
+  assert.deepEqual(flash.inputModalities, ["text", "image"]);
+  assert.deepEqual(flash.reasoning, dense.reasoning);
+  assert.deepEqual(flash.sampling, dense.sampling);
+  assert.equal(compiled.body.reasoning_effort, "xhigh");
+  assert.deepEqual(compiled.body.chat_template_kwargs, {
+    enable_thinking: true,
+    preserve_thinking: true,
+  });
+});
+
 test("Qwen 3.8 none switches thinking off and selects the direct sampling recipe", () => {
   const compiled = compileModelRequest({
-    profile: profile("qwen/qwen3.8-27b@v1"),
+    profile: profile("qwen/qwen3.8-27b"),
     config: { reasoning: { effort: "none", history: "discard" } },
     instructions: "system",
     messages: historyFixture(),
@@ -94,7 +121,7 @@ test("discard removes historical reasoning including the active tool turn", () =
     }),
   ];
   const compiled = compileModelRequest({
-    profile: profile("qwen/qwen3.8-27b@v1"),
+    profile: profile("qwen/qwen3.8-27b"),
     config: { reasoning: { history: "discard" } },
     instructions: "system",
     messages,
@@ -114,7 +141,7 @@ test("latest retains only the immediately preceding assistant reasoning", () => 
     }),
   ];
   const compiled = compileModelRequest({
-    profile: profile("qwen/qwen3.8-27b@v1"),
+    profile: profile("qwen/qwen3.8-27b"),
     config: { reasoning: { history: "latest" } },
     instructions: "system",
     messages,
@@ -126,7 +153,7 @@ test("latest retains only the immediately preceding assistant reasoning", () => 
 
 test("Qwen 3.8 maps portable high to xhigh visibly", () => {
   const compiled = compileModelRequest({
-    profile: profile("qwen/qwen3.8-27b@v1"),
+    profile: profile("qwen/qwen3.8-27b"),
     config: { reasoning: { effort: "high" } },
     instructions: "system",
     messages: [],
@@ -143,7 +170,7 @@ test("Config layers merge independently and sampling overrides retain the profil
     { reasoning: { history: "discard" }, sampling: { topP: 0.9 } },
   );
   const compiled = compileModelRequest({
-    profile: profile("qwen/qwen3.8-27b@v1"),
+    profile: profile("qwen/qwen3.8-27b"),
     config,
     instructions: "system",
     messages: historyFixture(),
@@ -159,7 +186,7 @@ test("Config layers merge independently and sampling overrides retain the profil
 
 test("Gemma 4 uses binary thinking, tool-only reasoning history, and images-first projection", () => {
   const compiled = compileModelRequest({
-    profile: profile("google/gemma-4-31b-it@v1"),
+    profile: profile("google/gemma-4-31b-it"),
     config: { reasoning: { effort: "medium" } },
     instructions: "system",
     messages: historyFixture(),
@@ -183,7 +210,7 @@ test("Gemma 4 uses binary thinking, tool-only reasoning history, and images-firs
 
 test("Gemma 4 reports unsupported full-history preservation instead of pretending", () => {
   const compiled = compileModelRequest({
-    profile: profile("google/gemma-4-31b-it@v1"),
+    profile: profile("google/gemma-4-31b-it"),
     config: { reasoning: { history: "all" } },
     instructions: "system",
     messages: historyFixture(),
@@ -196,7 +223,7 @@ test("Gemma 4 reports unsupported full-history preservation instead of pretendin
 
 test("Muse Glimmer applies reasoning strength through its official system contract", () => {
   const compiled = compileModelRequest({
-    profile: profile("meta/muse-glimmer-30b@v1"),
+    profile: profile("meta/muse-glimmer-30b"),
     config: { reasoning: { effort: "xhigh" } },
     instructions: "You are an agent.",
     messages: historyFixture(),
@@ -213,7 +240,7 @@ test("Muse Glimmer applies reasoning strength through its official system contra
 
 test("Muse Glimmer does not invent undocumented historical reasoning replay", () => {
   const compiled = compileModelRequest({
-    profile: profile("meta/muse-glimmer-30b@v1"),
+    profile: profile("meta/muse-glimmer-30b"),
     config: { reasoning: { history: "all" } },
     instructions: "system",
     messages: historyFixture(),
@@ -226,7 +253,7 @@ test("Muse Glimmer does not invent undocumented historical reasoning replay", ()
 
 test("Muse Glimmer never pretends to support reasoning off", () => {
   const compiled = compileModelRequest({
-    profile: profile("meta/muse-glimmer-30b@v1"),
+    profile: profile("meta/muse-glimmer-30b"),
     config: { reasoning: { effort: "none" } },
     instructions: "system",
     messages: [],
@@ -240,11 +267,19 @@ test("Muse Glimmer never pretends to support reasoning off", () => {
 
 test("Chat Completions keeps the system role first and serializes reasoning_content", () => {
   const body = buildChatCompletionsBody({
+    providerId: "provider",
     model: "qwen/qwen3.8-27b",
+    endpoint: "chat-completions",
     instructions: "system prompt",
     messages: historyFixture().slice(0, 1),
+    transportProfile: profile("qwen/qwen3.8-27b").transport,
     providerRequestBody: { reasoning_effort: "xhigh" },
-  });
+    resolvedLlmRequestConfig: compileModelRequest({
+      profile: profile("qwen/qwen3.8-27b"),
+      instructions: "system prompt",
+      messages: [],
+    }).resolved,
+  } satisfies PreparedProviderRequest);
   const messages = body.messages as Array<Record<string, unknown>>;
 
   assert.deepEqual(messages[0], { role: "system", content: "system prompt" });
@@ -263,26 +298,31 @@ test("Responses raw replay retains canonical reasoning blocks", () => {
 });
 
 test("Profile selection is exact and never activates through fuzzy model-name detection", () => {
-  assert.equal(suggestModelProfile("Qwen/Qwen3.8-27B"), "qwen/qwen3.8-27b@v1");
+  assert.equal(suggestModelProfile("Qwen/Qwen3.8-27B"), "qwen/qwen3.8-27b");
+  assert.equal(suggestModelProfile("unsloth/Qwen3.8-27B-GGUF"), "qwen/qwen3.8-27b");
   assert.equal(suggestModelProfile("qwen3.8"), undefined);
   assert.equal(suggestModelProfile("my-qwen3.8-27b-finetune"), undefined);
-  assert.equal(getModelProfile("qwen/qwen3.8-27b"), undefined);
+  assert.equal(getModelProfile("qwen/qwen3.8-27b")?.id, "qwen/qwen3.8-27b");
+  assert.equal(getModelProfile("Qwen/Qwen3.8-27B"), undefined);
 });
 
 test("Profiles own endpoint and standardized capabilities", () => {
   const summaries = listModelProfiles();
-  const qwen = summaries.find((entry) => entry.id === "qwen/qwen3.8-27b@v1");
-  const gemma = summaries.find((entry) => entry.id === "google/gemma-4-31b-it@v1");
-  const muse = summaries.find((entry) => entry.id === "meta/muse-glimmer-30b@v1");
+  assert.equal(summaries.every((entry) => !entry.id.includes("@") && !entry.label.includes("/ v")), true);
+  const qwen = summaries.find((entry) => entry.id === "qwen/qwen3.8-27b");
+  const flash = summaries.find((entry) => entry.id === "qwen/qwen3.8-flash-next");
+  const gemma = summaries.find((entry) => entry.id === "google/gemma-4-31b-it");
+  const muse = summaries.find((entry) => entry.id === "meta/muse-glimmer-30b");
   assert.equal(qwen?.endpoint, "chat-completions");
-  assert.deepEqual(qwen?.inputModalities, ["text", "image", "video"]);
-  assert.deepEqual(gemma?.inputModalities, ["text", "image", "video"]);
+  assert.deepEqual(qwen?.inputModalities, ["text", "image"]);
+  assert.deepEqual(flash?.inputModalities, ["text", "image"]);
+  assert.deepEqual(gemma?.inputModalities, ["text", "image"]);
   assert.deepEqual(muse?.inputModalities, ["text", "image"]);
   assert.equal(muse?.tools.mode, "native");
 });
 
 test("Provider-declared visual artifact availability refines profile modalities", () => {
-  const muse = profile("meta/muse-glimmer-30b@v1");
+  const muse = profile("meta/muse-glimmer-30b");
   const available = buildProfiledCapabilities(muse, { visualInputSupported: true });
   assert.equal(available.capabilities.inputModalities.includes("image"), true);
   assert.deepEqual(available.issues, []);
@@ -290,4 +330,35 @@ test("Provider-declared visual artifact availability refines profile modalities"
   const unavailable = buildProfiledCapabilities(muse, { visualInputSupported: false });
   assert.deepEqual(unavailable.capabilities.inputModalities, ["text"]);
   assert.equal(unavailable.issues.length, 1);
+});
+
+test("Provider-declared runtime gaps narrow tools and reasoning without changing the profile", () => {
+  const qwen = profile("qwen/qwen3.8-27b");
+  const resolved = buildProfiledCapabilities(qwen, {
+    nativeToolsSupported: false,
+    reasoningSupported: false,
+  });
+  assert.equal(resolved.capabilities.tools.mode, "none");
+  assert.equal(resolved.capabilities.reasoning.control, "none");
+  assert.deepEqual(resolved.capabilities.reasoning.allowedEfforts, []);
+  assert.deepEqual(resolved.issues.map((issue) => issue.code), [
+    "runtime_tools_unavailable",
+    "runtime_reasoning_unavailable",
+  ]);
+});
+
+test("runtime reasoning unavailability suppresses profile directives and history replay", () => {
+  const compiled = compileModelRequest({
+    profile: profile("qwen/qwen3.8-27b"),
+    reasoningSupported: false,
+    instructions: "system",
+    messages: historyFixture(),
+  });
+
+  assert.equal(compiled.body.reasoning_effort, undefined);
+  assert.equal(compiled.body.chat_template_kwargs, undefined);
+  assert.equal(compiled.resolved.reasoning.enabled, false);
+  assert.equal(compiled.resolved.reasoning.effectiveHistory, "discard");
+  assert.equal(getMessageReasoning(compiled.messages[1]!), "");
+  assert.match(compiled.resolved.warnings[0] ?? "", /runtime reports reasoning unavailable/);
 });

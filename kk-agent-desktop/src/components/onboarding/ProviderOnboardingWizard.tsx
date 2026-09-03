@@ -78,19 +78,11 @@ type Props = {
   onComplete: (provider: ProviderConfig) => void;
 };
 
-function parseModelsText(text: string): string[] {
-  return text
-    .split("\n")
-    .map((line) => line.trim())
-    .filter((line) => line.length > 0);
-}
-
 export default function ProviderOnboardingWizard({ onComplete }: Props) {
   const [form, setForm] = useState<ProviderFormValue>({
-    name: "Local LLM",
+    name: "OpenAI-compatible",
     baseUrl: DEFAULT_PROVIDER_BASE_URL,
     apiKey: "",
-    models: "",
   });
   const [selectedProfiles, setSelectedProfiles] = useState<Record<string, string>>({});
   const [state, setState] = useState<StepState>({ kind: "idle" });
@@ -114,12 +106,10 @@ export default function ProviderOnboardingWizard({ onComplete }: Props) {
     let created: ProviderConfig | undefined;
     setState({ kind: "saving" });
     try {
-      const parsedModels = parseModelsText(form.models);
       created = await providerApi.addProvider({
         name: form.name.trim(),
         baseUrl: form.baseUrl.trim(),
         apiKey: form.apiKey.trim() || undefined,
-        models: parsedModels.length > 0 ? parsedModels : undefined,
       });
 
       const testResult = await providerApi.testProvider(created.id);
@@ -210,7 +200,7 @@ export default function ProviderOnboardingWizard({ onComplete }: Props) {
         ) : (
           <>
             <MutedText>
-              Set up a local or self-hosted LLM provider so sessions can be started.
+              Set up an OpenAI-compatible LLM provider so sessions can be started.
             </MutedText>
             <ProviderFormFields
               value={form}

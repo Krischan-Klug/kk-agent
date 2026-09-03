@@ -16,7 +16,6 @@ export interface ModelProfile {
   id: string;
   manufacturer: string;
   modelName: string;
-  profileVersion: number;
   label: string;
   sourceUrl?: string;
   aliases: string[];

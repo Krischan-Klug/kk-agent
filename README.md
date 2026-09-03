@@ -21,7 +21,7 @@ Providers are configured only with:
 - `baseUrl`
 - optional `apiKey`
 
-Every usable model has an explicitly selected, versioned inference profile. The profile owns:
+Every usable model has an explicitly selected, stable inference profile. Existing model profiles are updated in place; new models receive new profiles. The profile owns:
 
 - the fixed `chat-completions` or `responses` endpoint
 - input/output modalities and native tool support
@@ -29,12 +29,13 @@ Every usable model has an explicitly selected, versioned inference profile. The 
 
 Per model, users may override only:
 
+- the effective context limit when discovery does not expose it
 - reasoning effort and history policy
 - two optional OpenAI sampling overrides: `temperature` and `top_p`
 
 Unprofiled models are discoverable in Provider Settings but cannot be selected for agents or sessions. There is no fuzzy capability detection or endpoint fallback.
 
-Runtime topics such as context window, KV cache, quantization, and backend load settings stay in LM Studio, Ollama, or the serving backend itself.
+Runtime topics such as KV cache, quantization, and model loading stay in the serving backend. KK-Agent uses discovered context metadata or an explicit per-model context limit for proactive compaction.
 
 ## Workspace Layout
 

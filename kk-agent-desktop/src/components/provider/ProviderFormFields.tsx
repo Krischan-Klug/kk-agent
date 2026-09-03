@@ -1,12 +1,10 @@
 import Input from "@/components/Input";
-import TextArea from "@/components/TextArea";
 import { FieldLabel, FormField } from "@/components/PageForm";
 
 export type ProviderFormValue = {
   name: string;
   baseUrl: string;
   apiKey: string;
-  models: string;
 };
 
 type Props = {
@@ -31,7 +29,7 @@ export default function ProviderFormFields({
         <Input
           value={value.name}
           onChange={(e) => set("name", e.target.value)}
-          placeholder="e.g. Local LLM Server"
+          placeholder="e.g. OpenAI-compatible Server"
           autoFocus={autoFocus}
         />
       </FormField>
@@ -49,15 +47,6 @@ export default function ProviderFormFields({
           value={value.apiKey}
           onChange={(e) => set("apiKey", e.target.value)}
           placeholder="optional"
-        />
-      </FormField>
-      <FormField>
-        <FieldLabel>Models (optional, eine ID pro Zeile)</FieldLabel>
-        <TextArea
-          value={value.models}
-          onChange={(e) => set("models", e.target.value)}
-          placeholder={"e.g. glm-4.6\nglm-4.5"}
-          rows={3}
         />
       </FormField>
     </>

@@ -117,7 +117,6 @@ export default function ProviderCard({
     name: provider.name,
     baseUrl: provider.baseUrl,
     apiKey: provider.apiKey ?? "",
-    models: (provider.models ?? []).join("\n"),
   });
   const statusState = testResult ? (testResult.ok ? "ok" : "error") : "unknown";
   const statusTitle = isTesting
@@ -134,7 +133,6 @@ export default function ProviderCard({
         name: provider.name,
         baseUrl: provider.baseUrl,
         apiKey: provider.apiKey ?? "",
-        models: (provider.models ?? []).join("\n"),
       });
     }
     setExpanded((expanded) => !expanded);

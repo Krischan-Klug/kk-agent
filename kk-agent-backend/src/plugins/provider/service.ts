@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import type {
+  PreparedProviderRequest,
   UnifiedRequest,
   UnifiedResponse,
   OnChunkFn,
@@ -14,7 +15,7 @@ import type {
   UpdateProviderBody,
 } from "./types.js";
 import type { DiscoveredModel, ProviderAdapter } from "./lib/adapter.js";
-import { createLocalProviderAdapter, createManualModel } from "./lib/adapters/local.js";
+import { createOpenAiProviderAdapter } from "./lib/adapters/openai.js";
 import { createLogger } from "../../lib/logger.js";
 import { NotFoundError } from "../../lib/errors.js";
 import { loadState, saveState } from "../lib/state.js";
@@ -71,7 +72,12 @@ function normalizeStoredProvidersState(nextState: ProvidersState): ProvidersStat
   );
   return {
     schemaVersion: PROVIDER_SCHEMA_VERSION,
-    providers: nextState.providers ?? [],
+    providers: (nextState.providers ?? []).map((provider) => ({
+      id: provider.id,
+      name: provider.name,
+      baseUrl: provider.baseUrl,
+      ...(provider.apiKey ? { apiKey: provider.apiKey } : {}),
+    })),
     modelSettings,
   };
 }
@@ -85,7 +91,7 @@ function getAdapter(providerId: string): ProviderAdapter {
   if (cached) return cached;
   const provider = getProviderById(providerId);
   if (!provider) throw new NotFoundError("Provider", providerId);
-  const adapter = createLocalProviderAdapter(provider);
+  const adapter = createOpenAiProviderAdapter(provider);
   adapterCache.set(providerId, adapter);
   return adapter;
 }
@@ -148,7 +154,12 @@ export function listProviders(): ProviderConfig[] {
 }
 
 export async function addProvider(config: CreateProviderBody): Promise<ProviderConfig> {
-  const provider: ProviderConfig = { ...config, id: randomUUID() };
+  const provider: ProviderConfig = {
+    id: randomUUID(),
+    name: config.name,
+    baseUrl: config.baseUrl,
+    ...(config.apiKey ? { apiKey: config.apiKey } : {}),
+  };
   state.providers.push(provider);
   await persist();
   return provider;
@@ -157,7 +168,13 @@ export async function addProvider(config: CreateProviderBody): Promise<ProviderC
 export async function updateProvider(id: string, updates: UpdateProviderBody): Promise<ProviderConfig> {
   const index = state.providers.findIndex((provider) => provider.id === id);
   if (index === -1) throw new NotFoundError("Provider", id);
-  state.providers[index] = { ...state.providers[index], ...updates };
+  const current = state.providers[index]!;
+  state.providers[index] = {
+    id: current.id,
+    name: updates.name ?? current.name,
+    baseUrl: updates.baseUrl ?? current.baseUrl,
+    ...((updates.apiKey ?? current.apiKey) ? { apiKey: updates.apiKey ?? current.apiKey } : {}),
+  };
   invalidateProvider(id);
   await persist();
   return state.providers[index]!;
@@ -176,20 +193,10 @@ export async function testProvider(id: string): Promise<{ ok: boolean; error?: s
   return getAdapter(id).testConnection();
 }
 
-function getManualModels(provider: ProviderConfig): DiscoveredModel[] {
-  return (provider.models ?? []).map((modelId) => createManualModel(provider.id, modelId));
-}
-
 async function getProviderModels(provider: ProviderConfig): Promise<ModelInfo[]> {
-  const manualModels = getManualModels(provider);
-  let fetchedModels: DiscoveredModel[] = [];
-  try {
-    fetchedModels = await getAdapter(provider.id).listModels();
-  } catch {
-    if (manualModels.length === 0) throw new Error(`Could not discover models for provider "${provider.name}".`);
-  }
+  const fetchedModels = await getAdapter(provider.id).listModels();
   const seenIds = new Set<string>();
-  const models = [...fetchedModels, ...manualModels].flatMap((model) => {
+  const models = fetchedModels.flatMap((model) => {
     if (seenIds.has(model.id)) return [];
     seenIds.add(model.id);
     return [configureModel(model)];
@@ -214,7 +221,8 @@ export async function getEffectiveContextLimit(
   modelId: string,
 ): Promise<number | undefined> {
   const model = (await getModels(providerId)).find((entry) => entry.id === modelId);
-  const limit = model?.contextLength;
+  const settings = getModelSettings(providerId, modelId);
+  const limit = settings.contextLimit ?? model?.contextLength ?? model?.maxContextLength;
   return typeof limit === "number" && Number.isFinite(limit) && limit > 0
     ? Math.floor(limit)
     : undefined;
@@ -260,7 +268,10 @@ export async function resolveProviderModel(
   return { providerId: selected.providerId, model: selected.id };
 }
 
-async function prepareRequest(request: UnifiedRequest) {
+async function prepareRequest(request: UnifiedRequest): Promise<{
+  provider: ProviderConfig;
+  prepared: PreparedProviderRequest;
+}> {
   const provider = resolveProvider(request.providerId ?? getSingleProviderId());
   const model = (await getModels(provider.id)).find((entry) => entry.id === request.model);
   if (!model) throw new Error(`Model "${request.model}" was not found for provider "${provider.name}".`);
@@ -272,8 +283,8 @@ async function prepareRequest(request: UnifiedRequest) {
   };
 }
 
-function attachProviderDebug(response: UnifiedResponse, prepared: UnifiedRequest): void {
-  const resolutionNotices = (prepared.resolvedLlmRequestConfig?.warnings ?? []).map((message) => ({
+function attachProviderDebug(response: UnifiedResponse, prepared: PreparedProviderRequest): void {
+  const resolutionNotices = prepared.resolvedLlmRequestConfig.warnings.map((message) => ({
     level: "warning" as const,
     code: "model_profile_resolution",
     message,
@@ -282,8 +293,8 @@ function attachProviderDebug(response: UnifiedResponse, prepared: UnifiedRequest
     response.notices = [...resolutionNotices, ...(response.notices ?? [])];
   }
   response.debug = {
-    ...(response.debug ?? { endpoint: prepared.endpoint! }),
-    profileId: prepared.resolvedLlmRequestConfig?.profileId,
+    ...(response.debug ?? { endpoint: prepared.endpoint }),
+    profileId: prepared.resolvedLlmRequestConfig.profileId,
     resolvedRequestConfig: prepared.resolvedLlmRequestConfig,
   };
 }
@@ -291,11 +302,11 @@ function attachProviderDebug(response: UnifiedResponse, prepared: UnifiedRequest
 export async function callProviderStream(
   request: UnifiedRequest,
   onChunk: OnChunkFn,
-  onPrepared?: (request: UnifiedRequest) => void | Promise<void>,
+  onPrepared?: (request: PreparedProviderRequest) => void | Promise<void>,
 ): Promise<UnifiedResponse> {
   const { provider, prepared } = await prepareRequest(request);
   await onPrepared?.(prepared);
-  const response = await getAdapter(provider.id).chatStream(prepared, onChunk);
+  const response = await getAdapter(provider.id).complete(prepared, onChunk);
   attachProviderDebug(response, prepared);
   return response;
 }

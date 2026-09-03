@@ -332,7 +332,7 @@ export async function runAgentLoop(opts: LoopOptions): Promise<LoopResult> {
           && transientRetries < TRANSIENT_RETRY_BUDGET
         ) {
           transientRetries += 1;
-          const delayMs = computeBackoffMs(transientRetries);
+          const delayMs = computeBackoffMs(transientRetries, classified.retryAfterMs);
           await emitRunEvent(opts, messages, state, {
             kind: "provider_retry",
             severity: "warning",

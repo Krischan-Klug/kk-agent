@@ -52,37 +52,6 @@ export function issueToNotice(issue: ToolCallParseIssue): ProviderNotice {
   };
 }
 
-function getProviderErrorMessage(parsed: Record<string, unknown>): string | undefined {
-  if (parsed.error && typeof parsed.error === "object") {
-    return "message" in parsed.error && typeof parsed.error.message === "string"
-      ? parsed.error.message
-      : JSON.stringify(parsed.error);
-  }
-
-  return parsed.type === "error" && typeof parsed.message === "string"
-    ? parsed.message
-    : undefined;
-}
-
-export function consumeProviderStreamError(
-  parsed: Record<string, unknown>,
-  notices: ProviderNotice[],
-): { handled: boolean; fatalError?: string } {
-  const message = getProviderErrorMessage(parsed);
-  if (!message) return { handled: false };
-
-  const isToolCallWarning = message.includes("tool call");
-  notices.push({
-    level: isToolCallWarning ? "warning" : "error",
-    message: `Provider stream stopped early: ${message}`,
-  });
-
-  return {
-    handled: true,
-    fatalError: isToolCallWarning ? undefined : message,
-  };
-}
-
 export function emitToolUseDeltas(
   toolCalls: NormalizedToolCall[],
   emittedToolUseIds: Set<string>,

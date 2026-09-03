@@ -9,7 +9,7 @@ import {
 } from "./model-profiles/registry.js";
 
 test("maps a canonical output limit to the selected endpoint", () => {
-  const profile = getModelProfile("generic/openai-chat-text@v1");
+  const profile = getModelProfile("generic/openai-chat-text");
   assert.ok(profile);
   const configured = buildProfiledCapabilities(profile, {});
   const model: ModelInfo = {
@@ -36,8 +36,8 @@ test("maps a canonical output limit to the selected endpoint", () => {
   assert.equal(normalized.providerRequestBody?.max_tokens, 6_000);
 });
 
-test("uses the explicit LM Studio compaction recipe for Qwen without leaking unsupported template kwargs", () => {
-  const profile = getModelProfile("qwen/qwen3.8-27b@v1");
+test("uses the profile transport for Qwen compaction", () => {
+  const profile = getModelProfile("qwen/qwen3.8-27b");
   assert.ok(profile);
   const configured = buildProfiledCapabilities(profile, {});
   const model: ModelInfo = {
@@ -58,10 +58,35 @@ test("uses the explicit LM Studio compaction recipe for Qwen without leaking uns
     maxOutputTokens: profile.compaction.maxOutputTokens,
   });
 
-  assert.equal(normalized.endpoint, "lmstudio-chat");
-  assert.equal(normalized.resolvedLlmRequestConfig?.endpoint, "lmstudio-chat");
-  assert.equal(normalized.providerRequestBody?.reasoning, "off");
-  assert.equal(normalized.providerRequestBody?.max_output_tokens, 8_000);
-  assert.equal(normalized.providerRequestBody?.chat_template_kwargs, undefined);
-  assert.equal(normalized.providerRequestBody?.max_tokens, undefined);
+  assert.equal(normalized.endpoint, "chat-completions");
+  assert.equal(normalized.resolvedLlmRequestConfig.endpoint, "chat-completions");
+  assert.deepEqual(normalized.providerRequestBody?.chat_template_kwargs, {
+    enable_thinking: false,
+    preserve_thinking: false,
+  });
+  assert.equal(normalized.providerRequestBody?.max_tokens, 8_000);
+});
+
+test("rejects image projection when the provider runtime narrows visual input", () => {
+  const profile = getModelProfile("qwen/qwen3.8-27b");
+  assert.ok(profile);
+  const configured = buildProfiledCapabilities(profile, { visualInputSupported: false });
+  const model: ModelInfo = {
+    id: "qwen/qwen3.8-27b",
+    object: "model",
+    providerId: "provider",
+    runtimeCapabilities: { visualInputSupported: false },
+    profile: getModelProfileSummary(profile),
+    capabilities: configured.capabilities,
+    compatibilityIssues: configured.issues,
+  };
+
+  assert.throws(() => normalizeRequestOptions(model, { profileId: profile.id }, {
+    model: model.id,
+    instructions: "Inspect",
+    messages: [createTranscriptMessage({ id: "image-message", role: "user", content: [textBlock("image")] })],
+    modelContentByMessageId: {
+      "image-message": [{ type: "image", dataUrl: "data:image/png;base64,AA==" }],
+    },
+  }), /cannot accept image input/);
 });

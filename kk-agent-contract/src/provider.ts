@@ -4,12 +4,15 @@ import type {
   ResolvedReasoningHistory,
 } from "./common.js";
 
-export type EndpointType = "chat-completions" | "responses" | "lmstudio-chat";
+export type EndpointType = "chat-completions" | "responses";
 export type ReasoningControl = "none" | "binary" | "effort";
 export type ModelInputModality = "text" | "image" | "audio" | "video" | "file";
 export type ModelOutputModality = "text" | "image" | "audio";
 export type ToolUseMode = "none" | "native";
 export type ContinuationMode = "none" | "raw-output-replay" | "previous-response-id";
+export type ProviderStreamMode = "sse" | "json";
+export type ChatInstructionRole = "system" | "developer";
+export type MaxOutputTokensField = "max_tokens" | "max_completion_tokens" | "max_output_tokens";
 
 export interface NumericRange {
   min: number;
@@ -25,10 +28,21 @@ export interface EndpointCapabilities {
 export interface EndpointTransportProfile {
   supportsConcatenatedJsonSplit: boolean;
   continuationMode: ContinuationMode;
+  streamMode: ProviderStreamMode;
+  instructionRole?: ChatInstructionRole;
+  includeUsageInStream?: boolean;
+  maxOutputTokensField: MaxOutputTokensField;
+  reasoningHistoryField?: "reasoning_content" | "reasoning" | "thinking";
+  strictToolSchemas?: boolean;
+  parallelToolCalls?: boolean;
+  samplingFields?: {
+    topK?: string;
+    minP?: string;
+    repetitionPenalty?: string;
+  };
 }
 
 export interface ModelCompactionProfile {
-  endpoint: EndpointType;
   reasoningEffort: ReasoningEffort;
   maxOutputTokens: number;
   inputBudgetRatio: number;
@@ -39,21 +53,18 @@ export interface ProviderConfig {
   name: string;
   baseUrl: string;
   apiKey?: string;
-  models?: string[];
 }
 
 export interface CreateProviderBody {
   name: string;
   baseUrl: string;
   apiKey?: string;
-  models?: string[];
 }
 
 export interface UpdateProviderBody {
   name?: string;
   baseUrl?: string;
   apiKey?: string;
-  models?: string[];
 }
 
 export interface ProvidersState {
@@ -79,7 +90,6 @@ export interface ModelCapabilities {
   outputModalities: ModelOutputModality[];
   tools: ModelToolCapabilities;
   reasoning: ModelReasoningCapabilities;
-  supportsStreaming: boolean;
   endpoint: EndpointType;
   endpointCapabilities: EndpointCapabilities;
   transport: EndpointTransportProfile;
@@ -87,10 +97,15 @@ export interface ModelCapabilities {
 
 export interface RuntimeModelCapabilities {
   visualInputSupported?: boolean;
+  nativeToolsSupported?: boolean;
+  reasoningSupported?: boolean;
 }
 
 export interface ModelCompatibilityIssue {
-  code: "runtime_modality_unavailable";
+  code:
+    | "runtime_modality_unavailable"
+    | "runtime_tools_unavailable"
+    | "runtime_reasoning_unavailable";
   message: string;
 }
 
@@ -98,7 +113,6 @@ export interface ModelProfileSummary {
   id: string;
   manufacturer: string;
   modelName: string;
-  profileVersion: number;
   label: string;
   sourceUrl?: string;
   endpoint: EndpointType;
@@ -117,6 +131,8 @@ export interface ModelInfo {
   id: string;
   object: string;
   providerId: string;
+  ownedBy?: string;
+  loaded?: boolean;
   maxContextLength?: number;
   contextLength?: number;
   runtimeCapabilities: RuntimeModelCapabilities;
@@ -164,6 +180,7 @@ export interface ResolvedLlmRequestConfig {
 
 export interface ModelSettings {
   profileId?: string;
+  contextLimit?: number;
   llmRequestConfig?: LlmRequestConfig;
 }
 

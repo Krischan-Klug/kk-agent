@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import type { ModelInputDebug, TranscriptMessage } from "kk-agent-contract";
 import { repairTranscript } from "kk-agent-contract";
 import type { LoopOptions } from "../types.js";
-import type { UnifiedRequest } from "../../provider/lib/types.js";
+import type { PreparedProviderRequest } from "../../provider/lib/types.js";
 import { callProviderStream, getModelCompactionProfile } from "../../provider/service.js";
 import { buildPrompt, getSystemVariables } from "../../systemprompt/lib/builder.js";
 import {
@@ -53,12 +53,11 @@ export function buildModelPassInput(
 
 async function recordPreparedModelInput(
   opts: LoopOptions,
-  prepared: UnifiedRequest,
+  prepared: PreparedProviderRequest,
   step: number,
   attempt: number,
   purpose: "agent" | "compaction" | "recovery",
 ): Promise<string | undefined> {
-  if (!prepared.endpoint || !prepared.resolvedLlmRequestConfig) return undefined;
   const id = randomUUID();
   await opts.onModelInput?.({
     id,
@@ -84,7 +83,7 @@ async function recordPreparedModelInput(
       inputSchema: structuredClone(tool.parameters),
     })),
     requestConfig: structuredClone(prepared.resolvedLlmRequestConfig),
-    providerRequestBody: structuredClone(prepared.providerRequestBody ?? {}),
+    providerRequestBody: structuredClone(prepared.providerRequestBody),
   });
   return id;
 }

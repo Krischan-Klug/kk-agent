@@ -1,10 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { classifyProviderError } from "./errors.js";
+import { classifyProviderError, ProviderError } from "./errors.js";
 
-test("classifies LM Studio model_unloaded separately from transient and configuration failures", () => {
-  const classified = classifyProviderError(new Error(
-    'LM Studio Chat error 400: {"error":{"type":"model_unloaded","message":"Model is not loaded"}}',
+test("classifies structured-compatible model_unloaded separately from transient and configuration failures", () => {
+  const classified = classifyProviderError(new ProviderError(
+    "Model is not loaded",
+    { status: 400, code: "model_unloaded" },
   ));
 
   assert.equal(classified.kind, "model_unloaded");

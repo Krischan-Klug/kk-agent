@@ -75,7 +75,13 @@ export function handleResponsesStreamingEvent(
   currentOutput: AssembledOutputItem[],
 ): {
   output: AssembledOutputItem[];
-  metadata?: { usage?: Record<string, unknown>; done?: boolean; error?: string; responseId?: string };
+  metadata?: {
+    usage?: Record<string, unknown>;
+    done?: boolean;
+    error?: string;
+    responseId?: string;
+    incomplete?: boolean;
+  };
 } {
   const eventType = typeof data.type === "string" ? data.type : "";
 
@@ -195,6 +201,22 @@ export function handleResponsesStreamingEvent(
       metadata: {
         usage: isPlainObject(response?.usage) ? (response!.usage as Record<string, unknown>) : undefined,
         done: true,
+        responseId: typeof response?.id === "string" ? response.id : undefined,
+      },
+    };
+  }
+
+  if (eventType === "response.incomplete") {
+    const response = isPlainObject(data.response) ? data.response : undefined;
+    const finalOutput = Array.isArray(response?.output)
+      ? response.output.filter((entry): entry is AssembledOutputItem => isPlainObject(entry) && typeof entry.type === "string")
+      : currentOutput;
+    return {
+      output: finalOutput,
+      metadata: {
+        usage: isPlainObject(response?.usage) ? response.usage : undefined,
+        done: true,
+        incomplete: true,
         responseId: typeof response?.id === "string" ? response.id : undefined,
       },
     };

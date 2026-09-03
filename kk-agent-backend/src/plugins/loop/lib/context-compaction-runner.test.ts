@@ -11,7 +11,6 @@ import { COMPACTION_REQUIRED_HEADINGS } from "./context-compaction.js";
 import { runContextCompaction, type CompactionPassRequest } from "./context-compaction-runner.js";
 
 const profile: ModelCompactionProfile = {
-  endpoint: "lmstudio-chat",
   reasoningEffort: "none",
   maxOutputTokens: 8_000,
   inputBudgetRatio: 0.85,

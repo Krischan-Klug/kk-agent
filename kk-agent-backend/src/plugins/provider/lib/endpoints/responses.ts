@@ -5,12 +5,15 @@ import type {
   OnChunkFn,
   ProviderNotice,
   ProviderTransportState,
+  PreparedProviderRequest,
   ResponsesConversationItem,
   ResponsesTransportState,
-  UnifiedRequest,
   UnifiedResponse,
 } from "../types.js";
 import { readSSEStream } from "../sse.js";
+import { openProviderStream, requestProviderJson } from "../http.js";
+import { ProviderError } from "../errors.js";
+import { isPlainObject } from "../object-utils.js";
 import {
   buildResponsesTools,
   buildUnifiedResponseFromTurn,
@@ -30,7 +33,6 @@ import {
   type TranscriptMessage,
 } from "kk-agent-contract";
 import {
-  consumeProviderStreamError,
   emitFinalStreamChunks,
   emitToolUseDeltas,
   normalizeProviderUsage,
@@ -126,7 +128,7 @@ type PreparedResponsesRequest = {
 function appendUnsyncedConversationItems(
   state: ResponsesTransportState,
   messages: TranscriptMessage[],
-  modelContentByMessageId: UnifiedRequest["modelContentByMessageId"],
+  modelContentByMessageId: PreparedProviderRequest["modelContentByMessageId"],
 ): {
   transportState: ResponsesTransportState;
   appendedItems: ResponsesConversationItem[];
@@ -169,10 +171,10 @@ function appendUnsyncedConversationItems(
 }
 
 function prepareResponsesRequest(
-  request: UnifiedRequest,
+  request: PreparedProviderRequest,
 ): PreparedResponsesRequest {
   const requestedContinuationMode =
-    request.transportProfile?.continuationMode ?? "previous-response-id";
+    request.transportProfile.continuationMode;
   const candidateState = isResponsesTransportState(request.transportState)
     ? request.transportState
     : undefined;
@@ -205,15 +207,20 @@ function prepareResponsesRequest(
     }] : []),
   ];
   const body: Record<string, unknown> = {
-    ...(request.providerRequestBody ?? {}),
+    ...request.providerRequestBody,
     model: request.model,
-    stream: true,
+    stream: request.transportProfile.streamMode === "sse",
   };
 
-  const tools = buildResponsesTools(request.tools);
+  const tools = buildResponsesTools(request.tools, request.transportProfile.strictToolSchemas ?? false);
 
   if (request.instructions.trim()) body.instructions = request.instructions;
-  if (tools?.length) body.tools = tools;
+  if (tools?.length) {
+    body.tools = tools;
+    if (request.transportProfile.parallelToolCalls !== undefined) {
+      body.parallel_tool_calls = request.transportProfile.parallelToolCalls;
+    }
+  }
   if (
     continuationMode === "previous-response-id" &&
     transportState.lastResponseId
@@ -260,103 +267,110 @@ function commitResponsesTransportState(input: {
   return next;
 }
 
-async function postResponses(
-  request: UnifiedRequest,
-  baseUrl: string,
-  headers: Record<string, string>,
-): Promise<{
-  res: Response;
-  prepared: PreparedResponsesRequest;
-}> {
-  const prepared = prepareResponsesRequest(request);
-  const res = await fetch(`${baseUrl}/responses`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json", ...headers },
-    body: JSON.stringify(prepared.body),
-    signal: request.signal,
-  });
-
-  if (!res.ok) {
-    throw new Error(`Responses API error ${res.status}: ${await res.text()}`);
-  }
-  return { res, prepared };
-}
-
-export async function chatStream(
-  request: UnifiedRequest,
+export async function complete(
+  request: PreparedProviderRequest,
   baseUrl: string,
   onChunk: OnChunkFn,
   headers: Record<string, string> = {},
 ): Promise<UnifiedResponse> {
-  const posted = await postResponses(request, baseUrl, headers);
-  const prepared = posted.prepared;
+  const prepared = prepareResponsesRequest(request);
+  const url = `${baseUrl}/responses`;
+  const init: RequestInit = {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...headers },
+    body: JSON.stringify(prepared.body),
+  };
   const messageId = randomUUID();
-  const providerNotices: ProviderNotice[] = [];
-  let output: Array<Record<string, unknown> & { type: string }> = [];
+  let output: AssembledOutputItem[] = [];
   let usage: ProviderTokenUsage | undefined;
   let responseId: string | undefined;
   const emittedToolUseIds = new Set<string>();
-  let fatalStreamError: string | undefined;
+  let finishReason: UnifiedResponse["finishReason"] = "stop";
+  let sawTerminalEvent = false;
 
-  await readSSEStream(
-    posted.res,
-    (parsed) => {
-      const streamError = consumeProviderStreamError(parsed, providerNotices);
-      if (streamError.handled) {
-        fatalStreamError = streamError.fatalError ?? fatalStreamError;
-        return true;
-      }
+  if (request.transportProfile.streamMode === "json") {
+    const payload = await requestProviderJson(
+      url,
+      init,
+      "Responses API request",
+      { signal: request.signal },
+    );
+    if (isPlainObject(payload.error)) {
+      throw new ProviderError(
+        typeof payload.error.message === "string" ? payload.error.message : "Responses API request failed.",
+      );
+    }
+    output = Array.isArray(payload.output)
+      ? payload.output.filter((entry): entry is AssembledOutputItem => (
+          isPlainObject(entry) && typeof entry.type === "string"
+        ))
+      : [];
+    usage = isPlainObject(payload.usage) ? payload.usage as ProviderTokenUsage : undefined;
+    responseId = typeof payload.id === "string" ? payload.id : undefined;
+    finishReason = payload.status === "incomplete" ? "length" : "stop";
+  } else {
+    const stream = await openProviderStream(
+      url,
+      init,
+      "Responses API request",
+      { signal: request.signal },
+    );
+    try {
+      await readSSEStream(
+        stream.response,
+        (parsed) => {
+          emitDeltaBlocks(parsed, messageId, onChunk);
+          const next = handleResponsesStreamingEvent(parsed, output);
+          output = next.output;
+          const eventType = typeof parsed.type === "string" ? parsed.type : "";
+          const shouldEmitToolUses =
+            eventType === "response.completed" ||
+            (eventType === "response.output_item.done" &&
+              typeof parsed.item === "object" &&
+              parsed.item !== null &&
+              "type" in parsed.item &&
+              parsed.item.type === "function_call");
 
-      emitDeltaBlocks(parsed, messageId, onChunk);
-      const next = handleResponsesStreamingEvent(parsed, output);
-      output = next.output;
-      const eventType = typeof parsed.type === "string" ? parsed.type : "";
-      const shouldEmitToolUses =
-        eventType === "response.completed" ||
-        (eventType === "response.output_item.done" &&
-          typeof parsed.item === "object" &&
-          parsed.item !== null &&
-          "type" in parsed.item &&
-          parsed.item.type === "function_call");
+          if (shouldEmitToolUses) {
+            const normalizedToolCalls = normalizeResponsesToolCalls({
+              output,
+              tools: request.tools,
+              supportsConcatenatedJsonSplit:
+                request.transportProfile.supportsConcatenatedJsonSplit,
+            }).toolCalls;
+            emitToolUseDeltas(
+              normalizedToolCalls,
+              emittedToolUseIds,
+              messageId,
+              onChunk,
+            );
+          }
 
-      if (shouldEmitToolUses) {
-        const normalizedToolCalls = normalizeResponsesToolCalls({
-          output,
-          tools: request.tools,
-          supportsConcatenatedJsonSplit:
-            request.transportProfile?.supportsConcatenatedJsonSplit ?? true,
-        }).toolCalls;
-        emitToolUseDeltas(
-          normalizedToolCalls,
-          emittedToolUseIds,
-          messageId,
-          onChunk,
-        );
-      }
+          if (next.metadata?.error) {
+            throw new ProviderError(next.metadata.error);
+          }
 
-      if (next.metadata?.error) {
-        providerNotices.push({
-          level: "error",
-          message: next.metadata.error,
-        });
-        fatalStreamError = next.metadata.error;
-        return true;
-      }
+          if (next.metadata?.usage) {
+            usage = next.metadata.usage as ProviderTokenUsage;
+          }
+          if (typeof next.metadata?.responseId === "string") {
+            responseId = next.metadata.responseId;
+          }
+          if (next.metadata?.done) {
+            sawTerminalEvent = true;
+            if (next.metadata.incomplete) finishReason = "length";
+          }
 
-      if (next.metadata?.usage) {
-        usage = next.metadata.usage as ProviderTokenUsage;
-      }
-      if (typeof next.metadata?.responseId === "string") {
-        responseId = next.metadata.responseId;
-      }
-
-      return false;
-    },
-    { throwOnProviderError: false },
-  );
-
-  if (fatalStreamError && output.length === 0) {
-    throw new Error(fatalStreamError);
+          return false;
+        },
+        { signal: stream.signal },
+      );
+    } finally {
+      stream.close();
+    }
+    if (!sawTerminalEvent) {
+      throw new ProviderError("Responses stream ended before a terminal response event was received.");
+    }
   }
 
   const turn = finalizeResponsesOutput({
@@ -364,8 +378,9 @@ export async function chatStream(
     output,
     usage: normalizeProviderUsage(usage),
     tools: request.tools,
+    finishReason,
     supportsConcatenatedJsonSplit:
-      request.transportProfile?.supportsConcatenatedJsonSplit ?? true,
+      request.transportProfile.supportsConcatenatedJsonSplit,
   });
 
   const response = buildUnifiedResponseFromTurn(turn);
@@ -381,10 +396,9 @@ export async function chatStream(
     responseId,
     outputCount: output.length,
   };
-  if (prepared.notices.length > 0 || providerNotices.length > 0) {
+  if (prepared.notices.length > 0) {
     response.notices = [
       ...prepared.notices,
-      ...providerNotices,
       ...(response.notices ?? []),
     ];
   }

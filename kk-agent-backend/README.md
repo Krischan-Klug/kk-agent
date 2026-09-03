@@ -60,19 +60,19 @@ Providers are configured only with:
 - `baseUrl`
 - optional `apiKey`
 
-Each usable model has an explicitly selected, versioned inference profile. Profiles own:
+Each usable model has an explicitly selected, stable inference profile. Existing model profiles are updated in place; new models receive new profiles. Profiles own:
 
 - one fixed endpoint and transport grammar
 - standardized input/output modalities and native tool support
 - manufacturer reasoning, history, sampling, and system-role translations
 
-Model settings contain only the profile ID plus optional canonical reasoning/history and compact `temperature` / `top_p` overrides. Arbitrary provider request bodies are never persisted as user configuration.
+Model settings contain only the profile ID, an optional effective context limit, canonical reasoning/history, and compact `temperature` / `top_p` overrides. Arbitrary provider request bodies are never persisted as user configuration.
 
 Reasoning history is `auto|discard|latest|tool-turns|all`: `auto` selects the profile default, `discard` omits historical reasoning, `latest` replays only the immediately preceding assistant step, `tool-turns` retains tool-call reasoning, and `all` preserves the complete reasoning trace. Canonical transcripts remain unchanged for debug and compaction.
 
 The provider layer keeps the wrapper small:
 
-- LM Studio discovery prefers `/api/v1/models` metadata and falls back to OpenAI-compatible `/v1/models`
+- Model discovery uses the OpenAI-compatible `/v1/models` contract and preserves common optional runtime metadata
 - unprofiled models remain visible but cannot be used for inference
 - profiles, never model-name heuristics, declare reasoning, tools, modalities, and endpoint behavior
 - provider-declared visual artifact availability can narrow a profile's visual modalities

@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import styled from "styled-components";
 import type {
   LlmRequestConfig,
@@ -16,6 +17,7 @@ import {
 import { toModelRef } from "@/lib/modelRefs";
 import { useToggleSet } from "@/hooks/useToggleSet";
 import SamplingSettings from "@/components/SamplingSettings";
+import Input from "@/components/Input";
 
 const SectionDivider = styled.div`
   font-size: var(--font-size-sm);
@@ -188,6 +190,60 @@ type Props = {
   onSave: (model: ModelInfo, settings: ModelSettings) => void;
 };
 
+function ContextLimitField({
+  modelRef,
+  value,
+  discoveredValue,
+  onCommit,
+}: {
+  modelRef: string;
+  value?: number;
+  discoveredValue?: number;
+  onCommit: (value: number | undefined) => void;
+}) {
+  const [draft, setDraft] = useState(value?.toString() ?? "");
+
+  useEffect(() => {
+    setDraft(value?.toString() ?? "");
+  }, [value]);
+
+  function commit() {
+    const trimmed = draft.trim();
+    if (!trimmed) {
+      if (value !== undefined) onCommit(undefined);
+      return;
+    }
+    const parsed = Number(trimmed);
+    if (!Number.isFinite(parsed) || parsed <= 0) {
+      setDraft(value?.toString() ?? "");
+      return;
+    }
+    const normalized = Math.floor(parsed);
+    setDraft(normalized.toString());
+    if (normalized !== value) onCommit(normalized);
+  }
+
+  return (
+    <Input
+      id={`context-limit-${modelRef}`}
+      type="number"
+      min={1}
+      step={1}
+      value={draft}
+      placeholder={String(discoveredValue ?? "provider default")}
+      onChange={(event) => setDraft(event.target.value)}
+      onBlur={commit}
+      onKeyDown={(event) => {
+        if (event.key === "Enter") event.currentTarget.blur();
+        if (event.key === "Escape") {
+          setDraft(value?.toString() ?? "");
+          event.currentTarget.blur();
+        }
+      }}
+    />
+  );
+}
+
 export default function ModelSettingsSection({
   models,
   profiles,
@@ -237,6 +293,9 @@ export default function ModelSettingsSection({
                       ctx: {model.contextLength ? `${model.contextLength.toLocaleString()} / ` : ""}
                       {model.maxContextLength.toLocaleString()}
                     </Muted>
+                  )}
+                  {model.loaded !== undefined && (
+                    <Muted>{model.loaded ? "loaded" : "not loaded"}</Muted>
                   )}
                 </ModelName>
                 <ProfileControl>
@@ -346,6 +405,19 @@ export default function ModelSettingsSection({
                     </FieldCard>
                   </QuickSettings>
                 )}
+
+                <QuickSettings>
+                  <FieldCard>
+                    <Label htmlFor={`context-limit-${modelRef}`}>Effective context limit</Label>
+                    <ContextLimitField
+                      modelRef={modelRef}
+                      value={settings.contextLimit}
+                      discoveredValue={model.contextLength ?? model.maxContextLength}
+                      onCommit={(contextLimit) => saveModelSettings(model, { contextLimit })}
+                    />
+                    <Muted>Used for proactive compaction when discovery does not expose the active limit.</Muted>
+                  </FieldCard>
+                </QuickSettings>
 
                 <SamplingSettings
                   value={settings.llmRequestConfig}

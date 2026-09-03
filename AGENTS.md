@@ -16,7 +16,7 @@ Quick reference for AI agents working in this repo.
 - `skills`: Agent Skills discovered from workspace/user roots plus managed imports, separate from tools and MCPs
 - `session`: Sessions, chat, streaming
 - `provider`: Models and providers
-- `provider/lib/model-profiles`: Versioned model-family inference recipes and canonical request translation
+- `provider/lib/model-profiles`: Stable model-specific inference recipes and canonical request translation
 
 Backend features register through a fixed, explicit initializer list. There is no dynamic plugin discovery, dependency graph, or lifecycle layer.
 
@@ -62,9 +62,9 @@ Backend features register through a fixed, explicit initializer list. There is n
 - Escape XML attributes and wrap free-form runtime text in CDATA; keep the effective mode as the final prompt block.
 - Loop behavior remains configurable per agent; `simple` loops must work without forced plan/verify steps.
 - Providers use a unified capability model and are configured only via `name`, `baseUrl`, and optional `apiKey`.
-- Every usable model requires an explicit versioned inference profile; the profile fixes endpoint, transport, modalities, tools, reasoning translation, and manufacturer sampling defaults. Do not infer these from model names or retry across endpoints.
+- Every usable model requires an explicit stable inference profile; the profile ID identifies the model or generic transport recipe and is updated in place. New models receive new profiles. Profiles fix endpoint, transport, modalities, tools, reasoning translation, and manufacturer sampling defaults. Do not infer these from model names or retry across endpoints.
 - Harness reasoning uses `reasoning.effort` (`none|low|medium|high|xhigh`) plus a canonical history policy; full reasoning remains in the transcript for debug and compaction, while the Qwen default replays only the latest assistant step.
-- Sampling defaults beyond optional user `temperature` and `top_p` overrides belong to versioned model profiles.
+- Sampling defaults beyond optional user `temperature` and `top_p` overrides belong to stable model profiles.
 - User-configurable sampling is limited to optional `temperature` and `top_p` overrides; arbitrary request-body passthrough belongs in the inference provider.
 - Internal tools are registered in the `tools` plugin, not the user MCP area.
 - Filesystem Read provides model context but never acts as mutation authorization. Edit and Write read current content internally, serialize mutations per path, and replace text files atomically.

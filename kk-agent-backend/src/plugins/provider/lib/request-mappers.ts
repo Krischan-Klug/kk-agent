@@ -11,7 +11,7 @@ import {
   type TranscriptMessage,
   type TranscriptStopReason,
 } from "kk-agent-contract";
-import type { AssembledAssistantTurn, ModelContentPart, UnifiedRequest, UnifiedToolDefinition, UnifiedResponse } from "./types.js";
+import type { AssembledAssistantTurn, ModelContentPart, PreparedProviderRequest, UnifiedToolDefinition, UnifiedResponse } from "./types.js";
 
 type ChatCompletionContentPart =
   | { type: "text"; text: string }
@@ -25,15 +25,18 @@ function toChatCompletionsContent(message: TranscriptMessage, projection?: Model
     : { type: "image_url", image_url: { url: part.dataUrl } });
 }
 
-function buildMessages(messages: TranscriptMessage[], projections: Record<string, ModelContentPart[]> = {}) {
+function buildMessages(
+  messages: TranscriptMessage[],
+  projections: Record<string, ModelContentPart[]> = {},
+  reasoningHistoryField: "reasoning_content" | "reasoning" | "thinking" = "reasoning_content",
+) {
   return messages.map((message) => {
     if (message.role === "assistant") {
       const toolUses = getToolUses(message);
       const reasoning = getMessageReasoning(message) || undefined;
-      return {
+      const serialized: Record<string, unknown> = {
         role: "assistant" as const,
         content: getMessageText(message) || null,
-        ...(reasoning ? { reasoning_content: reasoning } : {}),
         ...(toolUses.length > 0
           ? {
               tool_calls: toolUses.map((toolUse) => ({
@@ -44,6 +47,8 @@ function buildMessages(messages: TranscriptMessage[], projections: Record<string
             }
           : {}),
       };
+      if (reasoning) serialized[reasoningHistoryField] = reasoning;
+      return serialized;
     }
 
     if (message.role === "tool") {
@@ -62,27 +67,47 @@ function buildMessages(messages: TranscriptMessage[], projections: Record<string
   });
 }
 
-function buildTools(request: UnifiedRequest) {
+function buildTools(request: PreparedProviderRequest) {
   return request.tools?.map((tool) => ({
     type: "function" as const,
-    function: { name: tool.name, description: tool.description, parameters: tool.parameters },
+    function: {
+      name: tool.name,
+      description: tool.description,
+      parameters: tool.parameters,
+      ...(request.transportProfile.strictToolSchemas !== undefined
+        ? { strict: request.transportProfile.strictToolSchemas }
+        : {}),
+    },
   }));
 }
 
-export function buildChatCompletionsBody(request: UnifiedRequest): Record<string, unknown> {
+export function buildChatCompletionsBody(request: PreparedProviderRequest): Record<string, unknown> {
+  const transport = request.transportProfile;
+  const stream = transport.streamMode === "sse";
   const body: Record<string, unknown> = {
-    ...(request.providerRequestBody ?? {}),
+    ...request.providerRequestBody,
     model: request.model,
     messages: [
-      { role: "system", content: request.instructions },
-      ...buildMessages(request.messages, request.modelContentByMessageId),
+      { role: transport.instructionRole ?? "system", content: request.instructions },
+      ...buildMessages(
+        request.messages,
+        request.modelContentByMessageId,
+        transport.reasoningHistoryField,
+      ),
     ],
-    stream: true,
+    stream,
   };
 
   const tools = buildTools(request);
-  if (tools?.length) body.tools = tools;
-  body.stream_options = { include_usage: true };
+  if (tools?.length) {
+    body.tools = tools;
+    if (transport.parallelToolCalls !== undefined) {
+      body.parallel_tool_calls = transport.parallelToolCalls;
+    }
+  }
+  if (stream && transport.includeUsageInStream) {
+    body.stream_options = { include_usage: true };
+  }
 
   return body;
 }

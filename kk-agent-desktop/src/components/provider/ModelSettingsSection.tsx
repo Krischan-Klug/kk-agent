@@ -4,7 +4,7 @@ import type {
   ModelInfo,
   ModelProfileSummary,
   ModelSettings,
-} from "@/types/api";
+} from "kk-agent-contract";
 import {
   getReasoningLevels,
   normalizeCanonicalReasoningEffort,

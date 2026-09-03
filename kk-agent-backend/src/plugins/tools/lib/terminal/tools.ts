@@ -1,8 +1,6 @@
 import type { InternalToolDescriptor } from "../../types.js";
-import type { TerminalShellProfile } from "./shell-profile.js";
 
-export function buildTerminalTools(_profile: TerminalShellProfile): InternalToolDescriptor[] {
-  return [{
+export const TERMINAL_TOOLS: InternalToolDescriptor[] = [{
     name: "Terminal",
     description: "Run a host command or inspect/stop a managed background terminal task.",
     inputSchema: {
@@ -24,6 +22,4 @@ export function buildTerminalTools(_profile: TerminalShellProfile): InternalTool
         env: { type: "object", description: "Optional environment variables.", additionalProperties: { type: "string" } },
       },
     },
-    capabilityId: "terminal",
   }];
-}

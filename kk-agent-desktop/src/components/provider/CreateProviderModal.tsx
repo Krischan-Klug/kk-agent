@@ -1,16 +1,10 @@
 import FormModal from "@/components/FormModal";
-import ProviderFormFields from "./ProviderFormFields";
+import ProviderFormFields, { type ProviderFormValue } from "./ProviderFormFields";
 
 type Props = {
   open: boolean;
-  name: string;
-  baseUrl: string;
-  apiKey: string;
-  models: string;
-  onNameChange: (value: string) => void;
-  onBaseUrlChange: (value: string) => void;
-  onApiKeyChange: (value: string) => void;
-  onModelsChange: (value: string) => void;
+  value: ProviderFormValue;
+  onChange: (value: ProviderFormValue) => void;
   onCreate: () => void;
   onClose: () => void;
 };
@@ -23,17 +17,11 @@ export default function CreateProviderModal(props: Props) {
       title="New Provider"
       onClose={props.onClose}
       onSubmit={props.onCreate}
-      submitDisabled={!props.name.trim() || !props.baseUrl.trim()}
+      submitDisabled={!props.value.name.trim() || !props.value.baseUrl.trim()}
     >
       <ProviderFormFields
-        name={props.name}
-        baseUrl={props.baseUrl}
-        apiKey={props.apiKey}
-        models={props.models}
-        onNameChange={props.onNameChange}
-        onBaseUrlChange={props.onBaseUrlChange}
-        onApiKeyChange={props.onApiKeyChange}
-        onModelsChange={props.onModelsChange}
+        value={props.value}
+        onChange={props.onChange}
         autoFocus
       />
     </FormModal>

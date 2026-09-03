@@ -28,6 +28,5 @@ export const userInteractionTools: InternalToolDescriptor[] = [
       },
       required: ["question", "choices"],
     },
-    capabilityId: "user-interaction",
   },
 ];

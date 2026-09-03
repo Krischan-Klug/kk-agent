@@ -1,13 +1,14 @@
+import { useState } from "react";
 import styled from "styled-components";
-import type { McpListItem } from "@/types/api";
+import type { McpListItem, UpdateMcpBody } from "kk-agent-contract";
 import Card from "@/components/Card";
 import Button from "@/components/Button";
 import Input from "@/components/Input";
 import { ActionsRow, Section } from "@/components/PageForm";
 import { StatusDot } from "@/components/agent/AgentEditor.styled";
-import type { EditForm } from "./types";
 import { InstructionEditorBlock, McpEditFields } from "./McpCard.parts";
-import { parseMcpServerJson } from "./configJson";
+import { formatMcpServerJson, parseMcpServerJson } from "./configJson";
+import { reportError } from "@/lib/errorReporting";
 
 const Header = styled.div<{ $withBody: boolean }>`
   display: flex;
@@ -81,60 +82,76 @@ const RuntimeNotice = styled.div`
 
 type Props = {
   mcp: McpListItem;
-  instruction: string;
-  editForm?: EditForm;
-  editOpen: boolean;
   systemVariables?: string[];
-  onStateToggle: () => void;
-  onEditToggle: () => void;
+  onStateToggle: () => Promise<void>;
   onDelete?: () => void;
-  onInstructionChange: (value: string) => void;
-  onOpenEdit: () => void;
-  onEditFormChange: (form: EditForm) => void;
-  onSaveEdit: () => void;
+  onSave: (body: UpdateMcpBody) => Promise<void>;
 };
 
 const DEFAULT_MCP_EMOJI = "🧩";
 
 export default function McpCard({
   mcp,
-  instruction,
-  editForm,
-  editOpen,
   systemVariables = [],
   onStateToggle,
-  onEditToggle,
   onDelete,
-  onInstructionChange,
-  onOpenEdit,
-  onEditFormChange,
-  onSaveEdit,
+  onSave,
 }: Props) {
-  const handleEditToggle = editOpen ? onEditToggle : onOpenEdit;
+  const [draft, setDraft] = useState({
+    name: mcp.name,
+    emoji: mcp.emoji ?? "",
+    serverJson: formatMcpServerJson(mcp),
+    instruction: mcp.instruction,
+  });
+  const [editOpen, setEditOpen] = useState(false);
   const isActive = mcp.runtime.status === "running";
   const statusTitle = mcp.runtime.status === "unavailable"
     ? `Unavailable${mcp.runtime.error ? `: ${mcp.runtime.error}` : ""}`
     : isActive ? "Active" : "Inactive";
-  const hasBody = editOpen && Boolean(editForm);
-  const configInvalid = editForm
-    ? !parseMcpServerJson(editForm.serverJson, mcp.transport).ok
-    : false;
+  const parsedServer = parseMcpServerJson(draft.serverJson, mcp.transport);
+
+  function toggleEdit() {
+    if (!editOpen) {
+      setDraft({
+        name: mcp.name,
+        emoji: mcp.emoji ?? "",
+        serverJson: formatMcpServerJson(mcp),
+        instruction: mcp.instruction,
+      });
+    }
+    setEditOpen((open) => !open);
+  }
+
+  async function save() {
+    if (!parsedServer.ok) return;
+    try {
+      await onSave({
+        name: draft.name,
+        emoji: draft.emoji || undefined,
+        instruction: draft.instruction,
+        ...parsedServer.value,
+      });
+      setEditOpen(false);
+    } catch (error) {
+      reportError("Failed to save MCP edit", error);
+    }
+  }
 
   return (
     <Card>
-      <Header $withBody={hasBody}>
+      <Header $withBody={editOpen}>
         <HeaderTop>
           <Name>
-            {editOpen && editForm ? (
+            {editOpen ? (
               <>
                 <HeaderEmojiInput
-                  value={editForm.emoji}
-                  onChange={(e) => onEditFormChange({ ...editForm, emoji: e.target.value })}
+                  value={draft.emoji}
+                  onChange={(e) => setDraft({ ...draft, emoji: e.target.value })}
                   placeholder={DEFAULT_MCP_EMOJI}
                 />
                 <HeaderNameInput
-                  value={editForm.name}
-                  onChange={(e) => onEditFormChange({ ...editForm, name: e.target.value })}
+                  value={draft.name}
+                  onChange={(e) => setDraft({ ...draft, name: e.target.value })}
                 />
               </>
             ) : (
@@ -147,7 +164,7 @@ export default function McpCard({
             )}
             <StatusToggle
               type="button"
-              onClick={onStateToggle}
+              onClick={() => void onStateToggle().catch((error) => reportError("Failed to toggle MCP state", error))}
               aria-label={mcp.active ? "Disable" : "Enable"}
               title={statusTitle}
             >
@@ -155,7 +172,7 @@ export default function McpCard({
             </StatusToggle>
           </Name>
           <Controls>
-            <Button size="sm" variant="secondary" onClick={handleEditToggle}>
+            <Button size="sm" variant="secondary" onClick={toggleEdit}>
               {editOpen ? "Close" : "Edit"}
             </Button>
           </Controls>
@@ -165,12 +182,16 @@ export default function McpCard({
         )}
       </Header>
 
-      {editOpen && editForm && (
+      {editOpen && (
         <Section>
-          <McpEditFields mcp={mcp} editForm={editForm} onEditFormChange={onEditFormChange} />
+          <McpEditFields
+            mcp={mcp}
+            serverJson={draft.serverJson}
+            onChange={(serverJson) => setDraft({ ...draft, serverJson })}
+          />
 
           <ActionsRow>
-            <Button size="sm" onClick={onSaveEdit} disabled={configInvalid}>
+            <Button size="sm" onClick={() => void save()} disabled={!draft.name.trim() || !parsedServer.ok}>
               Save
             </Button>
             {onDelete && (
@@ -178,16 +199,16 @@ export default function McpCard({
                 Delete
               </Button>
             )}
-            <Button size="sm" variant="secondary" onClick={onEditToggle}>
+            <Button size="sm" variant="secondary" onClick={toggleEdit}>
               Cancel
             </Button>
           </ActionsRow>
 
           <InstructionEditorBlock
-            instruction={instruction}
+            instruction={draft.instruction}
             systemVariables={systemVariables}
             title="Instruction"
-            onInstructionChange={onInstructionChange}
+            onInstructionChange={(instruction) => setDraft({ ...draft, instruction })}
           />
         </Section>
       )}

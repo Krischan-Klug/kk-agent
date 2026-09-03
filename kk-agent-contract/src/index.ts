@@ -79,6 +79,11 @@ export type {
   UpdateSessionBody,
 } from "./session.js";
 
+export {
+  ASSET_EXTENSION_KINDS,
+  SUPPORTED_ASSET_EXTENSIONS,
+} from "./session.js";
+
 export type {
   CreateMcpBody,
   McpListItem,

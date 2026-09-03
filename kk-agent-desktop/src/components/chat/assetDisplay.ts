@@ -1,4 +1,4 @@
-import type { AssetMeta } from "@/types/api";
+import type { AssetMeta } from "kk-agent-contract";
 
 const KIND_ICON: Record<AssetMeta["kind"], string> = {
   image: "Image",

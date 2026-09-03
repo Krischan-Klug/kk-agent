@@ -1,4 +1,4 @@
-import type { AgentLoopState, RunEvent } from "@/types/api";
+import type { AgentLoopState, RunEvent } from "kk-agent-contract";
 import type { PendingPrompt, StreamingTurnState, TokenDisplayStats } from "@/components/chat/types";
 
 type ChatStreamSnapshot = {

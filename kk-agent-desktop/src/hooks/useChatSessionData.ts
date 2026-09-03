@@ -11,7 +11,7 @@ import type {
   ModelSettings,
   SessionState,
   TaskItem,
-} from "@/types/api";
+} from "kk-agent-contract";
 import { addAppEventListener, CHAT_DEBUG_TOGGLE_EVENT, SESSION_CHANGED_EVENT } from "@/lib/appEvents";
 import { clearActiveSessionId, getActiveSessionId } from "@/lib/sessionState";
 import { createAndActivateSession, resolveDefaultSessionAgentId } from "@/lib/sessionFactory";

@@ -1,5 +1,5 @@
 import styled from "styled-components";
-import type { LlmRequestConfig } from "@/types/api";
+import type { LlmRequestConfig } from "kk-agent-contract";
 import { mergeLlmRequestConfigs } from "kk-agent-contract";
 import Input from "@/components/Input";
 

@@ -1,4 +1,4 @@
-import type { AgentPromptSections } from "@/types/api";
+import type { AgentPromptSections } from "kk-agent-contract";
 
 export const PROMPT_SECTION_META: Array<{ key: keyof AgentPromptSections; label: string }> = [
   { key: "identity", label: "\u{1FAAA} Identity" },

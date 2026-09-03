@@ -4,13 +4,13 @@ import type {
   AgentModeConfig,
   AgentModeDefinition,
   ModeBehavior,
-  RuntimeCapability,
   ModelInfo,
   ProviderConfig,
   ReasoningEffort,
   SkillDefinition,
   ToolAccessScope,
-} from "@/types/api";
+} from "kk-agent-contract";
+import type { RuntimeCapability } from "@/types/runtime";
 import SkillIcon from "@/components/SkillIcon";
 import { normalizeCanonicalReasoningEffort } from "@/lib/modelCapabilities";
 import { getAgentModelRef, getModelLabel, parseModelRef, toModelRef } from "@/lib/modelRefs";

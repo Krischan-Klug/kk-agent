@@ -12,7 +12,7 @@ import type {
   SkillDefinition,
   SecuritySettings,
   ToolAccessScope,
-} from "@/types/api";
+} from "kk-agent-contract";
 import { getReasoningLevels } from "@/lib/modelCapabilities";
 import { compactLlmRequestConfig, mergeLlmRequestConfigs } from "kk-agent-contract";
 import { getAgentModelRef, toModelRef } from "@/lib/modelRefs";

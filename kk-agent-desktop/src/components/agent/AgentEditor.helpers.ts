@@ -3,22 +3,15 @@ import type {
   AgentModeConfig,
   AgentModeDefinition,
   AppDefaults,
-  RuntimeCapability,
   ModeBehavior,
-} from "@/types/api";
+} from "kk-agent-contract";
+import type { RuntimeCapability } from "@/types/runtime";
 export { PROMPT_SECTION_META } from "@/lib/promptSections";
 
 export const MODE_BEHAVIORS: ModeBehavior[] = ["plan", "edit"];
 
 export const OVERRIDE_EMOJI = "\u270F\uFE0F";
 export const RESET_EMOJI = "\u21BA";
-
-type ConcreteCapabilityTool = {
-  capabilityId: string;
-  capabilityName: string;
-  name: string;
-  description: string;
-};
 
 function slugifyModeId(value: string): string {
   const normalized = value
@@ -81,40 +74,22 @@ export function createCustomMode(
   };
 }
 
-function getConcreteCapabilityTools(capabilityIds: string[], capabilities: RuntimeCapability[]): ConcreteCapabilityTool[] {
-  const capabilityMap = new Map(capabilities.map((entry) => [entry.id, entry]));
-  return capabilityIds
-    .map((id) => capabilityMap.get(id))
-    .filter((entry): entry is RuntimeCapability => Boolean(entry))
-    .flatMap((entry) => entry.tools.map((tool) => ({
-      capabilityId: entry.id,
-      capabilityName: entry.name,
-      name: tool.name,
-      description: tool.description,
-    })));
-}
-
-function getConcreteInternalTools(modeConfig: AgentModeConfig, internalTools: RuntimeCapability[]) {
-  return getConcreteCapabilityTools(modeConfig.toolIds, internalTools);
-}
-
-function getConcreteMcpTools(modeConfig: AgentModeConfig, mcps: RuntimeCapability[]) {
-  return getConcreteCapabilityTools(modeConfig.mcpIds, mcps);
-}
-
-export function getConcreteRuntimeTools(modeConfig: AgentModeConfig, internalTools: RuntimeCapability[], mcps: RuntimeCapability[]) {
-  return [
-    ...getConcreteInternalTools(modeConfig, internalTools),
-    ...getConcreteMcpTools(modeConfig, mcps),
-  ];
-}
-
 export function getCapabilityToolNames(capability: RuntimeCapability): string[] {
   return capability.tools.map((tool) => tool.name);
 }
 
-export function normalizeAllowedToolNames(nextAllowed: string[], concreteTools: Array<{ name: string }>): string[] {
-  const activeToolNames = new Set(concreteTools.map((tool) => tool.name));
+export function normalizeAllowedToolNames(
+  nextAllowed: string[],
+  modeConfig: AgentModeConfig,
+  internalTools: RuntimeCapability[],
+  mcps: RuntimeCapability[],
+): string[] {
+  const activeCapabilityIds = new Set([...modeConfig.toolIds, ...modeConfig.mcpIds]);
+  const activeToolNames = new Set(
+    [...internalTools, ...mcps]
+      .filter((capability) => activeCapabilityIds.has(capability.id))
+      .flatMap(getCapabilityToolNames),
+  );
   return [...new Set(nextAllowed)].filter((name) => activeToolNames.has(name));
 }
 

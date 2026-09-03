@@ -12,15 +12,15 @@ import type {
   ModelProfileSummary,
   ModelSettings,
   ProviderConfig,
-} from "@/types/api";
+} from "kk-agent-contract";
 import { useToggleSet } from "@/hooks/useToggleSet";
 import Card from "@/components/Card";
 import Button from "@/components/Button";
 import SettingsLayout from "@/components/SettingsLayout";
 import ProviderCard from "@/components/provider/ProviderCard";
 import CreateProviderModal from "@/components/provider/CreateProviderModal";
+import type { ProviderFormValue } from "@/components/provider/ProviderFormFields";
 import { DEFAULT_PROVIDER_BASE_URL } from "@/components/provider/constants";
-import { toModelRef } from "@/lib/modelRefs";
 
 const Grid = styled.div`
   display: flex;
@@ -47,7 +47,6 @@ export default function SettingsProviderPage() {
     Record<string, ModelSettings>
   >({});
   const [loading, setLoading] = useState(true);
-  const expanded = useToggleSet();
   const testing = useToggleSet();
   const {
     add: markTesting,
@@ -59,10 +58,12 @@ export default function SettingsProviderPage() {
   const [testResults, setTestResults] = useState<
     Record<string, { ok: boolean; error?: string }>
   >(getProviderVerificationSnapshot);
-  const [newName, setNewName] = useState("");
-  const [newBaseUrl, setNewBaseUrl] = useState(DEFAULT_PROVIDER_BASE_URL);
-  const [newApiKey, setNewApiKey] = useState("");
-  const [newModels, setNewModels] = useState("");
+  const [createForm, setCreateForm] = useState<ProviderFormValue>({
+    name: "",
+    baseUrl: DEFAULT_PROVIDER_BASE_URL,
+    apiKey: "",
+    models: "",
+  });
 
   const runProviderVerification = useCallback(
     async (providerIds: string[]) => {
@@ -84,58 +85,61 @@ export default function SettingsProviderPage() {
     [clearTesting, setTestingValues],
   );
 
-  const loadData = useCallback(async () => {
-    try {
-      const providerList = await providerApi.listProviders();
-      setProviders(providerList);
-      setTestResults((prev) => ({
-        ...prev,
-        ...getProviderVerificationSnapshot(),
-      }));
-      if (providerList.length > 0) {
-        const modelsData = await providerApi.getModels();
-        setModels(modelsData.models);
-        setProfiles(modelsData.profiles);
-        setModelSettings(modelsData.modelSettings ?? {});
-        void runProviderVerification(
-          providerList.map((provider) => provider.id),
-        );
-      } else {
+  const loadCatalog = useCallback(async () => {
+    const providerList = await providerApi.listProviders();
+    setProviders(providerList);
+    if (providerList.length === 0) {
+      setModels([]);
+      setProfiles([]);
+      setModelSettings({});
+    } else {
+      try {
+        const catalog = await providerApi.getModels();
+        setModels(catalog.models);
+        setProfiles(catalog.profiles);
+        setModelSettings(catalog.modelSettings ?? {});
+      } catch (error) {
         setModels([]);
         setProfiles([]);
         setModelSettings({});
-        setTestingValues(new Set());
+        reportError("Failed to load provider models", error);
       }
+    }
+    return providerList;
+  }, []);
+
+  const loadData = useCallback(async () => {
+    try {
+      const providerList = await loadCatalog();
+      setTestResults((prev) => ({ ...prev, ...getProviderVerificationSnapshot() }));
+      void runProviderVerification(providerList.map((provider) => provider.id));
     } catch (err) {
       reportError("Failed to load providers", err);
     } finally {
       setLoading(false);
     }
-  }, [runProviderVerification, setTestingValues]);
+  }, [loadCatalog, runProviderVerification]);
 
   useEffect(() => {
     void loadData();
   }, [loadData]);
 
   function resetCreateForm() {
-    setNewName("");
-    setNewBaseUrl(DEFAULT_PROVIDER_BASE_URL);
-    setNewApiKey("");
-    setNewModels("");
+    setCreateForm({ name: "", baseUrl: DEFAULT_PROVIDER_BASE_URL, apiKey: "", models: "" });
   }
 
   async function handleCreate() {
-    if (!newName.trim() || !newBaseUrl.trim()) return;
+    if (!createForm.name.trim() || !createForm.baseUrl.trim()) return;
     try {
-      const parsedModels = parseModelsText(newModels);
+      const parsedModels = parseModelsText(createForm.models);
       const created = await providerApi.addProvider({
-        name: newName.trim(),
-        baseUrl: newBaseUrl.trim(),
-        apiKey: newApiKey || undefined,
+        name: createForm.name.trim(),
+        baseUrl: createForm.baseUrl.trim(),
+        apiKey: createForm.apiKey || undefined,
         models: parsedModels.length > 0 ? parsedModels : undefined,
       });
-      setProviders((prev) => [...prev, created]);
-      void loadData();
+      await loadCatalog();
+      void runProviderVerification([created.id]);
       setShowCreate(false);
       resetCreateForm();
     } catch (err) {
@@ -146,19 +150,12 @@ export default function SettingsProviderPage() {
   async function handleDelete(id: string) {
     try {
       await providerApi.removeProvider(id);
-      const nextProviders = providers.filter((provider) => provider.id !== id);
-      setProviders(nextProviders);
-      setModels((prev) => prev.filter((model) => model.providerId !== id));
-      setModelSettings((prev) =>
-        Object.fromEntries(
-          Object.entries(prev).filter(([key]) => !key.startsWith(`${id}::`)),
-        ),
-      );
       setTestResults((prev) =>
         Object.fromEntries(Object.entries(prev).filter(([key]) => key !== id)),
       );
       clearTesting(id);
       removeProviderVerification(id);
+      await loadCatalog();
     } catch (err) {
       reportError("Failed to delete provider", err);
     }
@@ -186,52 +183,29 @@ export default function SettingsProviderPage() {
     }
   }
 
-  async function handleProviderFieldChange(
-    id: string,
-    field: keyof ProviderConfig,
-    value: string,
-  ) {
-    try {
-      const body: Record<string, unknown> = { [field]: value || undefined };
-      if (field === "models") {
-        body.models = parseModelsText(value);
-      }
-      const updated = await providerApi.updateProvider(id, body);
-      setProviders((prev) =>
-        prev.map((provider) => (provider.id === id ? updated : provider)),
-      );
-      if (field === "baseUrl" || field === "apiKey") void loadData();
-    } catch (err) {
-      reportError("Failed to update provider", err);
-    }
+  async function handleProviderSave(id: string, value: ProviderFormValue) {
+    const parsedModels = parseModelsText(value.models);
+    await providerApi.updateProvider(id, {
+      name: value.name.trim(),
+      baseUrl: value.baseUrl.trim(),
+      apiKey: value.apiKey,
+      models: parsedModels,
+    });
+    removeProviderVerification(id);
+    setTestResults((prev) => Object.fromEntries(Object.entries(prev).filter(([key]) => key !== id)));
+    await loadCatalog();
+    void runProviderVerification([id]);
   }
 
   async function handleModelSettingsSave(
     model: ModelInfo,
     settings: ModelSettings,
   ) {
-    const modelRef = toModelRef(model);
-    setModelSettings((prev) => {
-      const next = { ...prev };
-      if (settings.profileId) next[modelRef] = settings;
-      else delete next[modelRef];
-      return next;
-    });
     try {
-      const saved = await providerApi.setModelSettings(model.providerId, model.id, settings);
-      setModelSettings((prev) => {
-        const next = { ...prev };
-        if (saved.settings.profileId) next[modelRef] = saved.settings;
-        else delete next[modelRef];
-        return next;
-      });
-      const modelsData = await providerApi.getModels();
-      setModels(modelsData.models);
-      setProfiles(modelsData.profiles);
-      setModelSettings(modelsData.modelSettings ?? {});
+      await providerApi.setModelSettings(model.providerId, model.id, settings);
+      await loadCatalog();
     } catch (err) {
       reportError("Failed to save model settings", err);
-      void loadData();
     }
   }
 
@@ -259,18 +233,14 @@ export default function SettingsProviderPage() {
               <ProviderCard
                 key={provider.id}
                 provider={provider}
-                isExpanded={expanded.has(provider.id)}
                 isTesting={isTestingProvider(provider.id)}
                 testResult={testResults[provider.id]}
                 models={getProviderModels(provider.id)}
                 profiles={profiles}
                 modelSettings={modelSettings}
-                onToggleExpand={() => expanded.toggle(provider.id)}
                 onTest={() => void handleTest(provider.id)}
                 onDelete={() => void handleDelete(provider.id)}
-                onFieldChange={(field, value) =>
-                  void handleProviderFieldChange(provider.id, field, value)
-                }
+                onSave={(value) => handleProviderSave(provider.id, value)}
                 onModelSettingsSave={handleModelSettingsSave}
               />
             ))
@@ -278,14 +248,8 @@ export default function SettingsProviderPage() {
         </Grid>
         <CreateProviderModal
           open={showCreate}
-          name={newName}
-          baseUrl={newBaseUrl}
-          apiKey={newApiKey}
-          models={newModels}
-          onNameChange={setNewName}
-          onBaseUrlChange={setNewBaseUrl}
-          onApiKeyChange={setNewApiKey}
-          onModelsChange={setNewModels}
+          value={createForm}
+          onChange={setCreateForm}
           onCreate={handleCreate}
           onClose={() => {
             setShowCreate(false);

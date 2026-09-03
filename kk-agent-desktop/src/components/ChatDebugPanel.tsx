@@ -6,7 +6,7 @@ import type {
   RunEvent,
   SessionPromptDebug,
   SessionState,
-} from "@/types/api";
+} from "kk-agent-contract";
 
 export type ChatDebugTab = "model-input" | "prompt" | "runtime" | "harness" | "runs" | "session";
 

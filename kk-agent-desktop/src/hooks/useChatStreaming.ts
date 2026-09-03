@@ -10,7 +10,7 @@ import {
   updateChatStreamSnapshot,
 } from "@/lib/chatStreamState";
 import type {
-  SessionMessage,
+  TranscriptMessage,
   SessionState,
   RunEvent,
   StreamEvent,
@@ -18,7 +18,7 @@ import type {
   TranscriptBlock,
   TranscriptToolUseBlock,
   TranscriptToolResultBlock,
-} from "@/types/api";
+} from "kk-agent-contract";
 import type { PendingAsset } from "@/hooks/useAssets";
 import type { ActiveToolCall, StreamingTurnState } from "@/components/chat/types";
 import { getToolCallDisplayText } from "@/components/chat/messageBlocks";
@@ -62,7 +62,7 @@ function mergeStreamBlock(existing: TranscriptBlock[], block: TranscriptBlock): 
   return [...existing, block];
 }
 
-function createDraftAssistantMessage(messageId: string, block?: TranscriptBlock): SessionMessage {
+function createDraftAssistantMessage(messageId: string, block?: TranscriptBlock): TranscriptMessage {
   return {
     id: messageId,
     role: "assistant",
@@ -71,11 +71,11 @@ function createDraftAssistantMessage(messageId: string, block?: TranscriptBlock)
   };
 }
 
-function collectToolUsesFromMessage(message: SessionMessage): TranscriptToolUseBlock[] {
+function collectToolUsesFromMessage(message: TranscriptMessage): TranscriptToolUseBlock[] {
   return message.content.filter((entry): entry is TranscriptToolUseBlock => entry.type === "tool_use");
 }
 
-function syncStepToolCalls(assistant: SessionMessage, existingToolCalls: ActiveToolCall[]): ActiveToolCall[] {
+function syncStepToolCalls(assistant: TranscriptMessage, existingToolCalls: ActiveToolCall[]): ActiveToolCall[] {
   const toolUses = collectToolUsesFromMessage(assistant);
   const existingById = new Map(existingToolCalls.map((toolCall) => [toolCall.id, toolCall]));
 
@@ -127,7 +127,7 @@ function completeYieldedToolCalls(steps: StreamingTurnState["steps"]): Streaming
 function updateStepAssistant(
   previous: StreamingTurnState | null,
   messageId: string,
-  updateAssistant: (assistant: SessionMessage | null) => SessionMessage,
+  updateAssistant: (assistant: TranscriptMessage | null) => TranscriptMessage,
 ): StreamingTurnState {
   const steps = previous?.steps ? [...previous.steps] : [];
   const index = steps.findIndex((step) => step.assistant.id === messageId);
@@ -225,7 +225,7 @@ function updateStepToolCall(previous: StreamingTurnState | null, event: Extract<
   return { steps };
 }
 
-function buildOptimisticUserMessage(message: string, assets: PendingAsset[]): SessionMessage {
+function buildOptimisticUserMessage(message: string, assets: PendingAsset[]): TranscriptMessage {
   const content: TranscriptBlock[] = [{ type: "text", text: message }];
 
   for (const asset of assets) {
@@ -241,7 +241,7 @@ function buildOptimisticUserMessage(message: string, assets: PendingAsset[]): Se
   };
 }
 
-function getToolResult(message: SessionMessage | undefined): { content: string; isError: boolean; metadata?: Record<string, unknown> } | undefined {
+function getToolResult(message: TranscriptMessage | undefined): { content: string; isError: boolean; metadata?: Record<string, unknown> } | undefined {
   if (!message) return undefined;
   const block = message.content.find((entry): entry is TranscriptToolResultBlock => entry.type === "tool_result");
   if (!block) return undefined;

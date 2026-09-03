@@ -1,6 +1,7 @@
 import { useState } from "react";
 import type { ReactNode } from "react";
-import type { AgentModeConfig, RuntimeCapability } from "@/types/api";
+import type { AgentModeConfig } from "kk-agent-contract";
+import type { RuntimeCapability } from "@/types/runtime";
 import SkillIcon from "@/components/SkillIcon";
 import { toggleId } from "@/lib/idLists";
 import {
@@ -8,7 +9,6 @@ import {
 } from "./AgentEditor.styled";
 import {
   getCapabilityToolNames,
-  getConcreteRuntimeTools,
   normalizeAllowedToolNames,
   setCapabilityInstruction,
 } from "./AgentEditor.helpers";
@@ -90,7 +90,9 @@ export default function RuntimeToolCapabilitySection({
                   ...nextModeConfig,
                   allowedToolNames: normalizeAllowedToolNames(
                     nextAllowedRaw,
-                    getConcreteRuntimeTools(nextModeConfig, internalTools, mcps),
+                    nextModeConfig,
+                    internalTools,
+                    mcps,
                   ),
                 });
               }}
@@ -146,7 +148,9 @@ export default function RuntimeToolCapabilitySection({
                       ...nextModeConfig,
                       allowedToolNames: normalizeAllowedToolNames(
                         nextAllowedRaw,
-                        getConcreteRuntimeTools(nextModeConfig, internalTools, mcps),
+                        nextModeConfig,
+                        internalTools,
+                        mcps,
                       ),
                     });
                   }}

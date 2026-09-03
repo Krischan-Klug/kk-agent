@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import FormModal from "@/components/FormModal";
-import type { CreateMcpBody } from "@/types/api";
+import type { CreateMcpBody } from "kk-agent-contract";
 import McpJsonEditor from "./McpJsonEditor";
 import { MCP_IMPORT_HINT, MCP_IMPORT_PLACEHOLDER, parseMcpImportJson } from "./configJson";
 

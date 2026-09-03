@@ -4,14 +4,14 @@ import type {
   ModelInfo,
   ModelProfileSummary,
   ProviderConfig,
-} from "@/types/api";
+} from "kk-agent-contract";
 import { provider as providerApi } from "@/lib/api";
 import { reportError } from "@/lib/errorReporting";
 import Button from "@/components/Button";
 import Modal from "@/components/Modal";
 import Spinner from "@/components/Spinner";
 import { ActionsRow, MutedText } from "@/components/PageForm";
-import ProviderFormFields from "@/components/provider/ProviderFormFields";
+import ProviderFormFields, { type ProviderFormValue } from "@/components/provider/ProviderFormFields";
 import { DEFAULT_PROVIDER_BASE_URL } from "@/components/provider/constants";
 
 const Body = styled.div`
@@ -86,16 +86,18 @@ function parseModelsText(text: string): string[] {
 }
 
 export default function ProviderOnboardingWizard({ onComplete }: Props) {
-  const [name, setName] = useState("Local LLM");
-  const [baseUrl, setBaseUrl] = useState(DEFAULT_PROVIDER_BASE_URL);
-  const [apiKey, setApiKey] = useState("");
-  const [models, setModels] = useState("");
+  const [form, setForm] = useState<ProviderFormValue>({
+    name: "Local LLM",
+    baseUrl: DEFAULT_PROVIDER_BASE_URL,
+    apiKey: "",
+    models: "",
+  });
   const [selectedProfiles, setSelectedProfiles] = useState<Record<string, string>>({});
   const [state, setState] = useState<StepState>({ kind: "idle" });
 
   const canSubmit =
-    name.trim().length > 0 &&
-    baseUrl.trim().length > 0 &&
+    form.name.trim().length > 0 &&
+    form.baseUrl.trim().length > 0 &&
     state.kind !== "saving";
 
   async function cleanupProvider(providerId: string) {
@@ -112,11 +114,11 @@ export default function ProviderOnboardingWizard({ onComplete }: Props) {
     let created: ProviderConfig | undefined;
     setState({ kind: "saving" });
     try {
-      const parsedModels = parseModelsText(models);
+      const parsedModels = parseModelsText(form.models);
       created = await providerApi.addProvider({
-        name: name.trim(),
-        baseUrl: baseUrl.trim(),
-        apiKey: apiKey.trim() || undefined,
+        name: form.name.trim(),
+        baseUrl: form.baseUrl.trim(),
+        apiKey: form.apiKey.trim() || undefined,
         models: parsedModels.length > 0 ? parsedModels : undefined,
       });
 
@@ -211,14 +213,8 @@ export default function ProviderOnboardingWizard({ onComplete }: Props) {
               Set up a local or self-hosted LLM provider so sessions can be started.
             </MutedText>
             <ProviderFormFields
-              name={name}
-              baseUrl={baseUrl}
-              apiKey={apiKey}
-              models={models}
-              onNameChange={setName}
-              onBaseUrlChange={setBaseUrl}
-              onApiKeyChange={setApiKey}
-              onModelsChange={setModels}
+              value={form}
+              onChange={setForm}
               autoFocus
             />
           </>

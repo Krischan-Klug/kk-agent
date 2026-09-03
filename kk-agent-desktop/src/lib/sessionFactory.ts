@@ -1,5 +1,5 @@
 import { agent as agentApi, session as sessionApi } from "@/lib/api";
-import type { AgentDefinition, SessionState } from "@/types/api";
+import type { AgentDefinition, SessionState } from "kk-agent-contract";
 import { emitAppEvent, SESSION_CHANGED_EVENT } from "@/lib/appEvents";
 import { setActiveSessionId } from "@/lib/sessionState";
 

@@ -45,7 +45,6 @@ export interface InternalToolDescriptor {
   name: string;
   description: string;
   inputSchema: Record<string, unknown>;
-  capabilityId: string;
 }
 
 export type InternalToolRuntimeStatus = "running" | "stopped" | "unavailable";

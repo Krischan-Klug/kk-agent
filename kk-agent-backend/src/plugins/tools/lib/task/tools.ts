@@ -21,7 +21,6 @@ export const taskTools: InternalToolDescriptor[] = [
       },
       required: ["tasks"],
     },
-    capabilityId: "task",
   },
   {
     name: "update_tasks",
@@ -44,7 +43,6 @@ export const taskTools: InternalToolDescriptor[] = [
       },
       required: ["tasks"],
     },
-    capabilityId: "task",
   },
   {
     name: "solve_tasks",
@@ -59,6 +57,5 @@ export const taskTools: InternalToolDescriptor[] = [
       },
       required: ["taskIds"],
     },
-    capabilityId: "task",
   },
 ];

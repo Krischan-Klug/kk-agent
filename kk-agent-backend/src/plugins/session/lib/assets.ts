@@ -5,7 +5,7 @@ import { basename, extname, join, resolve } from "node:path";
 import { fileTypeFromBuffer } from "file-type";
 import { unzipSync } from "fflate";
 import readXlsxFile from "read-excel-file/node";
-import type { AssetKind, AssetMeta } from "kk-agent-contract";
+import { ASSET_EXTENSION_KINDS, type AssetKind, type AssetMeta } from "kk-agent-contract";
 import { ConflictError } from "../../../lib/errors.js";
 import { getStateDirPath } from "../../lib/state.js";
 import * as sessionStore from "./store.js";
@@ -33,18 +33,7 @@ const MIME_KIND = new Map<string, AssetKind>([
   ["text/csv", "spreadsheet"], ["text/tab-separated-values", "spreadsheet"],
 ]);
 
-const EXTENSION_KIND = new Map<string, AssetKind>([
-  [".png", "image"], [".jpg", "image"], [".jpeg", "image"], [".gif", "image"], [".webp", "image"],
-  [".pdf", "pdf"], [".docx", "document"], [".odt", "document"], [".rtf", "document"],
-  [".pptx", "presentation"], [".odp", "presentation"],
-  [".xlsx", "spreadsheet"], [".ods", "spreadsheet"], [".csv", "spreadsheet"], [".tsv", "spreadsheet"],
-  [".txt", "text"], [".md", "text"], [".json", "text"], [".xml", "text"], [".yaml", "text"],
-  [".yml", "text"], [".html", "text"], [".css", "text"], [".js", "text"], [".ts", "text"],
-  [".tsx", "text"], [".jsx", "text"], [".py", "text"], [".rs", "text"], [".go", "text"],
-  [".java", "text"], [".c", "text"], [".cpp", "text"], [".h", "text"], [".sh", "text"],
-  [".sql", "text"], [".toml", "text"], [".ini", "text"], [".log", "text"],
-  [".env", "text"],
-]);
+const EXTENSION_KIND = new Map<string, AssetKind>(Object.entries(ASSET_EXTENSION_KINDS));
 
 const KIND_MIME: Record<AssetKind, string> = {
   image: "application/octet-stream", pdf: "application/pdf", document: "application/octet-stream",

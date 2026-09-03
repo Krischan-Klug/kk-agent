@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import styled from "styled-components";
-import type { AssetMeta } from "@/types/api";
+import type { AssetMeta } from "kk-agent-contract";
 import { session as sessionApi } from "@/lib/api";
 import { reportError } from "@/lib/errorReporting";
 import { formatAssetSize, getAssetLabel } from "./assetDisplay";

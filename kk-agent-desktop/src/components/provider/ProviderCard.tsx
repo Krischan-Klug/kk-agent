@@ -1,16 +1,17 @@
+import { useState } from "react";
 import styled from "styled-components";
 import type {
   ModelInfo,
   ModelProfileSummary,
   ModelSettings,
   ProviderConfig,
-} from "@/types/api";
+} from "kk-agent-contract";
 import Card from "@/components/Card";
 import Button from "@/components/Button";
-import Input from "@/components/Input";
-import TextArea from "@/components/TextArea";
-import { ActionsRow, FormField, FormRow } from "@/components/PageForm";
+import { ActionsRow } from "@/components/PageForm";
+import { reportError } from "@/lib/errorReporting";
 import ModelSettingsSection from "./ModelSettingsSection";
+import ProviderFormFields, { type ProviderFormValue } from "./ProviderFormFields";
 
 const Header = styled.div<{ $withBody: boolean }>`
   display: flex;
@@ -80,49 +81,44 @@ const ExpandedContent = styled.div`
   gap: var(--space-md);
 `;
 
-const Label = styled.label`
-  font-size: var(--font-size-sm);
-  color: var(--text-muted);
-`;
-
 const TestResult = styled.span<{ $ok: boolean }>`
   font-size: var(--font-size-sm);
   color: ${(p) => (p.$ok ? "var(--success)" : "var(--danger)")};
 `;
 
-function modelsToString(models?: string[]): string {
-  return (models ?? []).join("\n");
-}
-
 type Props = {
   provider: ProviderConfig;
-  isExpanded: boolean;
   isTesting: boolean;
   testResult?: { ok: boolean; error?: string };
   models: ModelInfo[];
   profiles: ModelProfileSummary[];
   modelSettings: Record<string, ModelSettings>;
-  onToggleExpand: () => void;
   onTest: () => void;
   onDelete: () => void;
-  onFieldChange: (field: keyof ProviderConfig, value: string) => void;
+  onSave: (value: ProviderFormValue) => Promise<void>;
   onModelSettingsSave: (model: ModelInfo, settings: ModelSettings) => void;
 };
 
 export default function ProviderCard({
   provider,
-  isExpanded,
   isTesting,
   testResult,
   models,
   profiles,
   modelSettings,
-  onToggleExpand,
   onTest,
   onDelete,
-  onFieldChange,
+  onSave,
   onModelSettingsSave,
 }: Props) {
+  const [isExpanded, setExpanded] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [draft, setDraft] = useState<ProviderFormValue>({
+    name: provider.name,
+    baseUrl: provider.baseUrl,
+    apiKey: provider.apiKey ?? "",
+    models: (provider.models ?? []).join("\n"),
+  });
   const statusState = testResult ? (testResult.ok ? "ok" : "error") : "unknown";
   const statusTitle = isTesting
     ? "Testing"
@@ -131,6 +127,30 @@ export default function ProviderCard({
         ? "Verified"
         : "Test failed"
       : "Not tested yet";
+
+  function toggleExpanded() {
+    if (!isExpanded) {
+      setDraft({
+        name: provider.name,
+        baseUrl: provider.baseUrl,
+        apiKey: provider.apiKey ?? "",
+        models: (provider.models ?? []).join("\n"),
+      });
+    }
+    setExpanded((expanded) => !expanded);
+  }
+
+  async function save() {
+    setSaving(true);
+    try {
+      await onSave(draft);
+      setExpanded(false);
+    } catch (error) {
+      reportError("Failed to update provider", error);
+    } finally {
+      setSaving(false);
+    }
+  }
 
   return (
     <Card>
@@ -142,7 +162,7 @@ export default function ProviderCard({
             <Meta title={provider.baseUrl}>{provider.baseUrl}</Meta>
           </NameRow>
           <Controls>
-            <Button size="sm" variant="secondary" onClick={onToggleExpand}>
+            <Button size="sm" variant="secondary" onClick={toggleExpanded}>
               {isExpanded ? "Close" : "Edit"}
             </Button>
           </Controls>
@@ -151,46 +171,7 @@ export default function ProviderCard({
 
       {isExpanded && (
         <ExpandedContent>
-          <FormRow>
-            <FormField>
-              <Label>Name</Label>
-              <Input
-                value={provider.name}
-                onChange={(e) => onFieldChange("name", e.target.value)}
-              />
-            </FormField>
-            <FormField $flex={1}>
-              <Label>Base URL</Label>
-              <Input
-                value={provider.baseUrl}
-                onChange={(e) => onFieldChange("baseUrl", e.target.value)}
-              />
-            </FormField>
-          </FormRow>
-
-          <FormRow>
-            <FormField $flex={1}>
-              <Label>API Key</Label>
-              <Input
-                type="password"
-                value={provider.apiKey ?? ""}
-                onChange={(e) => onFieldChange("apiKey", e.target.value)}
-                placeholder="optional"
-              />
-            </FormField>
-          </FormRow>
-
-          <FormRow>
-            <FormField $flex={1}>
-              <Label>Models (optional, eine ID pro Zeile)</Label>
-              <TextArea
-                value={modelsToString(provider.models)}
-                onChange={(e) => onFieldChange("models", e.target.value)}
-                placeholder={"e.g. glm-4.6\nglm-4.5"}
-                rows={3}
-              />
-            </FormField>
-          </FormRow>
+          <ProviderFormFields value={draft} onChange={setDraft} />
 
           <ModelSettingsSection
             models={models}
@@ -200,6 +181,13 @@ export default function ProviderCard({
           />
 
           <ActionsRow>
+            <Button
+              size="sm"
+              onClick={() => void save()}
+              disabled={saving || !draft.name.trim() || !draft.baseUrl.trim()}
+            >
+              {saving ? "..." : "Save"}
+            </Button>
             <Button
               size="sm"
               variant="secondary"

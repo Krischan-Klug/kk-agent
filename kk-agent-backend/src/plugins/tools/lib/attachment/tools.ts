@@ -5,7 +5,6 @@ export const attachmentTools: InternalToolDescriptor[] = [
     name: "list_assets",
     description: "List managed input assets and published artifacts in the current session.",
     inputSchema: { type: "object", properties: {} },
-    capabilityId: "attachment",
   },
   {
     name: "search_asset",
@@ -19,7 +18,6 @@ export const attachmentTools: InternalToolDescriptor[] = [
       },
       required: ["assetId", "query"],
     },
-    capabilityId: "attachment",
   },
   {
     name: "read_asset",
@@ -33,7 +31,6 @@ export const attachmentTools: InternalToolDescriptor[] = [
       },
       required: ["assetId"],
     },
-    capabilityId: "attachment",
   },
   {
     name: "publish_artifact",
@@ -46,6 +43,5 @@ export const attachmentTools: InternalToolDescriptor[] = [
         content: { type: "string", description: "Optional UTF-8 content for a small text artifact. Never pass binary or base64 here." },
       },
     },
-    capabilityId: "attachment",
   },
 ];

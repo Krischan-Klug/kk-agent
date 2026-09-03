@@ -6,7 +6,7 @@ import {
   SidebarList,
   SidebarMeta,
 } from "@/components/MasterDetail.styled";
-import type { SkillDefinition } from "@/types/api";
+import type { SkillDefinition } from "kk-agent-contract";
 
 type Props = {
   skills: SkillDefinition[];

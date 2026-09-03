@@ -1,4 +1,4 @@
-import type { AgentDefinition, InternalToolListItem, McpListItem } from "@/types/api";
+import type { AgentDefinition, InternalToolListItem, McpListItem } from "kk-agent-contract";
 import Badge from "@/components/Badge";
 import Button from "@/components/Button";
 import SkillIcon from "@/components/SkillIcon";

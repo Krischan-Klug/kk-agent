@@ -1,4 +1,4 @@
-import type { ModeBehavior } from "@/types/api";
+import type { ModeBehavior } from "kk-agent-contract";
 
 export const MODE_COLOR_OPTIONS = [
   { value: "#60a5fa", label: "Blue" },

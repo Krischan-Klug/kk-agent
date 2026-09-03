@@ -21,7 +21,6 @@ export const webSearchTools: InternalToolDescriptor[] = [
       },
       required: ["query"],
     },
-    capabilityId: "web-search",
   },
   {
     name: "WebFetch",
@@ -34,6 +33,5 @@ export const webSearchTools: InternalToolDescriptor[] = [
       },
       required: ["url", "prompt"],
     },
-    capabilityId: "web-search",
   },
 ];

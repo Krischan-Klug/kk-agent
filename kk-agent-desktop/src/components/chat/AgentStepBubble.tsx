@@ -1,6 +1,7 @@
 import Badge from "@/components/Badge";
 import MarkdownMessage from "@/components/MarkdownMessage";
-import type { AssetMeta, RuntimeCapability } from "@/types/api";
+import type { AssetMeta } from "kk-agent-contract";
+import type { RuntimeCapability } from "@/types/runtime";
 import MessageAssets from "./MessageAssets";
 import ToolCallCards from "./ToolCallCards";
 import { collectReasoning, collectText } from "./messageBlocks";

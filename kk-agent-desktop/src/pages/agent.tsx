@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { agent as agentApi, mcp as mcpApi, provider as providerApi, settings as settingsApi, skills as skillsApi, tools as toolsApi } from "@/lib/api";
 import { reportError } from "@/lib/errorReporting";
-import type { AgentDefinition, AppDefaults, CreateAgentBody, InternalToolListItem, McpListItem, ModelInfo, ProviderConfig, SecuritySettings, SkillDefinition } from "@/types/api";
+import type { AgentDefinition, AppDefaults, CreateAgentBody, InternalToolListItem, McpListItem, ModelInfo, ProviderConfig, SecuritySettings, SkillDefinition } from "kk-agent-contract";
 import { PageBody } from "@/components/Layout.styled";
 import { MasterDetailLayout } from "@/components/MasterDetail.styled";
 import Spinner from "@/components/Spinner";
@@ -20,12 +20,12 @@ export default function AgentPage() {
   const [securityDefaults, setSecurityDefaults] = useState<SecuritySettings | null>(null);
   const [systemVariables, setSystemVariables] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
-  const [selectedId, setSelectedId] = useState<string | null>(null);
   const [editAgent, setEditAgent] = useState<AgentDefinition | null>(null);
   const [showCreate, setShowCreate] = useState(false);
   const [showSystemVariables, setShowSystemVariables] = useState(false);
   const [newName, setNewName] = useState("");
   const [saving, setSaving] = useState(false);
+  const selectedId = editAgent?.id ?? null;
 
   async function loadModels() {
     try {
@@ -38,8 +38,12 @@ export default function AgentPage() {
   }
 
   useEffect(() => {
-    void Promise.all([agentApi.list(), mcpApi.list(), toolsApi.list(), skillsApi.list(), agentApi.systemVariables(), providerApi.listProviders(), agentApi.templates(), settingsApi.getSecurity()])
-      .then(async ([agentList, mcpList, toolList, skillList, vars, providerList, agentTemplates, security]) => {
+    const providerModels = providerApi.getModels().catch((error) => {
+      reportError("Failed to load models", error);
+      return { models: [] };
+    });
+    void Promise.all([agentApi.list(), mcpApi.list(), toolsApi.list(), skillsApi.list(), agentApi.systemVariables(), providerApi.listProviders(), providerModels, agentApi.templates(), settingsApi.getSecurity()])
+      .then(([agentList, mcpList, toolList, skillList, vars, providerList, providerModels, agentTemplates, security]) => {
         setAgents(agentList);
         setProviders(providerList);
         setMcps(mcpList);
@@ -48,14 +52,8 @@ export default function AgentPage() {
         setSystemVariables(vars.variables);
         setTemplates(agentTemplates);
         setSecurityDefaults(security);
-        if (agentList.length > 0) {
-          const firstAgent = agentList[0];
-          setSelectedId(firstAgent.id);
-          setEditAgent(structuredClone(firstAgent));
-          await loadModels();
-        } else {
-          setModels([]);
-        }
+        setModels(providerModels.models.filter((model) => model.profile && model.capabilities));
+        setEditAgent(agentList[0] ? structuredClone(agentList[0]) : null);
       })
       .catch((error) => reportError("Failed to load agent configuration", error))
       .finally(() => setLoading(false));
@@ -64,7 +62,6 @@ export default function AgentPage() {
   function selectAgent(id: string) {
     const agent = agents.find((entry) => entry.id === id);
     if (!agent) return;
-    setSelectedId(id);
     setEditAgent(structuredClone(agent));
   }
 
@@ -73,7 +70,6 @@ export default function AgentPage() {
     try {
       const created = await agentApi.create({ name: newName.trim() } satisfies CreateAgentBody);
       setAgents((prev) => [...prev, created]);
-      setSelectedId(created.id);
       setEditAgent(structuredClone(created));
       setShowCreate(false);
       setNewName("");
@@ -83,10 +79,10 @@ export default function AgentPage() {
   }
 
   async function handleSave() {
-    if (!editAgent || !selectedId) return;
+    if (!editAgent) return;
     setSaving(true);
     try {
-      const updated = await agentApi.update(selectedId, {
+      const updated = await agentApi.update(editAgent.id, {
         name: editAgent.name,
         description: editAgent.description,
         defaultModeId: editAgent.defaultModeId,
@@ -96,7 +92,7 @@ export default function AgentPage() {
         defaultModel: editAgent.defaultModel,
         llmRequestConfig: editAgent.llmRequestConfig,
       });
-      setAgents((prev) => prev.map((agent) => (agent.id === selectedId ? updated : agent)));
+      setAgents((prev) => prev.map((agent) => (agent.id === editAgent.id ? updated : agent)));
       setEditAgent(structuredClone(updated));
       await loadModels();
     } catch (err) {
@@ -107,17 +103,12 @@ export default function AgentPage() {
   }
 
   async function handleDelete() {
-    if (!selectedId) return;
+    if (!editAgent) return;
     try {
-      await agentApi.delete(selectedId);
-      const remaining = agents.filter((agent) => agent.id !== selectedId);
+      await agentApi.delete(editAgent.id);
+      const remaining = agents.filter((agent) => agent.id !== editAgent.id);
       setAgents(remaining);
-      if (remaining.length === 0) {
-        setSelectedId(null);
-        setEditAgent(null);
-        return;
-      }
-      selectAgent(remaining[0].id);
+      setEditAgent(remaining[0] ? structuredClone(remaining[0]) : null);
     } catch (err) {
       reportError("Failed to delete agent", err);
     }

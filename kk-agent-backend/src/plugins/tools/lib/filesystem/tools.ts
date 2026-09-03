@@ -14,7 +14,6 @@ export const filesystemTools: InternalToolDescriptor[] = [
       },
       required: ["file_path"],
     },
-    capabilityId: "filesystem",
   },
   {
     name: "Edit",
@@ -30,7 +29,6 @@ export const filesystemTools: InternalToolDescriptor[] = [
       },
       required: ["file_path", "old_string", "new_string"],
     },
-    capabilityId: "filesystem",
   },
   {
     name: "Write",
@@ -43,7 +41,6 @@ export const filesystemTools: InternalToolDescriptor[] = [
       },
       required: ["file_path", "content"],
     },
-    capabilityId: "filesystem",
   },
   {
     name: "Glob",
@@ -56,7 +53,6 @@ export const filesystemTools: InternalToolDescriptor[] = [
       },
       required: ["pattern"],
     },
-    capabilityId: "filesystem",
   },
   {
     name: "Grep",
@@ -81,6 +77,5 @@ export const filesystemTools: InternalToolDescriptor[] = [
       },
       required: ["pattern"],
     },
-    capabilityId: "filesystem",
   },
 ];

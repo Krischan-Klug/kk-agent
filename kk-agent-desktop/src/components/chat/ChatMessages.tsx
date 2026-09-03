@@ -3,11 +3,11 @@ import Badge from "@/components/Badge";
 import Spinner from "@/components/Spinner";
 import MarkdownMessage from "@/components/MarkdownMessage";
 import type {
-  RuntimeCapability,
   RunEvent,
-  SessionMessage,
   SessionState,
-} from "@/types/api";
+  TranscriptMessage,
+} from "kk-agent-contract";
+import type { RuntimeCapability } from "@/types/runtime";
 import type { PendingPrompt, StreamingTurnState } from "./types";
 import AgentStepBubble from "./AgentStepBubble";
 import MessageAssets from "./MessageAssets";
@@ -44,7 +44,7 @@ type Props = {
 };
 
 function renderSingleMessage(
-  message: SessionMessage,
+  message: TranscriptMessage,
   session: SessionState,
 ) {
   if (message.role === "tool") return null;

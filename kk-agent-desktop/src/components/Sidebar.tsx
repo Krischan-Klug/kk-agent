@@ -7,7 +7,7 @@ import SkillIcon from "@/components/SkillIcon";
 import { session as sessionApi } from "@/lib/api";
 import { reportError } from "@/lib/errorReporting";
 import { getRunningChatStreamSessionIds, subscribeChatStreamStore } from "@/lib/chatStreamState";
-import type { SessionSummary } from "@/types/api";
+import type { SessionSummary } from "kk-agent-contract";
 import { addAppEventListener, emitAppEvent, SESSION_CHANGED_EVENT } from "@/lib/appEvents";
 import {
   clearActiveSessionId,

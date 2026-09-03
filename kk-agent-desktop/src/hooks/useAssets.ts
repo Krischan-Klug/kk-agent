@@ -1,8 +1,8 @@
 import { useCallback, useRef, useState } from "react";
+import { SUPPORTED_ASSET_EXTENSIONS, type AssetMeta } from "kk-agent-contract";
 import { session as sessionApi } from "@/lib/api";
 import { createLogger } from "@/lib/logger";
 import { reportError } from "@/lib/errorReporting";
-import type { AssetMeta } from "@/types/api";
 
 const logger = createLogger("assets");
 
@@ -11,12 +11,7 @@ export interface PendingAsset extends AssetMeta {
   previewUrl?: string;
 }
 
-const ACCEPTED_EXTENSIONS = new Set([
-  ".png", ".jpg", ".jpeg", ".gif", ".webp", ".pdf",
-  ".docx", ".odt", ".rtf", ".pptx", ".odp", ".xlsx", ".ods", ".csv", ".tsv",
-  ".txt", ".md", ".json", ".xml", ".yaml", ".yml", ".html", ".css", ".js", ".ts", ".tsx",
-  ".jsx", ".py", ".rs", ".go", ".java", ".c", ".cpp", ".h", ".sh", ".sql", ".toml", ".ini", ".log",
-]);
+const ACCEPTED_EXTENSIONS = new Set(SUPPORTED_ASSET_EXTENSIONS);
 
 const MAX_FILE_SIZE = 50 * 1024 * 1024;
 const MAX_ASSETS = 10;

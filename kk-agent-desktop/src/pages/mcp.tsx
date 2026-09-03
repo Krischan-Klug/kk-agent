@@ -1,37 +1,52 @@
-import { useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import styled from "styled-components";
-import { mcp as mcpApi } from "@/lib/api";
+import { agent as agentApi, mcp as mcpApi } from "@/lib/api";
 import { reportError } from "@/lib/errorReporting";
-import type { CreateMcpBody, McpListItem } from "@/types/api";
-import { useMcpCardCollection } from "@/hooks/useMcpCardCollection";
+import type { CreateMcpBody, McpListItem, UpdateMcpBody } from "kk-agent-contract";
 import { PageBody } from "@/components/Layout.styled";
 import Button from "@/components/Button";
 import Spinner from "@/components/Spinner";
 import Modal from "@/components/Modal";
 import McpCard from "@/components/mcp/McpCard";
-import McpCardList from "@/components/mcp/McpCardList";
 import CreateMcpModal from "@/components/mcp/CreateMcpModal";
 import { ActionsRow, EmptyHint, MutedText } from "@/components/PageForm";
-import { buildMcpCardBaseProps } from "@/components/mcp/cardProps";
-import { buildCustomMcpUpdateBody } from "@/components/mcp/updateBody";
 
 const HeaderActions = styled.div`
   margin-bottom: var(--space-lg);
+`;
+
+const McpCardList = styled.div`
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-lg);
+
+  @media (max-width: 900px) {
+    grid-template-columns: 1fr;
+  }
 `;
 
 export default function McpPage() {
   const [showCreate, setShowCreate] = useState(false);
   const [creating, setCreating] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
-  const collection = useMcpCardCollection(mcpApi, "MCPs");
+  const [items, setItems] = useState<McpListItem[]>([]);
+  const [systemVariables, setSystemVariables] = useState<string[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  const loadItems = useCallback(async () => setItems(await mcpApi.list()), []);
+
+  useEffect(() => {
+    void loadItems()
+      .catch((error) => reportError("Failed to load MCPs", error))
+      .finally(() => setLoading(false));
+    void agentApi.systemVariables()
+      .then((response) => setSystemVariables(response.variables))
+      .catch((error) => reportError("Failed to load system variables", error));
+  }, [loadItems]);
 
   async function handleStateToggle(mcp: McpListItem) {
-    try {
-      await mcpApi.update(mcp.id, { active: !mcp.active });
-      await collection.loadItems();
-    } catch (err) {
-      reportError("Failed to toggle MCP state", err);
-    }
+    await mcpApi.update(mcp.id, { active: !mcp.active });
+    await loadItems();
   }
 
   async function handleCreate(createForm: CreateMcpBody) {
@@ -48,7 +63,7 @@ export default function McpPage() {
         instruction: createForm.instruction || undefined,
       });
       setShowCreate(false);
-      await collection.loadItems();
+      await loadItems();
     } catch (err) {
       reportError("Failed to create MCP", err);
     } finally {
@@ -60,30 +75,18 @@ export default function McpPage() {
     try {
       await mcpApi.remove(id);
       setDeleteTarget(null);
-      await collection.loadItems();
+      await loadItems();
     } catch (err) {
       reportError("Failed to delete MCP", err);
     }
   }
 
-  async function handleSaveEdit(mcp: McpListItem) {
-    const form = collection.editForms[mcp.id];
-    if (!form) return;
-
-    try {
-      await mcpApi.update(mcp.id, {
-        ...buildCustomMcpUpdateBody(mcp, form),
-        instruction: collection.instructions[mcp.id] ?? "",
-      });
-
-      collection.expandedEdit.remove(mcp.id);
-      await collection.loadItems();
-    } catch (err) {
-      reportError("Failed to save MCP edit", err);
-    }
+  async function handleSave(id: string, body: UpdateMcpBody) {
+    await mcpApi.update(id, body);
+    await loadItems();
   }
 
-  if (collection.loading) return <Spinner />;
+  if (loading) return <Spinner />;
 
   return (
     <PageBody>
@@ -91,17 +94,17 @@ export default function McpPage() {
         <Button onClick={() => setShowCreate(true)}>Import MCP JSON</Button>
       </HeaderActions>
       <McpCardList>
-        {collection.items.map((mcp) => (
+        {items.map((mcp) => (
           <McpCard
             key={mcp.id}
             mcp={mcp}
-            {...buildMcpCardBaseProps(mcp, collection)}
-            onStateToggle={() => void handleStateToggle(mcp)}
+            systemVariables={systemVariables}
+            onStateToggle={() => handleStateToggle(mcp)}
             onDelete={() => setDeleteTarget(mcp.id)}
-            onSaveEdit={() => void handleSaveEdit(mcp)}
+            onSave={(body) => handleSave(mcp.id, body)}
           />
         ))}
-        {collection.items.length === 0 && <EmptyHint>No external MCP servers configured.</EmptyHint>}
+        {items.length === 0 && <EmptyHint>No external MCP servers configured.</EmptyHint>}
       </McpCardList>
       <CreateMcpModal
         open={showCreate}

@@ -2,7 +2,7 @@ import Badge from "@/components/Badge";
 import Spinner from "@/components/Spinner";
 import SkillIcon from "@/components/SkillIcon";
 import type { ReactNode } from "react";
-import type { RuntimeCapability } from "@/types/api";
+import type { RuntimeCapability } from "@/types/runtime";
 import type { ActiveToolCall } from "./types";
 import { getToolCardMetadataSummary, renderToolCardBody } from "./toolCardRenderers";
 import {

@@ -7,7 +7,7 @@ import Spinner from "./Spinner";
 import { provider as providerApi } from "@/lib/api";
 import { reportError } from "@/lib/errorReporting";
 import { verifyProviders } from "@/lib/providerVerification";
-import type { ProviderConfig } from "@/types/api";
+import type { ProviderConfig } from "kk-agent-contract";
 
 interface LayoutProps {
   children: React.ReactNode;

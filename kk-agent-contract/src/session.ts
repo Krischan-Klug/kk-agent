@@ -6,6 +6,20 @@ import type { ToolExecutionStatus, TranscriptBlock, TranscriptMessage } from "./
 export type AssetKind = "image" | "pdf" | "document" | "presentation" | "spreadsheet" | "text";
 export type AssetSource = "user" | "assistant";
 
+export const ASSET_EXTENSION_KINDS = {
+  ".png": "image", ".jpg": "image", ".jpeg": "image", ".gif": "image", ".webp": "image",
+  ".pdf": "pdf", ".docx": "document", ".odt": "document", ".rtf": "document",
+  ".pptx": "presentation", ".odp": "presentation",
+  ".xlsx": "spreadsheet", ".ods": "spreadsheet", ".csv": "spreadsheet", ".tsv": "spreadsheet",
+  ".txt": "text", ".md": "text", ".json": "text", ".xml": "text", ".yaml": "text",
+  ".yml": "text", ".html": "text", ".css": "text", ".js": "text", ".ts": "text",
+  ".tsx": "text", ".jsx": "text", ".py": "text", ".rs": "text", ".go": "text",
+  ".java": "text", ".c": "text", ".cpp": "text", ".h": "text", ".sh": "text",
+  ".sql": "text", ".toml": "text", ".ini": "text", ".log": "text", ".env": "text",
+} as const satisfies Record<string, AssetKind>;
+
+export const SUPPORTED_ASSET_EXTENSIONS = Object.keys(ASSET_EXTENSION_KINDS);
+
 export interface AssetMeta {
   id: string;
   filename: string;

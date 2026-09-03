@@ -4,7 +4,7 @@ import { executeFilesystemTool } from "./filesystem/runtime.js";
 import { filesystemTools } from "./filesystem/tools.js";
 import { terminalDefinition } from "./terminal/definition.js";
 import { executeTerminalTool } from "./terminal/runtime.js";
-import { buildTerminalTools } from "./terminal/tools.js";
+import { TERMINAL_TOOLS } from "./terminal/tools.js";
 import { getTerminalShellProfile } from "./terminal/shell-profile.js";
 import { webSearchDefinition } from "./web-search/definition.js";
 import { executeWebSearchTool } from "./web-search/runtime.js";
@@ -106,8 +106,7 @@ export function getDefaultInternalToolMap(): Record<InternalToolId, InternalTool
 export function getToolDescriptors(id: string): InternalToolDescriptor[] {
   if (!isInternalToolId(id)) return [];
   if (id === "terminal") {
-    const profile = getTerminalShellProfile();
-    return profile ? buildTerminalTools(profile) : [];
+    return getTerminalShellProfile() ? TERMINAL_TOOLS : [];
   }
   return INTERNAL_TOOL_MODULES[id].tools;
 }

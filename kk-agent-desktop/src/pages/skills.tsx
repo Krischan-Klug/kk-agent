@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent } f
 import styled from "styled-components";
 import { skills as skillsApi } from "@/lib/api";
 import { reportError } from "@/lib/errorReporting";
-import type { SkillDefinition } from "@/types/api";
+import type { SkillDefinition } from "kk-agent-contract";
 import { PageBody } from "@/components/Layout.styled";
 import { MasterDetailLayout } from "@/components/MasterDetail.styled";
 import Button from "@/components/Button";

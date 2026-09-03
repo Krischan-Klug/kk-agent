@@ -1,10 +1,11 @@
-import { useRef, useState, useCallback, useLayoutEffect } from "react";
+import { Fragment, useRef, useState, useCallback, useLayoutEffect } from "react";
 import styled from "styled-components";
+import { SUPPORTED_ASSET_EXTENSIONS } from "kk-agent-contract";
 import type {
   AgentDefinition,
   ApprovalMode,
   TaskItem,
-} from "@/types/api";
+} from "kk-agent-contract";
 import type { PendingAsset } from "@/hooks/useAssets";
 import SelectMenu, { type SelectMenuOption } from "@/components/SelectMenu";
 import { getModeColor } from "@/lib/modeColors";
@@ -228,12 +229,6 @@ const ComposerActions = styled.div`
   flex-wrap: wrap;
 `;
 
-const ControlGroup = styled.div`
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-`;
-
 const ContextIndicator = styled.div`
   display: flex;
   align-items: center;
@@ -312,57 +307,7 @@ const HiddenFileInput = styled.input`
   display: none;
 `;
 
-const ACCEPTED_FILES = [
-  "image/png",
-  "image/jpeg",
-  "image/gif",
-  "image/webp",
-  "application/pdf",
-  "application/rtf",
-  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-  "application/vnd.openxmlformats-officedocument.presentationml.presentation",
-  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-  "application/json",
-  "text/plain",
-  "text/markdown",
-  "text/csv",
-  "text/xml",
-  "text/html",
-  ".txt",
-  ".md",
-  ".json",
-  ".csv",
-  ".xml",
-  ".yaml",
-  ".yml",
-  ".html",
-  ".css",
-  ".js",
-  ".ts",
-  ".tsx",
-  ".jsx",
-  ".py",
-  ".rs",
-  ".go",
-  ".java",
-  ".c",
-  ".cpp",
-  ".h",
-  ".sh",
-  ".sql",
-  ".toml",
-  ".ini",
-  ".log",
-  ".pdf",
-  ".docx",
-  ".odt",
-  ".rtf",
-  ".pptx",
-  ".odp",
-  ".xlsx",
-  ".ods",
-  ".tsv",
-].join(",");
+const ACCEPTED_FILES = SUPPORTED_ASSET_EXTENSIONS.join(",");
 
 function ContextRing({ used, max }: { used: number; max: number }) {
   const pct = max > 0 ? Math.min(used / max, 1) : 0;
@@ -463,6 +408,7 @@ export default function ChatComposer({
   const currentAgent = agents.find((agent) => agent.id === currentAgentId);
   const openTasks = tasks.filter((task) => task.status !== "completed");
   const completedTasks = tasks.filter((task) => task.status === "completed");
+  const orderedTasks = [...openTasks, ...completedTasks];
   const usedContextTokens = tokenStats?.used ?? ((tokenStats?.input ?? 0) + (tokenStats?.output ?? 0));
   const modeOptions = (currentAgent?.modes ?? [])
     .filter((mode) => mode.enabled)
@@ -537,11 +483,11 @@ export default function ChatComposer({
               <TasksHeader>
                 <TasksTitle>Tasks</TasksTitle>
               </TasksHeader>
-              {tasks.length > 0 && (
-                <TasksList>
-                  {openTasks.map((task) => (
+              <TasksList>
+                {orderedTasks.map((task, index) => (
+                  <Fragment key={task.id}>
+                    {index === openTasks.length && openTasks.length > 0 && <CompletedTasksDivider />}
                     <TaskRow
-                      key={task.id}
                       $status={task.status}
                       title={
                         task.notes
@@ -555,27 +501,9 @@ export default function ChatComposer({
                         {task.notes && <TaskNotes>{task.notes}</TaskNotes>}
                       </div>
                     </TaskRow>
-                  ))}
-                  {openTasks.length > 0 && completedTasks.length > 0 && <CompletedTasksDivider />}
-                  {completedTasks.map((task) => (
-                    <TaskRow
-                      key={task.id}
-                      $status={task.status}
-                      title={
-                        task.notes
-                          ? `${task.title} - ${task.notes}`
-                          : task.title
-                      }
-                    >
-                      <TaskStatusDot $status={task.status} />
-                      <div>
-                        <TaskText $status={task.status}>{task.title}</TaskText>
-                        {task.notes && <TaskNotes>{task.notes}</TaskNotes>}
-                      </div>
-                    </TaskRow>
-                  ))}
-                </TasksList>
-              )}
+                  </Fragment>
+                ))}
+              </TasksList>
             </TasksDrawer>
           )}
           <Composer
@@ -617,29 +545,25 @@ export default function ChatComposer({
                     onSelect={onAgentSwitch}
                   />
                 )}
-                <ControlGroup>
-                  <SelectMenu
-                    value={activeModeId}
-                    options={modeOptions}
-                    onSelect={onModeSwitch}
-                    direction="up"
-                    minWidth="max-content"
-                    variant={activeModeBehavior === "plan" ? "info" : "warning"}
-                  />
-                </ControlGroup>
-                <ControlGroup>
-                  <SelectMenu
-                    value={approvalMode}
-                    options={[
-                      { value: "ask_approval", label: "Ask approval", color: "var(--info)" },
-                      { value: "full_access", label: "Do not ask", color: "var(--warning)" },
-                    ]}
-                    onSelect={(value) => onApprovalModeSwitch(value as ApprovalMode)}
-                    direction="up"
-                    minWidth="max-content"
-                    variant={approvalMode === "full_access" ? "warning" : "info"}
-                  />
-                </ControlGroup>
+                <SelectMenu
+                  value={activeModeId}
+                  options={modeOptions}
+                  onSelect={onModeSwitch}
+                  direction="up"
+                  minWidth="max-content"
+                  variant={activeModeBehavior === "plan" ? "info" : "warning"}
+                />
+                <SelectMenu
+                  value={approvalMode}
+                  options={[
+                    { value: "ask_approval", label: "Ask approval", color: "var(--info)" },
+                    { value: "full_access", label: "Do not ask", color: "var(--warning)" },
+                  ]}
+                  onSelect={(value) => onApprovalModeSwitch(value as ApprovalMode)}
+                  direction="up"
+                  minWidth="max-content"
+                  variant={approvalMode === "full_access" ? "warning" : "info"}
+                />
                 {reasoningValue && reasoningOptions.length > 0 && (
                   <SelectMenu
                     value={reasoningValue}

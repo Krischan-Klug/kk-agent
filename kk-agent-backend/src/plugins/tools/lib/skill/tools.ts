@@ -15,6 +15,5 @@ export const skillTools: InternalToolDescriptor[] = [
       required: ["name"],
       additionalProperties: false,
     },
-    capabilityId: "skill",
   },
 ];

@@ -1,4 +1,4 @@
-import type { CreateMcpBody, McpListItem, McpStdioConfig, UpdateMcpBody } from "@/types/api";
+import type { CreateMcpBody, McpListItem, McpStdioConfig, UpdateMcpBody } from "kk-agent-contract";
 
 export type JsonParseResult<T> =
   | { ok: true; value: T }

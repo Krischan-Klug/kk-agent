@@ -2,7 +2,7 @@ import {
   getReasoningLevels as getSharedReasoningLevels,
   normalizeCanonicalReasoningLevel,
 } from "kk-agent-contract";
-import type { ModelInfo, ModelSettings, ReasoningEffort } from "@/types/api";
+import type { ModelInfo, ModelSettings, ReasoningEffort } from "kk-agent-contract";
 
 export function getReasoningLevels(modelInfo?: ModelInfo): ReasoningEffort[] {
   return getSharedReasoningLevels(modelInfo?.capabilities);

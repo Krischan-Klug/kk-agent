@@ -1,14 +1,14 @@
-import type { SessionMessage } from "@/types/api";
+import type { TranscriptMessage } from "kk-agent-contract";
 import type { AgentStepView } from "./types";
 import { buildToolCards, collectToolResults, collectToolUses } from "./messageBlocks";
 
 export type MessageGroup =
-  | { kind: "single"; message: SessionMessage; key: string }
+  | { kind: "single"; message: TranscriptMessage; key: string }
   | { kind: "agent-step"; step: AgentStepView; key: string; userMessageId?: string; streaming?: boolean };
 
 type AgentStepGroup = Extract<MessageGroup, { kind: "agent-step" }>;
 
-export function groupMessages(messages: SessionMessage[]): MessageGroup[] {
+export function groupMessages(messages: TranscriptMessage[]): MessageGroup[] {
   const groups: MessageGroup[] = [];
   let index = 0;
   let latestUserMessageId: string | undefined;

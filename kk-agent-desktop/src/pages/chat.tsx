@@ -19,7 +19,7 @@ import { session as sessionApi } from "@/lib/api";
 import { reportError } from "@/lib/errorReporting";
 import { resolveDefaultSessionAgentId } from "@/lib/sessionFactory";
 import { getSessionModelRef } from "@/lib/modelRefs";
-import type { ReasoningEffort, SessionPromptDebug } from "@/types/api";
+import type { ReasoningEffort, SessionPromptDebug } from "kk-agent-contract";
 
 const REASONING_COLORS: Record<ReasoningEffort, string> = {
   none: "#9d9d9d",

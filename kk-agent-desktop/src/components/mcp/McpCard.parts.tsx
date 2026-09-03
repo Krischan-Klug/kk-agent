@@ -1,9 +1,8 @@
 import { useState } from "react";
-import type { McpListItem } from "@/types/api";
+import type { McpListItem } from "kk-agent-contract";
 import Button from "@/components/Button";
 import TextArea from "@/components/TextArea";
 import { ActionsRow, MutedText, SectionTitle } from "@/components/PageForm";
-import type { EditForm } from "./types";
 import McpJsonEditor from "./McpJsonEditor";
 import { MCP_SSE_HINT, MCP_STDIO_HINT, parseMcpServerJson } from "./configJson";
 
@@ -58,18 +57,18 @@ export function InstructionEditorBlock({
 
 type McpEditFieldsProps = {
   mcp: McpListItem;
-  editForm: EditForm;
-  onEditFormChange: (form: EditForm) => void;
+  serverJson: string;
+  onChange: (serverJson: string) => void;
 };
 
-export function McpEditFields({ mcp, editForm, onEditFormChange }: McpEditFieldsProps) {
-  const parsedServer = parseMcpServerJson(editForm.serverJson, mcp.transport);
+export function McpEditFields({ mcp, serverJson, onChange }: McpEditFieldsProps) {
+  const parsedServer = parseMcpServerJson(serverJson, mcp.transport);
   const serverJsonError = !parsedServer.ok ? parsedServer.error : undefined;
 
   return (
     <McpJsonEditor
-      value={editForm.serverJson}
-      onChange={(serverJson) => onEditFormChange({ ...editForm, serverJson })}
+      value={serverJson}
+      onChange={onChange}
       hint={mcp.transport === "stdio" ? MCP_STDIO_HINT : MCP_SSE_HINT}
       error={serverJsonError}
       rows={8}

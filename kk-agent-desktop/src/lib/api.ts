@@ -21,7 +21,6 @@ import type {
   ProviderConfig,
   CreateProviderBody,
   UpdateProviderBody,
-  SystemVariablesResponse,
   UpdateSessionBody,
   TaskItem,
   MemoryFact,
@@ -29,7 +28,7 @@ import type {
   SkillDefinition,
   SessionPromptDebug,
   ImportSkillResult,
-} from "@/types/api";
+} from "kk-agent-contract";
 
 function resolveApiBaseUrl(): string {
   if (typeof window !== "undefined") {
@@ -238,7 +237,7 @@ export const tools = {
 export const agent = {
   list: () => request<AgentDefinition[]>("/agent"),
 
-  systemVariables: () => request<SystemVariablesResponse>("/agent/system-variables"),
+  systemVariables: () => request<{ variables: string[] }>("/agent/system-variables"),
 
   templates: () => request<AppDefaults["agent"]>("/agent/templates"),
 

@@ -1,4 +1,4 @@
-import type { ModelInfo, ProviderConfig } from "@/types/api";
+import type { ModelInfo, ProviderConfig } from "kk-agent-contract";
 
 const MODEL_REF_SEPARATOR = "::";
 

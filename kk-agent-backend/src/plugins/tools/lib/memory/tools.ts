@@ -22,6 +22,5 @@ export const memoryTools: InternalToolDescriptor[] = [
       },
       required: ["scope", "facts"],
     },
-    capabilityId: "memory",
   },
 ];

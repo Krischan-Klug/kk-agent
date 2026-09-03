@@ -1,4 +1,4 @@
-import type { SessionMessage, ToolExecutionStatus } from "@/types/api";
+import type { ToolExecutionStatus, TranscriptMessage } from "kk-agent-contract";
 
 export interface ActiveToolCall {
   id: string;
@@ -13,7 +13,7 @@ export interface ActiveToolCall {
 }
 
 export interface AgentStepView {
-  assistant: SessionMessage;
+  assistant: TranscriptMessage;
   toolCalls: ActiveToolCall[];
 }
 

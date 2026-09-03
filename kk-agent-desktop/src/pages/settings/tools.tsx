@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import styled from "styled-components";
 import { agent as agentApi, tools as toolsApi } from "@/lib/api";
 import { reportError } from "@/lib/errorReporting";
-import type { InternalToolListItem, UpdateInternalToolBody } from "@/types/api";
+import type { InternalToolListItem, UpdateInternalToolBody } from "kk-agent-contract";
 import SettingsLayout from "@/components/SettingsLayout";
 import Card from "@/components/Card";
 import Button from "@/components/Button";

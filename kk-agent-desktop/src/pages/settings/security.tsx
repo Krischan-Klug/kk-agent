@@ -6,7 +6,7 @@ import { Select } from "@/components/FormControls.styled";
 import { ActionsRow, FieldLabel, FormField, MutedText, Section, SectionTitle } from "@/components/PageForm";
 import { settings as settingsApi } from "@/lib/api";
 import { reportError } from "@/lib/errorReporting";
-import type { SecuritySettings } from "@/types/api";
+import type { SecuritySettings } from "kk-agent-contract";
 
 const SettingsCard = styled.div`
   display: flex;

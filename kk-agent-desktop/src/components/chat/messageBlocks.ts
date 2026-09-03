@@ -1,4 +1,4 @@
-import type { TranscriptToolUseBlock } from "@/types/api";
+import type { TranscriptToolUseBlock } from "kk-agent-contract";
 import type { ActiveToolCall } from "./types";
 
 export {

@@ -1,5 +1,5 @@
 import { tools as toolsApi } from "@/lib/api";
-import { createLogger } from "@/lib/logger";
+import { reportError } from "@/lib/errorReporting";
 import type { McpListItem } from "@/types/api";
 import { useMcpCardCollection } from "@/hooks/useMcpCardCollection";
 import SettingsLayout from "@/components/SettingsLayout";
@@ -9,17 +9,15 @@ import { EmptyHint } from "@/components/PageForm";
 import { buildMcpCardBaseProps } from "@/components/mcp/cardProps";
 import { buildSystemToolUpdateBody } from "@/components/mcp/updateBody";
 
-const logger = createLogger("settings/tools");
-
 export default function SettingsToolsPage() {
-  const collection = useMcpCardCollection(toolsApi, logger, "tools");
+  const collection = useMcpCardCollection(toolsApi, "tools");
 
   async function handleStateToggle(tool: McpListItem) {
     try {
       await toolsApi.update(tool.id, { active: !tool.active });
       await collection.loadItems();
     } catch (err) {
-      logger.error("Failed to toggle tool:", err);
+      reportError("Failed to toggle tool", err);
     }
   }
 
@@ -35,7 +33,7 @@ export default function SettingsToolsPage() {
       collection.expandedEdit.remove(tool.id);
       await collection.loadItems();
     } catch (err) {
-      logger.error("Failed to save tool edit:", err);
+      reportError("Failed to save tool edit", err);
     }
   }
 

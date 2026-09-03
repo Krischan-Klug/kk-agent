@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { agent as agentApi } from "@/lib/api";
-import type { Logger } from "@/lib/logger";
+import { reportError } from "@/lib/errorReporting";
 import type { McpListItem } from "@/types/api";
 import { useToggleSet } from "@/hooks/useToggleSet";
 import { buildEditForm, type EditForm } from "@/components/mcp/types";
@@ -11,7 +11,7 @@ type McpCardCollectionApi = {
 
 export type McpCardCollection = ReturnType<typeof useMcpCardCollection>;
 
-export function useMcpCardCollection(api: McpCardCollectionApi, logger: Logger, label: string) {
+export function useMcpCardCollection(api: McpCardCollectionApi, label: string) {
   const [items, setItems] = useState<McpListItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [instructions, setInstructions] = useState<Record<string, string>>({});
@@ -25,20 +25,20 @@ export function useMcpCardCollection(api: McpCardCollectionApi, logger: Logger, 
       setItems(data);
       setInstructions(Object.fromEntries(data.map((item) => [item.id, item.instruction])));
     } catch (err) {
-      logger.error(`Failed to load ${label}:`, err);
+      reportError(`Failed to load ${label}`, err);
     } finally {
       setLoading(false);
     }
-  }, [api, label, logger]);
+  }, [api, label]);
 
   const loadSystemVariables = useCallback(async () => {
     try {
       const response = await agentApi.systemVariables();
       setSystemVariables(response.variables);
     } catch (err) {
-      logger.error("Failed to load system variables:", err);
+      reportError("Failed to load system variables", err);
     }
-  }, [logger]);
+  }, []);
 
   useEffect(() => {
     void loadItems();

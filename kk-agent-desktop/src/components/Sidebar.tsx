@@ -5,7 +5,7 @@ import Spinner from "@/components/Spinner";
 import BrandMark from "@/components/BrandMark";
 import SkillIcon from "@/components/SkillIcon";
 import { session as sessionApi } from "@/lib/api";
-import { createLogger } from "@/lib/logger";
+import { reportError } from "@/lib/errorReporting";
 import { getRunningChatStreamSessionIds, subscribeChatStreamStore } from "@/lib/chatStreamState";
 import type { SessionState } from "@/types/api";
 import { addAppEventListener, emitAppEvent, SESSION_CHANGED_EVENT } from "@/lib/appEvents";
@@ -35,8 +35,6 @@ import {
   SessionAdd,
   SessionDelete,
 } from "./Sidebar.styled";
-
-const logger = createLogger("sidebar");
 
 const navItems = [
   { href: "/chat", Icon: ChatIcon, label: "Chat" },
@@ -83,8 +81,8 @@ export default function Sidebar() {
       setServerRunningSessionIds(nextSessions
         .filter((session) => session.runs.some((run) => run.status === "running"))
         .map((session) => session.id));
-    } catch {
-      // ignore
+    } catch (error) {
+      reportError("Failed to load sessions", error);
     }
   }, [setSessions]);
 
@@ -117,7 +115,7 @@ export default function Sidebar() {
   function selectSession(id: string) {
     persistActiveSessionId(id);
     emitAppEvent(SESSION_CHANGED_EVENT);
-    void router.push("/chat");
+    void router.push("/chat").catch((error) => reportError("Failed to open session", error));
   }
 
   async function createSession() {
@@ -127,7 +125,7 @@ export default function Sidebar() {
       await loadSessions();
       await router.push("/chat");
     } catch (err) {
-      logger.error("Failed to create session:", err);
+      reportError("Failed to create session", err);
     }
   }
 
@@ -141,7 +139,7 @@ export default function Sidebar() {
       await loadSessions();
       if (router.pathname === "/chat") await router.replace("/chat");
     } catch (err) {
-      logger.error("Failed to delete session:", err);
+      reportError("Failed to delete session", err);
     }
   }
 

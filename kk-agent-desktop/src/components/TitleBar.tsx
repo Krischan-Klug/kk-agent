@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import BrandMark from "@/components/BrandMark";
+import { reportError } from "@/lib/errorReporting";
 import {
   TitleBarBrand,
   TitleBarDragArea,
@@ -17,7 +18,7 @@ export default function TitleBar() {
     let mounted = true;
     void controls.isMaximized().then((nextMaximized) => {
       if (mounted) setMaximized(nextMaximized);
-    });
+    }).catch((error) => reportError("Failed to read window state", error));
     const unsubscribe = controls.onMaximizedChange(setMaximized);
 
     return () => {
@@ -27,7 +28,23 @@ export default function TitleBar() {
   }, []);
 
   function toggleMaximize() {
-    void window.kkAgentDesktop?.windowControls.toggleMaximize().then(setMaximized);
+    const controls = window.kkAgentDesktop?.windowControls;
+    if (!controls) return;
+    void controls.toggleMaximize()
+      .then(setMaximized)
+      .catch((error) => reportError("Failed to resize window", error));
+  }
+
+  function minimize() {
+    const controls = window.kkAgentDesktop?.windowControls;
+    if (!controls) return;
+    void controls.minimize().catch((error) => reportError("Failed to minimize window", error));
+  }
+
+  function close() {
+    const controls = window.kkAgentDesktop?.windowControls;
+    if (!controls) return;
+    void controls.close().catch((error) => reportError("Failed to close window", error));
   }
 
   return (
@@ -40,7 +57,7 @@ export default function TitleBar() {
         type="button"
         aria-label="Minimize window"
         title="Minimize"
-        onClick={() => void window.kkAgentDesktop?.windowControls.minimize()}
+        onClick={minimize}
         onDoubleClick={(event) => event.stopPropagation()}
       >
         <svg viewBox="0 0 12 12" aria-hidden="true">
@@ -69,7 +86,7 @@ export default function TitleBar() {
         type="button"
         aria-label="Close window"
         title="Close"
-        onClick={() => void window.kkAgentDesktop?.windowControls.close()}
+        onClick={close}
         onDoubleClick={(event) => event.stopPropagation()}
       >
         <svg viewBox="0 0 12 12" aria-hidden="true">

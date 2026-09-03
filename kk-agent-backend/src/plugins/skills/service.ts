@@ -4,7 +4,12 @@ import { homedir, tmpdir } from "node:os";
 import { dirname, join, relative, resolve, sep } from "node:path";
 import { getStateDirPath } from "../lib/state.js";
 import type { ImportSkillResult, SkillDefinition, SkillSource } from "./types.js";
-import { loadSkillDirectory, resolveImportedSkillRoot, type LoadedSkill } from "./lib/loader.js";
+import {
+  loadSkillDirectory,
+  resolveImportedSkillRoot,
+  SkillValidationError,
+  type LoadedSkill,
+} from "./lib/loader.js";
 import { buildSkillContextXml, buildSkillsCatalogSection } from "./lib/xml.js";
 import { createLogger } from "../../lib/logger.js";
 import { getErrorMessage } from "../../lib/error.js";
@@ -183,8 +188,17 @@ export async function importSkill(files: ImportedSkillFile[]): Promise<ImportSki
   const tempRoot = await mkdtemp(join(tmpdir(), "kk-agent-skill-import-"));
   try {
     await writeImportedFiles(tempRoot, files);
-    const bundleRoot = await resolveImportedSkillRoot(tempRoot);
-    const loaded = await loadSkillDirectory(bundleRoot, "managed", true);
+    let bundleRoot: string;
+    let loaded: LoadedSkill;
+    try {
+      bundleRoot = await resolveImportedSkillRoot(tempRoot);
+      loaded = await loadSkillDirectory(bundleRoot, "managed", true, {
+        requireMatchingDirectoryName: false,
+      });
+    } catch (error) {
+      if (error instanceof SkillValidationError) throw new ValidationError(error.message);
+      throw error;
+    }
     if (cachedSkills.some((skill) => skill.name === loaded.name)) {
       throw new ConflictError(`Skill "${loaded.name}" already exists.`);
     }

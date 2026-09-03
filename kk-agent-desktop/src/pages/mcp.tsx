@@ -1,7 +1,7 @@
 import { useState } from "react";
 import styled from "styled-components";
 import { mcp as mcpApi } from "@/lib/api";
-import { createLogger } from "@/lib/logger";
+import { reportError } from "@/lib/errorReporting";
 import type { CreateMcpBody, McpListItem } from "@/types/api";
 import { useMcpCardCollection } from "@/hooks/useMcpCardCollection";
 import { PageBody } from "@/components/Layout.styled";
@@ -15,8 +15,6 @@ import { ActionsRow, EmptyHint, MutedText } from "@/components/PageForm";
 import { buildMcpCardBaseProps } from "@/components/mcp/cardProps";
 import { buildCustomMcpUpdateBody } from "@/components/mcp/updateBody";
 
-const logger = createLogger("mcp");
-
 const HeaderActions = styled.div`
   margin-bottom: var(--space-lg);
 `;
@@ -25,14 +23,14 @@ export default function McpPage() {
   const [showCreate, setShowCreate] = useState(false);
   const [creating, setCreating] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
-  const collection = useMcpCardCollection(mcpApi, logger, "MCPs");
+  const collection = useMcpCardCollection(mcpApi, "MCPs");
 
   async function handleStateToggle(mcp: McpListItem) {
     try {
       await mcpApi.update(mcp.id, { active: !mcp.active });
       await collection.loadItems();
     } catch (err) {
-      logger.error("Failed to toggle MCP state:", err);
+      reportError("Failed to toggle MCP state", err);
     }
   }
 
@@ -52,7 +50,7 @@ export default function McpPage() {
       setShowCreate(false);
       await collection.loadItems();
     } catch (err) {
-      logger.error("Failed to create MCP:", err);
+      reportError("Failed to create MCP", err);
     } finally {
       setCreating(false);
     }
@@ -64,7 +62,7 @@ export default function McpPage() {
       setDeleteTarget(null);
       await collection.loadItems();
     } catch (err) {
-      logger.error("Failed to delete MCP:", err);
+      reportError("Failed to delete MCP", err);
     }
   }
 
@@ -81,7 +79,7 @@ export default function McpPage() {
       collection.expandedEdit.remove(mcp.id);
       await collection.loadItems();
     } catch (err) {
-      logger.error("Failed to save MCP edit:", err);
+      reportError("Failed to save MCP edit", err);
     }
   }
 

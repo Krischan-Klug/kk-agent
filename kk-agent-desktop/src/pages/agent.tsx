@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { agent as agentApi, mcp as mcpApi, provider as providerApi, settings as settingsApi, skills as skillsApi, tools as toolsApi } from "@/lib/api";
-import { createLogger } from "@/lib/logger";
+import { reportError } from "@/lib/errorReporting";
 import type { AgentDefinition, AppDefaults, CreateAgentBody, McpListItem, ModelInfo, ProviderConfig, SecuritySettings, SkillDefinition } from "@/types/api";
 import { PageBody } from "@/components/Layout.styled";
 import { MasterDetailLayout } from "@/components/MasterDetail.styled";
@@ -8,8 +8,6 @@ import Spinner from "@/components/Spinner";
 import AgentList from "@/components/agent/AgentList";
 import AgentEditor from "@/components/agent/AgentEditor";
 import CreateAgentModal from "@/components/agent/CreateAgentModal";
-
-const logger = createLogger("agent");
 
 export default function AgentPage() {
   const [agents, setAgents] = useState<AgentDefinition[]>([]);
@@ -34,13 +32,13 @@ export default function AgentPage() {
       const providerModels = await providerApi.getModels();
       setModels(providerModels.models.filter((model) => model.profile && model.capabilities));
     } catch (err) {
-      logger.error("Failed to load models:", err);
+      reportError("Failed to load models", err);
       setModels([]);
     }
   }
 
   useEffect(() => {
-    Promise.all([agentApi.list(), mcpApi.list(), toolsApi.list(), skillsApi.list(), agentApi.systemVariables(), providerApi.listProviders(), agentApi.templates(), settingsApi.getSecurity()])
+    void Promise.all([agentApi.list(), mcpApi.list(), toolsApi.list(), skillsApi.list(), agentApi.systemVariables(), providerApi.listProviders(), agentApi.templates(), settingsApi.getSecurity()])
       .then(async ([agentList, mcpList, toolList, skillList, vars, providerList, agentTemplates, security]) => {
         setAgents(agentList);
         setProviders(providerList);
@@ -59,6 +57,7 @@ export default function AgentPage() {
           setModels([]);
         }
       })
+      .catch((error) => reportError("Failed to load agent configuration", error))
       .finally(() => setLoading(false));
   }, []);
 
@@ -79,7 +78,7 @@ export default function AgentPage() {
       setShowCreate(false);
       setNewName("");
     } catch (err) {
-      logger.error("Failed to create agent:", err);
+      reportError("Failed to create agent", err);
     }
   }
 
@@ -101,7 +100,7 @@ export default function AgentPage() {
       setEditAgent(structuredClone(updated));
       await loadModels();
     } catch (err) {
-      logger.error("Failed to save agent:", err);
+      reportError("Failed to save agent", err);
     } finally {
       setSaving(false);
     }
@@ -120,7 +119,7 @@ export default function AgentPage() {
       }
       selectAgent(remaining[0].id);
     } catch (err) {
-      logger.error("Failed to delete agent:", err);
+      reportError("Failed to delete agent", err);
     }
   }
 

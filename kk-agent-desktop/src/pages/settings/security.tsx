@@ -5,10 +5,8 @@ import Button from "@/components/Button";
 import { Select } from "@/components/FormControls.styled";
 import { ActionsRow, FieldLabel, FormField, MutedText, Section, SectionTitle } from "@/components/PageForm";
 import { settings as settingsApi } from "@/lib/api";
-import { createLogger } from "@/lib/logger";
+import { reportError } from "@/lib/errorReporting";
 import type { SecuritySettings } from "@/types/api";
-
-const logger = createLogger("settings/security");
 
 const SettingsCard = styled.div`
   display: flex;
@@ -29,7 +27,7 @@ export default function SecurityPage() {
   useEffect(() => {
     void settingsApi.getSecurity()
       .then(setSettings)
-      .catch((error) => logger.error("Failed to load security settings:", error));
+      .catch((error) => reportError("Failed to load security settings", error));
   }, []);
 
   async function save() {
@@ -40,7 +38,7 @@ export default function SecurityPage() {
       setSettings(await settingsApi.updateSecurity(settings));
       setSaved(true);
     } catch (error) {
-      logger.error("Failed to save security settings:", error);
+      reportError("Failed to save security settings", error);
     } finally {
       setSaving(false);
     }

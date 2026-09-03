@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import styled from "styled-components";
 import type { AssetMeta } from "@/types/api";
 import { session as sessionApi } from "@/lib/api";
+import { reportError } from "@/lib/errorReporting";
 import { formatAssetSize, getAssetLabel } from "./assetDisplay";
 
 const Strip = styled.div`display: flex; gap: var(--space-sm); flex-wrap: wrap; margin-top: var(--space-sm);`;
@@ -23,9 +24,9 @@ function AssetPreviewImage({ sessionId, asset }: { sessionId: string; asset: Ass
     void sessionApi.getAssetBlob(sessionId, asset.id, asset.kind === "pdf" ? 1 : undefined).then((blob) => {
       if (!active) return;
       setUrl(URL.createObjectURL(blob));
-    }).catch(() => undefined);
+    }).catch((error) => reportError(`Failed to load preview for ${asset.filename}`, error));
     return () => { active = false; setUrl((current) => { if (current) URL.revokeObjectURL(current); return undefined; }); };
-  }, [asset.id, asset.kind, sessionId]);
+  }, [asset.filename, asset.id, asset.kind, sessionId]);
   return url ? <Preview src={url} alt={asset.filename} /> : null;
 }
 
@@ -41,7 +42,15 @@ async function downloadAsset(sessionId: string, asset: AssetMeta): Promise<void>
 export default function MessageAssets({ sessionId, assets }: { sessionId: string; assets: AssetMeta[] }) {
   if (!assets.length) return null;
   return <Strip>{assets.map((asset) => (
-    <Card key={asset.id} type="button" onClick={() => { void downloadAsset(sessionId, asset); }} title={`Download ${asset.filename}`}>
+    <Card
+      key={asset.id}
+      type="button"
+      onClick={() => {
+        void downloadAsset(sessionId, asset)
+          .catch((error) => reportError(`Failed to download ${asset.filename}`, error));
+      }}
+      title={`Download ${asset.filename}`}
+    >
       {asset.previewAvailable && (asset.kind === "image" || asset.kind === "pdf") && <AssetPreviewImage sessionId={sessionId} asset={asset} />}
       <Meta><span>{getAssetLabel(asset)}</span><Name>{asset.filename}</Name><Size>{formatAssetSize(asset.size)}</Size></Meta>
     </Card>

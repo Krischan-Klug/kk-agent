@@ -5,11 +5,9 @@ import { LayoutBody, LayoutWrapper, MainContent } from "./Layout.styled";
 import ProviderOnboardingWizard from "./onboarding/ProviderOnboardingWizard";
 import Spinner from "./Spinner";
 import { provider as providerApi } from "@/lib/api";
-import { createLogger } from "@/lib/logger";
+import { reportError } from "@/lib/errorReporting";
 import { verifyProviders } from "@/lib/providerVerification";
 import type { ProviderConfig } from "@/types/api";
-
-const logger = createLogger("layout");
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -28,7 +26,7 @@ export default function Layout({ children }: LayoutProps) {
         void verifyProviders(providerList.map((provider) => provider.id), providerApi.testProvider);
       }
     } catch (error) {
-      logger.error("Failed to load providers for onboarding:", error);
+      reportError("Failed to load providers", error);
       setProviders([]);
     }
   }, []);

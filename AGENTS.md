@@ -38,11 +38,13 @@ Backend features register through a fixed, explicit initializer list. There is n
 - `/settings/appearance`: Theme and UI appearance
 - `/settings/tools`: Internal tools configuration
 - `/settings/provider`: Providers and models
+- Renderer failures use one global, manually dismissed error-toast queue; domain validation and status results may remain local.
 
 ## Key Project Rules
 - Preserve existing structure; extend an existing plugin, route, component, or helper before adding a new system.
 - Internal tools are not user MCPs. Skills are not internal tools or user MCPs.
 - Skills use the Agent Skills `SKILL.md` format unchanged; KK-Agent adds no bundle overlays, capability links, or provider-specific adapters.
+- Managed skill imports accept any source folder name and install under the canonical frontmatter `name`.
 - Skill discovery precedence is workspace `.agents/skills`, managed `state/agent-skills`, then user `~/.agents/skills`.
 - Skill metadata is catalog context; full instructions and resources enter request-scoped runtime context only after activation.
 - Agents separate `toolIds`, `mcpIds`, and `skillIds`.

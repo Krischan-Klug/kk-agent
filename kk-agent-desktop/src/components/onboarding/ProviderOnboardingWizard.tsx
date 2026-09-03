@@ -6,15 +6,13 @@ import type {
   ProviderConfig,
 } from "@/types/api";
 import { provider as providerApi } from "@/lib/api";
-import { createLogger } from "@/lib/logger";
+import { reportError } from "@/lib/errorReporting";
 import Button from "@/components/Button";
 import Modal from "@/components/Modal";
 import Spinner from "@/components/Spinner";
 import { ActionsRow, MutedText } from "@/components/PageForm";
 import ProviderFormFields from "@/components/provider/ProviderFormFields";
 import { DEFAULT_PROVIDER_BASE_URL } from "@/components/provider/constants";
-
-const logger = createLogger("onboarding/provider");
 
 const Body = styled.div`
   display: flex;
@@ -80,11 +78,6 @@ type Props = {
   onComplete: (provider: ProviderConfig) => void;
 };
 
-function getErrorMessage(error: unknown): string {
-  if (error instanceof Error) return error.message;
-  return String(error);
-}
-
 function parseModelsText(text: string): string[] {
   return text
     .split("\n")
@@ -109,7 +102,7 @@ export default function ProviderOnboardingWizard({ onComplete }: Props) {
     try {
       await providerApi.removeProvider(providerId);
     } catch (error) {
-      logger.error("Failed to remove incomplete onboarding provider:", error);
+      reportError("Failed to remove incomplete provider", error);
     }
   }
 
@@ -130,6 +123,7 @@ export default function ProviderOnboardingWizard({ onComplete }: Props) {
       const testResult = await providerApi.testProvider(created.id);
       if (!testResult.ok) {
         await cleanupProvider(created.id);
+        reportError("Provider connection failed", testResult.error || "Provider connection failed.");
         setState({
           kind: "error",
           message: testResult.error || "Provider connection failed.",
@@ -140,6 +134,7 @@ export default function ProviderOnboardingWizard({ onComplete }: Props) {
       const modelsResult = await providerApi.getModels(created.id);
       if (modelsResult.models.length === 0) {
         await cleanupProvider(created.id);
+        reportError("Provider setup failed", "Provider reachable, but no models were found.");
         setState({
           kind: "error",
           message: "Provider reachable, but no models were found.",
@@ -157,8 +152,7 @@ export default function ProviderOnboardingWizard({ onComplete }: Props) {
       if (created) {
         await cleanupProvider(created.id);
       }
-      const message = getErrorMessage(error);
-      logger.error("Provider onboarding failed:", error);
+      const message = reportError("Provider onboarding failed", error).message;
       setState({ kind: "error", message });
     }
   }
@@ -175,8 +169,8 @@ export default function ProviderOnboardingWizard({ onComplete }: Props) {
       ));
       onComplete(readyState.provider);
     } catch (error) {
-      logger.error("Failed to save onboarding model profiles:", error);
-      setState({ ...readyState, saving: false, error: getErrorMessage(error) });
+      const message = reportError("Failed to save onboarding model profiles", error).message;
+      setState({ ...readyState, saving: false, error: message });
     }
   }
 

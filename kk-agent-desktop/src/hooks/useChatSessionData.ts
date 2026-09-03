@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { agent as agentApi, mcp as mcpApi, provider as providerApi, session as sessionApi, skills as skillsApi, tools as toolsApi } from "@/lib/api";
 import { createLogger } from "@/lib/logger";
+import { reportError } from "@/lib/errorReporting";
 import type {
   AgentDefinition,
   ApprovalMode,
@@ -76,7 +77,7 @@ export function useChatSessionData({ onDebugOpen, setDebugOpen }: Options) {
       setSessionFacts(sessionMemoryResult.facts);
       setUserFacts(userMemoryResult.facts);
     } catch (err) {
-      logger.error("Failed to load chat context:", err);
+      reportError("Failed to load chat context", err);
     }
   }, []);
 
@@ -87,8 +88,8 @@ export function useChatSessionData({ onDebugOpen, setDebugOpen }: Options) {
       setModels(configuredModels.map(toModelRef));
       setModelInfoMap(new Map(result.models.map((model) => [toModelRef(model), model])));
       setModelSettingsMap(result.modelSettings ?? {});
-    } catch {
-      // ignore
+    } catch (error) {
+      reportError("Failed to load models", error);
     }
   }, []);
 
@@ -132,7 +133,8 @@ export function useChatSessionData({ onDebugOpen, setDebugOpen }: Options) {
         sessionFacts: contextData[1].facts,
         userFacts: contextData[2].facts,
       };
-    } catch {
+    } catch (error) {
+      reportError("Failed to load the active session", error);
       clearActiveSessionId();
       return {
         session: null,
@@ -166,7 +168,8 @@ export function useChatSessionData({ onDebugOpen, setDebugOpen }: Options) {
         setMcps(availableMcps.mcps);
         setAgents(availableAgents);
         setSkills(availableSkills);
-      } catch {
+      } catch (error) {
+        reportError("Failed to initialize chat", error);
         if (!disposed) setLoading(false);
       }
     })();
@@ -208,7 +211,7 @@ export function useChatSessionData({ onDebugOpen, setDebugOpen }: Options) {
         [field]: toggleId(session[field], id, enabled),
       });
     } catch (err) {
-      logger.error(errorMessage, err);
+      reportError(errorMessage, err);
     }
   }, [session, updateSessionAndSet]);
 
@@ -222,7 +225,7 @@ export function useChatSessionData({ onDebugOpen, setDebugOpen }: Options) {
         llmRequestConfig: compactLlmRequestConfig(mergeLlmRequestConfigs(session.llmRequestConfig, patch)),
       });
     } catch (err) {
-      logger.error(errorMessage, err);
+      reportError(errorMessage, err);
     }
   }, [session, updateSessionAndSet]);
 
@@ -234,38 +237,38 @@ export function useChatSessionData({ onDebugOpen, setDebugOpen }: Options) {
     try {
       await updateSessionAndSet({ providerId: parsed.providerId, model: parsed.modelId });
     } catch (err) {
-      logger.error("Failed to switch model:", err);
+      reportError("Failed to switch model", err);
     }
   }, [session, updateSessionAndSet]);
 
   const handleMcpToggle = useCallback(async (mcpId: string, enabled: boolean) => {
-    await updateActiveCapabilityIds("activeMcpIds", mcpId, enabled, "Failed to toggle MCP:");
+    await updateActiveCapabilityIds("activeMcpIds", mcpId, enabled, "Failed to toggle MCP");
   }, [updateActiveCapabilityIds]);
 
   const handleToolToggle = useCallback(async (toolId: string, enabled: boolean) => {
-    await updateActiveCapabilityIds("activeToolIds", toolId, enabled, "Failed to toggle tool:");
+    await updateActiveCapabilityIds("activeToolIds", toolId, enabled, "Failed to toggle tool");
   }, [updateActiveCapabilityIds]);
 
   const handleSkillToggle = useCallback(async (skillId: string, enabled: boolean) => {
-    await updateActiveCapabilityIds("activeSkillIds", skillId, enabled, "Failed to toggle skill:");
+    await updateActiveCapabilityIds("activeSkillIds", skillId, enabled, "Failed to toggle skill");
   }, [updateActiveCapabilityIds]);
 
   const handleReasoningEffort = useCallback(async (value: string) => {
     await updateRequestConfig({
       reasoning: { effort: normalizeCanonicalReasoningEffort(value) },
-    }, "Failed to set reasoning:");
+    }, "Failed to set reasoning");
   }, [updateRequestConfig]);
 
   const handleReasoningHistory = useCallback(async (value: string) => {
     await updateRequestConfig({
       reasoning: { history: value as ReasoningHistory },
-    }, "Failed to set reasoning history:");
+    }, "Failed to set reasoning history");
   }, [updateRequestConfig]);
 
   const handleTemperature = useCallback(async (value: string) => {
     await updateRequestConfig({
       sampling: { temperature: Number(value) },
-    }, "Failed to set temperature:");
+    }, "Failed to set temperature");
   }, [updateRequestConfig]);
 
   const handleLlmRequestConfig = useCallback(async (value: LlmRequestConfig | undefined) => {
@@ -273,7 +276,7 @@ export function useChatSessionData({ onDebugOpen, setDebugOpen }: Options) {
     try {
       await updateSessionAndSet({ llmRequestConfig: value });
     } catch (err) {
-      logger.error("Failed to update LLM request config:", err);
+      reportError("Failed to update LLM request config", err);
     }
   }, [session, updateSessionAndSet]);
 
@@ -282,7 +285,7 @@ export function useChatSessionData({ onDebugOpen, setDebugOpen }: Options) {
     try {
       await updateSessionAndSet({ agentId });
     } catch (err) {
-      logger.error("Failed to switch agent:", err);
+      reportError("Failed to switch agent", err);
     }
   }, [session, updateSessionAndSet]);
 
@@ -291,7 +294,7 @@ export function useChatSessionData({ onDebugOpen, setDebugOpen }: Options) {
     try {
       await updateSessionAndSet({ activeModeId });
     } catch (err) {
-      logger.error("Failed to switch mode:", err);
+      reportError("Failed to switch mode", err);
     }
   }, [session, updateSessionAndSet]);
 
@@ -300,7 +303,7 @@ export function useChatSessionData({ onDebugOpen, setDebugOpen }: Options) {
     try {
       await updateSessionAndSet({ approvalMode });
     } catch (err) {
-      logger.error("Failed to switch approval mode:", err);
+      reportError("Failed to switch approval mode", err);
     }
   }, [session, updateSessionAndSet]);
 
@@ -311,7 +314,7 @@ export function useChatSessionData({ onDebugOpen, setDebugOpen }: Options) {
       await loadContextData(newSession.id);
       await loadModels();
     } catch (err) {
-      logger.error("Failed to create new session:", err);
+      reportError("Failed to create new session", err);
     }
   }, [agents, loadContextData, loadModels]);
 
@@ -321,7 +324,7 @@ export function useChatSessionData({ onDebugOpen, setDebugOpen }: Options) {
       const result = await toolsApi.replaceTasks(session.id, nextTasks);
       setTasks(result.tasks);
     } catch (err) {
-      logger.error("Failed to save tasks:", err);
+      reportError("Failed to save tasks", err);
     }
   }, [session]);
 
@@ -331,7 +334,7 @@ export function useChatSessionData({ onDebugOpen, setDebugOpen }: Options) {
       const result = await toolsApi.replaceSessionMemory(session.id, nextFacts);
       setSessionFacts(result.facts);
     } catch (err) {
-      logger.error("Failed to save session memory:", err);
+      reportError("Failed to save session memory", err);
     }
   }, [session]);
 
@@ -340,7 +343,7 @@ export function useChatSessionData({ onDebugOpen, setDebugOpen }: Options) {
       const result = await toolsApi.replaceUserMemory(nextFacts);
       setUserFacts(result.facts);
     } catch (err) {
-      logger.error("Failed to save user memory:", err);
+      reportError("Failed to save user memory", err);
     }
   }, []);
 

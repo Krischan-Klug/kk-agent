@@ -8,6 +8,7 @@
   "scripts": {
     "dev:renderer": "next dev --port 3000",
     "start:dev": "npm run build:electron && node scripts/start-dev.mjs",
+    "test": "tsx --test src/lib/api.test.ts src/lib/errorReporting.test.ts",
     "build": "npm run build:renderer",
     "build:renderer": "npm --prefix .. --workspace kk-agent-contract run build && next build",
     "build:renderer:desktop": "npm --prefix .. --workspace kk-agent-contract run build && cross-env KK_AGENT_STATIC_EXPORT=1 next build",

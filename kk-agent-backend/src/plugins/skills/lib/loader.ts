@@ -13,6 +13,17 @@ export interface LoadedSkill extends SkillDefinition {
   instruction: string;
 }
 
+type LoadSkillOptions = {
+  requireMatchingDirectoryName?: boolean;
+};
+
+export class SkillValidationError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "SkillValidationError";
+  }
+}
+
 function isWithinRoot(rootDir: string, targetPath: string): boolean {
   const rel = relative(rootDir, targetPath);
   return rel === "" || (!rel.startsWith("..") && !rel.includes(`..${sep}`));
@@ -21,11 +32,16 @@ function isWithinRoot(rootDir: string, targetPath: string): boolean {
 function parseFrontmatter(rawInput: string): { frontmatter: Record<string, unknown>; body: string } {
   const raw = rawInput.replace(/^\uFEFF/, "");
   const match = raw.match(/^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)([\s\S]*)$/);
-  if (!match) throw new Error("SKILL.md must start with YAML frontmatter.");
+  if (!match) throw new SkillValidationError("SKILL.md must start with YAML frontmatter.");
 
-  const parsed = YAML.parse(match[1]!) as unknown;
+  let parsed: unknown;
+  try {
+    parsed = YAML.parse(match[1]!);
+  } catch {
+    throw new SkillValidationError("SKILL.md frontmatter must contain valid YAML.");
+  }
   if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
-    throw new Error("SKILL.md frontmatter must be a YAML mapping.");
+    throw new SkillValidationError("SKILL.md frontmatter must be a YAML mapping.");
   }
 
   return {
@@ -42,11 +58,11 @@ function readOptionalString(
   const value = frontmatter[key];
   if (value === undefined) return undefined;
   if (typeof value !== "string" || value.trim().length === 0) {
-    throw new Error(`Skill frontmatter field "${key}" must be a non-empty string.`);
+    throw new SkillValidationError(`Skill frontmatter field "${key}" must be a non-empty string.`);
   }
   const normalized = value.trim();
   if (maxLength && normalized.length > maxLength) {
-    throw new Error(`Skill frontmatter field "${key}" must not exceed ${maxLength} characters.`);
+    throw new SkillValidationError(`Skill frontmatter field "${key}" must not exceed ${maxLength} characters.`);
   }
   return normalized;
 }
@@ -54,11 +70,11 @@ function readOptionalString(
 function readMetadata(value: unknown): Record<string, string> {
   if (value === undefined) return {};
   if (!value || typeof value !== "object" || Array.isArray(value)) {
-    throw new Error("Skill frontmatter field \"metadata\" must be a string-to-string mapping.");
+    throw new SkillValidationError("Skill frontmatter field \"metadata\" must be a string-to-string mapping.");
   }
   const entries = Object.entries(value);
   if (entries.some(([, entry]) => typeof entry !== "string")) {
-    throw new Error("Skill frontmatter field \"metadata\" must contain only string values.");
+    throw new SkillValidationError("Skill frontmatter field \"metadata\" must contain only string values.");
   }
   return Object.fromEntries(entries) as Record<string, string>;
 }
@@ -115,23 +131,24 @@ export async function loadSkillDirectory(
   skillDir: string,
   source: SkillSource,
   mutable: boolean,
+  options: LoadSkillOptions = {},
 ): Promise<LoadedSkill> {
   const rootPath = resolve(skillDir);
   const path = join(rootPath, SKILL_FILE);
   const info = await lstat(path);
-  if (!info.isFile()) throw new Error(`${SKILL_FILE} must be a regular file.`);
+  if (!info.isFile()) throw new SkillValidationError(`${SKILL_FILE} must be a regular file.`);
 
   const raw = await readFile(path, "utf-8");
   const { frontmatter, body } = parseFrontmatter(raw);
   const name = readOptionalString(frontmatter, "name", 64);
   const description = readOptionalString(frontmatter, "description", 1024);
-  if (!name) throw new Error("Skill frontmatter requires a non-empty name.");
-  if (!description) throw new Error("Skill frontmatter requires a non-empty description.");
+  if (!name) throw new SkillValidationError("Skill frontmatter requires a non-empty name.");
+  if (!description) throw new SkillValidationError("Skill frontmatter requires a non-empty description.");
   if (!STANDARD_NAME_PATTERN.test(name)) {
-    throw new Error("Skill name must contain only lowercase letters, numbers, and single hyphens.");
+    throw new SkillValidationError("Skill name must contain only lowercase letters, numbers, and single hyphens.");
   }
-  if (basename(rootPath) !== name) {
-    throw new Error(`Skill name "${name}" must match its parent directory name "${basename(rootPath)}".`);
+  if (options.requireMatchingDirectoryName !== false && basename(rootPath) !== name) {
+    throw new SkillValidationError(`Skill name "${name}" must match its parent directory name "${basename(rootPath)}".`);
   }
 
   const license = readOptionalString(frontmatter, "license");
@@ -174,7 +191,7 @@ export async function resolveImportedSkillRoot(uploadRoot: string): Promise<stri
 
   await walk(resolvedUploadRoot);
   if (matches.length !== 1) {
-    throw new Error(`Expected exactly one ${SKILL_FILE}, found ${matches.length}.`);
+    throw new SkillValidationError(`Expected exactly one ${SKILL_FILE}, found ${matches.length}.`);
   }
   return resolve(matches[0]!, "..");
 }

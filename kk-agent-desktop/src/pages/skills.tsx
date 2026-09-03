@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
 import styled from "styled-components";
 import { skills as skillsApi } from "@/lib/api";
-import { createLogger } from "@/lib/logger";
+import { reportError } from "@/lib/errorReporting";
 import type { SkillDefinition } from "@/types/api";
 import { PageBody } from "@/components/Layout.styled";
 import { MasterDetailLayout } from "@/components/MasterDetail.styled";
@@ -9,8 +9,6 @@ import Button from "@/components/Button";
 import { ActionsRow, MutedText, Section, SectionTitle, SurfaceBox } from "@/components/PageForm";
 import Spinner from "@/components/Spinner";
 import SkillList from "@/components/skill/SkillList";
-
-const logger = createLogger("skills");
 
 const UploadSection = styled.section<{ $dragOver: boolean }>`
   display: flex;
@@ -233,7 +231,7 @@ export default function SkillsPage() {
         return desired && skillList.some((skill) => skill.id === desired) ? desired : skillList[0]?.id ?? null;
       });
     } catch (error) {
-      logger.error("Failed to load skills:", error);
+      reportError("Failed to load skills", error);
     } finally {
       setLoading(false);
     }
@@ -248,7 +246,7 @@ export default function SkillsPage() {
       const imported = await skillsApi.importBundle(files);
       await loadSkills(imported.skill.id);
     } catch (error) {
-      logger.error("Failed to import skill bundle:", error);
+      reportError("Failed to import skill bundle", error);
     } finally {
       setUploading(false);
       setDragOver(false);
@@ -263,7 +261,7 @@ export default function SkillsPage() {
       await skillsApi.delete(selectedSkill.id);
       await loadSkills(null);
     } catch (error) {
-      logger.error("Failed to delete skill:", error);
+      reportError("Failed to delete skill", error);
     } finally {
       setDeleting(false);
     }
@@ -288,7 +286,7 @@ export default function SkillsPage() {
         onDrop={(event) => {
           event.preventDefault();
           void extractDroppedFiles(event.dataTransfer.items).then(importFiles).catch((error) => {
-            logger.error("Failed to read dropped skill bundle:", error);
+            reportError("Failed to read dropped skill bundle", error);
             setDragOver(false);
           });
         }}

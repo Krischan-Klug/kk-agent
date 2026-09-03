@@ -2,6 +2,8 @@ import "@/styles/globals.css";
 import { useEffect } from "react";
 import type { AppProps } from "next/app";
 import Layout from "@/components/Layout";
+import AppErrorBoundary from "@/components/AppErrorBoundary";
+import ErrorToast from "@/components/ErrorToast";
 import { initTheme } from "@/lib/themes";
 
 export default function App({ Component, pageProps }: AppProps) {
@@ -10,8 +12,13 @@ export default function App({ Component, pageProps }: AppProps) {
   }, []);
 
   return (
-    <Layout>
-      <Component {...pageProps} />
-    </Layout>
+    <>
+      <AppErrorBoundary>
+        <Layout>
+          <Component {...pageProps} />
+        </Layout>
+      </AppErrorBoundary>
+      <ErrorToast />
+    </>
   );
 }

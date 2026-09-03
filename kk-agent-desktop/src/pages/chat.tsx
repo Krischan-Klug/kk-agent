@@ -17,7 +17,7 @@ import { useAssets } from "@/hooks/useAssets";
 import { useChatSessionData } from "@/hooks/useChatSessionData";
 import { useChatStreaming } from "@/hooks/useChatStreaming";
 import { session as sessionApi } from "@/lib/api";
-import { createLogger } from "@/lib/logger";
+import { reportError } from "@/lib/errorReporting";
 import { resolveDefaultSessionAgentId } from "@/lib/sessionFactory";
 import { getSessionModelRef } from "@/lib/modelRefs";
 import type {
@@ -28,8 +28,6 @@ import type {
   SessionRuntimeSkillDebug,
   SessionRuntimeToolDebug,
 } from "@/types/api";
-
-const logger = createLogger("chat");
 
 const REASONING_COLORS: Record<ReasoningEffort, string> = {
   none: "#9d9d9d",
@@ -84,7 +82,8 @@ export default function ChatPage() {
         setDebugHarnessInstructions(result.harnessInstructions);
         setDebugRuntimeDiagnostics(result.runtimeDiagnostics);
       }
-    } catch {
+    } catch (error) {
+      reportError("Failed to load debug information", error);
       if (requestId === debugPromptRequestRef.current) {
         setDebugPrompt("[Error loading]");
         setDebugRuntimeContext("[Error loading]");
@@ -198,7 +197,7 @@ export default function ChatPage() {
       setCreatingSession(true);
       await sessionData.handleNewSession(resolveDefaultSessionAgentId(sessionData.agents));
     } catch (err) {
-      logger.error("Failed to create session:", err);
+      reportError("Failed to create session", err);
     } finally {
       setCreatingSession(false);
     }

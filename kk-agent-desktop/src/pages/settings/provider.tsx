@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import styled from "styled-components";
 import { provider as providerApi } from "@/lib/api";
-import { createLogger } from "@/lib/logger";
+import { reportError } from "@/lib/errorReporting";
 import {
   getProviderVerificationSnapshot,
   removeProviderVerification,
@@ -21,8 +21,6 @@ import ProviderCard from "@/components/provider/ProviderCard";
 import CreateProviderModal from "@/components/provider/CreateProviderModal";
 import { DEFAULT_PROVIDER_BASE_URL } from "@/components/provider/constants";
 import { toModelRef } from "@/lib/modelRefs";
-
-const logger = createLogger("settings/provider");
 
 const Grid = styled.div`
   display: flex;
@@ -109,7 +107,7 @@ export default function SettingsProviderPage() {
         setTestingValues(new Set());
       }
     } catch (err) {
-      logger.error("Failed to load providers:", err);
+      reportError("Failed to load providers", err);
     } finally {
       setLoading(false);
     }
@@ -141,7 +139,7 @@ export default function SettingsProviderPage() {
       setShowCreate(false);
       resetCreateForm();
     } catch (err) {
-      logger.error("Failed to create provider:", err);
+      reportError("Failed to create provider", err);
     }
   }
 
@@ -162,7 +160,7 @@ export default function SettingsProviderPage() {
       clearTesting(id);
       removeProviderVerification(id);
     } catch (err) {
-      logger.error("Failed to delete provider:", err);
+      reportError("Failed to delete provider", err);
     }
   }
 
@@ -173,7 +171,9 @@ export default function SettingsProviderPage() {
         await verifyProviders([id], providerApi.testProvider),
       );
       setTestResults((prev) => ({ ...prev, [id]: result }));
+      if (!result.ok) reportError("Provider connection failed", result.error ?? "The provider could not be reached.");
     } catch (err) {
+      reportError("Failed to test provider", err);
       setTestResults((prev) => ({
         ...prev,
         [id]: {
@@ -202,7 +202,7 @@ export default function SettingsProviderPage() {
       );
       if (field === "baseUrl" || field === "apiKey") void loadData();
     } catch (err) {
-      logger.error("Failed to update provider:", err);
+      reportError("Failed to update provider", err);
     }
   }
 
@@ -230,7 +230,7 @@ export default function SettingsProviderPage() {
       setProfiles(modelsData.profiles);
       setModelSettings(modelsData.modelSettings ?? {});
     } catch (err) {
-      logger.error("Failed to save model settings:", err);
+      reportError("Failed to save model settings", err);
       void loadData();
     }
   }

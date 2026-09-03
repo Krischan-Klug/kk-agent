@@ -129,7 +129,7 @@ Skills:
 - `POST /skills/import`
 - `DELETE /skills/:id`
 
-Skills are unmodified Agent Skills bundles with a root `SKILL.md`. Discovery precedence is workspace `.agents/skills`, managed imports, then `~/.agents/skills`; duplicate names use the first discovered bundle. The prompt receives only catalog metadata until the `Skill` tool loads full instructions into request-scoped runtime context.
+Skills are unmodified Agent Skills bundles with a root `SKILL.md`. Managed imports accept any source folder name and install the bundle under its canonical frontmatter `name`. Discovery precedence is workspace `.agents/skills`, managed imports, then `~/.agents/skills`; duplicate names use the first discovered bundle. The prompt receives only catalog metadata until the `Skill` tool loads full instructions into request-scoped runtime context.
 
 Provider:
 

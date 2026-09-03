@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { session as sessionApi } from "@/lib/api";
 import { createLogger } from "@/lib/logger";
+import { reportError } from "@/lib/errorReporting";
 import { emitAppEvent, SESSION_CHANGED_EVENT } from "@/lib/appEvents";
 import {
   getChatStreamSnapshot,
@@ -482,7 +483,6 @@ export function useChatStreaming({
             if (debugOpen && mountedRef.current) loadDebugData(event.session.id);
             break;
           case "transport_error":
-            logger.error(event.message);
             transportError = event.message;
             break;
         }
@@ -490,7 +490,7 @@ export function useChatStreaming({
       if (!completed) throw new Error(transportError ?? "The chat stream ended before completion.");
     } catch (err) {
       const userAborted = abortRequestedRef.current || streamController.signal.aborted;
-      if (!userAborted) logger.error(err);
+      if (!userAborted) reportError("Chat request failed", err);
       const errorMessage = err instanceof Error ? err.message : String(err);
       let currentSession = session;
       try {
@@ -592,7 +592,7 @@ export function useChatStreaming({
       await sessionApi.respondToPrompt(session.id, streamSnapshot.pendingPrompt.promptId, selectedKey);
       updateChatStreamSnapshot(session.id, (previous) => ({ ...previous, pendingPrompt: null }));
     } catch (err) {
-      logger.error(err);
+      reportError("Failed to respond to prompt", err);
     }
   }, [session, streamSnapshot.pendingPrompt]);
 

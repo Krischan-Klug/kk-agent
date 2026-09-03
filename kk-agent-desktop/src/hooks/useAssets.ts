@@ -1,6 +1,7 @@
 import { useCallback, useRef, useState } from "react";
 import { session as sessionApi } from "@/lib/api";
 import { createLogger } from "@/lib/logger";
+import { reportError } from "@/lib/errorReporting";
 import type { AssetMeta } from "@/types/api";
 
 const logger = createLogger("assets");
@@ -51,7 +52,7 @@ export function useAssets() {
           const asset = await sessionApi.uploadAsset(sessionId, file);
           uploaded.push({ ...asset, sessionId, ...(asset.kind === "image" ? { previewUrl: URL.createObjectURL(file) } : {}) });
         } catch (error) {
-          logger.warn("Upload failed:", error instanceof Error ? error.message : String(error));
+          reportError(`Failed to upload ${file.name}`, error);
         }
       }
       if (uploaded.length) setPendingState((previous) => [...previous, ...uploaded]);

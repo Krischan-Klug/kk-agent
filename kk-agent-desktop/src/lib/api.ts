@@ -53,6 +53,16 @@ function resolveApiToken(): string | undefined {
 
 const API_TOKEN = resolveApiToken();
 
+export class ApiError extends Error {
+  constructor(
+    public readonly status: number,
+    message: string,
+  ) {
+    super(message);
+    this.name = "ApiError";
+  }
+}
+
 function authHeaders(headers?: HeadersInit): HeadersInit {
   return {
     ...(API_TOKEN ? { "X-KK-Agent-Token": API_TOKEN } : {}),
@@ -63,7 +73,18 @@ function authHeaders(headers?: HeadersInit): HeadersInit {
 async function assertOk(res: Response): Promise<void> {
   if (!res.ok) {
     const text = await res.text();
-    throw new Error(`${res.status}: ${text}`);
+    let message = text.trim() || res.statusText || "Request failed.";
+    if (text) {
+      try {
+        const parsed: unknown = JSON.parse(text);
+        if (parsed && typeof parsed === "object" && "error" in parsed && typeof parsed.error === "string") {
+          message = parsed.error;
+        }
+      } catch {
+        // Keep the response text when the server did not return JSON.
+      }
+    }
+    throw new ApiError(res.status, message);
   }
 }
 
@@ -332,8 +353,7 @@ export const session = {
     });
     if (!res.ok) {
       if (res.status === 404) return { ok: false };
-      const text = await res.text();
-      throw new Error(`${res.status}: ${text}`);
+      await assertOk(res);
     }
     return { ok: true };
   },

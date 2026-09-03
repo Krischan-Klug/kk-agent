@@ -1,14 +1,12 @@
-import { getStoredJson, getStoredString, setStoredJson, setStoredString } from "@/lib/storage";
+import { getStoredString, setStoredString } from "@/lib/storage";
 
-export interface Theme {
+export interface AccentPreset {
   id: string;
   name: string;
-  description: string;
-  custom?: boolean;
-  variables: Record<string, string>;
+  color: string;
 }
 
-export type ThemeColorMode = "light" | "dark";
+type ThemeColorMode = "light" | "dark";
 export type ThemePreferenceMode = ThemeColorMode | "system";
 
 const THEME_VARIABLE_KEYS = [
@@ -18,8 +16,7 @@ const THEME_VARIABLE_KEYS = [
   "--border", "--border-focus",
 ] as const;
 
-const THEME_STORAGE_KEY = "kk-agent-theme";
-const CUSTOM_THEMES_KEY = "kk-agent-custom-themes";
+const ACCENT_STORAGE_KEY = "kk-agent-accent";
 const THEME_COLOR_MODE_STORAGE_KEY = "kk-agent-color-mode";
 const FALLBACK_ACCENT = "#c15f3c";
 
@@ -65,7 +62,7 @@ function ensureContrast(color: Rgb, background: Rgb, toward: Rgb): Rgb {
   return mix(color, toward, high);
 }
 
-export function resolveThemeColorMode(mode: ThemePreferenceMode | undefined): ThemeColorMode {
+function resolveThemeColorMode(mode: ThemePreferenceMode | undefined): ThemeColorMode {
   if (mode === "light" || mode === "dark") return mode;
   return typeof window !== "undefined" && window.matchMedia("(prefers-color-scheme: dark)").matches
     ? "dark"
@@ -73,7 +70,7 @@ export function resolveThemeColorMode(mode: ThemePreferenceMode | undefined): Th
 }
 
 /** Builds a complete semantic palette from one colour and an explicit canvas mode. */
-export function buildVariablesFromAccent(inputAccent: string, colorMode: ThemeColorMode = "dark"): Record<string, string> {
+function buildVariablesFromAccent(inputAccent: string, colorMode: ThemeColorMode = "dark"): Record<string, string> {
   const requestedAccent = parseHex(inputAccent) ?? parseHex(FALLBACK_ACCENT)!;
   const isLightCanvas = colorMode === "light";
   const white = { r: 255, g: 255, b: 255 };
@@ -98,29 +95,11 @@ export function buildVariablesFromAccent(inputAccent: string, colorMode: ThemeCo
       };
 }
 
-export const defaultThemes: Theme[] = [
-  {
-    id: "white",
-    name: "White",
-    description: "Crisp, quiet, and ready to focus.",
-    variables: buildVariablesFromAccent("#777777", "light"),
-  },
-  {
-    id: "copper",
-    name: "Copper",
-    description: "Warm contrast for hands-on work.",
-    variables: buildVariablesFromAccent(FALLBACK_ACCENT, "light"),
-  },
-  {
-    id: "purple",
-    name: "Purple",
-    description: "Soft focus with a deeper mood.",
-    variables: buildVariablesFromAccent("#8a6a86", "light"),
-  },
+export const accentPresets: AccentPreset[] = [
+  { id: "neutral", name: "Neutral", color: "#777777" },
+  { id: "copper", name: "Copper", color: FALLBACK_ACCENT },
+  { id: "purple", name: "Purple", color: "#8a6a86" },
 ];
-
-function getCustomThemes(): Theme[] { return getStoredJson<Theme[]>(CUSTOM_THEMES_KEY, []); }
-function saveCustomThemes(themes: Theme[]): void { setStoredJson(CUSTOM_THEMES_KEY, themes); }
 export function getSavedThemeColorMode(): ThemePreferenceMode {
   const mode = getStoredString(THEME_COLOR_MODE_STORAGE_KEY);
   return mode === "light" || mode === "dark" || mode === "system" ? mode : "light";
@@ -130,35 +109,26 @@ export function setThemeColorMode(colorMode: ThemePreferenceMode): void {
   setStoredString(THEME_COLOR_MODE_STORAGE_KEY, colorMode);
 }
 
-export function getAllThemes(): Theme[] {
-  const colorMode = resolveThemeColorMode(getSavedThemeColorMode());
-  return [...defaultThemes, ...getCustomThemes()].map((theme) => ({
-    ...theme,
-    variables: buildVariablesFromAccent(theme.variables["--accent"], colorMode),
-  }));
-}
-export function addCustomTheme(theme: Theme): void { const customs = getCustomThemes(); customs.push({ ...theme, custom: true }); saveCustomThemes(customs); }
-export function deleteCustomTheme(id: string): void { saveCustomThemes(getCustomThemes().filter((theme) => theme.id !== id)); }
-export function getSavedThemeId(): string { return getStoredString(THEME_STORAGE_KEY) || defaultThemes[0].id; }
-function getThemeById(id: string): Theme { return getAllThemes().find((theme) => theme.id === id) || defaultThemes[0]; }
+export function getSavedAccentId(): string { return getStoredString(ACCENT_STORAGE_KEY) || accentPresets[1].id; }
+function getAccent(id: string): AccentPreset { return accentPresets.find((accent) => accent.id === id) || accentPresets[1]; }
 
-function applyTheme(theme: Theme): void {
+function applyAccent(accent: AccentPreset): void {
   const root = document.documentElement;
   const variables = buildVariablesFromAccent(
-    theme.variables["--accent"] ?? FALLBACK_ACCENT,
+    accent.color,
     resolveThemeColorMode(getSavedThemeColorMode()),
   );
   for (const key of THEME_VARIABLE_KEYS) root.style.setProperty(key, variables[key]);
   root.style.colorScheme = relativeLuminance(parseHex(variables["--bg-base"]) ?? parseHex("#ffffff")!) < 0.5 ? "dark" : "light";
 }
 
-export function saveAndApplyTheme(themeId: string): void { setStoredString(THEME_STORAGE_KEY, themeId); applyTheme(getThemeById(themeId)); }
+export function saveAndApplyAccent(accentId: string): void { setStoredString(ACCENT_STORAGE_KEY, accentId); applyAccent(getAccent(accentId)); }
 let systemThemeListenerRegistered = false;
 
 export function initTheme(): void {
-  applyTheme(getThemeById(getSavedThemeId()));
+  applyAccent(getAccent(getSavedAccentId()));
   if (typeof window === "undefined" || systemThemeListenerRegistered) return;
   const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
-  mediaQuery.addEventListener("change", () => applyTheme(getThemeById(getSavedThemeId())));
+  mediaQuery.addEventListener("change", () => applyAccent(getAccent(getSavedAccentId())));
   systemThemeListenerRegistered = true;
 }

@@ -26,14 +26,3 @@ export function getResolvedReasoningEffort(
   if (declaredDefault && levels.includes(declaredDefault)) return declaredDefault;
   return levels[0];
 }
-
-export function buildTemperatureOptions(range?: { min: number; max: number; step?: number }) {
-  if (!range) return [];
-  const step = range.step ?? 0.1;
-  const options: Array<{ value: string; label: string }> = [];
-  for (let value = range.min; value <= range.max + 1e-9; value += step) {
-    const normalized = Number(value.toFixed(6)).toFixed(step >= 1 ? 0 : 1);
-    options.push({ value: normalized, label: normalized });
-  }
-  return options;
-}

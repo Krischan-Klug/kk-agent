@@ -1,11 +1,11 @@
 import { resolve } from "node:path";
-import type { McpServerConfig, ToolCallResult } from "../../../mcp/types.js";
+import type { InternalToolDefinition, ToolCallResult } from "../../types.js";
 import { globWithRipgrep, isRipgrepAvailable } from "./ripgrep.js";
 import { resolveFilesystemPath } from "./path-utils.js";
 import { GLOB_RESULT_LIMIT, globToRegex, walkForGlob } from "./search.js";
 
 export async function executeGlob(
-  config: McpServerConfig,
+  config: InternalToolDefinition,
   args: Record<string, unknown>,
   abortSignal?: AbortSignal,
 ): Promise<ToolCallResult> {

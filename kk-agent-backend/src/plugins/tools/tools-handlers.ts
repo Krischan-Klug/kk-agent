@@ -1,34 +1,34 @@
 import type { Request, Response } from "express";
 import { requireParam } from "../../lib/http.js";
 import {
-  UpdateMcpBodySchema,
+  UpdateInternalToolBodySchema,
   TaskItemsBodySchema,
   MemoryFactsBodySchema,
 } from "../../lib/schemas.js";
 import {
   listSessionFacts,
   listTasks,
-  getAllSystemMcps,
-  getSystemMcpRuntimeState,
+  listInternalTools,
+  getInternalToolRuntimeState,
   listUserFacts,
   replaceSessionFacts,
   replaceTasks,
   replaceUserFacts,
   updateInternalToolConfig,
 } from "./service.js";
-import { getSystemToolsForMcp } from "./lib/index.js";
+import { getToolDescriptors } from "./lib/tool-modules.js";
 
 export async function listTools(_req: Request, res: Response): Promise<Response> {
-  const tools = getAllSystemMcps().map((tool) => ({
+  const tools = listInternalTools().map((tool) => ({
     ...tool,
-    runtime: getSystemMcpRuntimeState(tool),
-    tools: getSystemToolsForMcp(tool.id),
+    runtime: getInternalToolRuntimeState(tool),
+    tools: getToolDescriptors(tool.id),
   }));
   return res.json(tools);
 }
 
 export async function doUpdateTool(req: Request, res: Response): Promise<Response> {
-  const body = UpdateMcpBodySchema.parse(req.body);
+  const body = UpdateInternalToolBodySchema.parse(req.body);
   return res.json(await updateInternalToolConfig(requireParam(req, "id"), body));
 }
 

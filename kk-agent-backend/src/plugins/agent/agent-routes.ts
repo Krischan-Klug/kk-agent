@@ -6,7 +6,7 @@ import {
   doDelete,
   doListSystemVariables,
   doGetTemplates,
-} from "./controller.js";
+} from "./agent-handlers.js";
 
 const router = Router();
 

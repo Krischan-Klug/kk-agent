@@ -1,6 +1,6 @@
-import { defineSystemMcp } from "../system-definition.js";
+import { defineInternalTool } from "../internal-tool-definition.js";
 
-export const attachmentDefinition = defineSystemMcp({
+export const attachmentDefinition = defineInternalTool({
   id: "attachment",
   name: "Assets",
   instruction: [

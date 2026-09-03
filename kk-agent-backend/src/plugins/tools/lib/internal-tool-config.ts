@@ -1,4 +1,4 @@
-import type { SystemMcpConfig, SystemMcpKey, ToolResultPolicy } from "../../mcp/types.js";
+import type { InternalToolConfig, ToolResultPolicy } from "../types.js";
 
 function normalizeResultPolicy(resultPolicy?: ToolResultPolicy): ToolResultPolicy | undefined {
   if (!resultPolicy) return undefined;
@@ -16,9 +16,9 @@ function normalizeResultPolicy(resultPolicy?: ToolResultPolicy): ToolResultPolic
   };
 }
 
-export function normalizeSystemConfig(_key: SystemMcpKey, systemConfig?: SystemMcpConfig): SystemMcpConfig | undefined {
-  if (!systemConfig) return systemConfig;
+export function normalizeInternalToolConfig(config?: InternalToolConfig): InternalToolConfig | undefined {
+  if (!config) return config;
 
-  const resultPolicy = normalizeResultPolicy(systemConfig.resultPolicy);
+  const resultPolicy = normalizeResultPolicy(config.resultPolicy);
   return resultPolicy ? { resultPolicy } : undefined;
 }

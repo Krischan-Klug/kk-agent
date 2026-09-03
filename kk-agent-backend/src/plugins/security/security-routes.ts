@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { getSettings, updateSettings } from "./controller.js";
+import { getSettings, updateSettings } from "./security-handlers.js";
 
 const router = Router();
 

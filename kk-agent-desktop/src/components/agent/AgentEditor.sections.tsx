@@ -4,7 +4,7 @@ import type {
   AgentModeConfig,
   AgentModeDefinition,
   ModeBehavior,
-  McpListItem,
+  RuntimeCapability,
   ModelInfo,
   ProviderConfig,
   ReasoningEffort,
@@ -443,8 +443,8 @@ export function ModeInstructionSection({
 
 type InternalToolsSectionProps = {
   selectedModeConfig: AgentModeConfig;
-  internalTools: McpListItem[];
-  mcps: McpListItem[];
+  internalTools: RuntimeCapability[];
+  mcps: RuntimeCapability[];
   getEffectiveToolInstruction: (toolId: string, fallback?: string) => string;
   getToolInstructionFallback: (toolId: string, fallback?: string) => string;
   getDefaultAccessScope: (toolId: string) => ToolAccessScope;
@@ -518,8 +518,8 @@ export function InternalToolsSection({
 
 type ExternalMcpsSectionProps = {
   selectedModeConfig: AgentModeConfig;
-  internalTools: McpListItem[];
-  mcps: McpListItem[];
+  internalTools: RuntimeCapability[];
+  mcps: RuntimeCapability[];
   updateModeConfig: (nextConfig: AgentModeConfig) => void;
 };
 

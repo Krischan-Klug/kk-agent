@@ -7,7 +7,7 @@ import {
   doUpdateProvider,
   doRemoveProvider,
   doTestProvider,
-} from "./controller.js";
+} from "./provider-handlers.js";
 
 const router = Router();
 

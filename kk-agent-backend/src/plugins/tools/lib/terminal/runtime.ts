@@ -1,18 +1,17 @@
 import { existsSync } from "node:fs";
 import { resolve, sep } from "node:path";
 import type { ToolRuntimeContext } from "../../../loop/types.js";
-import type { AccessScope, McpServerConfig, ToolCallResult } from "../../../mcp/types.js";
+import type { AccessScope, InternalToolDefinition, ToolCallResult } from "../../types.js";
 import {
   getDefaultPathForScope,
   resolveAccessScope,
-  resolveTerminalSystemConfig,
+  resolveTerminalConfig,
 } from "../access-paths.js";
 import {
   getTerminalShellProfile,
   type TerminalShellProfile,
 } from "./shell-profile.js";
 import { isUnmanagedProcessTerminationCommand } from "./command-policy.js";
-import { getCurrentSessionId } from "../user-interaction/interaction-store.js";
 import {
   getTerminalTask,
   startBackgroundTerminalTask,
@@ -32,12 +31,12 @@ const DEFAULT_TIMEOUT = 30000;
 const MAX_BUFFER = 1024 * 1024;
 const TERMINATED_PROCESS_EXIT_GRACE_MS = 1_500;
 
-function getWorkingDirectory(config: McpServerConfig): string {
-  return resolveTerminalSystemConfig(config.systemConfig).workingDirectory ?? resolve("/");
+function getWorkingDirectory(tool: InternalToolDefinition): string {
+  return resolveTerminalConfig(tool.config).workingDirectory ?? resolve("/");
 }
 
-function getAllowedRoot(config: McpServerConfig): string {
-  return getDefaultPathForScope(resolveAccessScope(config.systemConfig?.accessScope));
+function getAllowedRoot(tool: InternalToolDefinition): string {
+  return getDefaultPathForScope(resolveAccessScope(tool.config?.accessScope));
 }
 
 function normalizePathForComparison(path: string): string {
@@ -337,7 +336,7 @@ function validTimeout(value: unknown): number | undefined {
 }
 
 export async function executeTerminalTool(
-  config: McpServerConfig,
+  config: InternalToolDefinition,
   toolName: string,
   args: Record<string, unknown>,
   context?: ToolRuntimeContext,
@@ -353,7 +352,7 @@ export async function executeTerminalTool(
   }
 
   if (action === "status" || action === "stop") {
-    const sessionId = getCurrentSessionId();
+    const sessionId = context?.sessionId;
     if (!sessionId) return { content: "Terminal task operations require an active session.", isError: true };
     const taskId = String(args.taskId ?? "").trim();
     if (!taskId) return { content: `taskId is required for Terminal action "${action}".`, isError: true };
@@ -363,7 +362,7 @@ export async function executeTerminalTool(
     return task ? taskResult(action, task) : invalidTaskResult(taskId);
   }
 
-  const accessScope = resolveAccessScope(config.systemConfig?.accessScope);
+  const accessScope = resolveAccessScope(config.config?.accessScope);
   const workingDirectory = getWorkingDirectory(config);
   const allowedRoot = getAllowedRoot(config);
   const command = String(args.command ?? "").trim();
@@ -386,7 +385,7 @@ export async function executeTerminalTool(
   const env = commandEnvironment(envOverrides);
 
   if (args.run_in_background === true) {
-    const sessionId = getCurrentSessionId();
+    const sessionId = context?.sessionId;
     if (!sessionId) return { content: "Background terminal commands require an active session.", isError: true };
     try {
       const task = await startBackgroundTerminalTask({

@@ -1,7 +1,7 @@
-import { defineSystemMcp } from "../system-definition.js";
+import { defineInternalTool } from "../internal-tool-definition.js";
 
 // Base capability guidance only. Mode-specific workflow rules live in defaults.
-export const memoryDefinition = defineSystemMcp({
+export const memoryDefinition = defineInternalTool({
   id: "memory",
   name: "Memory",
   instruction:

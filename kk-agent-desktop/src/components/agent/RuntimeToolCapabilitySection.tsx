@@ -1,6 +1,6 @@
 import { useState } from "react";
 import type { ReactNode } from "react";
-import type { AgentModeConfig, McpListItem } from "@/types/api";
+import type { AgentModeConfig, RuntimeCapability } from "@/types/api";
 import SkillIcon from "@/components/SkillIcon";
 import { toggleId } from "@/lib/idLists";
 import {
@@ -24,16 +24,16 @@ type RuntimeCapabilityInstructionField = "toolInstructions" | "mcpInstructions";
 
 type Props = {
   title: string;
-  groups: McpListItem[];
+  groups: RuntimeCapability[];
   idField: RuntimeCapabilityIdField;
   instructionField: RuntimeCapabilityInstructionField;
   selectedModeConfig: AgentModeConfig;
-  internalTools: McpListItem[];
-  mcps: McpListItem[];
+  internalTools: RuntimeCapability[];
+  mcps: RuntimeCapability[];
   emojiFallback: string;
-  getEffectiveInstruction: (group: McpListItem) => string;
-  getInstructionFallback: (group: McpListItem) => string;
-  renderActiveControls?: (group: McpListItem) => ReactNode;
+  getEffectiveInstruction: (group: RuntimeCapability) => string;
+  getInstructionFallback: (group: RuntimeCapability) => string;
+  renderActiveControls?: (group: RuntimeCapability) => ReactNode;
   updateModeConfig: (nextConfig: AgentModeConfig) => void;
 };
 

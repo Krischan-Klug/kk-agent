@@ -28,13 +28,10 @@ export type {
   ModelSettings,
   ProviderConfig,
   ReasoningEffort,
-  ReasoningHistory,
   RunEvent,
   SessionPromptDebug,
-  SessionRuntimeMcpDebug,
-  SessionRuntimeSkillDebug,
-  SessionRuntimeToolDebug,
   SessionState,
+  SessionSummary,
   SkillDefinition,
   StreamEvent,
   TaskItem,
@@ -46,11 +43,23 @@ export type {
   TranscriptToolUseBlock,
   UpdateAgentBody,
   UpdateMcpBody,
+  InternalToolListItem,
+  InternalToolDefinition,
+  UpdateInternalToolBody,
   UpdateProviderBody,
   UpdateSessionBody,
 } from "kk-agent-contract";
 
 export type SessionMessage = TranscriptMessage;
+
+export interface RuntimeCapability {
+  id: string;
+  name: string;
+  instruction: string;
+  emoji?: string;
+  runtime: { status: "running" | "stopped" | "unavailable"; error?: string };
+  tools: Array<{ name: string; description: string }>;
+}
 
 export interface SystemVariablesResponse {
   variables: string[];

@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
-import type { AgentRun, AgentRunStatus, RunEvent } from "kk-agent-contract";
-import type { SessionRecord, SSEEvent } from "../types.js";
+import type { AgentRunStatus, RunEvent } from "kk-agent-contract";
+import type { PersistedAgentRun, SessionRecord, SSEEvent } from "../types.js";
 import * as store from "./store.js";
 import { getSessionAssetsByIds } from "./assets.js";
 import { compileAssetModelContent } from "./asset-context.js";
@@ -42,7 +42,6 @@ import {
   cancelPendingPrompts,
   emitPrompt,
   registerSession,
-  runWithSessionId,
   unregisterSession,
   waitForResponse,
 } from "../../tools/lib/user-interaction/interaction-store.js";
@@ -70,7 +69,7 @@ function getExplicitSkillId(message: string, availableSkillIds: string[]): strin
 async function updateRun(
   sessionId: string,
   runId: string,
-  updater: (run: AgentRun) => AgentRun,
+  updater: (run: PersistedAgentRun) => PersistedAgentRun,
   sessionPatch: Partial<SessionRecord> = {},
 ): Promise<SessionRecord> {
   const current = getSessionRecordOrThrow(sessionId);
@@ -127,7 +126,7 @@ async function prepareLoopRun(sessionId: string, message: string, assetIds?: str
 
   const userMessage = createTranscriptMessage({ role: "user", content: userBlocks });
   const runStartedAt = nowIso();
-  const run: AgentRun = {
+  const run: PersistedAgentRun = {
     id: randomUUID(),
     userMessageId: userMessage.id,
     status: "running",
@@ -248,6 +247,7 @@ function buildLoopRequest(
     }, emit);
   };
   const initialToolContext: ToolRuntimeContext = {
+    sessionId: prepared.session.id,
     values: {
       ...prepared.loadedSkills,
       availableSkillIds: activeModeConfig.activeSkillIds,
@@ -432,7 +432,7 @@ export async function chatStream(
     registerSession(sessionId, (payload) => emit({ type: "user_prompt", ...payload }));
     interactionRegistered = true;
     await persistRuntimeNotices(currentRun, emit);
-    const result = await runWithSessionId(sessionId, () => runAgentLoop({
+    const result = await runAgentLoop({
       ...buildLoopRequest(currentRun, {
         onAssistantBlockDelta: (messageId, block) => emit({ type: "assistant_block_delta", messageId, block }),
         onAssistantMessage: (messageObject) => emit({ type: "assistant_message_complete", message: messageObject }),
@@ -444,7 +444,7 @@ export async function chatStream(
         onContextUsage: (usage) => emit({ type: "context_usage", usage }),
       }, emit),
       abortSignal: abortController.signal,
-    }));
+    });
     emit({ type: "done", session: toPublicSession(await finalizeLoopSession(currentRun, result)) });
   } catch (error) {
     if (!prepared) throw error;

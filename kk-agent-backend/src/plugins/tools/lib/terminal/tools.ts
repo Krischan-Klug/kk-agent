@@ -1,7 +1,7 @@
-import type { McpToolDefinition } from "../../../mcp/types.js";
+import type { InternalToolDescriptor } from "../../types.js";
 import type { TerminalShellProfile } from "./shell-profile.js";
 
-export function buildTerminalTools(_profile: TerminalShellProfile): McpToolDefinition[] {
+export function buildTerminalTools(_profile: TerminalShellProfile): InternalToolDescriptor[] {
   return [{
     name: "Terminal",
     description: "Run a host command or inspect/stop a managed background terminal task.",
@@ -24,6 +24,6 @@ export function buildTerminalTools(_profile: TerminalShellProfile): McpToolDefin
         env: { type: "object", description: "Optional environment variables.", additionalProperties: { type: "string" } },
       },
     },
-    mcpId: "terminal",
+    capabilityId: "terminal",
   }];
 }

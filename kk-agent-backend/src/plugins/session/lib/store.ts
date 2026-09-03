@@ -1,4 +1,4 @@
-import type { AgentRun, SessionContextState, TranscriptMessage } from "kk-agent-contract";
+import type { SessionContextState, TranscriptMessage } from "kk-agent-contract";
 import { createLogger } from "../../../lib/logger.js";
 import { getErrorMessage } from "../../../lib/error.js";
 import { NotFoundError } from "../../../lib/errors.js";
@@ -13,7 +13,7 @@ import { ensureSessionFactsLoaded } from "../../tools/lib/memory-state.js";
 import { ensureTasksLoaded } from "../../tools/lib/task-state.js";
 import { getAgent } from "../../agent/service.js";
 import { getEnabledAgentModes } from "../../agent/lib/mode-config.js";
-import type { SessionRecord, SessionState } from "../types.js";
+import type { PersistedAgentRun, SessionRecord, SessionState } from "../types.js";
 
 const logger = createLogger("session/store");
 const SESSION_FILE = "session.json";
@@ -83,11 +83,11 @@ function isCompatibleSession(value: unknown, id: string): value is SessionRecord
 }
 
 function abortInterruptedRuns(
-  runs: AgentRun[],
+  runs: PersistedAgentRun[],
   messages: TranscriptMessage[],
   sessionId: string,
   timestamp = new Date().toISOString(),
-): { runs: AgentRun[]; changed: boolean } {
+): { runs: PersistedAgentRun[]; changed: boolean } {
   const anchorMessageId = [...messages]
     .reverse()
     .find((message) => message.role === "assistant" || message.role === "user")?.id;

@@ -1,16 +1,18 @@
 import { randomUUID } from "node:crypto";
-import type { McpServerConfig, ToolCallResult } from "../../../mcp/types.js";
-import { emitPrompt, waitForResponse, getCurrentSessionId } from "./interaction-store.js";
+import type { InternalToolDefinition, ToolCallResult } from "../../types.js";
+import { emitPrompt, waitForResponse } from "./interaction-store.js";
+import type { ToolRuntimeContext } from "../../../loop/types.js";
 import type { UserPromptPayload } from "./interaction-store.js";
 
 export async function executeUserInteractionTool(
-  _config: McpServerConfig,
+  _config: InternalToolDefinition,
   toolName: string,
   args: Record<string, unknown>,
+  context?: ToolRuntimeContext,
 ): Promise<ToolCallResult | null> {
   if (toolName !== "ask_user") return null;
 
-  const sessionId = getCurrentSessionId();
+  const sessionId = context?.sessionId;
   if (!sessionId) {
     return { content: "No active session context for user interaction.", isError: true };
   }

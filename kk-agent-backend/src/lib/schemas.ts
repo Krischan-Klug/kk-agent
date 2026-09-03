@@ -25,7 +25,7 @@ const ToolResultPolicySchema = z.object({
   previewChars: z.number().int().positive().optional(),
 });
 
-const SystemConfigSchema = z.object({
+const InternalToolConfigSchema = z.object({
   resultPolicy: ToolResultPolicySchema.optional(),
 });
 
@@ -141,7 +141,14 @@ export const UpdateMcpBodySchema = z.object({
   url: OptionalTrimmedStringSchema,
   instruction: z.string().optional(),
   emoji: z.string().optional(),
-  systemConfig: SystemConfigSchema.optional(),
+});
+
+export const UpdateInternalToolBodySchema = z.object({
+  name: OptionalTrimmedStringSchema,
+  active: z.boolean().optional(),
+  instruction: z.string().optional(),
+  emoji: z.string().optional(),
+  config: InternalToolConfigSchema.optional(),
 });
 
 /* Agent */

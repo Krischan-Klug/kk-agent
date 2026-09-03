@@ -2,7 +2,7 @@ import { getAllTools as getAllMcpTools } from "../../mcp/lib/process-manager.js"
 import { executeToolForMcp } from "../../mcp/service.js";
 import type { RuntimeToolDefinition, ToolExecutionResult } from "../../loop/types.js";
 import type { UnifiedToolDefinition } from "../../provider/lib/types.js";
-import { executeSystemToolForId, type ResolvedSystemToolRuntime } from "../../tools/service.js";
+import { executeInternalToolById, type ResolvedInternalToolRuntime } from "../../tools/service.js";
 
 type RuntimeToolCollection = {
   allTools: UnifiedToolDefinition[];
@@ -16,8 +16,8 @@ type RuntimeToolBucket = {
   parameters: Record<string, unknown>;
 };
 
-function buildSystemRuntimeBuckets(systemRuntime: ResolvedSystemToolRuntime): RuntimeToolBucket[] {
-  return Object.values(systemRuntime.runtimeToolsByName).map((tool) => ({
+function buildInternalToolBuckets(toolRuntime: ResolvedInternalToolRuntime): RuntimeToolBucket[] {
+  return Object.values(toolRuntime.runtimeToolsByName).map((tool) => ({
     tool,
     description: tool.description,
     parameters: tool.parameters,
@@ -92,12 +92,12 @@ function formatConflictNotice(toolName: string, buckets: RuntimeToolBucket[]): s
 }
 
 export function buildRuntimeToolCollection(
-  systemRuntime: ResolvedSystemToolRuntime,
+  toolRuntime: ResolvedInternalToolRuntime,
   activeMcpIds: string[],
   allowedToolNames: string[],
 ): RuntimeToolCollection {
   const buckets = filterAllowedRuntimeBuckets([
-    ...buildSystemRuntimeBuckets(systemRuntime),
+    ...buildInternalToolBuckets(toolRuntime),
     ...buildMcpRuntimeBuckets(activeMcpIds),
   ], allowedToolNames);
 
@@ -129,9 +129,9 @@ export async function executeRuntimeTool(
   args: Record<string, unknown>,
   context?: import("../../loop/types.js").ToolRuntimeContext,
 ): Promise<ToolExecutionResult> {
-  if (runtimeTool.source === "system") {
+  if (runtimeTool.source === "internal") {
     return (
-      await executeSystemToolForId(
+      await executeInternalToolById(
         runtimeTool.capabilityId,
         toolName,
         args,

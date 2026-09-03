@@ -15,7 +15,6 @@ interface LayoutProps {
 
 export default function Layout({ children }: LayoutProps) {
   const [providers, setProviders] = useState<ProviderConfig[] | null>(null);
-  const [contentKey, setContentKey] = useState(0);
   const [isDesktop, setIsDesktop] = useState(false);
 
   const loadProviders = useCallback(async () => {
@@ -41,7 +40,6 @@ export default function Layout({ children }: LayoutProps) {
 
   function handleOnboardingComplete(created: ProviderConfig) {
     setProviders([created]);
-    setContentKey((key) => key + 1);
   }
 
   return (
@@ -49,7 +47,7 @@ export default function Layout({ children }: LayoutProps) {
       {isDesktop ? <TitleBar /> : null}
       <LayoutBody>
         <Sidebar />
-        <MainContent key={contentKey}>
+        <MainContent>
           {providers === null ? <Spinner /> : children}
         </MainContent>
       </LayoutBody>

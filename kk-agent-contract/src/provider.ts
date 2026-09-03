@@ -119,8 +119,6 @@ export interface ModelInfo {
   providerId: string;
   maxContextLength?: number;
   contextLength?: number;
-  publisher?: string;
-  architecture?: string;
   runtimeCapabilities: RuntimeModelCapabilities;
   suggestedProfileId?: string;
   profile?: ModelProfileSummary;

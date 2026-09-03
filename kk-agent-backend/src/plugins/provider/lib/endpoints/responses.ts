@@ -17,7 +17,7 @@ import {
   serializeAssistantMessageToResponsesInput,
   serializeToolMessageToResponsesInput,
   serializeUserMessageToResponsesInput,
-} from "../helpers.js";
+} from "../request-mappers.js";
 import {
   finalizeResponsesOutput,
   handleResponsesStreamingEvent,

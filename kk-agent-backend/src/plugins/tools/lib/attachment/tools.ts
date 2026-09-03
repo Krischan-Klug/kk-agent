@@ -1,11 +1,11 @@
-import type { McpToolDefinition } from "../../../mcp/types.js";
+import type { InternalToolDescriptor } from "../../types.js";
 
-export const attachmentTools: McpToolDefinition[] = [
+export const attachmentTools: InternalToolDescriptor[] = [
   {
     name: "list_assets",
     description: "List managed input assets and published artifacts in the current session.",
     inputSchema: { type: "object", properties: {} },
-    mcpId: "attachment",
+    capabilityId: "attachment",
   },
   {
     name: "search_asset",
@@ -19,7 +19,7 @@ export const attachmentTools: McpToolDefinition[] = [
       },
       required: ["assetId", "query"],
     },
-    mcpId: "attachment",
+    capabilityId: "attachment",
   },
   {
     name: "read_asset",
@@ -33,7 +33,7 @@ export const attachmentTools: McpToolDefinition[] = [
       },
       required: ["assetId"],
     },
-    mcpId: "attachment",
+    capabilityId: "attachment",
   },
   {
     name: "publish_artifact",
@@ -46,6 +46,6 @@ export const attachmentTools: McpToolDefinition[] = [
         content: { type: "string", description: "Optional UTF-8 content for a small text artifact. Never pass binary or base64 here." },
       },
     },
-    mcpId: "attachment",
+    capabilityId: "attachment",
   },
 ];

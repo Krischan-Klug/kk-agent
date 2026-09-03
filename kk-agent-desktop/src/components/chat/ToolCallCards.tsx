@@ -2,7 +2,7 @@ import Badge from "@/components/Badge";
 import Spinner from "@/components/Spinner";
 import SkillIcon from "@/components/SkillIcon";
 import type { ReactNode } from "react";
-import type { McpListItem } from "@/types/api";
+import type { RuntimeCapability } from "@/types/api";
 import type { ActiveToolCall } from "./types";
 import { getToolCardMetadataSummary, renderToolCardBody } from "./toolCardRenderers";
 import {
@@ -18,20 +18,20 @@ import {
 } from "./ChatMessages.styled";
 
 type Props = {
-  mcps: McpListItem[];
+  capabilities: RuntimeCapability[];
   toolCalls: ActiveToolCall[];
 };
 
-function getToolIcon(mcps: McpListItem[], toolName: string): ReactNode {
-  for (const mcp of mcps) {
-    if (mcp.tools.some((tool) => tool.name === toolName)) {
-      return mcp.id === "skill" ? <SkillIcon /> : mcp.emoji || "\u{1F6E0}\uFE0F";
+function getToolIcon(capabilities: RuntimeCapability[], toolName: string): ReactNode {
+  for (const capability of capabilities) {
+    if (capability.tools.some((tool) => tool.name === toolName)) {
+      return capability.id === "skill" ? <SkillIcon /> : capability.emoji || "\u{1F6E0}\uFE0F";
     }
   }
   return "\u{1F6E0}\uFE0F";
 }
 
-export default function ToolCallCards({ mcps, toolCalls }: Props) {
+export default function ToolCallCards({ capabilities, toolCalls }: Props) {
   return toolCalls.map((toolCall) => {
     const metadataSummary = getToolCardMetadataSummary(toolCall);
     const metadataDetails = renderToolCardBody(toolCall);
@@ -41,7 +41,7 @@ export default function ToolCallCards({ mcps, toolCalls }: Props) {
     return (
       <ToolCard key={toolCall.id}>
         <CardSummary>
-          <ToolEmoji>{getToolIcon(mcps, toolCall.name)}</ToolEmoji>
+          <ToolEmoji>{getToolIcon(capabilities, toolCall.name)}</ToolEmoji>
           <ToolLabel>{shellName ? `${toolCall.name} · ${shellName}` : toolCall.name}</ToolLabel>
           {toolCall.displayText && <ToolDisplayText>{toolCall.displayText}</ToolDisplayText>}
           {toolCall.status === "queued" || toolCall.status === "executing" || toolCall.status === "yielded" ? (

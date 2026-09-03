@@ -1,6 +1,6 @@
 import styled from "styled-components";
 import type { LlmRequestConfig } from "@/types/api";
-import { mergeLlmRequestConfigs } from "@/lib/llmRequestConfig";
+import { mergeLlmRequestConfigs } from "kk-agent-contract";
 import Input from "@/components/Input";
 
 const Wrap = styled.div`

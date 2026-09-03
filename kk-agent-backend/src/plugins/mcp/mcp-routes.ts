@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { listMcps, doCreate, doDelete, doUpdate } from "./controller.js";
+import { listMcps, doCreate, doDelete, doUpdate } from "./mcp-handlers.js";
 
 const router = Router();
 

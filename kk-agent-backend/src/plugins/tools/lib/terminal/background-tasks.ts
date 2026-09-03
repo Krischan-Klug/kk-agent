@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { createWriteStream, type WriteStream } from "node:fs";
 import { mkdir, rename, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import type { AccessScope } from "../../../mcp/types.js";
+import type { AccessScope } from "../../types.js";
 import type { TerminalShellProfile } from "./shell-profile.js";
 import {
   spawnShellProcess,

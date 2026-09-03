@@ -7,7 +7,7 @@ import SkillIcon from "@/components/SkillIcon";
 import { session as sessionApi } from "@/lib/api";
 import { reportError } from "@/lib/errorReporting";
 import { getRunningChatStreamSessionIds, subscribeChatStreamStore } from "@/lib/chatStreamState";
-import type { SessionState } from "@/types/api";
+import type { SessionSummary } from "@/types/api";
 import { addAppEventListener, emitAppEvent, SESSION_CHANGED_EVENT } from "@/lib/appEvents";
 import {
   clearActiveSessionId,
@@ -68,7 +68,7 @@ function isNavActive(pathname: string, href: string): boolean {
 
 export default function Sidebar() {
   const router = useRouter();
-  const [sessions, setSessions] = useState<SessionState[]>([]);
+  const [sessions, setSessions] = useState<SessionSummary[]>([]);
   const [serverRunningSessionIds, setServerRunningSessionIds] = useState<string[]>([]);
   const [clientRunningSessionIds, setClientRunningSessionIds] = useState<string[]>(getRunningChatStreamSessionIds());
   const activeSessionId = useStoredActiveSessionId();
@@ -79,7 +79,7 @@ export default function Sidebar() {
       const nextSessions = await sessionApi.list();
       setSessions(nextSessions);
       setServerRunningSessionIds(nextSessions
-        .filter((session) => session.runs.some((run) => run.status === "running"))
+        .filter((session) => session.status === "running")
         .map((session) => session.id));
     } catch (error) {
       reportError("Failed to load sessions", error);

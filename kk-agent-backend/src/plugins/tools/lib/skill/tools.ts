@@ -1,6 +1,6 @@
-import type { McpToolDefinition } from "../../../mcp/types.js";
+import type { InternalToolDescriptor } from "../../types.js";
 
-export const skillTools: McpToolDefinition[] = [
+export const skillTools: InternalToolDescriptor[] = [
   {
     name: "Skill",
     description: "Load one listed Agent Skill.",
@@ -15,6 +15,6 @@ export const skillTools: McpToolDefinition[] = [
       required: ["name"],
       additionalProperties: false,
     },
-    mcpId: "skill",
+    capabilityId: "skill",
   },
 ];

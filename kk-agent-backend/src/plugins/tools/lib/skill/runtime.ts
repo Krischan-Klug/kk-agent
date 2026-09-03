@@ -1,5 +1,5 @@
 import type { ToolExecutionResult, ToolRuntimeContext } from "../../../loop/types.js";
-import type { McpServerConfig } from "../../../mcp/types.js";
+import type { InternalToolDefinition } from "../../types.js";
 import { loadSkillContext } from "../../../skills/service.js";
 import { getErrorMessage } from "../../../../lib/error.js";
 
@@ -14,6 +14,7 @@ function addLoadedSkill(context: ToolRuntimeContext, skillId: string, skillConte
   if (loadedSkillIds.includes(skillId)) return context;
   const loadedSkillContexts = readStringArray(context.values.loadedSkillContexts);
   return {
+    ...context,
     values: {
       ...context.values,
       loadedSkillIds: [...loadedSkillIds, skillId],
@@ -23,7 +24,7 @@ function addLoadedSkill(context: ToolRuntimeContext, skillId: string, skillConte
 }
 
 export async function executeSkillTool(
-  _config: McpServerConfig,
+  _config: InternalToolDefinition,
   toolName: string,
   args: Record<string, unknown>,
   context: ToolRuntimeContext = { values: {} },

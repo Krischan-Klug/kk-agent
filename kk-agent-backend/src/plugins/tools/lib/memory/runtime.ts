@@ -1,10 +1,10 @@
-import type { McpServerConfig, ToolCallResult } from "../../../mcp/types.js";
-import { getCurrentSessionId } from "../user-interaction/interaction-store.js";
+import type { InternalToolDefinition, ToolCallResult } from "../../types.js";
+import type { ToolRuntimeContext } from "../../../loop/types.js";
 import { replaceSessionFacts, replaceUserFacts } from "../../lib/memory-state.js";
 import type { MemoryFact } from "../../types.js";
 
-function getSessionIdOrThrow(): string {
-  const sessionId = getCurrentSessionId();
+function getSessionIdOrThrow(context?: ToolRuntimeContext): string {
+  const sessionId = context?.sessionId;
   if (!sessionId) throw new Error("No active session context for memory tool.");
   return sessionId;
 }
@@ -15,9 +15,10 @@ function memorySummary(facts: MemoryFact[]): string {
 }
 
 export async function executeMemoryTool(
-  _config: McpServerConfig,
+  _config: InternalToolDefinition,
   toolName: string,
   args: Record<string, unknown>,
+  context?: ToolRuntimeContext,
 ): Promise<ToolCallResult | null> {
   if (toolName !== "remember_facts") return null;
 
@@ -28,7 +29,7 @@ export async function executeMemoryTool(
   }
 
   if (scope === "session") {
-    const sessionId = getSessionIdOrThrow();
+    const sessionId = getSessionIdOrThrow(context);
     const next = await replaceSessionFacts(sessionId, facts);
     return { content: `Session-Memory aktualisiert.\n${memorySummary(next)}`, isError: false };
   }

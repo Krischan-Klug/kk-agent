@@ -1,6 +1,6 @@
 import { buildCapabilityInstructions } from "../../systemprompt/lib/builder.js";
 import { getKnownMcpIds, getRunnableMcpIds } from "../../mcp/service.js";
-import { getKnownSystemMcpIds, getRunnableSystemMcpIds } from "../../tools/service.js";
+import { getKnownInternalToolIds, getRunnableInternalToolIds } from "../../tools/service.js";
 import { listSkills } from "../../skills/service.js";
 import { filterToKnownIds } from "../../lib/ids.js";
 import type { AgentDefinition, AgentModeDefinition } from "../../agent/types.js";
@@ -13,7 +13,7 @@ function sanitizeMcpIds(mcpIds: string[]): string[] {
 }
 
 function sanitizeToolIds(toolIds: string[]): string[] {
-  return filterToKnownIds(toolIds, getKnownSystemMcpIds(), REQUIRED_SESSION_TOOL_IDS);
+  return filterToKnownIds(toolIds, getKnownInternalToolIds(), REQUIRED_SESSION_TOOL_IDS);
 }
 
 function sanitizeSkillIds(skillIds: string[]): string[] {
@@ -21,7 +21,7 @@ function sanitizeSkillIds(skillIds: string[]): string[] {
 }
 
 function getSessionRunnableMcpIds(activeToolIds: string[], activeMcpIds: string[]): string[] {
-  const runnable = new Set([...getRunnableMcpIds(), ...getRunnableSystemMcpIds()]);
+  const runnable = new Set([...getRunnableMcpIds(), ...getRunnableInternalToolIds()]);
   return [...activeToolIds, ...activeMcpIds].filter((id) => runnable.has(id));
 }
 

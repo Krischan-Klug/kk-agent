@@ -73,18 +73,13 @@ export type {
   SessionRuntimeSkillDebug,
   SessionRuntimeToolDebug,
   SessionState,
+  SessionSummary,
   StreamEvent,
   TaskItem,
   UpdateSessionBody,
 } from "./session.js";
 
-export {
-  SYSTEM_MCP_KEYS,
-} from "./mcp.js";
-
 export type {
-  AccessScope,
-  ApprovalMode,
   CreateMcpBody,
   McpListItem,
   McpRuntimeState,
@@ -93,13 +88,25 @@ export type {
   McpSseConfig,
   McpStdioConfig,
   McpToolDefinition,
-  SystemMcpConfig,
-  SystemMcpUpdateConfig,
-  SecuritySettings,
-  SystemMcpKey,
-  ToolResultPolicy,
   UpdateMcpBody,
 } from "./mcp.js";
+
+export { INTERNAL_TOOL_IDS } from "./tool.js";
+
+export type {
+  AccessScope,
+  ApprovalMode,
+  InternalToolConfig,
+  InternalToolDefinition,
+  InternalToolDescriptor,
+  InternalToolId,
+  InternalToolListItem,
+  InternalToolRuntimeState,
+  InternalToolRuntimeStatus,
+  SecuritySettings,
+  ToolResultPolicy,
+  UpdateInternalToolBody,
+} from "./tool.js";
 
 export type {
   ImportSkillResult,
@@ -131,7 +138,6 @@ export {
 } from "./transcript.js";
 
 export type {
-  McpSource,
   RuntimeToolSource,
   ToolExecutionStatus,
   TranscriptAssetRefBlock,

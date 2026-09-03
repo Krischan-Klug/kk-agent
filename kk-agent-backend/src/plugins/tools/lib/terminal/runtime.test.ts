@@ -5,14 +5,26 @@ import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
-import type { McpServerConfig } from "../../../mcp/types.js";
+import type { InternalToolDefinition } from "../../types.js";
 import { terminalDefinition } from "./definition.js";
 import { executeTerminalTool } from "./runtime.js";
 import { getTerminalShellResolution, initializeTerminalShell } from "./shell-profile.js";
-import { runWithSessionId } from "../user-interaction/interaction-store.js";
 import { buildRuntimeContext } from "../../../session/lib/runtime-context.js";
 
 const execFileAsync = promisify(execFile);
+
+const sessionContext = (sessionId: string) => ({ sessionId, values: {} });
+
+async function waitForStatus(statusPath: string, expected: "completed" | "timed_out"): Promise<string> {
+  const deadline = Date.now() + 12_000;
+  let status = "";
+  while (Date.now() < deadline) {
+    status = await readFile(statusPath, "utf8").catch(() => "");
+    if (status.includes(`"status": "${expected}"`)) return status;
+    await new Promise((resolveWait) => setTimeout(resolveWait, 50));
+  }
+  return status;
+}
 
 async function windowsSleepPids(): Promise<number[]> {
   const { stdout } = await execFileAsync("powershell.exe", [
@@ -27,11 +39,11 @@ async function windowsSleepPids(): Promise<number[]> {
     .filter((pid): pid is number => Number.isInteger(pid) && pid > 0);
 }
 
-function configForScope(accessScope: "user" | "system", workingDirectory = process.cwd()): McpServerConfig {
+function configForScope(accessScope: "user" | "system", workingDirectory = process.cwd()): InternalToolDefinition {
   return {
     ...terminalDefinition,
-    systemConfig: {
-      ...terminalDefinition.systemConfig,
+    config: {
+      ...terminalDefinition.config,
       accessScope,
       workingDirectory,
     },
@@ -135,11 +147,11 @@ test("background execution uses the same detected shell and writes status and UT
 
   const cwd = await mkdtemp(join(tmpdir(), "kk-agent-terminal-test-"));
   try {
-    const result = await runWithSessionId("background-completion-test", () => executeTerminalTool(terminalDefinition, "Terminal", {
+    const result = await executeTerminalTool(terminalDefinition, "Terminal", {
       command: "node -e \"setTimeout(() => process.stdout.write('hintergründig'), 50)\"",
       cwd,
       run_in_background: true,
-    }));
+    }, sessionContext("background-completion-test"));
     assert.ok(result);
     assert.equal(result.isError, false);
     assert.equal(result.metadata?.shell, resolution.profile.kind);
@@ -147,12 +159,7 @@ test("background execution uses the same detected shell and writes status and UT
 
     const statusPath = String(result.metadata?.statusPath ?? "");
     const stdoutPath = String(result.metadata?.stdoutPath ?? "");
-    let status = "";
-    for (let attempt = 0; attempt < 100; attempt += 1) {
-      status = await readFile(statusPath, "utf8").catch(() => "");
-      if (status.includes('"status": "completed"')) break;
-      await new Promise((resolveWait) => setTimeout(resolveWait, 50));
-    }
+    const status = await waitForStatus(statusPath, "completed");
     assert.match(status, /"status": "completed"/);
     assert.match(status, /"privilege": "current_user"/);
     assert.doesNotMatch(status, /"elevated"/);
@@ -172,23 +179,18 @@ test("an explicit background timeout terminates the process and updates its stat
 
   const cwd = await mkdtemp(join(tmpdir(), "kk-agent-terminal-timeout-test-"));
   try {
-    const result = await runWithSessionId("background-timeout-test", () => executeTerminalTool(terminalDefinition, "Terminal", {
+    const result = await executeTerminalTool(terminalDefinition, "Terminal", {
       command: "node -e \"setTimeout(() => {}, 5000)\"",
       cwd,
       run_in_background: true,
       timeoutMs: 100,
-    }));
+    }, sessionContext("background-timeout-test"));
     assert.ok(result);
     assert.equal(result.isError, false);
     assert.equal(result.metadata?.timeoutMs, 100);
 
     const statusPath = String(result.metadata?.statusPath ?? "");
-    let status = "";
-    for (let attempt = 0; attempt < 100; attempt += 1) {
-      status = await readFile(statusPath, "utf8").catch(() => "");
-      if (status.includes('"status": "timed_out"')) break;
-      await new Promise((resolveWait) => setTimeout(resolveWait, 50));
-    }
+    const status = await waitForStatus(statusPath, "timed_out");
     assert.match(status, /"status": "timed_out"/);
     assert.match(status, /"timedOut": true/);
     assert.match(status, /"privilege": "current_user"/);
@@ -261,12 +263,12 @@ test("managed background tasks expose status and stop through their task id", as
   const sessionId = "background-stop-test";
   const cwd = await mkdtemp(join(tmpdir(), "kk-agent-terminal-stop-test-"));
   try {
-    const started = await runWithSessionId(sessionId, () => executeTerminalTool(terminalDefinition, "Terminal", {
+    const started = await executeTerminalTool(terminalDefinition, "Terminal", {
       action: "run",
       command: "node -e \"setTimeout(() => {}, 10000)\"",
       cwd,
       run_in_background: true,
-    }));
+    }, sessionContext(sessionId));
     assert.ok(started);
     assert.equal(started.isError, false, JSON.stringify(started, null, 2));
     const taskId = String(started.metadata?.taskId ?? "");
@@ -290,26 +292,26 @@ test("managed background tasks expose status and stop through their task id", as
     assert.match(context, /\[running\]/);
     assert.doesNotMatch(context, /stdoutPath|stderrPath|\bpid=/i);
 
-    const foreignStatus = await runWithSessionId("foreign-session", () => executeTerminalTool(terminalDefinition, "Terminal", {
+    const foreignStatus = await executeTerminalTool(terminalDefinition, "Terminal", {
       action: "status",
       taskId,
-    }));
+    }, sessionContext("foreign-session"));
     assert.ok(foreignStatus);
     assert.equal(foreignStatus.isError, true);
     assert.equal(foreignStatus.metadata?.errorKind, "task_not_found");
 
-    const status = await runWithSessionId(sessionId, () => executeTerminalTool(terminalDefinition, "Terminal", {
+    const status = await executeTerminalTool(terminalDefinition, "Terminal", {
       action: "status",
       taskId,
-    }));
+    }, sessionContext(sessionId));
     assert.ok(status);
     assert.equal(status.isError, false);
     assert.equal(status.metadata?.status, "running");
 
-    const stopped = await runWithSessionId(sessionId, () => executeTerminalTool(terminalDefinition, "Terminal", {
+    const stopped = await executeTerminalTool(terminalDefinition, "Terminal", {
       action: "stop",
       taskId,
-    }));
+    }, sessionContext(sessionId));
     assert.ok(stopped);
     assert.equal(stopped.metadata?.status, "stopped", JSON.stringify(stopped, null, 2));
 
@@ -347,12 +349,12 @@ test("stopping a Git Bash task terminates nested children without waiting for in
   const baselinePids = new Set(await windowsSleepPids());
   const childPids: number[] = [];
   try {
-    const started = await runWithSessionId(sessionId, () => executeTerminalTool(terminalDefinition, "Terminal", {
+    const started = await executeTerminalTool(terminalDefinition, "Terminal", {
       action: "run",
       command: "sh -c \"sleep 600 & sleep 600 & wait\"",
       cwd,
       run_in_background: true,
-    }));
+    }, sessionContext(sessionId));
     assert.ok(started);
     assert.equal(started.isError, false, JSON.stringify(started, null, 2));
     const taskId = String(started.metadata?.taskId ?? "");
@@ -365,10 +367,10 @@ test("stopping a Git Bash task terminates nested children without waiting for in
     assert.equal(childPids.length, 2, `Expected exactly two managed sleep.exe children, got ${childPids.join(", ")}`);
 
     const startedStoppingAt = Date.now();
-    const stopped = await runWithSessionId(sessionId, () => executeTerminalTool(terminalDefinition, "Terminal", {
+    const stopped = await executeTerminalTool(terminalDefinition, "Terminal", {
       action: "stop",
       taskId,
-    }));
+    }, sessionContext(sessionId));
     assert.ok(stopped);
     assert.ok(Date.now() - startedStoppingAt < 8_000, "Nested task stop exceeded its hard deadline");
 

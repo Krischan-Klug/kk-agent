@@ -1,4 +1,4 @@
-import type { AgentDefinition, McpListItem } from "@/types/api";
+import type { AgentDefinition, InternalToolListItem, McpListItem } from "@/types/api";
 import Badge from "@/components/Badge";
 import Button from "@/components/Button";
 import SkillIcon from "@/components/SkillIcon";
@@ -12,7 +12,7 @@ import {
 
 type Props = {
   agents: AgentDefinition[];
-  tools: McpListItem[];
+  tools: InternalToolListItem[];
   mcps: McpListItem[];
   selectedId: string | null;
   onSelect: (id: string) => void;

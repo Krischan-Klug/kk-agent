@@ -4,7 +4,7 @@ import { getDefaults } from "../../lib/defaults.js";
 import type { AgentModeDefinition, AgentPromptSections } from "../types.js";
 import { normalizeModeDefinitions } from "./mode-config.js";
 
-test("mode normalization drops the removed legacy tasks prompt section", () => {
+test("mode normalization drops the removed tasks prompt section", () => {
   const defaults = getDefaults();
   const legacyPromptSections = {
     ...defaults.agent.promptSections,

@@ -19,7 +19,7 @@ import type { ModelProfile } from "./types.js";
 import {
   buildChatCompletionsBody,
   serializeAssistantMessageToResponsesInput,
-} from "../helpers.js";
+} from "../request-mappers.js";
 
 function profile(id: string): ModelProfile {
   const result = getModelProfile(id);

@@ -1,5 +1,5 @@
 import { readFile, stat } from "node:fs/promises";
-import type { McpServerConfig, ToolCallResult } from "../../../mcp/types.js";
+import type { InternalToolDefinition, ToolCallResult } from "../../types.js";
 import { truncateSelfBoundedReadOutput } from "../read-output.js";
 import {
   detectImagePdf,
@@ -12,7 +12,7 @@ const READ_LINE_LIMIT = 2000;
 const MAX_READ_BYTES_BEFORE_REJECT = 10 * 1024 * 1024; // 10 MB
 
 export async function executeRead(
-  config: McpServerConfig,
+  config: InternalToolDefinition,
   args: Record<string, unknown>,
 ): Promise<ToolCallResult> {
   const path = resolveFilesystemPath(config, args.file_path);

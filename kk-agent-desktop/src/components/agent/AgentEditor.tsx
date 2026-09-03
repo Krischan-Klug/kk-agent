@@ -5,6 +5,7 @@ import type {
   AgentModeConfig,
   AppDefaults,
   ModeBehavior,
+  InternalToolListItem,
   McpListItem,
   ModelInfo,
   ProviderConfig,
@@ -13,7 +14,7 @@ import type {
   ToolAccessScope,
 } from "@/types/api";
 import { getReasoningLevels } from "@/lib/modelCapabilities";
-import { compactLlmRequestConfig, mergeLlmRequestConfigs } from "@/lib/llmRequestConfig";
+import { compactLlmRequestConfig, mergeLlmRequestConfigs } from "kk-agent-contract";
 import { getAgentModelRef, toModelRef } from "@/lib/modelRefs";
 import { EmptyHint } from "@/components/PageForm";
 import {
@@ -38,7 +39,7 @@ type Props = {
   agent: AgentDefinition | null;
   providers: ProviderConfig[];
   mcps: McpListItem[];
-  internalTools: McpListItem[];
+  internalTools: InternalToolListItem[];
   skills: SkillDefinition[];
   models: ModelInfo[];
   templates: AppDefaults["agent"] | null;

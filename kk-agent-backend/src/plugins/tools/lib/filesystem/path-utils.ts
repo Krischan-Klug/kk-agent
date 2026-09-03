@@ -1,6 +1,6 @@
 import { extname, resolve, sep } from "node:path";
-import { getDefaultPathForScope, resolveAccessScope, resolveFilesystemSystemConfig } from "../access-paths.js";
-import type { McpServerConfig } from "../../../mcp/types.js";
+import { getDefaultPathForScope, resolveAccessScope, resolveFilesystemConfig } from "../access-paths.js";
+import type { InternalToolDefinition } from "../../types.js";
 
 const BINARY_EXTENSIONS = new Set([
   // images
@@ -57,12 +57,12 @@ export function detectImagePdf(filePath: string): "image" | "pdf" | "binary" | n
   return null;
 }
 
-function getFilesystemBasePath(config: McpServerConfig): string {
-  return resolveFilesystemSystemConfig(config.systemConfig).basePath ?? resolve("/");
+function getFilesystemBasePath(tool: InternalToolDefinition): string {
+  return resolveFilesystemConfig(tool.config).basePath ?? resolve("/");
 }
 
-function getFilesystemAllowedRoot(config: McpServerConfig): string {
-  return getDefaultPathForScope(resolveAccessScope(config.systemConfig?.accessScope));
+function getFilesystemAllowedRoot(tool: InternalToolDefinition): string {
+  return getDefaultPathForScope(resolveAccessScope(tool.config?.accessScope));
 }
 
 function normalizeRequestedPath(target: string): string {
@@ -88,6 +88,6 @@ function resolveWithinRoot(allowedRoot: string, basePath: string, target?: unkno
   return candidate;
 }
 
-export function resolveFilesystemPath(config: McpServerConfig, target?: unknown): string {
+export function resolveFilesystemPath(config: InternalToolDefinition, target?: unknown): string {
   return resolveWithinRoot(getFilesystemAllowedRoot(config), getFilesystemBasePath(config), target);
 }

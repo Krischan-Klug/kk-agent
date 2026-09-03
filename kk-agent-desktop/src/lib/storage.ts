@@ -21,17 +21,3 @@ export function getStoredBoolean(key: string, defaultValue: boolean): boolean {
   const stored = getStoredString(key);
   return stored === null ? defaultValue : stored === "true";
 }
-
-export function getStoredJson<T>(key: string, fallback: T): T {
-  const stored = getStoredString(key);
-  if (!stored) return fallback;
-  try {
-    return JSON.parse(stored) as T;
-  } catch {
-    return fallback;
-  }
-}
-
-export function setStoredJson(key: string, value: unknown): void {
-  setStoredString(key, JSON.stringify(value));
-}

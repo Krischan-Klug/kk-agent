@@ -1,29 +1,23 @@
 import { useCallback, useEffect, useState } from "react";
-import { agent as agentApi, mcp as mcpApi, provider as providerApi, session as sessionApi, skills as skillsApi, tools as toolsApi } from "@/lib/api";
-import { createLogger } from "@/lib/logger";
+import { agent as agentApi, mcp as mcpApi, provider as providerApi, session as sessionApi, tools as toolsApi } from "@/lib/api";
 import { reportError } from "@/lib/errorReporting";
 import type {
   AgentDefinition,
   ApprovalMode,
   LlmRequestConfig,
   McpListItem,
-  MemoryFact,
+  InternalToolListItem,
   ModelInfo,
   ModelSettings,
-  ReasoningHistory,
   SessionState,
-  SkillDefinition,
   TaskItem,
 } from "@/types/api";
 import { addAppEventListener, CHAT_DEBUG_TOGGLE_EVENT, SESSION_CHANGED_EVENT } from "@/lib/appEvents";
 import { clearActiveSessionId, getActiveSessionId } from "@/lib/sessionState";
 import { createAndActivateSession, resolveDefaultSessionAgentId } from "@/lib/sessionFactory";
-import { compactLlmRequestConfig, mergeLlmRequestConfigs } from "@/lib/llmRequestConfig";
+import { compactLlmRequestConfig, mergeLlmRequestConfigs } from "kk-agent-contract";
 import { normalizeCanonicalReasoningEffort } from "@/lib/modelCapabilities";
-import { toggleId } from "@/lib/idLists";
-import { parseModelRef, toModelRef } from "@/lib/modelRefs";
-
-const logger = createLogger("chat-context");
+import { toModelRef } from "@/lib/modelRefs";
 
 type DebugToggleHandler = (updater: (previous: boolean) => boolean) => void;
 
@@ -35,47 +29,33 @@ type Options = {
 type BootstrapSnapshot = {
   session: SessionState | null;
   tasks: TaskItem[];
-  sessionFacts: MemoryFact[];
-  userFacts: MemoryFact[];
 };
 
 export function useChatSessionData({ onDebugOpen, setDebugOpen }: Options) {
   const [session, setSession] = useState<SessionState | null>(null);
   const [loading, setLoading] = useState(true);
-  const [models, setModels] = useState<string[]>([]);
   const [modelInfoMap, setModelInfoMap] = useState<Map<string, ModelInfo>>(new Map());
   const [modelSettingsMap, setModelSettingsMap] = useState<Record<string, ModelSettings>>({});
   const [mcps, setMcps] = useState<McpListItem[]>([]);
-  const [toolMcps, setToolMcps] = useState<McpListItem[]>([]);
-  const [skills, setSkills] = useState<SkillDefinition[]>([]);
+  const [internalTools, setInternalTools] = useState<InternalToolListItem[]>([]);
   const [agents, setAgents] = useState<AgentDefinition[]>([]);
   const [tasks, setTasks] = useState<TaskItem[]>([]);
-  const [sessionFacts, setSessionFacts] = useState<MemoryFact[]>([]);
-  const [userFacts, setUserFacts] = useState<MemoryFact[]>([]);
 
   const applyBootstrapSnapshot = useCallback((snapshot: BootstrapSnapshot) => {
     setSession(snapshot.session);
     setTasks(snapshot.tasks);
-    setSessionFacts(snapshot.sessionFacts);
-    setUserFacts(snapshot.userFacts);
     setLoading(false);
   }, []);
 
-  const loadAvailableMcps = useCallback(async (): Promise<{ tools: McpListItem[]; mcps: McpListItem[] }> => {
+  const loadCapabilities = useCallback(async (): Promise<{ tools: InternalToolListItem[]; mcps: McpListItem[] }> => {
     const [internalTools, externalMcps] = await Promise.all([toolsApi.list(), mcpApi.list()]);
     return { tools: internalTools, mcps: externalMcps };
   }, []);
 
   const loadContextData = useCallback(async (sessionId: string) => {
     try {
-      const [taskResult, sessionMemoryResult, userMemoryResult] = await Promise.all([
-        toolsApi.listTasks(sessionId),
-        toolsApi.listSessionMemory(sessionId),
-        toolsApi.listUserMemory(),
-      ]);
+      const taskResult = await toolsApi.listTasks(sessionId);
       setTasks(taskResult.tasks);
-      setSessionFacts(sessionMemoryResult.facts);
-      setUserFacts(userMemoryResult.facts);
     } catch (err) {
       reportError("Failed to load chat context", err);
     }
@@ -84,8 +64,6 @@ export function useChatSessionData({ onDebugOpen, setDebugOpen }: Options) {
   const loadModels = useCallback(async () => {
     try {
       const result = await providerApi.getModels();
-      const configuredModels = result.models.filter((model) => model.profile && model.capabilities);
-      setModels(configuredModels.map(toModelRef));
       setModelInfoMap(new Map(result.models.map((model) => [toModelRef(model), model])));
       setModelSettingsMap(result.modelSettings ?? {});
     } catch (error) {
@@ -95,15 +73,7 @@ export function useChatSessionData({ onDebugOpen, setDebugOpen }: Options) {
 
   const loadDebugData = useCallback((sessionId: string) => {
     onDebugOpen(sessionId);
-    Promise.all([loadAvailableMcps(), skillsApi.list()])
-      .then(([{ tools, mcps }, availableSkills]) => {
-        setToolMcps(tools);
-        setMcps(mcps);
-        setSkills(availableSkills);
-      })
-      .catch((err) => logger.warn("Failed to load debug data:", err));
-    void loadContextData(sessionId);
-  }, [loadAvailableMcps, loadContextData, onDebugOpen]);
+  }, [onDebugOpen]);
 
   const fetchSessionSnapshot = useCallback(async (): Promise<BootstrapSnapshot> => {
     const id = getActiveSessionId();
@@ -111,27 +81,16 @@ export function useChatSessionData({ onDebugOpen, setDebugOpen }: Options) {
       return {
         session: null,
         tasks: [],
-        sessionFacts: [],
-        userFacts: [],
       };
     }
 
     try {
       const nextSession = await sessionApi.get(id);
-      const [contextData] = await Promise.all([
-        Promise.all([
-          toolsApi.listTasks(nextSession.id),
-          toolsApi.listSessionMemory(nextSession.id),
-          toolsApi.listUserMemory(),
-        ]),
-        loadModels(),
-      ]);
+      const contextData = await toolsApi.listTasks(nextSession.id);
 
       return {
         session: nextSession,
-        tasks: contextData[0].tasks,
-        sessionFacts: contextData[1].facts,
-        userFacts: contextData[2].facts,
+        tasks: contextData.tasks,
       };
     } catch (error) {
       reportError("Failed to load the active session", error);
@@ -139,35 +98,31 @@ export function useChatSessionData({ onDebugOpen, setDebugOpen }: Options) {
       return {
         session: null,
         tasks: [],
-        sessionFacts: [],
-        userFacts: [],
       };
     }
-  }, [loadModels]);
+  }, []);
 
   const loadSession = useCallback(async () => {
-    const snapshot = await fetchSessionSnapshot();
+    const [snapshot] = await Promise.all([fetchSessionSnapshot(), loadModels()]);
     applyBootstrapSnapshot(snapshot);
-  }, [applyBootstrapSnapshot, fetchSessionSnapshot]);
+  }, [applyBootstrapSnapshot, fetchSessionSnapshot, loadModels]);
 
   useEffect(() => {
     let disposed = false;
 
     void (async () => {
       try {
-        const [snapshot, availableMcps, availableAgents, availableSkills] = await Promise.all([
+        const [snapshot, availableMcps, availableAgents] = await Promise.all([
           fetchSessionSnapshot(),
-          loadAvailableMcps(),
+          loadCapabilities(),
           agentApi.list(),
-          skillsApi.list(),
           loadModels(),
         ]);
         if (disposed) return;
         applyBootstrapSnapshot(snapshot);
-        setToolMcps(availableMcps.tools);
+        setInternalTools(availableMcps.tools);
         setMcps(availableMcps.mcps);
         setAgents(availableAgents);
-        setSkills(availableSkills);
       } catch (error) {
         reportError("Failed to initialize chat", error);
         if (!disposed) setLoading(false);
@@ -181,7 +136,7 @@ export function useChatSessionData({ onDebugOpen, setDebugOpen }: Options) {
       disposed = true;
       removeSessionListener();
     };
-  }, [applyBootstrapSnapshot, fetchSessionSnapshot, loadAvailableMcps, loadModels, loadSession]);
+  }, [applyBootstrapSnapshot, fetchSessionSnapshot, loadCapabilities, loadModels, loadSession]);
 
   useEffect(() => addAppEventListener(CHAT_DEBUG_TOGGLE_EVENT, () => {
     setDebugOpen((previous) => {
@@ -195,25 +150,7 @@ export function useChatSessionData({ onDebugOpen, setDebugOpen }: Options) {
     if (!session) return;
     const nextSession = await sessionApi.update(session.id, body);
     setSession(nextSession);
-    await loadModels();
-    await loadContextData(nextSession.id);
-  }, [loadContextData, loadModels, session]);
-
-  const updateActiveCapabilityIds = useCallback(async (
-    field: "activeMcpIds" | "activeToolIds" | "activeSkillIds",
-    id: string,
-    enabled: boolean,
-    errorMessage: string,
-  ) => {
-    if (!session) return;
-    try {
-      await updateSessionAndSet({
-        [field]: toggleId(session[field], id, enabled),
-      });
-    } catch (err) {
-      reportError(errorMessage, err);
-    }
-  }, [session, updateSessionAndSet]);
+  }, [session]);
 
   const updateRequestConfig = useCallback(async (
     patch: LlmRequestConfig,
@@ -229,56 +166,11 @@ export function useChatSessionData({ onDebugOpen, setDebugOpen }: Options) {
     }
   }, [session, updateSessionAndSet]);
 
-  const handleModelSwitch = useCallback(async (modelRef: string) => {
-    if (!session) return;
-    const parsed = parseModelRef(modelRef);
-    if (!parsed) return;
-    if (parsed.providerId === session.providerId && parsed.modelId === session.model) return;
-    try {
-      await updateSessionAndSet({ providerId: parsed.providerId, model: parsed.modelId });
-    } catch (err) {
-      reportError("Failed to switch model", err);
-    }
-  }, [session, updateSessionAndSet]);
-
-  const handleMcpToggle = useCallback(async (mcpId: string, enabled: boolean) => {
-    await updateActiveCapabilityIds("activeMcpIds", mcpId, enabled, "Failed to toggle MCP");
-  }, [updateActiveCapabilityIds]);
-
-  const handleToolToggle = useCallback(async (toolId: string, enabled: boolean) => {
-    await updateActiveCapabilityIds("activeToolIds", toolId, enabled, "Failed to toggle tool");
-  }, [updateActiveCapabilityIds]);
-
-  const handleSkillToggle = useCallback(async (skillId: string, enabled: boolean) => {
-    await updateActiveCapabilityIds("activeSkillIds", skillId, enabled, "Failed to toggle skill");
-  }, [updateActiveCapabilityIds]);
-
   const handleReasoningEffort = useCallback(async (value: string) => {
     await updateRequestConfig({
       reasoning: { effort: normalizeCanonicalReasoningEffort(value) },
     }, "Failed to set reasoning");
   }, [updateRequestConfig]);
-
-  const handleReasoningHistory = useCallback(async (value: string) => {
-    await updateRequestConfig({
-      reasoning: { history: value as ReasoningHistory },
-    }, "Failed to set reasoning history");
-  }, [updateRequestConfig]);
-
-  const handleTemperature = useCallback(async (value: string) => {
-    await updateRequestConfig({
-      sampling: { temperature: Number(value) },
-    }, "Failed to set temperature");
-  }, [updateRequestConfig]);
-
-  const handleLlmRequestConfig = useCallback(async (value: LlmRequestConfig | undefined) => {
-    if (!session) return;
-    try {
-      await updateSessionAndSet({ llmRequestConfig: value });
-    } catch (err) {
-      reportError("Failed to update LLM request config", err);
-    }
-  }, [session, updateSessionAndSet]);
 
   const handleAgentSwitch = useCallback(async (agentId: string) => {
     if (!session || agentId === session.agentId) return;
@@ -312,40 +204,10 @@ export function useChatSessionData({ onDebugOpen, setDebugOpen }: Options) {
       const newSession = await createAndActivateSession(agents, fallbackAgentId ?? resolveDefaultSessionAgentId(agents));
       setSession(newSession);
       await loadContextData(newSession.id);
-      await loadModels();
     } catch (err) {
       reportError("Failed to create new session", err);
     }
-  }, [agents, loadContextData, loadModels]);
-
-  const handleSaveTasks = useCallback(async (nextTasks: TaskItem[]) => {
-    if (!session) return;
-    try {
-      const result = await toolsApi.replaceTasks(session.id, nextTasks);
-      setTasks(result.tasks);
-    } catch (err) {
-      reportError("Failed to save tasks", err);
-    }
-  }, [session]);
-
-  const handleSaveSessionFacts = useCallback(async (nextFacts: MemoryFact[]) => {
-    if (!session) return;
-    try {
-      const result = await toolsApi.replaceSessionMemory(session.id, nextFacts);
-      setSessionFacts(result.facts);
-    } catch (err) {
-      reportError("Failed to save session memory", err);
-    }
-  }, [session]);
-
-  const handleSaveUserFacts = useCallback(async (nextFacts: MemoryFact[]) => {
-    try {
-      const result = await toolsApi.replaceUserMemory(nextFacts);
-      setUserFacts(result.facts);
-    } catch (err) {
-      reportError("Failed to save user memory", err);
-    }
-  }, []);
+  }, [agents, loadContextData]);
 
   const currentAgentName = session
     ? agents.find((agent) => agent.id === session.agentId)?.name ?? session.agentId
@@ -355,33 +217,19 @@ export function useChatSessionData({ onDebugOpen, setDebugOpen }: Options) {
     session,
     setSession,
     loading,
-    models,
     modelInfoMap,
     modelSettingsMap,
     mcps,
-    toolMcps,
-    skills,
+    internalTools,
     agents,
     tasks,
-    sessionFacts,
-    userFacts,
     currentAgentName,
     loadContextData,
     loadDebugData,
-    handleModelSwitch,
-    handleMcpToggle,
-    handleToolToggle,
-    handleSkillToggle,
     handleReasoningEffort,
-    handleReasoningHistory,
-    handleTemperature,
-    handleLlmRequestConfig,
     handleAgentSwitch,
     handleModeSwitch,
     handleApprovalModeSwitch,
     handleNewSession,
-    handleSaveTasks,
-    handleSaveSessionFacts,
-    handleSaveUserFacts,
   };
 }

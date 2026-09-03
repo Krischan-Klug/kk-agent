@@ -1,16 +1,10 @@
-export { SYSTEM_MCP_KEYS } from "kk-agent-contract";
 export type {
-  AccessScope,
-  ApprovalMode,
   CreateMcpBody,
   McpRuntimeState,
   McpServerConfig,
   McpSseConfig,
   McpStdioConfig,
   McpToolDefinition,
-  SystemMcpConfig,
-  SystemMcpKey,
-  ToolResultPolicy,
   UpdateMcpBody,
 } from "kk-agent-contract";
 

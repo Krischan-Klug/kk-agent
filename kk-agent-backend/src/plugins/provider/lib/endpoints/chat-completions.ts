@@ -10,7 +10,7 @@ import {
   buildChatCompletionsBody,
   buildUnifiedResponseFromTurn,
   mapFinishReason,
-} from "../helpers.js";
+} from "../request-mappers.js";
 import {
   finalizeChatCompletionsTurn,
   normalizeChatCompletionsToolCalls,

@@ -7,7 +7,7 @@ import { join } from "node:path";
 import { after, before, test } from "node:test";
 import express from "express";
 import { errorMiddleware } from "../../lib/error-middleware.js";
-import router from "./routes.js";
+import router from "./skills-routes.js";
 import { initSkillService } from "./service.js";
 
 const temporaryRoot = await mkdtemp(join(tmpdir(), "kk-agent-skills-route-test-"));

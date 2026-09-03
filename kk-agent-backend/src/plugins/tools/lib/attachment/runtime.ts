@@ -1,6 +1,6 @@
 import { realpath } from "node:fs/promises";
 import { resolve, sep } from "node:path";
-import type { McpServerConfig } from "../../../mcp/types.js";
+import type { InternalToolDefinition } from "../../types.js";
 import type { ToolExecutionResult, ToolRuntimeContext } from "../../../loop/types.js";
 import {
   describeAsset,
@@ -11,11 +11,10 @@ import {
   readAssetChunks,
   readAssetText,
 } from "../../../session/lib/assets.js";
-import { getCurrentSessionId } from "../user-interaction/interaction-store.js";
 import { truncateSelfBoundedReadOutput } from "../read-output.js";
 
-function getSessionIdOrThrow(): string {
-  const sessionId = getCurrentSessionId();
+function getSessionIdOrThrow(context?: ToolRuntimeContext): string {
+  const sessionId = context?.sessionId;
   if (!sessionId) throw new Error("No active session context for asset tool.");
   return sessionId;
 }
@@ -38,16 +37,16 @@ async function resolvePublishPath(filePath: string, context?: ToolRuntimeContext
 
 function withPublishedAsset(context: ToolRuntimeContext, assetId: string): ToolRuntimeContext {
   const current = readStringArray(context.values.publishedAssetIds);
-  return { values: { ...context.values, publishedAssetIds: [...new Set([...current, assetId])] } };
+  return { ...context, values: { ...context.values, publishedAssetIds: [...new Set([...current, assetId])] } };
 }
 
 export async function executeAttachmentTool(
-  _config: McpServerConfig,
+  _config: InternalToolDefinition,
   toolName: string,
   args: Record<string, unknown>,
   context: ToolRuntimeContext = { values: {} },
 ): Promise<ToolExecutionResult | null> {
-  const sessionId = getSessionIdOrThrow();
+  const sessionId = getSessionIdOrThrow(context);
 
   if (toolName === "list_assets") {
     const assets = listSessionAssets(sessionId);

@@ -3,7 +3,7 @@ import Badge from "@/components/Badge";
 import Spinner from "@/components/Spinner";
 import MarkdownMessage from "@/components/MarkdownMessage";
 import type {
-  McpListItem,
+  RuntimeCapability,
   RunEvent,
   SessionMessage,
   SessionState,
@@ -31,7 +31,7 @@ import {
 type Props = {
   session: SessionState;
   currentAgentName: string;
-  mcps: McpListItem[];
+  capabilities: RuntimeCapability[];
   streaming: boolean;
   streamTurn: StreamingTurnState | null;
   streamRunEvents: RunEvent[];
@@ -117,7 +117,7 @@ function renderRunEvent(event: RunEvent) {
 export default function ChatMessages({
   session,
   currentAgentName,
-  mcps,
+  capabilities,
   streaming,
   streamTurn,
   streamRunEvents,
@@ -160,7 +160,7 @@ export default function ChatMessages({
               ? <AgentStepBubble
                   sessionId={session.id}
                   currentAgentName={currentAgentName}
-                  mcps={mcps}
+                  capabilities={capabilities}
                   step={group.step}
                   artifacts={(group.userMessageId && lastStepIdByUserMessage.get(group.userMessageId) === group.step.assistant.id
                     ? (session.runs.find((run) => run.userMessageId === group.userMessageId)?.artifactIds ?? [])
@@ -181,7 +181,7 @@ export default function ChatMessages({
           key={group.key}
           sessionId={session.id}
           currentAgentName={currentAgentName}
-          mcps={mcps}
+          capabilities={capabilities}
           step={group.step}
           streaming={group.streaming}
         />

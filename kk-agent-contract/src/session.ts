@@ -1,6 +1,6 @@
 import type { ModelInputDebug, ProviderTurnDebug, LlmRequestConfig } from "./provider.js";
 import type { AgentLoopState, AgentPromptSections, ModeBehavior } from "./agent.js";
-import type { ApprovalMode } from "./mcp.js";
+import type { ApprovalMode } from "./tool.js";
 import type { ToolExecutionStatus, TranscriptBlock, TranscriptMessage } from "./transcript.js";
 
 export type AssetKind = "image" | "pdf" | "document" | "presentation" | "spreadsheet" | "text";
@@ -67,6 +67,16 @@ export interface SessionState {
   updatedAt: string;
 }
 
+export interface SessionSummary {
+  id: string;
+  name: string;
+  agentId: string;
+  model: string;
+  status: AgentRunStatus | "idle";
+  createdAt: string;
+  updatedAt: string;
+}
+
 export type AgentRunStatus = "running" | "completed" | "stopped" | "failed" | "aborted";
 export type RunEventSeverity = "info" | "warning" | "error";
 export type RunEventVisibility = "debug" | "user";
@@ -119,7 +129,6 @@ export interface AgentRun {
   updatedAt: string;
   completedAt?: string;
   events: RunEvent[];
-  modelInputs: ModelInputDebug[];
   artifactIds: string[];
 }
 
@@ -151,7 +160,7 @@ export interface SessionRuntimeToolDebug {
   name: string;
   description: string;
   capabilityId: string;
-  source: "system" | "mcp";
+  source: "internal" | "mcp";
   inputSchema: Record<string, unknown>;
 }
 

@@ -12,7 +12,7 @@ import {
 import {
   compactLlmRequestConfig,
   mergeLlmRequestConfigs,
-} from "@/lib/llmRequestConfig";
+} from "kk-agent-contract";
 import { toModelRef } from "@/lib/modelRefs";
 import { useToggleSet } from "@/hooks/useToggleSet";
 import SamplingSettings from "@/components/SamplingSettings";

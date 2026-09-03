@@ -2,22 +2,6 @@ import type { McpListItem, UpdateMcpBody } from "@/types/api";
 import type { EditForm } from "./types";
 import { parseMcpServerJson } from "./configJson";
 
-function optionalResultPolicy(form: EditForm) {
-  const previewThresholdChars = form.previewThresholdChars.trim() ? Number(form.previewThresholdChars) : undefined;
-  const previewChars = form.previewChars.trim() ? Number(form.previewChars) : undefined;
-  return {
-    ...(previewThresholdChars !== undefined ? { previewThresholdChars } : {}),
-    ...(previewChars !== undefined ? { previewChars } : {}),
-  };
-}
-
-function buildSystemConfig(tool: McpListItem, form: EditForm) {
-  const supportsResultPolicy = tool.systemKey === "filesystem" || tool.systemKey === "terminal" || tool.systemKey === "web-search";
-  return {
-    ...(supportsResultPolicy ? { resultPolicy: optionalResultPolicy(form) } : {}),
-  };
-}
-
 function buildBaseUpdate(form: EditForm): Pick<UpdateMcpBody, "name" | "emoji"> {
   return {
     name: form.name,
@@ -31,12 +15,5 @@ export function buildCustomMcpUpdateBody(mcp: McpListItem, form: EditForm): Upda
   return {
     ...buildBaseUpdate(form),
     ...server.value,
-  };
-}
-
-export function buildSystemToolUpdateBody(tool: McpListItem, form: EditForm): UpdateMcpBody {
-  return {
-    ...buildBaseUpdate(form),
-    systemConfig: buildSystemConfig(tool, form),
   };
 }

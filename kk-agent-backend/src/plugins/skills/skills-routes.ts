@@ -1,6 +1,6 @@
 import { Router } from "express";
 import multer from "multer";
-import { doDelete, doImport, doList } from "./controller.js";
+import { doDelete, doImport, doList } from "./skills-handlers.js";
 
 const router = Router();
 const upload = multer({

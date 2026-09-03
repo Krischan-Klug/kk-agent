@@ -1,5 +1,5 @@
 import type { Express } from "express";
-import routes from "./routes.js";
+import routes from "./mcp-routes.js";
 import { initMcpService, getAllMcps } from "./service.js";
 import { startMcp } from "./lib/process-manager.js";
 

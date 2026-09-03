@@ -110,7 +110,6 @@ function gitBashCandidates(env: NodeJS.ProcessEnv, probe: ShellProbe): string[] 
   });
   return unique([
     env.KK_AGENT_GIT_BASH_PATH,
-    env.CLAUDE_CODE_GIT_BASH_PATH,
     ...derived,
     env.ProgramFiles ? pathWin32.join(env.ProgramFiles, "Git", "bin", "bash.exe") : undefined,
     env["ProgramFiles(x86)"] ? pathWin32.join(env["ProgramFiles(x86)"], "Git", "bin", "bash.exe") : undefined,

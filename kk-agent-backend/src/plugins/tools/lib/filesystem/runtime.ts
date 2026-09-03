@@ -1,4 +1,4 @@
-import type { McpServerConfig, ToolCallResult } from "../../../mcp/types.js";
+import type { InternalToolDefinition, ToolCallResult } from "../../types.js";
 import type { ToolRuntimeContext } from "../../../loop/types.js";
 import { executeRead } from "./read.js";
 import { executeEdit } from "./edit.js";
@@ -7,7 +7,7 @@ import { executeGlob } from "./glob.js";
 import { executeGrep } from "./grep.js";
 
 export async function executeFilesystemTool(
-  config: McpServerConfig,
+  config: InternalToolDefinition,
   toolName: string,
   args: Record<string, unknown>,
   context?: ToolRuntimeContext,

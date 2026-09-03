@@ -26,10 +26,7 @@ function unavailable(error: unknown): McpRuntimeState {
 }
 
 function mergeEnv(env?: Record<string, string>): Record<string, string> | undefined {
-  const windowsProcessEnv = process.platform === "win32"
-    ? { COMSPEC: process.env.COMSPEC, PATHEXT: process.env.PATHEXT }
-    : {};
-  const source = env ? { ...process.env, ...env } : windowsProcessEnv;
+  const source = { ...process.env, ...env };
 
   const merged: Record<string, string> = {};
   for (const [key, value] of Object.entries(source)) {
@@ -118,6 +115,10 @@ export async function stopMcp(id: string): Promise<McpRuntimeState> {
   const state: McpRuntimeState = { status: "stopped" };
   runtimeStates.set(id, state);
   return state;
+}
+
+export async function stopAllMcps(): Promise<void> {
+  await Promise.all([...running.keys()].map(stopMcp));
 }
 
 export function getMcpRuntimeState(id: string): McpRuntimeState {

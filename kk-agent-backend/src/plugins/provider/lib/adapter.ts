@@ -7,8 +7,6 @@ export interface DiscoveredModel {
   providerId: string;
   maxContextLength?: number;
   contextLength?: number;
-  publisher?: string;
-  architecture?: string;
   runtimeCapabilities: RuntimeModelCapabilities;
 }
 

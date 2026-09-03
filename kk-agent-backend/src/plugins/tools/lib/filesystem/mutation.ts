@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import type { Stats } from "node:fs";
 import { open, readFile, rename, rm, stat } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
-import type { ToolCallResult } from "../../../mcp/types.js";
+import type { ToolCallResult } from "../../types.js";
 import { isBinaryBuffer } from "./path-utils.js";
 import { countChangedLines, detectLineEnding, generateUnifiedDiff, normalizeLineEndings } from "./diff.js";
 

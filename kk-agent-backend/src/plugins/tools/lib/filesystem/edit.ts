@@ -1,4 +1,4 @@
-import type { McpServerConfig, ToolCallResult } from "../../../mcp/types.js";
+import type { InternalToolDefinition, ToolCallResult } from "../../types.js";
 import { resolveFilesystemPath } from "./path-utils.js";
 import {
   buildTextChangeDiff,
@@ -9,7 +9,7 @@ import {
 } from "./mutation.js";
 
 export async function executeEdit(
-  config: McpServerConfig,
+  config: InternalToolDefinition,
   args: Record<string, unknown>,
 ): Promise<ToolCallResult> {
   const path = resolveFilesystemPath(config, args.file_path);

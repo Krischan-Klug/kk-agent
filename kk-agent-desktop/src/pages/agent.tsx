@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { agent as agentApi, mcp as mcpApi, provider as providerApi, settings as settingsApi, skills as skillsApi, tools as toolsApi } from "@/lib/api";
 import { reportError } from "@/lib/errorReporting";
-import type { AgentDefinition, AppDefaults, CreateAgentBody, McpListItem, ModelInfo, ProviderConfig, SecuritySettings, SkillDefinition } from "@/types/api";
+import type { AgentDefinition, AppDefaults, CreateAgentBody, InternalToolListItem, McpListItem, ModelInfo, ProviderConfig, SecuritySettings, SkillDefinition } from "@/types/api";
 import { PageBody } from "@/components/Layout.styled";
 import { MasterDetailLayout } from "@/components/MasterDetail.styled";
 import Spinner from "@/components/Spinner";
@@ -13,7 +13,7 @@ export default function AgentPage() {
   const [agents, setAgents] = useState<AgentDefinition[]>([]);
   const [providers, setProviders] = useState<ProviderConfig[]>([]);
   const [mcps, setMcps] = useState<McpListItem[]>([]);
-  const [internalTools, setInternalTools] = useState<McpListItem[]>([]);
+  const [internalTools, setInternalTools] = useState<InternalToolListItem[]>([]);
   const [skills, setSkills] = useState<SkillDefinition[]>([]);
   const [models, setModels] = useState<ModelInfo[]>([]);
   const [templates, setTemplates] = useState<AppDefaults["agent"] | null>(null);

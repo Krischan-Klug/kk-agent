@@ -1,4 +1,5 @@
 import type { SessionPromptDebug, SessionRecord, SessionState, CreateSessionBody } from "./types.js";
+import type { SessionSummary } from "kk-agent-contract";
 import * as store from "./lib/store.js";
 import { getAllMcpsCached, getMcpTools, getRunnableMcpIds } from "../mcp/service.js";
 import { getAgent } from "../agent/service.js";
@@ -59,8 +60,16 @@ export function getSession(id: string): SessionState {
   return toPublicSession(getSessionRecordOrThrow(id));
 }
 
-export function listSessions(): SessionState[] {
-  return store.listSessions().map(toPublicSession);
+export function listSessions(): SessionSummary[] {
+  return store.listSessions().map((session) => ({
+    id: session.id,
+    name: session.name,
+    agentId: session.agentId,
+    model: session.model,
+    status: session.runs.at(-1)?.status ?? "idle",
+    createdAt: session.createdAt,
+    updatedAt: session.updatedAt,
+  }));
 }
 
 export async function deleteSession(id: string): Promise<void> {
@@ -105,7 +114,7 @@ export function getCurrentPromptDebug(sessionId: string): SessionPromptDebug {
       modeName: modeRuntimeConfig.modePromptName,
       model: session.model,
       runtimeVariables: modeRuntimeConfig.runtimeVariables,
-      toolContext: { values: loadedSkills },
+      toolContext: { sessionId, values: loadedSkills },
       assetContext,
     }),
     runtimeTools: Object.values(modeRuntimeConfig.runtimeToolsByName).map((tool) => ({
@@ -122,7 +131,7 @@ export function getCurrentPromptDebug(sessionId: string): SessionPromptDebug {
         name: mcp.name,
         instruction: mcp.instruction,
         emoji: mcp.emoji,
-        source: mcp.source === "custom" ? "custom" : undefined,
+        source: "custom",
         active: mcp.active,
         running: getRunnableMcpIds().includes(mcp.id),
         tools: getMcpTools(mcp.id).map((tool) => ({

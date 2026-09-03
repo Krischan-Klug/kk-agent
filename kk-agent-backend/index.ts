@@ -5,6 +5,7 @@ import { resolvePort } from "./src/runtime-config.js";
 import { startServer } from "./src/server.js";
 import { createLogger } from "./src/lib/logger.js";
 import { stopAllBackgroundTerminalTasks } from "./src/plugins/tools/lib/terminal/background-tasks.js";
+import { stopAllMcps } from "./src/plugins/mcp/lib/process-manager.js";
 
 const logger = createLogger("backend");
 
@@ -22,7 +23,7 @@ async function main(): Promise<void> {
     if (stopping) return;
     stopping = true;
     logger.info(`Stopping backend after ${signal}`);
-    await stopAllBackgroundTerminalTasks();
+    await Promise.all([stopAllBackgroundTerminalTasks(), stopAllMcps()]);
     await new Promise<void>((resolveClose) => started.server.close(() => resolveClose()));
   };
   process.once("SIGINT", () => void shutdown("SIGINT"));

@@ -1,6 +1,6 @@
-import type { McpToolDefinition } from "../../../mcp/types.js";
+import type { InternalToolDescriptor } from "../../types.js";
 
-export const webSearchTools: McpToolDefinition[] = [
+export const webSearchTools: InternalToolDescriptor[] = [
   {
     name: "WebSearch",
     description: "Search the web for current information and return source URLs.",
@@ -21,7 +21,7 @@ export const webSearchTools: McpToolDefinition[] = [
       },
       required: ["query"],
     },
-    mcpId: "web-search",
+    capabilityId: "web-search",
   },
   {
     name: "WebFetch",
@@ -34,6 +34,6 @@ export const webSearchTools: McpToolDefinition[] = [
       },
       required: ["url", "prompt"],
     },
-    mcpId: "web-search",
+    capabilityId: "web-search",
   },
 ];

@@ -3,7 +3,7 @@ import type {
   AgentModeConfig,
   AgentModeDefinition,
   AppDefaults,
-  McpListItem,
+  RuntimeCapability,
   ModeBehavior,
 } from "@/types/api";
 export { PROMPT_SECTION_META } from "@/lib/promptSections";
@@ -81,11 +81,11 @@ export function createCustomMode(
   };
 }
 
-function getConcreteCapabilityTools(capabilityIds: string[], capabilities: McpListItem[]): ConcreteCapabilityTool[] {
+function getConcreteCapabilityTools(capabilityIds: string[], capabilities: RuntimeCapability[]): ConcreteCapabilityTool[] {
   const capabilityMap = new Map(capabilities.map((entry) => [entry.id, entry]));
   return capabilityIds
     .map((id) => capabilityMap.get(id))
-    .filter((entry): entry is McpListItem => Boolean(entry))
+    .filter((entry): entry is RuntimeCapability => Boolean(entry))
     .flatMap((entry) => entry.tools.map((tool) => ({
       capabilityId: entry.id,
       capabilityName: entry.name,
@@ -94,22 +94,22 @@ function getConcreteCapabilityTools(capabilityIds: string[], capabilities: McpLi
     })));
 }
 
-function getConcreteInternalTools(modeConfig: AgentModeConfig, internalTools: McpListItem[]) {
+function getConcreteInternalTools(modeConfig: AgentModeConfig, internalTools: RuntimeCapability[]) {
   return getConcreteCapabilityTools(modeConfig.toolIds, internalTools);
 }
 
-function getConcreteMcpTools(modeConfig: AgentModeConfig, mcps: McpListItem[]) {
+function getConcreteMcpTools(modeConfig: AgentModeConfig, mcps: RuntimeCapability[]) {
   return getConcreteCapabilityTools(modeConfig.mcpIds, mcps);
 }
 
-export function getConcreteRuntimeTools(modeConfig: AgentModeConfig, internalTools: McpListItem[], mcps: McpListItem[]) {
+export function getConcreteRuntimeTools(modeConfig: AgentModeConfig, internalTools: RuntimeCapability[], mcps: RuntimeCapability[]) {
   return [
     ...getConcreteInternalTools(modeConfig, internalTools),
     ...getConcreteMcpTools(modeConfig, mcps),
   ];
 }
 
-export function getCapabilityToolNames(capability: McpListItem): string[] {
+export function getCapabilityToolNames(capability: RuntimeCapability): string[] {
   return capability.tools.map((tool) => tool.name);
 }
 

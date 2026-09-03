@@ -3,7 +3,6 @@ import type { McpListItem } from "@/types/api";
 import Card from "@/components/Card";
 import Button from "@/components/Button";
 import Input from "@/components/Input";
-import SkillIcon from "@/components/SkillIcon";
 import { ActionsRow, Section } from "@/components/PageForm";
 import { StatusDot } from "@/components/agent/AgentEditor.styled";
 import type { EditForm } from "./types";
@@ -117,7 +116,7 @@ export default function McpCard({
     ? `Unavailable${mcp.runtime.error ? `: ${mcp.runtime.error}` : ""}`
     : isActive ? "Active" : "Inactive";
   const hasBody = editOpen && Boolean(editForm);
-  const customConfigInvalid = mcp.source === "custom" && editForm
+  const configInvalid = editForm
     ? !parseMcpServerJson(editForm.serverJson, mcp.transport).ok
     : false;
 
@@ -141,7 +140,7 @@ export default function McpCard({
             ) : (
               <>
                 <span style={{ fontSize: "1.2em", lineHeight: 1, display: "inline-flex" }}>
-                  {mcp.id === "skill" ? <SkillIcon /> : mcp.emoji || DEFAULT_MCP_EMOJI}
+                  {mcp.emoji || DEFAULT_MCP_EMOJI}
                 </span>
                 <NameText title={mcp.name}>{mcp.name}</NameText>
               </>
@@ -171,10 +170,10 @@ export default function McpCard({
           <McpEditFields mcp={mcp} editForm={editForm} onEditFormChange={onEditFormChange} />
 
           <ActionsRow>
-            <Button size="sm" onClick={onSaveEdit} disabled={customConfigInvalid}>
+            <Button size="sm" onClick={onSaveEdit} disabled={configInvalid}>
               Save
             </Button>
-            {mcp.source === "custom" && onDelete && (
+            {onDelete && (
               <Button size="sm" variant="danger" onClick={onDelete}>
                 Delete
               </Button>

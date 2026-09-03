@@ -1,6 +1,6 @@
-import type { McpToolDefinition } from "../../../mcp/types.js";
+import type { InternalToolDescriptor } from "../../types.js";
 
-export const taskTools: McpToolDefinition[] = [
+export const taskTools: InternalToolDescriptor[] = [
   {
     name: "create_tasks",
     description: "Create or replace the current session task list with small, concrete tasks.",
@@ -21,7 +21,7 @@ export const taskTools: McpToolDefinition[] = [
       },
       required: ["tasks"],
     },
-    mcpId: "task",
+    capabilityId: "task",
   },
   {
     name: "update_tasks",
@@ -44,7 +44,7 @@ export const taskTools: McpToolDefinition[] = [
       },
       required: ["tasks"],
     },
-    mcpId: "task",
+    capabilityId: "task",
   },
   {
     name: "solve_tasks",
@@ -59,6 +59,6 @@ export const taskTools: McpToolDefinition[] = [
       },
       required: ["taskIds"],
     },
-    mcpId: "task",
+    capabilityId: "task",
   },
 ];

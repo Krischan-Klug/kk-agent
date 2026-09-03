@@ -1,10 +1,10 @@
-import type { McpServerConfig, ToolCallResult } from "../../../mcp/types.js";
-import { getCurrentSessionId } from "../user-interaction/interaction-store.js";
+import type { InternalToolDefinition, ToolCallResult } from "../../types.js";
+import type { ToolRuntimeContext } from "../../../loop/types.js";
 import { createTasks, solveTasks, updateTasks } from "../../lib/task-state.js";
 import type { TaskDraft, TaskItem, TaskUpdateInput } from "../../types.js";
 
-function getSessionIdOrThrow(): string {
-  const sessionId = getCurrentSessionId();
+function getSessionIdOrThrow(context?: ToolRuntimeContext): string {
+  const sessionId = context?.sessionId;
   if (!sessionId) throw new Error("No active session context for task tool.");
   return sessionId;
 }
@@ -17,11 +17,12 @@ function taskSummary(tasks: TaskItem[]): string {
 }
 
 export async function executeTaskTool(
-  _config: McpServerConfig,
+  _config: InternalToolDefinition,
   toolName: string,
   args: Record<string, unknown>,
+  context?: ToolRuntimeContext,
 ): Promise<ToolCallResult | null> {
-  const sessionId = getSessionIdOrThrow();
+  const sessionId = getSessionIdOrThrow(context);
 
   if (toolName === "create_tasks") {
     const tasks = await createTasks(sessionId, Array.isArray(args.tasks) ? args.tasks.filter((t): t is TaskDraft => t && typeof t === "object" && "title" in t) : []);

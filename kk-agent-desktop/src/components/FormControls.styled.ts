@@ -46,10 +46,6 @@ export const InlineSelect = styled.select`
   font-size: var(--font-size-xs);
 `;
 
-export const InputLikeSelect = styled.select`
-  ${inputControlStyles}
-`;
-
 export const ModeTabs = styled.div`
   display: flex;
   gap: var(--space-xs);

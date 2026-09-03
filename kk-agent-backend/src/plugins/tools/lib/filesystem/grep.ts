@@ -1,10 +1,10 @@
-import type { McpServerConfig, ToolCallResult } from "../../../mcp/types.js";
+import type { InternalToolDefinition, ToolCallResult } from "../../types.js";
 import { grepWithRipgrep, isRipgrepAvailable } from "./ripgrep.js";
 import { resolveFilesystemPath } from "./path-utils.js";
 import { GLOB_RESULT_LIMIT, GREP_RESULT_LIMIT, buildRegex, walkForGrep, type GrepMatch } from "./search.js";
 
 export async function executeGrep(
-  config: McpServerConfig,
+  config: InternalToolDefinition,
   args: Record<string, unknown>,
   abortSignal?: AbortSignal,
 ): Promise<ToolCallResult> {

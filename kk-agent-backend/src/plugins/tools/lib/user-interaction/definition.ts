@@ -1,6 +1,6 @@
-import { defineSystemMcp } from "../system-definition.js";
+import { defineInternalTool } from "../internal-tool-definition.js";
 
-export const userInteractionDefinition = defineSystemMcp({
+export const userInteractionDefinition = defineInternalTool({
   id: "user-interaction",
   name: "User Interaction",
   instruction:

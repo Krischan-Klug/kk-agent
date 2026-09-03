@@ -1,6 +1,6 @@
 import { Router } from "express";
 import multer from "multer";
-import { doCreate, doList, doGet, doDelete, doChatStream, doPatch, doGetPrompt, doRespondToPrompt, doUploadAsset, doAbort, doGetAsset, doGetAssetPreview, doDeleteAsset } from "./controller.js";
+import { doCreate, doList, doGet, doDelete, doChatStream, doPatch, doGetPrompt, doRespondToPrompt, doUploadAsset, doAbort, doGetAsset, doGetAssetPreview, doDeleteAsset } from "./session-handlers.js";
 
 const upload = multer({
   storage: multer.memoryStorage(),

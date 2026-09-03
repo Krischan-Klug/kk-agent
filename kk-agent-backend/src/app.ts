@@ -1,6 +1,6 @@
 import express, { Request, Response } from "express";
 import cors from "cors";
-import initPlugins from "./plugins/index.js";
+import initPlugins from "./plugins/register-plugins.js";
 import { errorMiddleware } from "./lib/error-middleware.js";
 import { requireLocalApiToken } from "./lib/local-auth.js";
 

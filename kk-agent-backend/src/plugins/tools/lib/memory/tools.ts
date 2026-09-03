@@ -1,6 +1,6 @@
-import type { McpToolDefinition } from "../../../mcp/types.js";
+import type { InternalToolDescriptor } from "../../types.js";
 
-export const memoryTools: McpToolDefinition[] = [
+export const memoryTools: InternalToolDescriptor[] = [
   {
     name: "remember_facts",
     description: "Store short session facts or durable user preferences that are likely to matter again later.",
@@ -22,6 +22,6 @@ export const memoryTools: McpToolDefinition[] = [
       },
       required: ["scope", "facts"],
     },
-    mcpId: "memory",
+    capabilityId: "memory",
   },
 ];

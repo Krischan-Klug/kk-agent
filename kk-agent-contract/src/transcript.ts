@@ -63,8 +63,7 @@ export type ToolExecutionStatus =
   | "discarded"
   | "invalid";
 
-export type RuntimeToolSource = "system" | "mcp";
-export type McpSource = "system" | "custom";
+export type RuntimeToolSource = "internal" | "mcp";
 
 function generateId(): string {
   const c = (globalThis as { crypto?: { randomUUID?: () => string } }).crypto;

@@ -1,4 +1,4 @@
-import type { ApprovalMode } from "../../../mcp/types.js";
+import type { ApprovalMode } from "../../types.js";
 import type { ModeBehavior } from "../../../agent/types.js";
 import type { RuntimeToolPermissionPolicy } from "../../../loop/types.js";
 import {

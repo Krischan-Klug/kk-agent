@@ -1,5 +1,4 @@
-import { AsyncLocalStorage } from "node:async_hooks";
-import type { ToolCallResult } from "../../../mcp/types.js";
+import type { ToolCallResult } from "../../types.js";
 
 const PROMPT_TIMEOUT_MS = 5 * 60 * 1000;
 
@@ -82,16 +81,4 @@ export function resolvePrompt(sessionId: string, promptId: string, selectedKey: 
   pending.resolve({ content: JSON.stringify({ selectedKey }), isError: false });
   entry.pending.delete(promptId);
   return true;
-}
-
-/* AsyncLocalStorage for session context */
-
-const sessionContext = new AsyncLocalStorage<string>();
-
-export function runWithSessionId<T>(sessionId: string, fn: () => Promise<T>): Promise<T> {
-  return sessionContext.run(sessionId, fn);
-}
-
-export function getCurrentSessionId(): string | null {
-  return sessionContext.getStore() ?? null;
 }

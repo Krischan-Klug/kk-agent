@@ -24,6 +24,7 @@ export type RuntimeToolPermissionPolicy =
     };
 
 export interface ToolRuntimeContext {
+  sessionId?: string;
   values: Record<string, unknown>;
   abortSignal?: AbortSignal;
 }

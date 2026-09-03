@@ -8,7 +8,7 @@ import {
   replaceUserMemoryState,
   listSessionMemoryState,
   replaceSessionMemoryState,
-} from "./controller.js";
+} from "./tools-handlers.js";
 
 const router = Router();
 

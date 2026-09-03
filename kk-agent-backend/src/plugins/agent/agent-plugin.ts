@@ -1,5 +1,5 @@
 import type { Express } from "express";
-import routes from "./routes.js";
+import routes from "./agent-routes.js";
 import { initAgentService } from "./service.js";
 
 export default async function initAgent(app: Express): Promise<void> {

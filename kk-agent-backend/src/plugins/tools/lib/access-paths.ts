@@ -1,6 +1,6 @@
 import { homedir, platform } from "node:os";
 import { parse, resolve } from "node:path";
-import type { AccessScope, SystemMcpConfig } from "../../mcp/types.js";
+import type { AccessScope, InternalToolConfig } from "../types.js";
 
 function getUserRootPath(): string {
   return resolve(homedir());
@@ -22,14 +22,14 @@ export function resolveAccessScope(scope?: AccessScope): AccessScope {
   return scope === "system" ? "system" : "user";
 }
 
-export function resolveFilesystemSystemConfig(config?: SystemMcpConfig): SystemMcpConfig {
+export function resolveFilesystemConfig(config?: InternalToolConfig): InternalToolConfig {
   const accessScope = resolveAccessScope(config?.accessScope);
   const configuredBasePath = config?.basePath?.trim();
   const basePath = resolve(configuredBasePath || getDefaultPathForScope(accessScope));
   return { ...config, accessScope, basePath };
 }
 
-export function resolveTerminalSystemConfig(config?: SystemMcpConfig): SystemMcpConfig {
+export function resolveTerminalConfig(config?: InternalToolConfig): InternalToolConfig {
   const accessScope = resolveAccessScope(config?.accessScope);
   const configuredWorkingDirectory = config?.workingDirectory?.trim();
   const workingDirectory = resolve(configuredWorkingDirectory || getDefaultPathForScope(accessScope));

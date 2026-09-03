@@ -1,5 +1,5 @@
 import type { ProviderTransportState } from "../provider/lib/types.js";
-import type { SessionState } from "kk-agent-contract";
+import type { AgentRun, ModelInputDebug, SessionState } from "kk-agent-contract";
 
 export type {
   CreateSessionBody,
@@ -8,7 +8,12 @@ export type {
   StreamEvent as SSEEvent,
 } from "kk-agent-contract";
 
-export interface SessionRecord extends SessionState {
+export interface PersistedAgentRun extends AgentRun {
+  modelInputs: ModelInputDebug[];
+}
+
+export interface SessionRecord extends Omit<SessionState, "runs"> {
+  runs: PersistedAgentRun[];
   schemaVersion: number;
   providerState?: ProviderTransportState;
   loadedSkillIds: string[];

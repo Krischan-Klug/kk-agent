@@ -18,7 +18,10 @@ export function toPublicSession(session: SessionRecord): SessionState {
     loadedSkillIds: _loadedSkillIds,
     ...publicSession
   } = normalized;
-  return publicSession;
+  return {
+    ...publicSession,
+    runs: publicSession.runs.map(({ modelInputs: _modelInputs, ...run }) => run),
+  };
 }
 
 export function getSessionRecordOrThrow(id: string): SessionRecord {

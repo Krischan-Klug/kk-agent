@@ -1,6 +1,6 @@
-import { defineSystemMcp } from "../system-definition.js";
+import { defineInternalTool } from "../internal-tool-definition.js";
 
-export const skillDefinition = defineSystemMcp({
+export const skillDefinition = defineInternalTool({
   id: "skill",
   name: "Skill",
   emoji: "📚",

@@ -1,5 +1,5 @@
 import type { AgentModeDefinition, ModeBehavior } from "../types.js";
-import { SYSTEM_MCP_KEYS } from "../../mcp/types.js";
+import { INTERNAL_TOOL_IDS } from "../../tools/types.js";
 
 interface BuiltInModeMeta {
   id: ModeBehavior;
@@ -50,7 +50,7 @@ const EDIT_TOOL_NAMES = [
   "remember_facts",
 ];
 
-const EDIT_TOOL_IDS: string[] = [...SYSTEM_MCP_KEYS];
+const EDIT_TOOL_IDS: string[] = [...INTERNAL_TOOL_IDS];
 
 const PLAN_TOOL_IDS: string[] = EDIT_TOOL_IDS.filter((id) => id !== "memory");
 

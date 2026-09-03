@@ -1,4 +1,4 @@
-import type { McpServerConfig, ToolCallResult } from "../../../mcp/types.js";
+import type { InternalToolDefinition, ToolCallResult } from "../../types.js";
 import type { ToolRuntimeContext } from "../../../loop/types.js";
 
 const REQUEST_TIMEOUT = 10000;
@@ -179,7 +179,7 @@ function extractRelevantSections(markdown: string, prompt: string): string {
 }
 
 export async function executeWebSearchTool(
-  _config: McpServerConfig,
+  _config: InternalToolDefinition,
   toolName: string,
   args: Record<string, unknown>,
   context?: ToolRuntimeContext,

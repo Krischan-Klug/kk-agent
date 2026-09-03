@@ -1,4 +1,4 @@
-import type { McpServerConfig, McpToolDefinition, SystemMcpKey } from "../../mcp/types.js";
+import type { InternalToolDefinition, InternalToolDescriptor, InternalToolId } from "../types.js";
 import { filesystemDefinition } from "./filesystem/definition.js";
 import { executeFilesystemTool } from "./filesystem/runtime.js";
 import { filesystemTools } from "./filesystem/tools.js";
@@ -27,22 +27,22 @@ import { skillTools } from "./skill/tools.js";
 import type { ToolExecutionResult, ToolRuntimeContext } from "../../loop/types.js";
 import { getErrorMessage } from "../../../lib/error.js";
 
-type SystemToolModule = {
-  definition: McpServerConfig;
-  tools: McpToolDefinition[];
+type InternalToolModule = {
+  definition: InternalToolDefinition;
+  tools: InternalToolDescriptor[];
   execute: (
-    config: McpServerConfig,
+    config: InternalToolDefinition,
     toolName: string,
     args: Record<string, unknown>,
     context?: ToolRuntimeContext,
   ) => Promise<ToolExecutionResult | null>;
 };
 
-function isSystemMcpKey(value: unknown): value is SystemMcpKey {
-  return typeof value === "string" && value in SYSTEM_TOOL_MODULES;
+function isInternalToolId(value: unknown): value is InternalToolId {
+  return typeof value === "string" && value in INTERNAL_TOOL_MODULES;
 }
 
-const SYSTEM_TOOL_MODULES: Record<SystemMcpKey, SystemToolModule> = {
+const INTERNAL_TOOL_MODULES: Record<InternalToolId, InternalToolModule> = {
   filesystem: {
     definition: filesystemDefinition,
     tools: filesystemTools,
@@ -85,47 +85,42 @@ const SYSTEM_TOOL_MODULES: Record<SystemMcpKey, SystemToolModule> = {
   },
 };
 
-function cloneConfig(config: McpServerConfig): McpServerConfig {
+function cloneDefinition(definition: InternalToolDefinition): InternalToolDefinition {
   return {
-    ...config,
-    systemConfig: config.systemConfig
+    ...definition,
+    config: definition.config
       ? {
-          ...config.systemConfig,
-          resultPolicy: config.systemConfig.resultPolicy ? { ...config.systemConfig.resultPolicy } : undefined,
+          ...definition.config,
+          resultPolicy: definition.config.resultPolicy ? { ...definition.config.resultPolicy } : undefined,
         }
       : undefined,
-    server:
-      "command" in config.server
-        ? { ...config.server, args: [...config.server.args], env: config.server.env ? { ...config.server.env } : undefined }
-        : { ...config.server },
   };
 }
 
-export function getDefaultSystemMcpMap(): Record<SystemMcpKey, McpServerConfig> {
+export function getDefaultInternalToolMap(): Record<InternalToolId, InternalToolDefinition> {
   return Object.fromEntries(
-    (Object.keys(SYSTEM_TOOL_MODULES) as SystemMcpKey[]).map((key) => [key, cloneConfig(SYSTEM_TOOL_MODULES[key].definition)]),
-  ) as Record<SystemMcpKey, McpServerConfig>;
+    (Object.keys(INTERNAL_TOOL_MODULES) as InternalToolId[]).map((id) => [id, cloneDefinition(INTERNAL_TOOL_MODULES[id].definition)]),
+  ) as Record<InternalToolId, InternalToolDefinition>;
 }
 
-export function getSystemToolsForMcp(id: string): McpToolDefinition[] {
-  if (!isSystemMcpKey(id)) return [];
+export function getToolDescriptors(id: string): InternalToolDescriptor[] {
+  if (!isInternalToolId(id)) return [];
   if (id === "terminal") {
     const profile = getTerminalShellProfile();
     return profile ? buildTerminalTools(profile) : [];
   }
-  return SYSTEM_TOOL_MODULES[id].tools;
+  return INTERNAL_TOOL_MODULES[id].tools;
 }
 
-export async function executeSystemTool(
-  mcp: McpServerConfig,
+export async function executeInternalTool(
+  tool: InternalToolDefinition,
   toolName: string,
   args: Record<string, unknown>,
   context?: ToolRuntimeContext,
 ): Promise<ToolExecutionResult | null> {
   try {
-    const key = mcp.systemKey;
-    if (!isSystemMcpKey(key)) return null;
-    return await SYSTEM_TOOL_MODULES[key].execute(mcp, toolName, args, context);
+    if (!isInternalToolId(tool.id)) return null;
+    return await INTERNAL_TOOL_MODULES[tool.id].execute(tool, toolName, args, context);
   } catch (err) {
     return { content: getErrorMessage(err), isError: true };
   }

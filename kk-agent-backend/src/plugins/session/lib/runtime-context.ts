@@ -1,6 +1,6 @@
 import type { SessionState } from "../types.js";
 import { getSystemVariables, buildPrompt } from "../../systemprompt/lib/builder.js";
-import { buildResolvedSystemToolRuntime, getInternalToolState, getMemoryPromptContext, getTaskSummary } from "../../tools/service.js";
+import { buildResolvedInternalToolRuntime, getInternalToolState, getMemoryPromptContext, getTaskSummary } from "../../tools/service.js";
 import { buildActiveSkillCatalogSection } from "../../skills/service.js";
 import type { ModeRuntimeConfig } from "../../loop/types.js";
 import { getAgentMode } from "../../agent/lib/mode-config.js";
@@ -45,7 +45,7 @@ export function buildModeRuntimeConfig(
   const activeToolIds = activeSkillIds.length > 0
     ? configuredActiveToolIds
     : configuredActiveToolIds.filter((id) => id !== "skill");
-  const systemToolRuntime = buildResolvedSystemToolRuntime(
+  const systemToolRuntime = buildResolvedInternalToolRuntime(
     activeToolIds,
     config.toolAccessScopes,
     config.toolInstructions,

@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { normalizeSystemConfig } from "./system-config.js";
+import { normalizeInternalToolConfig } from "./internal-tool-config.js";
 
 test("tool config strips security-owned fields", () => {
-  const config = normalizeSystemConfig("terminal", {
+  const config = normalizeInternalToolConfig({
     accessScope: "system",
     approvalMode: "full_access",
     workingDirectory: "C:\\",

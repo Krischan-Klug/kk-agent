@@ -1,6 +1,6 @@
 import Badge from "@/components/Badge";
 import MarkdownMessage from "@/components/MarkdownMessage";
-import type { AssetMeta, McpListItem } from "@/types/api";
+import type { AssetMeta, RuntimeCapability } from "@/types/api";
 import MessageAssets from "./MessageAssets";
 import ToolCallCards from "./ToolCallCards";
 import { collectReasoning, collectText } from "./messageBlocks";
@@ -21,7 +21,7 @@ import type { AgentStepView } from "./types";
 type Props = {
   sessionId: string;
   currentAgentName: string;
-  mcps: McpListItem[];
+  capabilities: RuntimeCapability[];
   step: AgentStepView;
   streaming?: boolean;
   artifacts?: AssetMeta[];
@@ -47,7 +47,7 @@ function renderReasoningSummary(isThinking: boolean, animateThinking: boolean) {
 export default function AgentStepBubble({
   sessionId,
   currentAgentName,
-  mcps,
+  capabilities,
   step,
   streaming = false,
   artifacts = [],
@@ -73,7 +73,7 @@ export default function AgentStepBubble({
 
       {text && <MarkdownMessage content={text} />}
 
-      {step.toolCalls.length > 0 && <ToolCallCards mcps={mcps} toolCalls={step.toolCalls} />}
+      {step.toolCalls.length > 0 && <ToolCallCards capabilities={capabilities} toolCalls={step.toolCalls} />}
 
       {artifacts.length > 0 && <MessageAssets sessionId={sessionId} assets={artifacts} />}
 

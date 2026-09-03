@@ -1,9 +1,8 @@
 import { useState } from "react";
 import type { McpListItem } from "@/types/api";
 import Button from "@/components/Button";
-import Input from "@/components/Input";
 import TextArea from "@/components/TextArea";
-import { ActionsRow, FieldLabel, FormField, MutedText, SectionTitle } from "@/components/PageForm";
+import { ActionsRow, MutedText, SectionTitle } from "@/components/PageForm";
 import type { EditForm } from "./types";
 import McpJsonEditor from "./McpJsonEditor";
 import { MCP_SSE_HINT, MCP_STDIO_HINT, parseMcpServerJson } from "./configJson";
@@ -65,47 +64,16 @@ type McpEditFieldsProps = {
 
 export function McpEditFields({ mcp, editForm, onEditFormChange }: McpEditFieldsProps) {
   const parsedServer = parseMcpServerJson(editForm.serverJson, mcp.transport);
-  const serverJsonError = mcp.source === "custom" && !parsedServer.ok ? parsedServer.error : undefined;
+  const serverJsonError = !parsedServer.ok ? parsedServer.error : undefined;
 
   return (
-    <>
-      {mcp.source === "system" ? (
-        <>
-          {(mcp.systemKey === "filesystem" || mcp.systemKey === "terminal" || mcp.systemKey === "web-search") && (
-            <>
-              <FormField>
-                <FieldLabel>Preview Threshold (chars)</FieldLabel>
-                <Input
-                  type="number"
-                  min={1}
-                  value={editForm.previewThresholdChars}
-                  placeholder="Leave empty for tool default"
-                  onChange={(e) => onEditFormChange({ ...editForm, previewThresholdChars: e.target.value })}
-                />
-              </FormField>
-              <FormField>
-                <FieldLabel>Preview Chars</FieldLabel>
-                <Input
-                  type="number"
-                  min={200}
-                  value={editForm.previewChars}
-                  placeholder="Leave empty for tool default"
-                  onChange={(e) => onEditFormChange({ ...editForm, previewChars: e.target.value })}
-                />
-              </FormField>
-            </>
-          )}
-        </>
-      ) : (
-        <McpJsonEditor
-          value={editForm.serverJson}
-          onChange={(serverJson) => onEditFormChange({ ...editForm, serverJson })}
-          hint={mcp.transport === "stdio" ? MCP_STDIO_HINT : MCP_SSE_HINT}
-          error={serverJsonError}
-          rows={8}
-          label={`Server JSON (${mcp.transport})`}
-        />
-      )}
-    </>
+    <McpJsonEditor
+      value={editForm.serverJson}
+      onChange={(serverJson) => onEditFormChange({ ...editForm, serverJson })}
+      hint={mcp.transport === "stdio" ? MCP_STDIO_HINT : MCP_SSE_HINT}
+      error={serverJsonError}
+      rows={8}
+      label={`Server JSON (${mcp.transport})`}
+    />
   );
 }

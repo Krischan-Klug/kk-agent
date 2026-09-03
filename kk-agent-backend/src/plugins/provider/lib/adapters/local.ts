@@ -7,9 +7,7 @@ import { getErrorMessage } from "../../../../lib/error.js";
 
 interface NativeLmStudioModel {
   type: "llm" | "embedding";
-  publisher?: string;
   key: string;
-  architecture?: string | null;
   max_context_length?: number;
   loaded_instances?: Array<{ config?: { context_length?: number } }>;
   capabilities?: {
@@ -48,8 +46,6 @@ async function detectNativeModels(
       id: model.key,
       object: "model",
       providerId,
-      publisher: model.publisher,
-      architecture: model.architecture ?? undefined,
       maxContextLength: model.max_context_length,
       contextLength: model.loaded_instances?.[0]?.config?.context_length,
       runtimeCapabilities: {
@@ -86,6 +82,7 @@ async function detectModels(
 export function createLocalProviderAdapter(config: ProviderConfig): ProviderAdapter {
   const baseUrl = config.baseUrl.replace(/\/$/, "");
   const headers = buildHeaders(config);
+  const listModels = () => detectModels(baseUrl, headers, config.id);
   return {
     type: "local",
     chatStream(request, onChunk) {
@@ -94,12 +91,10 @@ export function createLocalProviderAdapter(config: ProviderConfig): ProviderAdap
         : request.endpoint === "lmstudio-chat" ? lmStudioChatStream : chatCompletionsStream;
       return endpoint(request, baseUrl, onChunk, headers);
     },
-    listModels() {
-      return detectModels(baseUrl, headers, config.id);
-    },
+    listModels,
     async testConnection(): Promise<{ ok: boolean; error?: string }> {
       try {
-        await this.listModels();
+        await listModels();
         return { ok: true };
       } catch (err) {
         return { ok: false, error: getErrorMessage(err) };

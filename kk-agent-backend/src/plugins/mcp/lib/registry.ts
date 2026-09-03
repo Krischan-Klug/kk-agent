@@ -1,10 +1,10 @@
 import { existsSync } from "node:fs";
 import type { McpServerConfig } from "../types.js";
-import { SYSTEM_MCP_KEYS } from "../types.js";
+import { INTERNAL_TOOL_IDS } from "../../tools/types.js";
 import { getStatePath, readJsonFile, writeJsonFile } from "../../lib/state.js";
 
 const REGISTRY_PATH = getStatePath("mcps.json");
-const SYSTEM_IDS = new Set<string>(SYSTEM_MCP_KEYS);
+const RESERVED_IDS = new Set<string>(INTERNAL_TOOL_IDS);
 const DEFAULT_REGISTRY: { mcps: McpServerConfig[] } = { mcps: [] };
 
 function normalizeStoredMcp(mcp: McpServerConfig): McpServerConfig {
@@ -14,7 +14,6 @@ function normalizeStoredMcp(mcp: McpServerConfig): McpServerConfig {
     active: mcp.active,
     instruction: mcp.instruction,
     ...(mcp.emoji ? { emoji: mcp.emoji } : {}),
-    source: "custom",
     transport: mcp.transport,
     server: mcp.server,
   };
@@ -27,7 +26,7 @@ async function loadRegistry(): Promise<McpServerConfig[]> {
   }
   const data = await readJsonFile<{ mcps?: McpServerConfig[] }>(REGISTRY_PATH);
   const mcps = (data?.mcps ?? [])
-    .filter((mcp) => !SYSTEM_IDS.has(mcp.id))
+    .filter((mcp) => !RESERVED_IDS.has(mcp.id))
     .map(normalizeStoredMcp);
   await saveRegistry(mcps);
   return mcps;

@@ -1,5 +1,5 @@
 import type { McpServerConfig, McpSseConfig, McpStdioConfig, McpToolDefinition, CreateMcpBody, UpdateMcpBody } from "./types.js";
-import { getSystemMcpById } from "../tools/service.js";
+import { getInternalTool } from "../tools/service.js";
 import { createSlugId } from "../lib/ids.js";
 import { NotFoundError, ConflictError } from "../../lib/errors.js";
 import { getRegistry, updateRegistry, getMcpById, addMcp, removeMcp } from "./lib/registry.js";
@@ -52,7 +52,7 @@ export function getMcpTools(id: string): McpToolDefinition[] {
 export async function createMcp(body: CreateMcpBody): Promise<McpServerConfig> {
   const id = createSlugId(body.name);
 
-  if (getSystemMcpById(id)) throw new ConflictError(`MCP "${id}" is reserved as a system MCP`);
+  if (getInternalTool(id)) throw new ConflictError(`MCP id "${id}" is reserved by an internal tool`);
   const existing = await getRegistry();
   if (getMcpById(existing, id)) throw new ConflictError(`MCP "${id}" already exists`);
 
@@ -62,7 +62,6 @@ export async function createMcp(body: CreateMcpBody): Promise<McpServerConfig> {
     active: false,
     instruction: body.instruction ?? "",
     emoji: body.emoji,
-    source: "custom",
     transport: body.transport,
     server:
       body.transport === "stdio"

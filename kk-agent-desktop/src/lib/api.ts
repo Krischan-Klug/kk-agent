@@ -1,13 +1,17 @@
 import type {
   SessionState,
+  SessionSummary,
   CreateSessionBody,
   McpListItem,
   McpServerConfig,
+  InternalToolDefinition,
+  InternalToolListItem,
   ModelInfo,
   ModelProfileSummary,
   StreamEvent,
   CreateMcpBody,
   UpdateMcpBody,
+  UpdateInternalToolBody,
   AgentDefinition,
   CreateAgentBody,
   UpdateAgentBody,
@@ -175,20 +179,14 @@ export const provider = {
     request<{ ok: boolean; error?: string }>(`/provider/providers/${id}/test`, { method: "POST" }),
 };
 
-function capabilityApi(basePath: "/mcp" | "/tools") {
-  return {
-    list: () => request<McpListItem[]>(basePath),
-
-    update: (id: string, body: UpdateMcpBody) =>
-      request<McpServerConfig>(`${basePath}/${id}`, {
-        method: "PUT",
-        body: JSON.stringify(body),
-      }),
-  };
-}
-
 export const mcp = {
-  ...capabilityApi("/mcp"),
+  list: () => request<McpListItem[]>("/mcp"),
+
+  update: (id: string, body: UpdateMcpBody) =>
+    request<McpServerConfig>(`/mcp/${id}`, {
+      method: "PUT",
+      body: JSON.stringify(body),
+    }),
 
   create: (body: CreateMcpBody) =>
     request<McpServerConfig>("/mcp", {
@@ -201,7 +199,13 @@ export const mcp = {
 };
 
 export const tools = {
-  ...capabilityApi("/tools"),
+  list: () => request<InternalToolListItem[]>("/tools"),
+
+  update: (id: string, body: UpdateInternalToolBody) =>
+    request<InternalToolDefinition>(`/tools/${id}`, {
+      method: "PUT",
+      body: JSON.stringify(body),
+    }),
 
   listTasks: (sessionId: string) =>
     request<{ tasks: TaskItem[] }>(`/tools/task/session/${sessionId}`),
@@ -288,7 +292,7 @@ export const session = {
       body: JSON.stringify(body),
     }),
 
-  list: () => request<SessionState[]>("/session"),
+  list: () => request<SessionSummary[]>("/session"),
 
   get: (id: string) => request<SessionState>(`/session/${id}`),
 

@@ -3,16 +3,16 @@ import test from "node:test";
 import { mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { McpServerConfig } from "../../../mcp/types.js";
+import type { InternalToolDefinition } from "../../types.js";
 import { filesystemDefinition } from "./definition.js";
 import { executeEdit } from "./edit.js";
 import { executeWrite } from "./write.js";
 
-function config(basePath: string): McpServerConfig {
+function config(basePath: string): InternalToolDefinition {
   return {
     ...filesystemDefinition,
-    systemConfig: {
-      ...filesystemDefinition.systemConfig,
+    config: {
+      ...filesystemDefinition.config,
       accessScope: "system",
       basePath,
     },

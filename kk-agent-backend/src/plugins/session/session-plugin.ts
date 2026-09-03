@@ -1,5 +1,5 @@
 import type { Express } from "express";
-import routes from "./routes.js";
+import routes from "./session-routes.js";
 import { initStore } from "./lib/store.js";
 import { reconcileAssetStore } from "./lib/assets.js";
 

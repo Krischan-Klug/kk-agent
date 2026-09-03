@@ -1,6 +1,6 @@
-import type { McpToolDefinition } from "../../../mcp/types.js";
+import type { InternalToolDescriptor } from "../../types.js";
 
-export const userInteractionTools: McpToolDefinition[] = [
+export const userInteractionTools: InternalToolDescriptor[] = [
   {
     name: "ask_user",
     description: "Present one multiple-choice question and return the selected key.",
@@ -28,6 +28,6 @@ export const userInteractionTools: McpToolDefinition[] = [
       },
       required: ["question", "choices"],
     },
-    mcpId: "user-interaction",
+    capabilityId: "user-interaction",
   },
 ];

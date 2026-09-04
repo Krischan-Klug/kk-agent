@@ -3,6 +3,7 @@ import cors from "cors";
 import initPlugins from "./plugins/register-plugins.js";
 import { errorMiddleware } from "./lib/error-middleware.js";
 import { requireLocalApiToken } from "./lib/local-auth.js";
+import hostRoutes from "./lib/host-routes.js";
 
 function allowedOrigins(): Set<string> {
   const configured = process.env.KK_AGENT_ALLOWED_ORIGINS?.split(",")
@@ -34,6 +35,7 @@ export async function createApp() {
   app.use(express.json());
 
   app.get("/healthz", (_req: Request, res: Response) => res.json({ ok: true }));
+  app.use("/internal/host", hostRoutes);
   app.use(requireLocalApiToken);
 
   await initPlugins(app);

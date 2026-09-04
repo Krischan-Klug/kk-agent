@@ -9,6 +9,8 @@ import { StatusDot } from "@/components/agent/AgentEditor.styled";
 import { InstructionEditorBlock, McpEditFields } from "./McpCard.parts";
 import { formatMcpServerJson, parseMcpServerJson } from "./configJson";
 import { reportError } from "@/lib/errorReporting";
+import CredentialEditor from "@/components/CredentialEditor";
+import { extractImportedCredentials } from "./credentialImport";
 
 const Header = styled.div<{ $withBody: boolean }>`
   display: flex;
@@ -124,15 +126,47 @@ export default function McpCard({
 
   async function save() {
     if (!parsedServer.ok) return;
+    const extracted = extractImportedCredentials({
+      name: draft.name,
+      transport: mcp.transport,
+      emoji: draft.emoji || undefined,
+      instruction: draft.instruction,
+      credentialBindings: mcp.credentialBindings,
+      ...parsedServer.value,
+    });
     try {
+      const credentials = window.kkAgentDesktop?.credentials;
+      if (extracted.pending.length > 0 && !credentials) throw new Error("Secure desktop credential storage is unavailable.");
+      if (extracted.pending.length > 0) {
+        await credentials!.setMany(Object.fromEntries(extracted.pending.map((entry) => [entry.credentialId, entry.value])));
+      }
       await onSave({
         name: draft.name,
         emoji: draft.emoji || undefined,
         instruction: draft.instruction,
-        ...parsedServer.value,
+        command: extracted.body.command,
+        args: extracted.body.args,
+        env: mcp.transport === "stdio" ? extracted.body.env ?? {} : undefined,
+        url: extracted.body.url,
+        headers: mcp.transport !== "stdio" ? extracted.body.headers ?? {} : undefined,
+        credentialBindings: extracted.body.credentialBindings,
       });
+      setDraft((current) => ({
+        ...current,
+        serverJson: JSON.stringify(
+          mcp.transport === "stdio"
+            ? { command: extracted.body.command, args: extracted.body.args ?? [] }
+            : { url: extracted.body.url },
+          null,
+          2,
+        ),
+      }));
       setEditOpen(false);
     } catch (error) {
+      const credentials = window.kkAgentDesktop?.credentials;
+      if (credentials) {
+        await credentials.removeMany(extracted.pending.map((pending) => pending.credentialId)).catch(() => undefined);
+      }
       reportError("Failed to save MCP edit", error);
     }
   }
@@ -203,6 +237,22 @@ export default function McpCard({
               Cancel
             </Button>
           </ActionsRow>
+
+          {mcp.credentials.length > 0 && (
+            <CredentialEditor
+              fields={mcp.credentials.map((credential) => {
+                const binding = mcp.credentialBindings?.find((candidate) => candidate.id === credential.id);
+                return {
+                  ...credential,
+                  credentialId: binding?.credentialId ?? "",
+                  description: binding
+                    ? `${binding.target.kind === "env" ? "Environment" : "HTTP header"}: ${binding.target.name}`
+                    : undefined,
+                };
+              }).filter((credential) => credential.credentialId.length > 0)}
+              onChanged={() => onSave({})}
+            />
+          )}
 
           <InstructionEditorBlock
             instruction={draft.instruction}

@@ -33,11 +33,12 @@ export interface InternalToolConfig {
 }
 
 export interface InternalToolDefinition {
-  id: InternalToolId;
+  id: string;
   name: string;
   active: boolean;
   instruction: string;
   emoji?: string;
+  driver?: "native" | "mcp";
   config?: InternalToolConfig;
 }
 
@@ -57,6 +58,14 @@ export interface InternalToolRuntimeState {
 export interface InternalToolListItem extends InternalToolDefinition {
   runtime: InternalToolRuntimeState;
   tools: InternalToolDescriptor[];
+  credentials?: Array<{
+    id: string;
+    label: string;
+    description?: string;
+    required: boolean;
+    configured: boolean;
+    credentialId: string;
+  }>;
 }
 
 export interface UpdateInternalToolBody {

@@ -43,6 +43,7 @@ Backend features register through a fixed, explicit initializer list. There is n
 ## Key Project Rules
 - Preserve existing structure; extend an existing plugin, route, component, or helper before adding a new system.
 - Internal tools are not user MCPs. Skills are not internal tools or user MCPs.
+- Code-owned managed MCP manifests are MCP-backed internal tools: they use `toolIds`, reuse the MCP runtime, and remain separate from user-managed `mcpIds` and `state/mcps.json`.
 - Skills use the Agent Skills `SKILL.md` format unchanged; KK-Agent adds no bundle overlays, capability links, or provider-specific adapters.
 - Managed skill imports accept any source folder name and install under the canonical frontmatter `name`.
 - Skill discovery precedence is workspace `.agents/skills`, managed `state/agent-skills`, then user `~/.agents/skills`.
@@ -72,6 +73,7 @@ Backend features register through a fixed, explicit initializer list. There is n
 - Verification claims must match exercised behavior; build, typecheck, and HTTP checks do not establish interactive runtime behavior.
 - Terminal `accessScope` and `approvalMode` are independent; tool settings provide defaults, sessions persist their approval mode, and effective values are fixed per run. The harness owns approval prompts, while `ask_user` is only for missing user information or decisions.
 - MCP `active` is persisted intent; runtime availability is reported separately and connection failures never stop the backend.
+- MCP transports are explicit (`streamable-http`, `stdio`, or legacy `sse`). Desktop credentials are OS-encrypted by Electron, persisted only as references in capability state, and synchronized into backend memory through a host-only authenticated route.
 - Large tool results must be truncated for model context; keep full output only where UI/debug needs it.
 - Runtime context and loaded skill instructions are request-scoped provider instructions, never transcript messages.
 - Runs persist typed events and incremental transcript checkpoints; retries advance attempts, only valid model outputs advance steps.

@@ -10,6 +10,7 @@ import Modal from "@/components/Modal";
 import McpCard from "@/components/mcp/McpCard";
 import CreateMcpModal from "@/components/mcp/CreateMcpModal";
 import { ActionsRow, EmptyHint, MutedText } from "@/components/PageForm";
+import { extractImportedCredentials } from "@/components/mcp/credentialImport";
 
 const HeaderActions = styled.div`
   margin-bottom: var(--space-lg);
@@ -51,20 +52,21 @@ export default function McpPage() {
 
   async function handleCreate(createForm: CreateMcpBody) {
     setCreating(true);
+    const extracted = extractImportedCredentials(createForm);
     try {
-      await mcpApi.create({
-        name: createForm.name,
-        transport: createForm.transport,
-        emoji: createForm.emoji || undefined,
-        command: createForm.transport === "stdio" ? createForm.command : undefined,
-        args: createForm.transport === "stdio" && createForm.args?.length ? createForm.args : undefined,
-        env: createForm.transport === "stdio" ? createForm.env : undefined,
-        url: createForm.transport === "sse" ? createForm.url : undefined,
-        instruction: createForm.instruction || undefined,
-      });
+      const credentials = window.kkAgentDesktop?.credentials;
+      if (extracted.pending.length > 0 && !credentials) throw new Error("Secure desktop credential storage is unavailable.");
+      if (extracted.pending.length > 0) {
+        await credentials!.setMany(Object.fromEntries(extracted.pending.map((entry) => [entry.credentialId, entry.value])));
+      }
+      await mcpApi.create(extracted.body);
       setShowCreate(false);
       await loadItems();
     } catch (err) {
+      const credentials = window.kkAgentDesktop?.credentials;
+      if (credentials) {
+        await credentials.removeMany(extracted.pending.map((pending) => pending.credentialId)).catch(() => undefined);
+      }
       reportError("Failed to create MCP", err);
     } finally {
       setCreating(false);
@@ -73,7 +75,9 @@ export default function McpPage() {
 
   async function handleDelete(id: string) {
     try {
+      const credentialIds = items.find((item) => item.id === id)?.credentialBindings?.map((binding) => binding.credentialId) ?? [];
       await mcpApi.remove(id);
+      if (credentialIds.length > 0) await window.kkAgentDesktop?.credentials.removeMany(credentialIds);
       setDeleteTarget(null);
       await loadItems();
     } catch (err) {

@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, Menu, net, protocol, shell } from "electron";
+import { app, BrowserWindow, ipcMain, Menu, net, protocol, safeStorage, shell } from "electron";
 import { spawn, type ChildProcess } from "node:child_process";
 import { randomBytes } from "node:crypto";
 import { createInterface } from "node:readline";
@@ -6,6 +6,8 @@ import { existsSync } from "node:fs";
 import { mkdir } from "node:fs/promises";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
+import { CredentialStore } from "./credential-store.js";
+import { migrateLegacyMcpCredentials } from "./credential-migration.js";
 
 const logger = {
   info: (...args: unknown[]) => console.info("[desktop]", ...args),
@@ -85,6 +87,29 @@ function createApiToken(): string {
   return configured && configured.length > 0
     ? configured
     : randomBytes(32).toString("hex");
+}
+
+function createHostToken(): string {
+  const configured = process.env.KK_AGENT_HOST_TOKEN?.trim();
+  return configured && configured.length > 0
+    ? configured
+    : randomBytes(32).toString("hex");
+}
+
+function isTrustedRendererUrl(rawUrl: string): boolean {
+  try {
+    const url = new URL(rawUrl);
+    return url.protocol === "app:"
+      || (isDev && url.origin === DEV_RENDERER_URL);
+  } catch {
+    return false;
+  }
+}
+
+function assertTrustedRenderer(event: Electron.IpcMainInvokeEvent): void {
+  if (!isTrustedRendererUrl(event.senderFrame?.url ?? "")) {
+    throw new Error("Untrusted credential request.");
+  }
 }
 
 function getDesktopRoot(): string {
@@ -203,7 +228,7 @@ async function waitForBackendFromLogs(child: ChildProcess): Promise<string> {
   });
 }
 
-async function startBackend(apiToken: string): Promise<string> {
+async function startBackend(apiToken: string, hostToken: string): Promise<string> {
   const backendEntry = getBackendEntry();
   const userDataRoot = app.getPath("userData");
   const stateDir = path.join(userDataRoot, "state");
@@ -219,6 +244,7 @@ async function startBackend(apiToken: string): Promise<string> {
       ELECTRON_RUN_AS_NODE: "1",
       PORT: "0",
       KK_AGENT_API_TOKEN: apiToken,
+      KK_AGENT_HOST_TOKEN: hostToken,
       KK_AGENT_STATE_DIR: stateDir,
     },
     stdio: ["ignore", "pipe", "pipe"],
@@ -228,6 +254,73 @@ async function startBackend(apiToken: string): Promise<string> {
   const apiBaseUrl = await waitForBackendFromLogs(backendProcess);
   await waitForHttp(`${apiBaseUrl}/healthz`);
   return apiBaseUrl;
+}
+
+async function syncCredentialsToBackend(
+  store: CredentialStore,
+  apiBaseUrl: string,
+  hostToken: string,
+): Promise<void> {
+  const response = await fetch(`${apiBaseUrl}/internal/host/credentials`, {
+    method: "PUT",
+    headers: {
+      "Content-Type": "application/json",
+      "X-KK-Agent-Host-Token": hostToken,
+    },
+    body: JSON.stringify({ credentials: await store.readAll() }),
+  });
+  if (!response.ok) throw new Error(`Credential sync failed with HTTP ${response.status}.`);
+}
+
+function registerCredentialHandlers(
+  store: CredentialStore,
+  apiBaseUrl: string,
+  hostToken: string,
+): void {
+  ipcMain.handle("kk-agent:credentials:set", async (event, id: unknown, value: unknown) => {
+    assertTrustedRenderer(event);
+    if (typeof id !== "string" || typeof value !== "string") throw new Error("Invalid credential input.");
+    await store.set(id, value);
+    await syncCredentialsToBackend(store, apiBaseUrl, hostToken);
+    return true;
+  });
+  ipcMain.handle("kk-agent:credentials:set-many", async (event, values: unknown) => {
+    assertTrustedRenderer(event);
+    if (!values || typeof values !== "object" || Array.isArray(values)
+      || !Object.entries(values).every(([id, value]) => id.length > 0 && typeof value === "string")) {
+      throw new Error("Invalid credentials input.");
+    }
+    await store.setMany(values as Record<string, string>);
+    await syncCredentialsToBackend(store, apiBaseUrl, hostToken);
+    return true;
+  });
+  ipcMain.handle("kk-agent:credentials:remove", async (event, id: unknown) => {
+    assertTrustedRenderer(event);
+    if (typeof id !== "string") throw new Error("Invalid credential id.");
+    await store.remove(id);
+    await syncCredentialsToBackend(store, apiBaseUrl, hostToken);
+    return true;
+  });
+  ipcMain.handle("kk-agent:credentials:remove-many", async (event, ids: unknown) => {
+    assertTrustedRenderer(event);
+    if (!Array.isArray(ids) || !ids.every((id) => typeof id === "string")) throw new Error("Invalid credential ids.");
+    await store.removeMany(ids);
+    await syncCredentialsToBackend(store, apiBaseUrl, hostToken);
+    return true;
+  });
+}
+
+async function createCredentialStore(): Promise<CredentialStore> {
+  if (!safeStorage.isEncryptionAvailable()) {
+    throw new Error("Secure operating-system credential storage is unavailable.");
+  }
+  return new CredentialStore(
+    path.join(app.getPath("userData"), "state", "mcp-credentials.json"),
+    {
+      encrypt: async (value) => safeStorage.encryptString(value),
+      decrypt: async (value) => safeStorage.decryptString(value),
+    },
+  );
 }
 
 async function createMainWindow(apiBaseUrl: string, apiToken?: string): Promise<void> {
@@ -327,7 +420,15 @@ app.whenReady().then(async () => {
     }
 
     const apiToken = createApiToken();
-    const apiBaseUrl = isDev ? DEV_API_BASE_URL : await startBackend(apiToken);
+    const hostToken = createHostToken();
+    const credentialStore = await createCredentialStore();
+    await migrateLegacyMcpCredentials(
+      path.join(app.getPath("userData"), "state", "mcps.json"),
+      credentialStore,
+    );
+    const apiBaseUrl = isDev ? DEV_API_BASE_URL : await startBackend(apiToken, hostToken);
+    await syncCredentialsToBackend(credentialStore, apiBaseUrl, hostToken);
+    registerCredentialHandlers(credentialStore, apiBaseUrl, hostToken);
     await createMainWindow(apiBaseUrl, apiToken);
   } catch (error) {
     logger.error("Failed to start application", error);

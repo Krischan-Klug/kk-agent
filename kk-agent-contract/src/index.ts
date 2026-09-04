@@ -86,13 +86,18 @@ export {
 
 export type {
   CreateMcpBody,
+  CredentialStatus,
   McpListItem,
+  McpCredentialBinding,
+  McpCredentialTarget,
+  McpHttpConfig,
   McpRuntimeState,
   McpRuntimeStatus,
   McpServerConfig,
   McpSseConfig,
   McpStdioConfig,
   McpToolDefinition,
+  McpTransport,
   UpdateMcpBody,
 } from "./mcp.js";
 

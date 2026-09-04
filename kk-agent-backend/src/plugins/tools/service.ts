@@ -4,11 +4,10 @@ import type {
   ApprovalMode,
   InternalToolDefinition,
   InternalToolDescriptor,
-  InternalToolId,
   UpdateInternalToolBody,
 } from "./types.js";
-import { buildInternalTools, createOverrideState, loadInternalToolOverrides, saveInternalToolOverrides } from "./lib/internal-tool-registry.js";
-import { executeInternalTool, getDefaultInternalToolMap, getToolDescriptors } from "./lib/tool-modules.js";
+import { buildInternalTools, createOverrideState, getAllDefaultInternalToolMap, loadInternalToolOverrides, saveInternalToolOverrides } from "./lib/internal-tool-registry.js";
+import { executeInternalTool, getToolDescriptors } from "./lib/tool-modules.js";
 import { clearSessionFacts, getMemoryPromptContext, initMemoryState, listSessionFacts, listUserFacts, replaceSessionFacts, replaceUserFacts } from "./lib/memory-state.js";
 import { clearTasks, getTaskSummary, listTasks, replaceTasks } from "./lib/task-state.js";
 import type { MemoryFact, TaskItem } from "./types.js";
@@ -29,6 +28,18 @@ import {
   initializeTerminalShell,
 } from "./lib/terminal/shell-profile.js";
 import { getSecuritySettings } from "../security/service.js";
+import {
+  buildManagedMcpConfig,
+  getManagedCredentialDescriptors,
+  getManagedMcpManifest,
+} from "./lib/managed-mcp/registry.js";
+import {
+  executeToolForMcp as executeManagedMcpTool,
+  getMcpRuntimeState,
+  getToolsForMcp,
+  startMcp,
+  stopMcp,
+} from "../mcp/lib/process-manager.js";
 
 let internalTools: InternalToolDefinition[] = [];
 
@@ -67,6 +78,10 @@ function isConcurrencySafeInternalTool(toolName: string, input: Record<string, u
   ]).has(toolName);
 }
 
+function isManagedMcpConcurrencySafe(toolId: string): boolean {
+  return getManagedMcpManifest(toolId)?.concurrencySafe ?? false;
+}
+
 function buildToolResultPolicy(tool: InternalToolDefinition, toolName: string) {
   return {
     previewThresholdChars: tool.config?.resultPolicy?.previewThresholdChars,
@@ -94,8 +109,8 @@ function buildToolPermissionResolver(
   };
 }
 
-function mergeToolConfig(id: InternalToolId, config?: InternalToolDefinition["config"]) {
-  const baseConfig = getDefaultInternalToolMap()[id].config;
+function mergeToolConfig(id: string, config?: InternalToolDefinition["config"]) {
+  const baseConfig = getAllDefaultInternalToolMap()[id]?.config;
   const explicitResultPolicy = Object.prototype.hasOwnProperty.call(config ?? {}, "resultPolicy");
 
   const merged = {
@@ -186,7 +201,7 @@ function resolveInternalTool(
           "The active shell profile is fixed for this run. Do not assume or silently switch to a different shell dialect.",
         ].join(" ")
       : baseInstruction,
-    tools: getToolDescriptors(id),
+    tools: getInternalToolDescriptors(id),
   };
 }
 
@@ -195,6 +210,11 @@ export async function initToolsService(): Promise<void> {
   internalTools = buildInternalTools(await loadInternalToolOverrides());
   await persistToolOverrides();
   await initMemoryState();
+  for (const tool of internalTools) {
+    if (!tool.active || tool.driver !== "mcp") continue;
+    const config = buildManagedMcpConfig(tool);
+    if (config) await startMcp(config);
+  }
 }
 
 export function listInternalTools(): InternalToolDefinition[] {
@@ -217,11 +237,27 @@ export function getRunnableInternalToolIds(): string[] {
 
 export function getInternalToolRuntimeState(tool: InternalToolDefinition): { status: "running" | "stopped" | "unavailable"; error?: string } {
   if (!tool.active) return { status: "stopped" };
+  if (tool.driver === "mcp") return getMcpRuntimeState(tool.id);
   if (tool.id === "terminal") {
     const resolution = getTerminalShellResolution();
     if (resolution.status === "unavailable") return { status: "unavailable", error: resolution.error };
   }
   return { status: "running" };
+}
+
+export function getInternalToolDescriptors(id: string): InternalToolDescriptor[] {
+  if (getManagedMcpManifest(id)) {
+    return getToolsForMcp(id).map((tool) => ({
+      name: tool.name,
+      description: tool.description,
+      inputSchema: tool.inputSchema,
+    }));
+  }
+  return getToolDescriptors(id);
+}
+
+export function getInternalToolCredentials(id: string) {
+  return getManagedCredentialDescriptors(id);
 }
 
 export function getActiveToolInstructions(): { id: string; name: string; instruction: string }[] {
@@ -270,7 +306,9 @@ export function buildResolvedInternalToolRuntime(
         source: "internal",
         capabilityId: toolId,
         accessScope: resolveAccessScope(resolved.tool.config?.accessScope),
-        isConcurrencySafe: (input) => isConcurrencySafeInternalTool(tool.name, input),
+        isConcurrencySafe: (input) => resolved.tool.driver === "mcp"
+          ? isManagedMcpConcurrencySafe(toolId)
+          : isConcurrencySafeInternalTool(tool.name, input),
         resultPolicy: buildToolResultPolicy(resolved.tool, tool.name),
         permissionPolicy: { kind: "allow" },
         resolvePermission: buildToolPermissionResolver(
@@ -307,6 +345,13 @@ export async function updateInternalToolConfig(id: string, body: UpdateInternalT
 
   setInternalTool(next);
   await persistToolOverrides();
+  if (next.driver === "mcp") {
+    await stopMcp(next.id);
+    if (next.active) {
+      const config = buildManagedMcpConfig(next);
+      if (config) await startMcp(config);
+    }
+  }
   return next;
 }
 
@@ -319,12 +364,26 @@ export async function executeInternalToolById(
 ): Promise<import("../loop/types.js").ToolExecutionResult | null> {
   const resolved = resolveInternalTool(id, accessScopeOverride);
   if (!resolved || !resolved.tool.active) return null;
+  if (resolved.tool.driver === "mcp") {
+    return executeManagedMcpTool(id, toolName, args, context?.abortSignal);
+  }
   const result = await executeInternalTool(resolved.tool, toolName, args, context);
   if (!result) return null;
 
   return {
     ...result,
   };
+}
+
+export async function refreshManagedMcpConnections(changedCredentialIds?: ReadonlySet<string>): Promise<void> {
+  for (const tool of internalTools) {
+    if (tool.driver !== "mcp" || !tool.active) continue;
+    const config = buildManagedMcpConfig(tool);
+    if (!config) continue;
+    if (changedCredentialIds && !(config.credentialBindings ?? []).some((binding) => changedCredentialIds.has(binding.credentialId))) continue;
+    await stopMcp(tool.id);
+    await startMcp(config);
+  }
 }
 
 export {

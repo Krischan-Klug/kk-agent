@@ -10,6 +10,7 @@ import Input from "@/components/Input";
 import TextArea from "@/components/TextArea";
 import { ActionsRow, EmptyHint, FieldLabel, FormField, MutedText, Section } from "@/components/PageForm";
 import { StatusDot } from "@/components/agent/AgentEditor.styled";
+import CredentialEditor from "@/components/CredentialEditor";
 
 const Grid = styled.div`
   display: grid;
@@ -128,8 +129,12 @@ export default function SettingsToolsPage() {
                 <Button size="sm" variant="secondary" onClick={() => editing ? setEditingId(undefined) : openEditor(tool)}>{editing ? "Close" : "Edit"}</Button>
               </Header>
               {tool.runtime.error && <MutedText>{tool.runtime.error}</MutedText>}
+              {tool.driver === "mcp" && <MutedText>MCP-backed internal tool</MutedText>}
               {editing && (
                 <Section style={{ marginTop: "var(--space-md)" }}>
+                  {tool.credentials && tool.credentials.length > 0 && (
+                    <CredentialEditor fields={tool.credentials} onChanged={load} />
+                  )}
                   <FormField>
                     <FieldLabel>Name</FieldLabel>
                     <Input value={draft.name} onChange={(event) => setDraft({ ...draft, name: event.target.value })} />

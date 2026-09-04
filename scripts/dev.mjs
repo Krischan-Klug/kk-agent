@@ -13,6 +13,7 @@ const startupTimeoutMs = 60_000;
 const useShell = process.platform === "win32";
 const managedChildren = [];
 const apiToken = process.env.KK_AGENT_API_TOKEN?.trim() || randomBytes(32).toString("hex");
+const hostToken = process.env.KK_AGENT_HOST_TOKEN?.trim() || randomBytes(32).toString("hex");
 const services = [
   {
     name: "backend",
@@ -60,6 +61,7 @@ function spawnManaged(name, args) {
     ...process.env,
     KK_AGENT_API_TOKEN: apiToken,
     NEXT_PUBLIC_KK_AGENT_API_TOKEN: apiToken,
+    KK_AGENT_HOST_TOKEN: hostToken,
   };
   const child = spawn("npm", args, {
     cwd: repoRoot,

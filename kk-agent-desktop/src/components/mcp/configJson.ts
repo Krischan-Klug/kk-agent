@@ -1,4 +1,4 @@
-import type { CreateMcpBody, McpListItem, McpStdioConfig, UpdateMcpBody } from "kk-agent-contract";
+import type { CreateMcpBody, McpHttpConfig, McpListItem, McpStdioConfig, McpTransport, UpdateMcpBody } from "kk-agent-contract";
 
 export type JsonParseResult<T> =
   | { ok: true; value: T }
@@ -16,12 +16,14 @@ export const MCP_IMPORT_PLACEHOLDER = `{
 
 export const MCP_IMPORT_HINT =
   'Format: {"mcpServers":{"name":{"command":"...","args":["arg 1","arg 2"],"env":{}}}}. ' +
-  'For SSE use {"mcpServers":{"name":{"url":"https://..."}}}. Paste exactly one server.';
+  'For modern HTTP use {"mcpServers":{"name":{"url":"https://.../mcp","headers":{}}}}. ' +
+  'Set "type":"sse" only for legacy SSE servers. Environment and header values are imported as encrypted credentials.';
 
 export const MCP_STDIO_HINT =
   'Format: {"command":"...","args":["arg 1","arg 2"],"env":{"KEY":"value"}}. Each array item is one process argument.';
 
-export const MCP_SSE_HINT = 'Format: {"url":"https://example.com/sse"}.';
+export const MCP_HTTP_HINT = 'Format: {"url":"https://example.com/mcp","headers":{"X-Non-Secret":"value"}}.';
+export const MCP_SSE_HINT = 'Legacy format: {"url":"https://example.com/sse"}.';
 
 function isObject(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -59,6 +61,14 @@ function readEnv(config: Record<string, unknown>): JsonParseResult<Record<string
   return { ok: true, value: config.env as Record<string, string> };
 }
 
+function readHeaders(config: Record<string, unknown>): JsonParseResult<Record<string, string> | undefined> {
+  if (config.headers === undefined) return { ok: true, value: undefined };
+  if (!isObject(config.headers) || !Object.values(config.headers).every((entry) => typeof entry === "string")) {
+    return { ok: false, error: '"headers" must be an object whose values are strings.' };
+  }
+  return { ok: true, value: config.headers as Record<string, string> };
+}
+
 function parseStdioServer(config: Record<string, unknown>): JsonParseResult<Pick<UpdateMcpBody, "command" | "args" | "env">> {
   const command = readRequiredString(config, "command");
   if (!command.ok) return { ok: false, error: command.error };
@@ -76,9 +86,12 @@ function parseStdioServer(config: Record<string, unknown>): JsonParseResult<Pick
   };
 }
 
-function parseSseServer(config: Record<string, unknown>): JsonParseResult<Pick<UpdateMcpBody, "url">> {
+function parseHttpServer(config: Record<string, unknown>): JsonParseResult<Pick<UpdateMcpBody, "url" | "headers">> {
   const url = readRequiredString(config, "url");
-  return url.ok ? { ok: true, value: { url: url.value } } : { ok: false, error: url.error };
+  if (!url.ok) return { ok: false, error: url.error };
+  const headers = readHeaders(config);
+  if (!headers.ok) return { ok: false, error: headers.error };
+  return { ok: true, value: { url: url.value, ...(headers.value ? { headers: headers.value } : {}) } };
 }
 
 export function parseMcpImportJson(raw: string): JsonParseResult<CreateMcpBody> {
@@ -99,21 +112,22 @@ export function parseMcpImportJson(raw: string): JsonParseResult<CreateMcpBody> 
       : { ok: false, error: config.error };
   }
   if ("url" in server) {
-    const config = parseSseServer(server);
+    const config = parseHttpServer(server);
+    const legacySse = server.type === "sse" || server.transport === "sse";
     return config.ok
-      ? { ok: true, value: { name: name.trim(), transport: "sse", ...config.value } }
+      ? { ok: true, value: { name: name.trim(), transport: legacySse ? "sse" : "streamable-http", ...config.value } }
       : { ok: false, error: config.error };
   }
-  return { ok: false, error: 'The server needs either "command" for stdio or "url" for SSE.' };
+  return { ok: false, error: 'The server needs either "command" for stdio or "url" for HTTP.' };
 }
 
 export function parseMcpServerJson(
   raw: string,
-  transport: "stdio" | "sse",
-): JsonParseResult<Pick<UpdateMcpBody, "command" | "args" | "env" | "url">> {
+  transport: McpTransport,
+): JsonParseResult<Pick<UpdateMcpBody, "command" | "args" | "env" | "headers" | "url">> {
   const parsed = parseObject(raw);
   if (!parsed.ok) return { ok: false, error: parsed.error };
-  return transport === "stdio" ? parseStdioServer(parsed.value) : parseSseServer(parsed.value);
+  return transport === "stdio" ? parseStdioServer(parsed.value) : parseHttpServer(parsed.value);
 }
 
 export function formatMcpServerJson(mcp: McpListItem): string {
@@ -121,5 +135,6 @@ export function formatMcpServerJson(mcp: McpListItem): string {
     const server = mcp.server as McpStdioConfig;
     return JSON.stringify({ command: server.command, args: server.args, ...(server.env ? { env: server.env } : {}) }, null, 2);
   }
-  return JSON.stringify(mcp.server, null, 2);
+  const server = mcp.server as McpHttpConfig;
+  return JSON.stringify({ url: server.url, ...(server.headers ? { headers: server.headers } : {}) }, null, 2);
 }

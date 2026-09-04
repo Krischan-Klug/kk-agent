@@ -1,20 +1,19 @@
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
-import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
-import { SSEClientTransport } from "@modelcontextprotocol/sdk/client/sse.js";
 import type {
   McpRuntimeState,
   McpServerConfig,
-  McpStdioConfig,
-  McpSseConfig,
   McpToolDefinition,
   ToolCallResult,
 } from "../types.js";
 import { getErrorMessage } from "../../../lib/error.js";
 import { createLogger } from "../../../lib/logger.js";
+import { redactRuntimeCredentials } from "./credentials.js";
+import { createMcpTransport } from "./transports/factory.js";
 
 interface RunningMcp {
   client: Client;
   tools: McpToolDefinition[];
+  markStopping: () => void;
 }
 
 const running = new Map<string, RunningMcp>();
@@ -22,31 +21,25 @@ const runtimeStates = new Map<string, McpRuntimeState>();
 const logger = createLogger("mcp");
 
 function unavailable(error: unknown): McpRuntimeState {
-  return { status: "unavailable", error: getErrorMessage(error) };
+  return { status: "unavailable", error: redactRuntimeCredentials(getErrorMessage(error)) };
 }
 
-function mergeEnv(env?: Record<string, string>): Record<string, string> | undefined {
-  const source = { ...process.env, ...env };
+const DEFAULT_CONNECT_TIMEOUT_MS = 20_000;
 
-  const merged: Record<string, string> = {};
-  for (const [key, value] of Object.entries(source)) {
-    if (typeof value === "string") merged[key] = value;
+async function connectWithTimeout(client: Client, config: McpServerConfig): Promise<void> {
+  const transport = createMcpTransport(config);
+  const timeoutMs = config.connectTimeoutMs ?? DEFAULT_CONNECT_TIMEOUT_MS;
+  let timeout: ReturnType<typeof setTimeout> | undefined;
+  try {
+    await Promise.race([
+      client.connect(transport),
+      new Promise<never>((_resolve, reject) => {
+        timeout = setTimeout(() => reject(new Error(`Connection timed out after ${timeoutMs} ms.`)), timeoutMs);
+      }),
+    ]);
+  } finally {
+    if (timeout) clearTimeout(timeout);
   }
-  return Object.keys(merged).length > 0 ? merged : undefined;
-}
-
-function createTransport(config: McpServerConfig): StdioClientTransport | SSEClientTransport {
-  if (config.transport === "sse") {
-    return new SSEClientTransport(new URL((config.server as McpSseConfig).url));
-  }
-
-  const server = config.server as McpStdioConfig;
-  const env = mergeEnv(server.env);
-  return new StdioClientTransport({
-    command: server.command,
-    args: server.args,
-    ...(env && { env }),
-  });
 }
 
 export async function startMcp(config: McpServerConfig): Promise<McpRuntimeState> {
@@ -54,6 +47,7 @@ export async function startMcp(config: McpServerConfig): Promise<McpRuntimeState
 
   const client = new Client({ name: `kk-agent-${config.id}`, version: "0.1.0" });
   let closed = false;
+  let stopping = false;
   let connectionError: Error | undefined;
 
   client.onclose = () => {
@@ -66,30 +60,33 @@ export async function startMcp(config: McpServerConfig): Promise<McpRuntimeState
     logger.warn(`MCP "${config.name}" became unavailable: ${state.error}`);
   };
   client.onerror = (error) => {
+    if (stopping) return;
     connectionError = error;
-    logger.warn(`MCP "${config.name}" connection error: ${getErrorMessage(error)}`);
+    logger.warn(`MCP "${config.name}" connection error: ${redactRuntimeCredentials(getErrorMessage(error))}`);
   };
 
   try {
-    const transport = createTransport(config);
-
-    await client.connect(transport);
+    await connectWithTimeout(client, config);
     const { tools: rawTools } = await client.listTools();
     if (closed) throw connectionError ?? new Error("Connection closed");
 
-    const tools: McpToolDefinition[] = rawTools.map((tool) => ({
+    const allowedTools = config.allowedTools ? new Set(config.allowedTools) : undefined;
+    const tools: McpToolDefinition[] = rawTools
+      .filter((tool) => !allowedTools || allowedTools.has(tool.name))
+      .map((tool) => ({
       name: tool.name,
       description: tool.description ?? "",
       inputSchema: (tool.inputSchema ?? {}) as Record<string, unknown>,
       mcpId: config.id,
-    }));
+      }));
 
-    running.set(config.id, { client, tools });
+    running.set(config.id, { client, tools, markStopping: () => { stopping = true; } });
     const state: McpRuntimeState = { status: "running" };
     runtimeStates.set(config.id, state);
     return state;
   } catch (error) {
     running.delete(config.id);
+    stopping = true;
     try {
       await client.close();
     } catch {
@@ -106,6 +103,7 @@ export async function stopMcp(id: string): Promise<McpRuntimeState> {
   const entry = running.get(id);
   running.delete(id);
   if (entry) {
+    entry.markStopping();
     try {
       await entry.client.close();
     } catch {
@@ -170,8 +168,8 @@ export async function executeToolForMcp(
     const content = (result.content as Array<{ type: string; text?: string }>)
       .map((c) => c.text ?? "")
       .join("\n");
-    return { content, isError: !!result.isError };
+    return { content: redactRuntimeCredentials(content), isError: !!result.isError };
   } catch (err) {
-    return { content: getErrorMessage(err), isError: true };
+    return { content: redactRuntimeCredentials(getErrorMessage(err)), isError: true };
   }
 }

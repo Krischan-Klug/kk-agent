@@ -1,4 +1,4 @@
-import type { McpServerConfig, McpSseConfig, McpStdioConfig, McpToolDefinition, CreateMcpBody, UpdateMcpBody } from "./types.js";
+import type { McpHttpConfig, McpServerConfig, McpStdioConfig, McpToolDefinition, CreateMcpBody, UpdateMcpBody } from "./types.js";
 import { getInternalTool } from "../tools/service.js";
 import { createSlugId } from "../lib/ids.js";
 import { NotFoundError, ConflictError } from "../../lib/errors.js";
@@ -11,6 +11,7 @@ import {
   forgetMcpRuntimeState,
   getRunningMcps,
 } from "./lib/process-manager.js";
+import { validateMcpConfig } from "./lib/config.js";
 
 let cachedCustomMcps: McpServerConfig[] = [];
 
@@ -63,11 +64,14 @@ export async function createMcp(body: CreateMcpBody): Promise<McpServerConfig> {
     instruction: body.instruction ?? "",
     emoji: body.emoji,
     transport: body.transport,
+    ...(body.credentialBindings?.length ? { credentialBindings: body.credentialBindings } : {}),
     server:
       body.transport === "stdio"
         ? { command: body.command ?? "", args: body.args ?? [], ...(body.env && { env: body.env }) }
-        : { url: body.url ?? "" },
+        : { url: body.url ?? "", ...(body.headers && { headers: body.headers }) },
   };
+
+  validateMcpConfig(config);
 
   await addMcp(config);
   cachedCustomMcps = await getRegistry();
@@ -99,23 +103,30 @@ export async function updateMcpConfig(id: string, body: UpdateMcpBody): Promise<
     instruction: body.instruction ?? current.instruction,
   };
   if (body.emoji !== undefined) next.emoji = body.emoji;
+  if (body.credentialBindings !== undefined) {
+    next.credentialBindings = body.credentialBindings.length > 0 ? body.credentialBindings : undefined;
+  }
 
   if (body.transport !== undefined) {
     next.transport = body.transport;
     next.server = body.transport === "stdio"
       ? { command: body.command ?? "", args: body.args ?? [], ...(body.env && { env: body.env }) }
-      : { url: body.url ?? "" };
+      : { url: body.url ?? "", ...(body.headers && { headers: body.headers }) };
   } else if (next.transport === "stdio") {
     const server = next.server as McpStdioConfig;
     if (body.command !== undefined) server.command = body.command;
     if (body.args !== undefined) server.args = body.args;
     if (body.env !== undefined) server.env = Object.keys(body.env).length > 0 ? body.env : undefined;
-  } else if (body.url !== undefined) {
-    (next.server as McpSseConfig).url = body.url;
+  } else {
+    const server = next.server as McpHttpConfig;
+    if (body.url !== undefined) server.url = body.url;
+    if (body.headers !== undefined) server.headers = Object.keys(body.headers).length > 0 ? body.headers : undefined;
   }
 
   const connectionChanged = current.transport !== next.transport
     || JSON.stringify(current.server) !== JSON.stringify(next.server);
+  const credentialsChanged = JSON.stringify(current.credentialBindings) !== JSON.stringify(next.credentialBindings);
+  validateMcpConfig(next);
   const index = mcps.findIndex((mcp) => mcp.id === id);
   mcps[index] = next;
   await updateRegistry(mcps);
@@ -123,12 +134,21 @@ export async function updateMcpConfig(id: string, body: UpdateMcpBody): Promise<
 
   if (!next.active) {
     await stopMcp(id);
-  } else if (!current.active || connectionChanged) {
-    if (connectionChanged) await stopMcp(id);
+  } else if (!current.active || connectionChanged || credentialsChanged) {
+    if (connectionChanged || credentialsChanged) await stopMcp(id);
     await startMcp(next);
   }
 
   return next;
+}
+
+export async function refreshActiveMcps(changedCredentialIds?: ReadonlySet<string>): Promise<void> {
+  for (const mcp of cachedCustomMcps) {
+    if (!mcp.active) continue;
+    if (changedCredentialIds && !(mcp.credentialBindings ?? []).some((binding) => changedCredentialIds.has(binding.credentialId))) continue;
+    await stopMcp(mcp.id);
+    await startMcp(mcp);
+  }
 }
 
 export async function executeToolForMcp(

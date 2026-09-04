@@ -238,8 +238,8 @@ export async function startBackgroundTerminalTask(input: {
   }
 
   record.settled = completion.then(async (result) => {
-    if (record.timeout) clearTimeout(record.timeout);
     await drainProcessOutput(record.processHandle);
+    if (record.timeout) clearTimeout(record.timeout);
     finishOutputStreams(record);
     await Promise.all([waitForStream(stdoutStream), waitForStream(stderrStream)]);
     if (record.status === "stop_failed") return;

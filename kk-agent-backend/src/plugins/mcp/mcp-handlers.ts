@@ -12,6 +12,7 @@ import {
   updateMcpConfig,
 } from "./service.js";
 import { getMcpRuntimeState } from "./lib/process-manager.js";
+import { buildCredentialStatuses } from "./lib/credentials.js";
 import { removeMcpFromAgents } from "../agent/service.js";
 import { removeMcpFromSessions } from "../session/lib/cleanup.js";
 
@@ -21,6 +22,7 @@ export async function listMcps(_req: Request, res: Response): Promise<Response> 
     ...m,
     runtime: getMcpRuntimeState(m.id),
     tools: getMcpTools(m.id),
+    credentials: buildCredentialStatuses(m.credentialBindings),
   }));
   return res.json(result);
 }

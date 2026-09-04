@@ -16,7 +16,7 @@ export default function CreateMcpModal({ open, creating, onCreate, onClose }: Pr
   const parsed = useMemo(() => parseMcpImportJson(configJson), [configJson]);
 
   useEffect(() => {
-    if (open) setConfigJson("");
+    setConfigJson("");
   }, [open]);
 
   if (!open) return null;

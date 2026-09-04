@@ -1,8 +1,8 @@
 export type {
   CreateMcpBody,
+  McpHttpConfig,
   McpRuntimeState,
   McpServerConfig,
-  McpSseConfig,
   McpStdioConfig,
   McpToolDefinition,
   UpdateMcpBody,

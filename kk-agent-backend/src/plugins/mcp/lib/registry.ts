@@ -1,10 +1,14 @@
 import { existsSync } from "node:fs";
 import type { McpServerConfig } from "../types.js";
 import { INTERNAL_TOOL_IDS } from "../../tools/types.js";
+import { listManagedMcpManifests } from "../../tools/lib/managed-mcp/registry.js";
 import { getStatePath, readJsonFile, writeJsonFile } from "../../lib/state.js";
 
 const REGISTRY_PATH = getStatePath("mcps.json");
-const RESERVED_IDS = new Set<string>(INTERNAL_TOOL_IDS);
+const RESERVED_IDS = new Set<string>([
+  ...INTERNAL_TOOL_IDS,
+  ...listManagedMcpManifests().map((manifest) => manifest.id),
+]);
 const DEFAULT_REGISTRY: { mcps: McpServerConfig[] } = { mcps: [] };
 
 function normalizeStoredMcp(mcp: McpServerConfig): McpServerConfig {
@@ -16,6 +20,9 @@ function normalizeStoredMcp(mcp: McpServerConfig): McpServerConfig {
     ...(mcp.emoji ? { emoji: mcp.emoji } : {}),
     transport: mcp.transport,
     server: mcp.server,
+    ...(mcp.credentialBindings?.length ? { credentialBindings: mcp.credentialBindings } : {}),
+    ...(mcp.allowedTools?.length ? { allowedTools: mcp.allowedTools } : {}),
+    ...(mcp.connectTimeoutMs ? { connectTimeoutMs: mcp.connectTimeoutMs } : {}),
   };
 }
 

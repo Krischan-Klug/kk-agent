@@ -7,6 +7,7 @@ import { getDefaults } from "../../lib/defaults.js";
 import { applyOverrides, diffOverrides } from "../../lib/overrides.js";
 import { dedupeIds, filterToKnownIds } from "../../lib/ids.js";
 import { getKnownSkillIds } from "../../skills/service.js";
+import { getKnownInternalToolIds } from "../../tools/service.js";
 
 const REQUIRED_TOOL_IDS = ["attachment"];
 
@@ -43,7 +44,7 @@ export function buildDefaultAgentConfig(): AgentConfig {
   return {
     color: defaults.color,
     promptSections: { ...defaults.promptSections },
-    toolIds: dedupeIds(defaults.toolIds, REQUIRED_TOOL_IDS),
+    toolIds: dedupeIds([...defaults.toolIds, ...getKnownInternalToolIds()], REQUIRED_TOOL_IDS),
     mcpIds: [...defaults.mcpIds],
     skillIds: getKnownSkillIds(),
     toolAccessScopes: { ...defaults.toolAccessScopes },

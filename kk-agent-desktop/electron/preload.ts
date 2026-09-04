@@ -21,6 +21,12 @@ contextBridge.exposeInMainWorld("kkAgentDesktop", {
   external: {
     open: (url: string) => ipcRenderer.invoke("kk-agent:open-external", url),
   },
+  credentials: {
+    set: (id: string, value: string) => ipcRenderer.invoke("kk-agent:credentials:set", id, value),
+    setMany: (values: Record<string, string>) => ipcRenderer.invoke("kk-agent:credentials:set-many", values),
+    remove: (id: string) => ipcRenderer.invoke("kk-agent:credentials:remove", id),
+    removeMany: (ids: string[]) => ipcRenderer.invoke("kk-agent:credentials:remove-many", ids),
+  },
   windowControls: {
     minimize: () => ipcRenderer.invoke("kk-agent:window:minimize"),
     toggleMaximize: () => ipcRenderer.invoke("kk-agent:window:toggle-maximize"),

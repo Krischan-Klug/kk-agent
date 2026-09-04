@@ -10,19 +10,21 @@ import {
   listTasks,
   listInternalTools,
   getInternalToolRuntimeState,
+  getInternalToolCredentials,
+  getInternalToolDescriptors,
   listUserFacts,
   replaceSessionFacts,
   replaceTasks,
   replaceUserFacts,
   updateInternalToolConfig,
 } from "./service.js";
-import { getToolDescriptors } from "./lib/tool-modules.js";
 
 export async function listTools(_req: Request, res: Response): Promise<Response> {
   const tools = listInternalTools().map((tool) => ({
     ...tool,
     runtime: getInternalToolRuntimeState(tool),
-    tools: getToolDescriptors(tool.id),
+    tools: getInternalToolDescriptors(tool.id),
+    credentials: getInternalToolCredentials(tool.id),
   }));
   return res.json(tools);
 }

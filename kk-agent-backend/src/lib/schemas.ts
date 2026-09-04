@@ -91,14 +91,31 @@ export const UpdateSessionBodySchema = z.object({
 
 /* MCP */
 
+const McpCredentialBindingSchema = z.object({
+  id: NonEmptyStringSchema,
+  label: NonEmptyStringSchema,
+  credentialId: NonEmptyStringSchema,
+  required: z.boolean(),
+  target: z.discriminatedUnion("kind", [
+    z.object({ kind: z.literal("env"), name: NonEmptyStringSchema }).strict(),
+    z.object({
+      kind: z.literal("header"),
+      name: NonEmptyStringSchema,
+      prefix: z.string().optional(),
+    }).strict(),
+  ]),
+}).strict();
+
 export const CreateMcpBodySchema = z
   .object({
     name: NonEmptyStringSchema,
-    transport: z.enum(["stdio", "sse"]),
+    transport: z.enum(["stdio", "streamable-http", "sse"]),
     command: OptionalTrimmedStringSchema,
     args: z.array(z.string()).optional(),
     env: z.record(z.string()).optional(),
+    headers: z.record(z.string()).optional(),
     url: OptionalTrimmedStringSchema,
+    credentialBindings: z.array(McpCredentialBindingSchema).optional(),
     instruction: z.string().optional(),
     emoji: z.string().optional(),
   })
@@ -110,11 +127,11 @@ export const CreateMcpBodySchema = z
         message: "command is required for stdio MCPs",
       });
     }
-    if (body.transport === "sse" && !body.url) {
+    if (body.transport !== "stdio" && !body.url) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         path: ["url"],
-        message: "url is required for SSE MCPs",
+        message: "url is required for HTTP MCPs",
       });
     }
   });
@@ -122,11 +139,13 @@ export const CreateMcpBodySchema = z
 export const UpdateMcpBodySchema = z.object({
   name: OptionalTrimmedStringSchema,
   active: z.boolean().optional(),
-  transport: z.enum(["stdio", "sse"]).optional(),
+  transport: z.enum(["stdio", "streamable-http", "sse"]).optional(),
   command: OptionalTrimmedStringSchema,
   args: z.array(z.string()).optional(),
   env: z.record(z.string()).optional(),
+  headers: z.record(z.string()).optional(),
   url: OptionalTrimmedStringSchema,
+  credentialBindings: z.array(McpCredentialBindingSchema).optional(),
   instruction: z.string().optional(),
   emoji: z.string().optional(),
 }).strict();

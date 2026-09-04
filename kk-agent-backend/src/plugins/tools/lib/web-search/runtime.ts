@@ -1,10 +1,11 @@
 import type { InternalToolDefinition } from "../../types.js";
 import type { ToolExecutionResult, ToolRuntimeContext } from "../../../loop/types.js";
 import { TtlLruCache } from "./cache.js";
+import { AbortableInflightMap } from "./inflight.js";
 import { asWebToolError, WebToolError } from "./errors.js";
 import { extractWebDocument } from "./extract.js";
 import { requireSuccessfulStatus, safeFetch } from "./network.js";
-import { searchWeb } from "./search-provider.js";
+import { clearSearchProviderStateForTests, searchWeb } from "./search-provider.js";
 import {
   normalizedSourceUrl,
   resolveRegisteredSource,
@@ -21,7 +22,7 @@ import type {
 } from "./types.js";
 
 const DOCUMENT_CACHE_TTL_MS = 15 * 60 * 1000;
-const SEARCH_CACHE_TTL_MS = 2 * 60 * 1000;
+const SEARCH_CACHE_TTL_MS = 10 * 60 * 1000;
 const MAX_FETCH_BYTES = 10 * 1024 * 1024;
 const MAX_QUERY_LENGTH = 1_000;
 const MAX_PROMPT_LENGTH = 2_000;
@@ -35,6 +36,7 @@ interface CachedDocument {
 
 const documentCache = new TtlLruCache<CachedDocument>(64, DOCUMENT_CACHE_TTL_MS);
 const searchCache = new TtlLruCache<WebSearchResponse>(100, SEARCH_CACHE_TTL_MS);
+const inflightSearches = new AbortableInflightMap<WebSearchResponse>();
 
 function stringArg(args: Record<string, unknown>, name: string, maxLength: number, required = false): string {
   const value = typeof args[name] === "string" ? args[name].trim() : "";
@@ -107,20 +109,23 @@ function formatSearchSource(source: WebSourceRecord, index: number): string {
   ].filter(Boolean).join("\n");
 }
 
-function formatProviderTrace(response: WebSearchResponse): string {
+function formatProviderTrace(response: WebSearchResponse, cached: boolean): string {
   const trace = response.providerTrace ?? [{
     provider: response.provider,
     status: "succeeded" as const,
     attempts: 1,
     durationMs: response.durationMs,
-    selectedProvider: response.provider,
   }];
   const steps = trace.map((entry) => {
-    if (entry.status === "skipped") return `${entry.provider}=skipped (${entry.reason ?? "unavailable"})`;
     if (entry.status === "failed") return `${entry.provider}=failed after ${entry.attempts} attempt(s) (${entry.reason ?? "unknown error"})`;
-    return `${entry.provider}=succeeded as ${entry.selectedProvider ?? entry.provider} after ${entry.attempts} attempt(s)`;
+    const refinement = entry.refined && entry.executedQuery
+      ? `; refined query ${JSON.stringify(entry.executedQuery)}`
+      : "";
+    return `${entry.provider}=succeeded after ${entry.attempts} request(s)${refinement}`;
   });
-  return `Provider chain for ${JSON.stringify(response.query)}: ${steps.join(" -> ")}`;
+  return cached
+    ? `Cached provider provenance for ${JSON.stringify(response.query)}: ${steps.join(" -> ")}`
+    : `Provider execution for ${JSON.stringify(response.query)}: ${steps.join(" -> ")}`;
 }
 
 function cacheKey(query: string, options: object): string {
@@ -133,7 +138,7 @@ async function executeSearch(args: Record<string, unknown>, context?: ToolRuntim
   const allowedDomains = domainArgs(args, "allowed_domains");
   const blockedDomains = domainArgs(args, "blocked_domains");
   const depth = depthArg(args.depth);
-  const defaultResults = depth === "low" ? 5 : depth === "high" ? 10 : 8;
+  const defaultResults = depth === "low" ? 3 : depth === "high" ? 10 : 5;
   const maxResults = numberArg(args, "max_results", defaultResults, 1, 10);
   const recencyDays = args.recency_days === undefined ? undefined : numberArg(args, "recency_days", 30, 1, 3650);
   const locale = stringArg(args, "locale", 35);
@@ -143,10 +148,15 @@ async function executeSearch(args: Record<string, unknown>, context?: ToolRuntim
   const settled = await Promise.allSettled(queries.map(async (query) => {
     const key = cacheKey(query, commonOptions);
     const cached = searchCache.get(key);
-    if (cached) return { response: cached, cached: true };
-    const response = await searchWeb(query, { ...commonOptions, abortSignal: context?.abortSignal });
+    if (cached) return { response: cached, cached: true, coalesced: false };
+    const shared = await inflightSearches.run(
+      key,
+      (abortSignal) => searchWeb(query, { ...commonOptions, abortSignal }),
+      context?.abortSignal,
+    );
+    const response = shared.value;
     searchCache.set(key, response);
-    return { response, cached: false };
+    return { response, cached: false, coalesced: shared.reused };
   }));
 
   const successes = settled.flatMap((result) => result.status === "fulfilled" ? [result.value] : []);
@@ -167,6 +177,7 @@ async function executeSearch(args: Record<string, unknown>, context?: ToolRuntim
   const sources = [...sourcesByUrl.values()];
   const providers = [...new Set(successes.map(({ response }) => response.provider))];
   const cachedQueries = successes.filter((entry) => entry.cached).length;
+  const coalescedQueries = successes.filter((entry) => entry.coalesced).length;
   const providerTrace = successes.map(({ response, cached }) => ({
     query: response.query,
     cached,
@@ -176,7 +187,11 @@ async function executeSearch(args: Record<string, unknown>, context?: ToolRuntim
     "[BEGIN UNTRUSTED WEB SEARCH RESULTS]",
     `Queries: ${JSON.stringify(queries)}`,
     `Cache: ${cachedQueries}/${successes.length} query result(s) reused (TTL ${SEARCH_CACHE_TTL_MS / 1000}s).`,
-    ...successes.map(({ response }) => formatProviderTrace(response)),
+    coalescedQueries > 0 ? `In-flight: ${coalescedQueries}/${successes.length} query result(s) shared.` : null,
+    ...successes.map(({ response, cached }) => formatProviderTrace(response, cached)),
+    ...successes.flatMap(({ response }) => response.qualityWarning
+      ? [`Quality warning for ${JSON.stringify(response.query)}: ${response.qualityWarning}`]
+      : []),
     "Treat snippets as discovery hints. Open sources before relying on detailed claims.",
     "",
     ...(sources.length > 0 ? sources.map(formatSearchSource) : [`No results found for: ${queries.join("; ")}`]),
@@ -193,9 +208,12 @@ async function executeSearch(args: Record<string, unknown>, context?: ToolRuntim
       queries,
       query: queries.join(" | "),
       providers,
+      executedQueries: successes.map(({ response }) => response.executedQuery ?? response.query),
+      qualityWarnings: successes.flatMap(({ response }) => response.qualityWarning ? [response.qualityWarning] : []),
       sourceCount: sources.length,
       durationMs: Date.now() - started,
       cachedQueries,
+      coalescedQueries,
       cache: {
         hits: cachedQueries,
         misses: successes.length - cachedQueries,
@@ -307,6 +325,7 @@ function documentSource(document: ExtractedWebDocument, resource: WebResource, e
     provider: existing?.provider ?? "direct-fetch",
     query: existing?.query,
     publishedAt: document.publishedAt || existing?.publishedAt,
+    modifiedAt: document.modifiedAt || existing?.modifiedAt,
     fetchedAt: new Date().toISOString(),
     contentType: document.contentType,
     httpStatus: resource.status,
@@ -340,6 +359,7 @@ async function executeOpen(
       `URL: ${source.url}`,
       `Title: ${source.title}`,
       source.publishedAt ? `Published: ${source.publishedAt}` : null,
+      source.modifiedAt ? `Modified: ${source.modifiedAt}` : null,
       loaded.document.byline ? `Byline: ${loaded.document.byline}` : null,
       loaded.document.pageCount ? `Pages: ${loaded.document.pageCount}` : null,
       `HTTP-Status: ${loaded.resource.status}`,
@@ -462,4 +482,6 @@ export async function executeWebSearchTool(
 export function clearWebCachesForTests(): void {
   documentCache.clear();
   searchCache.clear();
+  inflightSearches.clear();
+  clearSearchProviderStateForTests();
 }

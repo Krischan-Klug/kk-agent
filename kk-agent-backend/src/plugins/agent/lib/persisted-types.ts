@@ -1,9 +1,7 @@
 import type {
+  AgentConfig,
   AgentDefinition,
-  AgentModeConfig,
-  ModeBehavior,
 } from "../types.js";
-import type { AgentModeSource } from "kk-agent-contract";
 
 export interface PersistedAgentsState {
   schemaVersion: number;
@@ -11,16 +9,6 @@ export interface PersistedAgentsState {
 }
 
 export interface PersistedAgentDefinition
-  extends Omit<AgentDefinition, "modes"> {
-  modes: PersistedAgentModeDefinition[];
-}
-
-export interface PersistedAgentModeDefinition {
-  id: string;
-  label: string;
-  behavior: ModeBehavior;
-  source: AgentModeSource;
-  color?: string;
-  enabled: boolean;
-  configOverrides?: Partial<AgentModeConfig>;
+  extends Omit<AgentDefinition, keyof AgentConfig> {
+  configOverrides?: Partial<AgentConfig>;
 }

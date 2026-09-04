@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { filterResultsByDomains } from "../domains.js";
-import { decodeBingResultUrl, parseBingResults } from "./bing.js";
+import { augmentBingQuery, decodeBingResultUrl, parseBingResults } from "./bing.js";
 
 function redirectUrl(target: string): string {
   return `https://www.bing.com/ck/a?!&&p=test&u=a1${Buffer.from(target).toString("base64url")}&ntb=1`;
@@ -34,4 +34,27 @@ test("Bing parser decodes targets before applying allowed and blocked domains", 
     allowedDomains: [],
     blockedDomains: ["wikipedia.org"],
   }).map((result) => result.host), ["github.com"]);
+});
+
+test("Bing query hints are only added for explicitly supplied domain filters", () => {
+  const options = {
+    allowedDomains: [], blockedDomains: [], maxResults: 5, depth: "medium" as const,
+  };
+  assert.equal(augmentBingQuery("open web", options), "open web");
+  assert.equal(augmentBingQuery("project", {
+    ...options,
+    allowedDomains: ["https://github.com/example"],
+    blockedDomains: ["wikipedia.org"],
+  }), "project (site:github.com) -site:wikipedia.org");
+});
+
+test("Bing parser caps snippets and only exposes explicit absolute dates", () => {
+  const html = `<ol>
+    <li class="b_algo"><h2><a href="https://example.com/a">Result</a></h2>
+      <time datetime="2026-09-04T10:00:00Z"></time><div class="b_caption"><p>${"x".repeat(700)}</p></div>
+    </li>
+  </ol>`;
+  const [parsed] = parseBingResults(html, "https://www.bing.com/search?q=test");
+  assert.equal(parsed?.snippet.length, 500);
+  assert.equal(parsed?.publishedAt, "2026-09-04T10:00:00.000Z");
 });

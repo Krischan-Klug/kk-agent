@@ -1,6 +1,6 @@
 import styled from "styled-components";
 import { FormRow } from "@/components/PageForm";
-export { InlineSelect, ModeTab, ModeTabs, Select, ToggleLabel, ToggleSwitch } from "@/components/FormControls.styled";
+export { InlineSelect, Select, ToggleLabel, ToggleSwitch, WorkspaceTab } from "@/components/FormControls.styled";
 
 export const EditorArea = styled.div`
   flex: 1 1 0;
@@ -73,14 +73,14 @@ export const SkillCapabilityRow = styled.div<{ $active: boolean }>`
   }
 `;
 
-export const ModeColorPicker = styled.div`
+export const AgentColorPicker = styled.div`
   display: flex;
   align-items: center;
   flex-wrap: wrap;
   gap: var(--space-xs);
 `;
 
-export const ModeColorButton = styled.button<{ $active: boolean; $color: string }>`
+export const AgentColorButton = styled.button<{ $active: boolean; $color: string }>`
   width: 22px;
   height: 22px;
   padding: 0;
@@ -101,7 +101,7 @@ export const ModeColorButton = styled.button<{ $active: boolean; $color: string 
   }
 `;
 
-export const ModeCustomColorPicker = styled.label`
+export const AgentCustomColorPicker = styled.label`
   width: 22px;
   height: 22px;
   position: relative;
@@ -118,7 +118,7 @@ export const ModeCustomColorPicker = styled.label`
   }
 `;
 
-export const ModeColorInput = styled.input`
+export const AgentColorInput = styled.input`
   width: 22px;
   height: 22px;
   position: absolute;

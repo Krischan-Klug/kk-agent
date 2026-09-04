@@ -1,6 +1,6 @@
 import { useState } from "react";
 import type { ReactNode } from "react";
-import type { AgentModeConfig } from "kk-agent-contract";
+import type { AgentConfig } from "kk-agent-contract";
 import type { RuntimeCapability } from "@/types/runtime";
 import SkillIcon from "@/components/SkillIcon";
 import { toggleId } from "@/lib/idLists";
@@ -27,14 +27,14 @@ type Props = {
   groups: RuntimeCapability[];
   idField: RuntimeCapabilityIdField;
   instructionField: RuntimeCapabilityInstructionField;
-  selectedModeConfig: AgentModeConfig;
+  agentConfig: AgentConfig;
   internalTools: RuntimeCapability[];
   mcps: RuntimeCapability[];
   emojiFallback: string;
   getEffectiveInstruction: (group: RuntimeCapability) => string;
   getInstructionFallback: (group: RuntimeCapability) => string;
   renderActiveControls?: (group: RuntimeCapability) => ReactNode;
-  updateModeConfig: (nextConfig: AgentModeConfig) => void;
+  updateAgentConfig: (nextConfig: AgentConfig) => void;
 };
 
 export default function RuntimeToolCapabilitySection({
@@ -42,16 +42,16 @@ export default function RuntimeToolCapabilitySection({
   groups,
   idField,
   instructionField,
-  selectedModeConfig,
+  agentConfig,
   internalTools,
   mcps,
   emojiFallback,
   getEffectiveInstruction,
   getInstructionFallback,
   renderActiveControls,
-  updateModeConfig,
+  updateAgentConfig,
 }: Props) {
-  const activeIds = selectedModeConfig[idField];
+  const activeIds = agentConfig[idField];
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
 
   return (
@@ -61,7 +61,7 @@ export default function RuntimeToolCapabilitySection({
         const isActive = activeIds.includes(group.id);
         const isExpanded = expanded[group.id] ?? false;
         const capabilityToolNames = getCapabilityToolNames(group);
-        const explicitlyAllowedToolNames = selectedModeConfig.allowedToolNames
+        const explicitlyAllowedToolNames = agentConfig.allowedToolNames
           .filter((name) => capabilityToolNames.includes(name));
         // An empty allow-list for a capability means that all of its tools are enabled.
         const activeToolNames = explicitlyAllowedToolNames.length > 0
@@ -83,14 +83,14 @@ export default function RuntimeToolCapabilitySection({
               onToggle={() => {
                 const nextIds = toggleId(activeIds, group.id);
                 const nextAllowedRaw = isActive
-                  ? selectedModeConfig.allowedToolNames.filter((name) => !capabilityToolNames.includes(name))
-                  : [...selectedModeConfig.allowedToolNames, ...capabilityToolNames];
-                const nextModeConfig: AgentModeConfig = { ...selectedModeConfig, [idField]: nextIds };
-                updateModeConfig({
-                  ...nextModeConfig,
+                  ? agentConfig.allowedToolNames.filter((name) => !capabilityToolNames.includes(name))
+                  : [...agentConfig.allowedToolNames, ...capabilityToolNames];
+                const nextAgentConfig: AgentConfig = { ...agentConfig, [idField]: nextIds };
+                updateAgentConfig({
+                  ...nextAgentConfig,
                   allowedToolNames: normalizeAllowedToolNames(
                     nextAllowedRaw,
-                    nextModeConfig,
+                    nextAgentConfig,
                     internalTools,
                     mcps,
                   ),
@@ -100,15 +100,15 @@ export default function RuntimeToolCapabilitySection({
                 ...current,
                 [group.id]: !isExpanded,
               }))}
-              onResetInstruction={() => updateModeConfig({
-                ...selectedModeConfig,
+              onResetInstruction={() => updateAgentConfig({
+                ...agentConfig,
                 [instructionField]: setCapabilityInstruction(
-                  selectedModeConfig[instructionField],
+                  agentConfig[instructionField],
                   group.id,
                   instructionFallback,
                   instructionFallback,
                 ),
-              } as AgentModeConfig)}
+              } as AgentConfig)}
             />
             {isActive && isExpanded && (
               <>
@@ -117,15 +117,15 @@ export default function RuntimeToolCapabilitySection({
                   <CapabilityInstructionEditor
                     value={effectiveInstruction}
                     rows={4}
-                    onChange={(value) => updateModeConfig({
-                      ...selectedModeConfig,
+                    onChange={(value) => updateAgentConfig({
+                      ...agentConfig,
                       [instructionField]: setCapabilityInstruction(
-                        selectedModeConfig[instructionField],
+                        agentConfig[instructionField],
                         group.id,
                         value,
                         instructionFallback,
                       ),
-                    } as AgentModeConfig)}
+                    } as AgentConfig)}
                   />
                 </FormField>
                 {renderActiveControls?.(group)}
@@ -140,15 +140,15 @@ export default function RuntimeToolCapabilitySection({
                       ? activeIds
                       : activeIds.filter((id) => id !== group.id);
                     const nextAllowedRaw = [
-                      ...selectedModeConfig.allowedToolNames.filter((name) => !capabilityToolNames.includes(name)),
+                      ...agentConfig.allowedToolNames.filter((name) => !capabilityToolNames.includes(name)),
                       ...nextActiveToolNames,
                     ];
-                    const nextModeConfig: AgentModeConfig = { ...selectedModeConfig, [idField]: nextIds };
-                    updateModeConfig({
-                      ...nextModeConfig,
+                    const nextAgentConfig: AgentConfig = { ...agentConfig, [idField]: nextIds };
+                    updateAgentConfig({
+                      ...nextAgentConfig,
                       allowedToolNames: normalizeAllowedToolNames(
                         nextAllowedRaw,
-                        nextModeConfig,
+                        nextAgentConfig,
                         internalTools,
                         mcps,
                       ),

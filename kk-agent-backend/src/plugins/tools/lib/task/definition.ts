@@ -1,6 +1,6 @@
 import { defineInternalTool } from "../internal-tool-definition.js";
 
-// Base capability guidance only. Mode-specific workflow rules live in defaults.
+// Base capability guidance only; agent prompt policy owns workflow rules.
 export const taskDefinition = defineInternalTool({
   id: "task",
   name: "Tasks",

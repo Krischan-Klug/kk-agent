@@ -1,9 +1,7 @@
 export type {
   AgentDefinition,
-  AgentModeDefinition,
-  AgentModeConfig,
+  AgentConfig,
   AgentPromptSections,
-  ModeBehavior,
   CreateAgentBody,
   ToolAccessScope,
   UpdateAgentBody,

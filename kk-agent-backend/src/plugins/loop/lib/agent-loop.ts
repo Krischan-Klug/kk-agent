@@ -153,16 +153,11 @@ export async function runAgentLoop(opts: LoopOptions): Promise<LoopResult> {
         status = "stopped";
         break;
       }
-      const modeConfig = opts.modeConfigs[opts.activeModeId];
-      if (!modeConfig) throw new Error(`Missing mode config for mode "${opts.activeModeId}"`);
-
       state.attempt += 1;
       updateLoopState(state, opts, { status: "running" });
       const runtimeContext = opts.buildRuntimeContext?.({
         sessionId: opts.sessionId,
         agentId: opts.agentId,
-        modeId: modeConfig.modeId,
-        modeName: modeConfig.modePromptName,
         model: opts.model,
         step: state.step,
         toolContext,
@@ -463,10 +458,9 @@ export async function runAgentLoop(opts: LoopOptions): Promise<LoopResult> {
       if (toolUses.length > 0) {
         const executor = new StreamingToolExecutor(
           opts.executeTool,
-          { id: modeConfig.modeId, behavior: modeConfig.modeBehavior },
-          modeConfig.runtimeToolsByName,
-          async (runtimeTool, toolName, args, mode) =>
-            (await opts.resolveToolPermission?.(runtimeTool, toolName, args, mode)) ?? { allowed: true },
+          opts.runtimeConfig.runtimeToolsByName,
+          async (runtimeTool, toolName, args) =>
+            (await opts.resolveToolPermission?.(runtimeTool, toolName, args)) ?? { allowed: true },
           (update) => opts.onToolExecutionUpdate?.(
             update.toolUseId,
             update.toolName,

@@ -81,14 +81,13 @@ function buildToolPermissionResolver(
 ): RuntimeToolDefinition["resolvePermission"] | undefined {
   if (toolName !== "Terminal") return undefined;
 
-  return (_resolvedToolName, args, mode) => {
+  return (_resolvedToolName, args) => {
     const command = String(args.command ?? "").trim();
     const profile = getTerminalShellProfile();
     return resolveTerminalCommandPermission({
       action: args.action,
       command,
       taskId: args.taskId,
-      modeBehavior: mode.behavior,
       shellDialect: profile?.dialect,
       approvalMode,
     });

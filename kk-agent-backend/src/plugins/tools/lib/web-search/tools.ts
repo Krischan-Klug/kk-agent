@@ -9,7 +9,7 @@ const sourceTargetProperties = {
 export const webSearchTools: InternalToolDescriptor[] = [
   {
     name: "WebSearch",
-    description: "Search the web with one query or up to four parallel queries. Returns stable source IDs, clean target URLs, snippets, provider/fallback provenance, cache status, and optional publication dates. Open important sources before relying on detailed claims.",
+    description: "Search the web with one query or a batch of up to four queries. Normal Bing results are retained and relevance-ranked for agent judgment. Returns stable source IDs, clean target URLs, snippets, provenance, cache status, and optional verified publication dates. Search broadly unless a domain restriction is explicitly needed; open important sources before relying on detailed claims.",
     inputSchema: {
       type: "object",
       properties: {
@@ -20,23 +20,23 @@ export const webSearchTools: InternalToolDescriptor[] = [
           maxItems: 4,
           uniqueItems: true,
           items: { type: "string", minLength: 1, maxLength: 1000 },
-          description: "Up to four independent queries to run in parallel.",
+          description: "Up to four independent queries. Provider requests are safely scheduled by the runtime.",
         },
         allowed_domains: {
           type: "array",
           maxItems: 100,
           uniqueItems: true,
           items: { type: "string" },
-          description: "Only include these domains and their subdomains. Schemes are optional.",
+          description: "Optional per-call restriction: only include these domains and their subdomains. Omit for unrestricted web search. Schemes are optional.",
         },
         blocked_domains: {
           type: "array",
           maxItems: 100,
           uniqueItems: true,
           items: { type: "string" },
-          description: "Exclude these domains and their subdomains.",
+          description: "Optional per-call restriction: exclude these domains and their subdomains. Omit when no exclusion is required.",
         },
-        recency_days: { type: "integer", minimum: 1, maximum: 3650, description: "Prefer results from this many recent days." },
+        recency_days: { type: "integer", minimum: 1, maximum: 3650, description: "Ask Bing to prefer results from this many recent days. This is best-effort, not a strict date guarantee." },
         locale: { type: "string", maxLength: 35, description: "Search locale or language, for example de-DE or en-US." },
         depth: { type: "string", enum: ["low", "medium", "high"], description: "Research breadth. Defaults to medium." },
         max_results: { type: "integer", minimum: 1, maximum: 10, description: "Maximum results per query." },

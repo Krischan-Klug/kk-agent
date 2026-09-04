@@ -1,9 +1,6 @@
-import type { Dispatch, SetStateAction } from "react";
 import type {
+  AgentConfig,
   AgentDefinition,
-  AgentModeConfig,
-  AgentModeDefinition,
-  ModeBehavior,
   ModelInfo,
   ProviderConfig,
   ReasoningEffort,
@@ -33,12 +30,10 @@ import {
   HeaderActions,
   InlineSelect,
   LabelRow,
-  ModeColorButton,
-  ModeCustomColorPicker,
-  ModeColorInput,
-  ModeColorPicker,
-  ModeTab,
-  ModeTabs,
+  AgentColorButton,
+  AgentCustomColorPicker,
+  AgentColorInput,
+  AgentColorPicker,
   PromptSectionField,
   PromptSectionsGrid,
   ScopeRow,
@@ -46,28 +41,22 @@ import {
   SkillCapabilityRow,
   SkillsGrid,
   ToggleLabel,
-  ToggleSwitch,
   AgentActions,
 } from "./AgentEditor.styled";
 import {
   isScopeCapableTool,
-  MODE_BEHAVIORS,
   PROMPT_SECTION_META,
 } from "./AgentEditor.helpers";
 import { CapabilityToggleHeader, OverrideActions } from "./CapabilitySection";
 import RuntimeToolCapabilitySection from "./RuntimeToolCapabilitySection";
-import { getModeColor, MODE_COLOR_OPTIONS } from "@/lib/modeColors";
+import { AGENT_COLOR_OPTIONS, getAgentColor } from "@/lib/agentColors";
 
 type AgentInfoSectionProps = {
   currentAgent: AgentDefinition;
-  enabledModes: AgentModeDefinition[];
-  effectiveSelectedModeId: string;
   providers: ProviderConfig[];
   models: ModelInfo[];
   showReasoning: boolean;
   reasoningLevels: ReasoningEffort[];
-  setSelectedModeId: Dispatch<SetStateAction<string>>;
-  addCustomMode: () => void;
   updateReasoningConfig: (patch: NonNullable<AgentDefinition["llmRequestConfig"]>["reasoning"]) => void;
   onChange: (agent: AgentDefinition) => void;
   saving: boolean;
@@ -77,14 +66,10 @@ type AgentInfoSectionProps = {
 
 export function AgentInfoSection({
   currentAgent,
-  enabledModes,
-  effectiveSelectedModeId,
   providers,
   models,
   showReasoning,
   reasoningLevels,
-  setSelectedModeId,
-  addCustomMode,
   updateReasoningConfig,
   onChange,
   saving,
@@ -103,44 +88,36 @@ export function AgentInfoSection({
           <FieldLabel>Description</FieldLabel>
           <Input value={currentAgent.description} onChange={(e) => onChange({ ...currentAgent, description: e.target.value })} />
         </FormField>
-        <FormField>
-          <FieldLabel>Default Mode</FieldLabel>
-          <Select
-            value={currentAgent.defaultModeId}
-            onChange={(e) => onChange({ ...currentAgent, defaultModeId: e.target.value })}
-          >
-            {enabledModes.map((mode) => (
-              <option key={mode.id} value={mode.id}>
-                {mode.label}
-              </option>
-            ))}
-          </Select>
+        <FormField $minWidth="180px">
+          <FieldLabel>Agent Color</FieldLabel>
+          <AgentColorPicker>
+            {AGENT_COLOR_OPTIONS.map((color) => {
+              const active = getAgentColor(currentAgent.color) === color.value;
+              return (
+                <AgentColorButton
+                  key={color.value}
+                  type="button"
+                  $active={active}
+                  $color={color.value}
+                  aria-label={`${color.label} auswählen`}
+                  aria-pressed={active}
+                  title={color.label}
+                  onClick={() => onChange({ ...currentAgent, color: color.value })}
+                />
+              );
+            })}
+            <AgentCustomColorPicker title="Eigene Farbe wählen">
+              <AgentColorInput
+                type="color"
+                value={getAgentColor(currentAgent.color)}
+                aria-label="Eigene Farbe wählen"
+                onChange={(e) => onChange({ ...currentAgent, color: e.target.value })}
+              />
+            </AgentCustomColorPicker>
+          </AgentColorPicker>
         </FormField>
       </FormRow>
       <FormRow>
-        <FormField>
-          <FieldLabel>Modes</FieldLabel>
-          <ModeTabs>
-            {currentAgent.modes.map((mode) => (
-              <ModeTab
-                key={mode.id}
-                type="button"
-                $active={mode.id === effectiveSelectedModeId}
-                $enabled={mode.enabled}
-                $variant={mode.behavior === "plan" ? "info" : "warning"}
-                $color={getModeColor(mode.color, mode.behavior)}
-                onClick={() => setSelectedModeId(mode.id)}
-              >
-                {mode.label}
-              </ModeTab>
-            ))}
-          </ModeTabs>
-          <ActionsRow>
-            <Button type="button" size="sm" variant="secondary" onClick={addCustomMode}>
-              Add custom mode
-            </Button>
-          </ActionsRow>
-        </FormField>
         <FormField>
           <FieldLabel>Default Model</FieldLabel>
           <Select
@@ -182,128 +159,6 @@ export function AgentInfoSection({
           <Button onClick={onSave} disabled={saving}>{saving ? "Saving..." : "Save"}</Button>
           <Button variant="danger" onClick={onDelete}>Delete</Button>
         </AgentActions>
-      </FormRow>
-    </Section>
-  );
-}
-
-type ModeSettingsSectionProps = {
-  currentAgent: AgentDefinition;
-  selectedModeDefinition: AgentModeDefinition;
-  isSelectedModeDefault: boolean;
-  canDisableSelectedMode: boolean;
-  canDeleteSelectedMode: boolean;
-  updateModeDefinition: (modeId: string, transform: (mode: AgentModeDefinition) => AgentModeDefinition) => void;
-  updateSelectedModeBehavior: (behavior: ModeBehavior) => void;
-  deleteCustomMode: (modeId: string) => void;
-  onChange: (agent: AgentDefinition) => void;
-};
-
-export function ModeSettingsSection({
-  currentAgent,
-  selectedModeDefinition,
-  isSelectedModeDefault,
-  canDisableSelectedMode,
-  canDeleteSelectedMode,
-  updateModeDefinition,
-  updateSelectedModeBehavior,
-  deleteCustomMode,
-  onChange,
-}: ModeSettingsSectionProps) {
-  return (
-    <Section>
-      <FormRow style={{ justifyContent: "space-between", alignItems: "center" }}>
-        <SectionTitle>Mode Settings</SectionTitle>
-        <ActionsRow>
-          <ToggleLabel>
-            <ToggleSwitch
-              type="button"
-              $active={selectedModeDefinition.enabled}
-              role="switch"
-              aria-checked={selectedModeDefinition.enabled}
-              aria-label="Mode aktivieren"
-              disabled={!canDisableSelectedMode}
-              onClick={() => updateModeDefinition(selectedModeDefinition.id, (mode) => ({
-                ...mode,
-                enabled: !mode.enabled,
-              }))}
-            />
-            <span>Enabled</span>
-          </ToggleLabel>
-          {!isSelectedModeDefault && selectedModeDefinition.enabled && (
-            <Button
-              type="button"
-              size="sm"
-              variant="secondary"
-              onClick={() => onChange({ ...currentAgent, defaultModeId: selectedModeDefinition.id })}
-            >
-              Set as default
-            </Button>
-          )}
-          {canDeleteSelectedMode && (
-            <Button
-              type="button"
-              size="sm"
-              variant="danger"
-              onClick={() => deleteCustomMode(selectedModeDefinition.id)}
-            >
-              Delete
-            </Button>
-          )}
-        </ActionsRow>
-      </FormRow>
-      <FormRow>
-        <FormField $flex={1} $minWidth="220px">
-          <FieldLabel>Mode Label</FieldLabel>
-          <Input
-            value={selectedModeDefinition.label}
-            disabled={selectedModeDefinition.source === "builtin"}
-            onChange={(e) => updateModeDefinition(selectedModeDefinition.id, (mode) => ({
-              ...mode,
-              label: e.target.value,
-            }))}
-          />
-        </FormField>
-        <FormField $minWidth="180px">
-          <FieldLabel>Mode Behavior</FieldLabel>
-          <Select
-            value={selectedModeDefinition.behavior}
-            disabled={selectedModeDefinition.source === "builtin"}
-            onChange={(e) => updateSelectedModeBehavior(e.target.value as ModeBehavior)}
-          >
-            {MODE_BEHAVIORS.map((behavior) => (
-              <option key={behavior} value={behavior}>{behavior}</option>
-            ))}
-          </Select>
-        </FormField>
-        <FormField $minWidth="180px">
-          <FieldLabel>Mode Color</FieldLabel>
-          <ModeColorPicker>
-            {MODE_COLOR_OPTIONS.map((color) => {
-              const active = getModeColor(selectedModeDefinition.color, selectedModeDefinition.behavior) === color.value;
-              return (
-                <ModeColorButton
-                  key={color.value}
-                  type="button"
-                  $active={active}
-                  $color={color.value}
-                  aria-label={`${color.label} auswählen`}
-                  aria-pressed={active}
-                  title={color.label}
-                  onClick={() => updateModeDefinition(selectedModeDefinition.id, (mode) => ({ ...mode, color: color.value }))}
-                />
-              );
-            })}
-            <ModeCustomColorPicker title="Eigene Farbe wÃ¤hlen">
-              <ModeColorInput
-                type="color"
-                value={getModeColor(selectedModeDefinition.color, selectedModeDefinition.behavior)}
-                aria-label="Eigene Farbe wÃ¤hlen"
-                onChange={(e) => updateModeDefinition(selectedModeDefinition.id, (mode) => ({ ...mode, color: e.target.value }))}
-              />
-            </ModeCustomColorPicker>
-          </ModeColorPicker>
-        </FormField>
       </FormRow>
     </Section>
   );
@@ -355,22 +210,22 @@ export function VariablesSection({
 }
 
 type PromptSectionsSectionProps = {
-  selectedModeConfig: AgentModeConfig;
-  getPromptSectionDefault: (section: keyof AgentModeConfig["promptSections"]) => string;
-  updateModeConfig: (nextConfig: AgentModeConfig) => void;
+  agentConfig: AgentConfig;
+  getPromptSectionDefault: (section: keyof AgentConfig["promptSections"]) => string;
+  updateAgentConfig: (nextConfig: AgentConfig) => void;
 };
 
 export function PromptSectionsSection({
-  selectedModeConfig,
+  agentConfig,
   getPromptSectionDefault,
-  updateModeConfig,
+  updateAgentConfig,
 }: PromptSectionsSectionProps) {
   return (
     <Section>
       <SectionTitle>Prompt Sections</SectionTitle>
       <PromptSectionsGrid>
         {PROMPT_SECTION_META.map((entry) => {
-        const isCustomized = selectedModeConfig.promptSections[entry.key].trim() !== getPromptSectionDefault(entry.key).trim();
+        const isCustomized = agentConfig.promptSections[entry.key].trim() !== getPromptSectionDefault(entry.key).trim();
         return (
           <PromptSectionField key={entry.key}>
             <LabelRow>
@@ -378,10 +233,10 @@ export function PromptSectionsSection({
               {isCustomized && (
                 <HeaderActions>
                   <OverrideActions
-                    onReset={() => updateModeConfig({
-                      ...selectedModeConfig,
+                    onReset={() => updateAgentConfig({
+                      ...agentConfig,
                       promptSections: {
-                        ...selectedModeConfig.promptSections,
+                        ...agentConfig.promptSections,
                         [entry.key]: getPromptSectionDefault(entry.key),
                       },
                     })}
@@ -391,10 +246,10 @@ export function PromptSectionsSection({
             </LabelRow>
             <TextArea
               rows={4}
-              value={selectedModeConfig.promptSections[entry.key]}
-              onChange={(e) => updateModeConfig({
-                ...selectedModeConfig,
-                promptSections: { ...selectedModeConfig.promptSections, [entry.key]: e.target.value },
+              value={agentConfig.promptSections[entry.key]}
+              onChange={(e) => updateAgentConfig({
+                ...agentConfig,
+                promptSections: { ...agentConfig.promptSections, [entry.key]: e.target.value },
               })}
               placeholder={getPromptSectionDefault(entry.key)}
             />
@@ -406,61 +261,26 @@ export function PromptSectionsSection({
   );
 }
 
-type ModeInstructionSectionProps = {
-  selectedModeConfig: AgentModeConfig;
-  defaultModeInstruction: string;
-  isCustomizedModeInstruction: boolean;
-  updateModeConfig: (nextConfig: AgentModeConfig) => void;
-};
-
-export function ModeInstructionSection({
-  selectedModeConfig,
-  defaultModeInstruction,
-  isCustomizedModeInstruction,
-  updateModeConfig,
-}: ModeInstructionSectionProps) {
-  return (
-    <Section>
-      <FormRow style={{ justifyContent: "space-between", alignItems: "center" }}>
-        <SectionTitle>Mode Instruction</SectionTitle>
-        {isCustomizedModeInstruction && (
-          <HeaderActions>
-            <OverrideActions
-              onReset={() => updateModeConfig({ ...selectedModeConfig, modeInstruction: defaultModeInstruction })}
-            />
-          </HeaderActions>
-        )}
-      </FormRow>
-      <TextArea
-        rows={4}
-        value={selectedModeConfig.modeInstruction}
-        onChange={(e) => updateModeConfig({ ...selectedModeConfig, modeInstruction: e.target.value })}
-        placeholder={defaultModeInstruction}
-      />
-    </Section>
-  );
-}
-
 type InternalToolsSectionProps = {
-  selectedModeConfig: AgentModeConfig;
+  agentConfig: AgentConfig;
   internalTools: RuntimeCapability[];
   mcps: RuntimeCapability[];
   getEffectiveToolInstruction: (toolId: string, fallback?: string) => string;
   getToolInstructionFallback: (toolId: string, fallback?: string) => string;
   getDefaultAccessScope: (toolId: string) => ToolAccessScope;
   getEffectiveAccessScope: (toolId: string) => ToolAccessScope;
-  updateModeConfig: (nextConfig: AgentModeConfig) => void;
+  updateAgentConfig: (nextConfig: AgentConfig) => void;
 };
 
 export function InternalToolsSection({
-  selectedModeConfig,
+  agentConfig,
   internalTools,
   mcps,
   getEffectiveToolInstruction,
   getToolInstructionFallback,
   getDefaultAccessScope,
   getEffectiveAccessScope,
-  updateModeConfig,
+  updateAgentConfig,
 }: InternalToolsSectionProps) {
   return (
     <RuntimeToolCapabilitySection
@@ -468,7 +288,7 @@ export function InternalToolsSection({
       groups={internalTools}
       idField="toolIds"
       instructionField="toolInstructions"
-      selectedModeConfig={selectedModeConfig}
+      agentConfig={agentConfig}
       internalTools={internalTools}
       mcps={mcps}
       emojiFallback="T"
@@ -477,7 +297,7 @@ export function InternalToolsSection({
       renderActiveControls={(tool) => {
         if (!isScopeCapableTool(tool.id)) return null;
         const effectiveAccessScope = getEffectiveAccessScope(tool.id);
-        const hasScopeOverride = selectedModeConfig.toolAccessScopes[tool.id] !== undefined;
+        const hasScopeOverride = agentConfig.toolAccessScopes[tool.id] !== undefined;
 
         return (
           <ScopeRow>
@@ -489,10 +309,10 @@ export function InternalToolsSection({
                 value={effectiveAccessScope}
                 onChange={(e) => {
                   const nextScope = e.target.value as ToolAccessScope;
-                  const nextScopes = { ...selectedModeConfig.toolAccessScopes };
+                  const nextScopes = { ...agentConfig.toolAccessScopes };
                   if (nextScope === getDefaultAccessScope(tool.id)) delete nextScopes[tool.id];
                   else nextScopes[tool.id] = nextScope;
-                  updateModeConfig({ ...selectedModeConfig, toolAccessScopes: nextScopes });
+                  updateAgentConfig({ ...agentConfig, toolAccessScopes: nextScopes });
                 }}
               >
                 <option value="user">user</option>
@@ -501,9 +321,9 @@ export function InternalToolsSection({
               {hasScopeOverride && (
                 <OverrideActions
                   onReset={() => {
-                      const nextScopes = { ...selectedModeConfig.toolAccessScopes };
+                      const nextScopes = { ...agentConfig.toolAccessScopes };
                       delete nextScopes[tool.id];
-                      updateModeConfig({ ...selectedModeConfig, toolAccessScopes: nextScopes });
+                      updateAgentConfig({ ...agentConfig, toolAccessScopes: nextScopes });
                     }}
                 />
               )}
@@ -511,23 +331,23 @@ export function InternalToolsSection({
           </ScopeRow>
         );
       }}
-      updateModeConfig={updateModeConfig}
+      updateAgentConfig={updateAgentConfig}
     />
   );
 }
 
 type ExternalMcpsSectionProps = {
-  selectedModeConfig: AgentModeConfig;
+  agentConfig: AgentConfig;
   internalTools: RuntimeCapability[];
   mcps: RuntimeCapability[];
-  updateModeConfig: (nextConfig: AgentModeConfig) => void;
+  updateAgentConfig: (nextConfig: AgentConfig) => void;
 };
 
 export function ExternalMcpsSection({
-  selectedModeConfig,
+  agentConfig,
   internalTools,
   mcps,
-  updateModeConfig,
+  updateAgentConfig,
 }: ExternalMcpsSectionProps) {
   return (
     <RuntimeToolCapabilitySection
@@ -535,34 +355,34 @@ export function ExternalMcpsSection({
       groups={mcps}
       idField="mcpIds"
       instructionField="mcpInstructions"
-      selectedModeConfig={selectedModeConfig}
+      agentConfig={agentConfig}
       internalTools={internalTools}
       mcps={mcps}
       emojiFallback="M"
-      getEffectiveInstruction={(mcp) => selectedModeConfig.mcpInstructions[mcp.id] ?? mcp.instruction ?? ""}
+      getEffectiveInstruction={(mcp) => agentConfig.mcpInstructions[mcp.id] ?? mcp.instruction ?? ""}
       getInstructionFallback={(mcp) => mcp.instruction ?? ""}
-      updateModeConfig={updateModeConfig}
+      updateAgentConfig={updateAgentConfig}
     />
   );
 }
 
 type SkillsSectionProps = {
-  selectedModeConfig: AgentModeConfig;
+  agentConfig: AgentConfig;
   skills: SkillDefinition[];
-  updateModeConfig: (nextConfig: AgentModeConfig) => void;
+  updateAgentConfig: (nextConfig: AgentConfig) => void;
 };
 
 export function SkillsSection({
-  selectedModeConfig,
+  agentConfig,
   skills,
-  updateModeConfig,
+  updateAgentConfig,
 }: SkillsSectionProps) {
   return (
     <Section>
       <SectionTitle><SkillIcon style={{ marginRight: "var(--space-xs)", verticalAlign: "-0.1em" }} />Skills</SectionTitle>
       <SkillsGrid>
       {skills.map((skill) => {
-        const isActive = selectedModeConfig.skillIds.includes(skill.id);
+        const isActive = agentConfig.skillIds.includes(skill.id);
 
         return (
           <SkillCapabilityRow key={skill.id} $active={isActive} title={skill.path}>
@@ -571,9 +391,9 @@ export function SkillsSection({
               icon={<SkillIcon />}
               name={skill.name}
               onToggle={() => {
-                updateModeConfig({
-                  ...selectedModeConfig,
-                  skillIds: toggleId(selectedModeConfig.skillIds, skill.id),
+                updateAgentConfig({
+                  ...agentConfig,
+                  skillIds: toggleId(agentConfig.skillIds, skill.id),
                 });
               }}
             />

@@ -1,9 +1,7 @@
 import type { ApprovalMode } from "../../types.js";
-import type { ModeBehavior } from "../../../agent/types.js";
 import type { RuntimeToolPermissionPolicy } from "../../../loop/types.js";
 import {
   isDestructiveShellCommand,
-  isReadOnlyShellCommand,
   isUnmanagedProcessTerminationCommand,
 } from "./command-policy.js";
 import type { TerminalShellDialect } from "./shell-profile.js";
@@ -18,7 +16,6 @@ export function resolveTerminalCommandPermission(input: {
   action?: unknown;
   command: string;
   taskId?: unknown;
-  modeBehavior: ModeBehavior;
   shellDialect?: TerminalShellDialect;
   approvalMode?: ApprovalMode;
 }): RuntimeToolPermissionPolicy {
@@ -29,9 +26,6 @@ export function resolveTerminalCommandPermission(input: {
   if (action === "status" || action === "stop") {
     if (!String(input.taskId ?? "").trim()) {
       return { kind: "deny", reason: `Terminal action "${action}" requires taskId.` };
-    }
-    if (action === "stop" && input.modeBehavior === "plan") {
-      return { kind: "deny", reason: "Im Plan-Mode duerfen Terminal-Tasks nicht gestoppt werden." };
     }
     return { kind: "allow" };
   }
@@ -45,12 +39,6 @@ export function resolveTerminalCommandPermission(input: {
     return {
       kind: "deny",
       reason: "Raw process-termination commands are disabled. Use Terminal action=\"stop\" with a managed taskId.",
-    };
-  }
-  if (input.modeBehavior === "plan" && !isReadOnlyShellCommand(command, input.shellDialect)) {
-    return {
-      kind: "deny",
-      reason: "Im Plan-Mode ist Terminal nur fuer read-only Diagnose, Suche und Inspektion erlaubt.",
     };
   }
   if (resolveApprovalMode(input.approvalMode) === "full_access" || !isDestructiveShellCommand(command)) {

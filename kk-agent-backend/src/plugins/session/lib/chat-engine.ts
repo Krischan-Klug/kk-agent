@@ -13,17 +13,16 @@ import {
   textBlock,
   type TranscriptBlock,
 } from "kk-agent-contract";
-import type { SessionModeRuntimeConfig } from "../service.js";
+import type { SessionAgentRuntimeConfig } from "../service.js";
 import {
   buildAssetRuntimeContext,
-  buildModeRuntimeConfig,
+  buildAgentRuntimeConfig,
   buildRuntimeContext,
   getSessionRecordOrThrow,
   normalizeSessionRequestConfig,
   toPublicSession,
 } from "../service.js";
 import { resolveSessionLlmRequestConfig } from "./session-resolution.js";
-import { getEnabledAgentModes } from "../../agent/lib/mode-config.js";
 import {
   getAgent,
 } from "../../agent/service.js";
@@ -34,7 +33,6 @@ import type {
   LoopCheckpoint,
   LoopOptions,
   LoopResult,
-  ModeRuntimeRef,
   RuntimeToolDefinition,
   ToolRuntimeContext,
 } from "../../loop/types.js";
@@ -164,16 +162,12 @@ async function prepareLoopRun(sessionId: string, message: string, assetIds?: str
     visionSupported: imageInputSupported,
   });
 
-  const modeRuntimeConfigs = Object.fromEntries(
-    getEnabledAgentModes(agent).map((mode) => [mode.id, buildModeRuntimeConfig(session, agent, mode.id)]),
-  ) as Record<string, SessionModeRuntimeConfig>;
-  const activeModeConfig = modeRuntimeConfigs[session.activeModeId];
-  if (!activeModeConfig) throw new Error(`Missing active mode config "${session.activeModeId}".`);
-  const explicitSkillId = getExplicitSkillId(message, activeModeConfig.activeSkillIds);
+  const runtimeConfig: SessionAgentRuntimeConfig = buildAgentRuntimeConfig(session, agent);
+  const explicitSkillId = getExplicitSkillId(message, runtimeConfig.activeSkillIds);
   const requestedLoadedSkillIds = explicitSkillId
     ? [...new Set([...session.loadedSkillIds, explicitSkillId])]
     : session.loadedSkillIds;
-  const loadedSkills = buildLoadedSkillContexts(requestedLoadedSkillIds, activeModeConfig.activeSkillIds);
+  const loadedSkills = buildLoadedSkillContexts(requestedLoadedSkillIds, runtimeConfig.activeSkillIds);
   await store.updateSession(sessionId, { messages, runs: [...session.runs, run] });
 
   return {
@@ -183,7 +177,7 @@ async function prepareLoopRun(sessionId: string, message: string, assetIds?: str
     messages,
     assetContext,
     modelContentByMessageId,
-    modeRuntimeConfigs,
+    runtimeConfig,
     reasoning: resolveSessionLlmRequestConfig(session),
     loadedSkills,
   };
@@ -234,7 +228,7 @@ function buildLoopRequest(
   >> = {},
   emit?: (event: SSEEvent) => void,
 ): LoopOptions {
-  const activeModeConfig = prepared.modeRuntimeConfigs[prepared.session.activeModeId]!;
+  const runtimeConfig = prepared.runtimeConfig;
   const runPermissionGrants = new Set<string>();
   const recordApprovalDecision = async (
     toolName: string,
@@ -268,12 +262,12 @@ function buildLoopRequest(
     sessionId: prepared.session.id,
     values: {
       ...prepared.loadedSkills,
-      availableSkillIds: activeModeConfig.activeSkillIds,
+      availableSkillIds: runtimeConfig.activeSkillIds,
       webSources: readPersistedWebSources(prepared.messages),
       publishedAssetIds: [],
       assetPublishRoots: [...new Set([
-        activeModeConfig.runtimeVariables?.FILESYSTEM_ROOT,
-        activeModeConfig.runtimeVariables?.TERMINAL_ROOT,
+        runtimeConfig.runtimeVariables?.FILESYSTEM_ROOT,
+        runtimeConfig.runtimeVariables?.TERMINAL_ROOT,
       ].filter((value): value is string => Boolean(value)))],
     },
   };
@@ -286,12 +280,10 @@ function buildLoopRequest(
     providerId: prepared.session.providerId,
     messages: cloneMessages(prepared.messages),
     model: prepared.session.model,
-    buildRuntimeContext: ({ modeId, modeName, model, toolContext }) => buildRuntimeContext({
+    buildRuntimeContext: ({ model, toolContext }) => buildRuntimeContext({
       sessionId: prepared.session.id,
-      modeId,
-      modeName: modeName ?? activeModeConfig.modePromptName,
       model,
-      runtimeVariables: activeModeConfig.runtimeVariables,
+      runtimeVariables: runtimeConfig.runtimeVariables,
       toolContext,
       assetContext: prepared.assetContext,
     }),
@@ -304,15 +296,13 @@ function buildLoopRequest(
     ),
     modelContentByMessageId: prepared.modelContentByMessageId,
     toolContext: initialToolContext,
-    modeConfigs: prepared.modeRuntimeConfigs,
-    activeModeId: prepared.session.activeModeId,
+    runtimeConfig,
     agentVariables: prepared.agent.variables ?? {},
-    executeTool: (toolName, args, mode, context) => {
-      const modeRuntimeConfig = prepared.modeRuntimeConfigs[mode.id];
-      const runtimeTool = modeRuntimeConfig?.runtimeToolsByName[toolName];
+    executeTool: (toolName, args, context) => {
+      const runtimeTool = runtimeConfig.runtimeToolsByName[toolName];
       if (!runtimeTool) {
         return Promise.resolve({
-          content: `Tool "${toolName}" is not allowed or available in mode "${mode.id}".`,
+          content: `Tool "${toolName}" is not allowed or available in the current agent configuration.`,
           isError: true,
         });
       }
@@ -322,10 +312,9 @@ function buildLoopRequest(
       runtimeTool: RuntimeToolDefinition,
       toolName: string,
       args: Record<string, unknown>,
-      mode: ModeRuntimeRef,
     ) => {
       const policy = runtimeTool.resolvePermission
-        ? await runtimeTool.resolvePermission(toolName, args, mode)
+        ? await runtimeTool.resolvePermission(toolName, args)
         : runtimeTool.permissionPolicy;
       if (policy.kind === "allow") return { allowed: true };
       if (policy.kind === "deny") return { allowed: false, reason: policy.reason };
@@ -384,7 +373,7 @@ function buildLoopRequest(
 }
 
 async function persistRuntimeNotices(prepared: PreparedLoopRun, emit?: (event: SSEEvent) => void): Promise<void> {
-  const notices = prepared.modeRuntimeConfigs[prepared.session.activeModeId]?.runtimeNotices ?? [];
+  const notices = prepared.runtimeConfig.runtimeNotices;
   for (const message of notices) {
     await appendRunEvent(prepared.session.id, prepared.run.id, {
       id: randomUUID(),

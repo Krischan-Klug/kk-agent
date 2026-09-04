@@ -1,6 +1,4 @@
 import type { LlmRequestConfig } from "./provider.js";
-export type ModeBehavior = "plan" | "edit";
-export type AgentModeSource = "builtin" | "custom";
 export type ToolAccessScope = "user" | "system";
 
 export interface AgentPromptSections {
@@ -12,9 +10,9 @@ export interface AgentPromptSections {
   communication: string;
 }
 
-export interface AgentModeConfig {
+export interface AgentConfig {
+  color: string;
   promptSections: AgentPromptSections;
-  modeInstruction: string;
   toolIds: string[];
   mcpIds: string[];
   skillIds: string[];
@@ -24,22 +22,10 @@ export interface AgentModeConfig {
   allowedToolNames: string[];
 }
 
-export interface AgentModeDefinition {
-  id: string;
-  label: string;
-  behavior: ModeBehavior;
-  source: AgentModeSource;
-  color?: string;
-  enabled: boolean;
-  config: AgentModeConfig;
-}
-
-export interface AgentDefinition {
+export interface AgentDefinition extends AgentConfig {
   id: string;
   name: string;
   description: string;
-  defaultModeId: string;
-  modes: AgentModeDefinition[];
   variables: Record<string, string>;
   defaultProviderId?: string;
   defaultModel?: string;
@@ -53,8 +39,6 @@ export interface AgentLoopState {
   sessionId: string;
   agentId: string;
   status: "running" | "completed" | "stopped" | "failed" | "aborted";
-  modeId: string;
-  modeBehavior: ModeBehavior;
   step: number;
   attempt: number;
   toolBatch: number;
@@ -62,22 +46,18 @@ export interface AgentLoopState {
   updatedAt: string;
 }
 
-export interface CreateAgentBody {
+export interface CreateAgentBody extends Partial<AgentConfig> {
   name: string;
   description?: string;
-  defaultModeId?: string;
-  modes?: AgentModeDefinition[];
   variables?: Record<string, string>;
   defaultProviderId?: string;
   defaultModel?: string;
   llmRequestConfig?: LlmRequestConfig;
 }
 
-export interface UpdateAgentBody {
+export interface UpdateAgentBody extends Partial<AgentConfig> {
   name?: string;
   description?: string;
-  defaultModeId?: string;
-  modes?: AgentModeDefinition[];
   variables?: Record<string, string>;
   defaultProviderId?: string;
   defaultModel?: string;

@@ -35,6 +35,13 @@ function metaContent(document: Document, selectors: string[]): string | undefine
   return undefined;
 }
 
+function attributeContent(document: Document, selectors: string[], attribute: string): string | undefined {
+  for (const selector of selectors) {
+    const value = document.querySelector(selector)?.getAttribute(attribute)?.trim();
+    if (value) return value;
+  }
+  return undefined;
+}
 
 function normalizeDate(value?: string): string | undefined {
   if (!value) return undefined;
@@ -97,6 +104,29 @@ function createTurndown(): TurndownService {
   return service;
 }
 
+interface HtmlCandidate {
+  markdown: string;
+  text: string;
+  links: Array<{ id: string; text: string; url: string }>;
+  score: number;
+}
+
+function htmlCandidate(html: string, baseUrl: string): HtmlCandidate {
+  const resolved = resolveLinks(html, baseUrl);
+  const markdown = cleanText(createTurndown().turndown(resolved.html));
+  const text = cleanText(parseHTML(`<html><body>${resolved.html}</body></html>`).document.body.textContent || markdown);
+  const headingCount = (markdown.match(/^#{1,6}\s+/gmu) ?? []).length;
+  const codeChars = [...markdown.matchAll(/```[\s\S]*?```/gu)]
+    .reduce((total, match) => total + match[0].length, 0);
+  const codeRatio = markdown.length > 0 ? codeChars / markdown.length : 0;
+  const footerLike = /(?:copyright|trademark policy|privacy policy|terms of use)/iu.test(text)
+    && headingCount === 0 && text.length < 1_500;
+  let score = text.length + headingCount * 120 + resolved.links.length * 15;
+  if (codeRatio > 0.65) score *= 0.2;
+  if (footerLike) score *= 0.15;
+  return { markdown, text, links: resolved.links, score };
+}
+
 async function extractPdf(resource: WebResource, contentType: string): Promise<ExtractedWebDocument> {
   const { PDFParse } = await import("pdf-parse");
   const parser = new PDFParse({ data: new Uint8Array(resource.body) });
@@ -128,11 +158,19 @@ function extractHtml(resource: WebResource, contentType: string): ExtractedWebDo
   const { document } = parseHTML(html);
   const publishedAt = normalizeDate(metaContent(document as unknown as Document, [
     'meta[property="article:published_time"]',
-    'meta[name="date"]',
     'meta[name="pubdate"]',
     'meta[itemprop="datePublished"]',
-    "time[datetime]",
-  ]) ?? document.querySelector("time[datetime]")?.getAttribute("datetime") ?? undefined);
+    'meta[name="publish-date"]',
+  ]) ?? attributeContent(document as unknown as Document, [
+    'time[itemprop="datePublished"][datetime]',
+  ], "datetime"));
+  const modifiedAt = normalizeDate(metaContent(document as unknown as Document, [
+    'meta[property="article:modified_time"]',
+    'meta[itemprop="dateModified"]',
+    'meta[name="last-modified"]',
+  ]) ?? attributeContent(document as unknown as Document, [
+    'time[itemprop="dateModified"][datetime]',
+  ], "datetime"));
 
   const readable = new Readability(document.cloneNode(true) as unknown as Document, {
     charThreshold: 120,
@@ -142,22 +180,25 @@ function extractHtml(resource: WebResource, contentType: string): ExtractedWebDo
   const fallbackContent = document.querySelector("main, article, [role=main]")?.innerHTML
     ?? document.body?.innerHTML
     ?? html;
-  const articleHtml = readable?.content?.trim() || fallbackContent;
-  const resolved = resolveLinks(articleHtml, resource.finalUrl);
-  const markdown = cleanText(createTurndown().turndown(resolved.html));
-  const text = cleanText(readable?.textContent?.trim() || parseHTML(`<html><body>${resolved.html}</body></html>`).document.body.textContent || markdown);
+  const fallback = htmlCandidate(fallbackContent, resource.finalUrl);
+  const readability = readable?.content?.trim()
+    ? htmlCandidate(readable.content, resource.finalUrl)
+    : undefined;
+  const choseReadability = Boolean(readability && readability.score >= fallback.score * 0.85);
+  const selected = choseReadability ? readability! : fallback;
 
   return {
     url: resource.finalUrl,
     title: cleanText(readable?.title ?? "") || fallbackTitle,
-    byline: cleanText(readable?.byline ?? "") || null,
-    excerpt: cleanText(readable?.excerpt ?? "") || null,
-    siteName: cleanText(readable?.siteName ?? "") || null,
+    byline: choseReadability ? cleanText(readable?.byline ?? "") || null : null,
+    excerpt: choseReadability ? cleanText(readable?.excerpt ?? "") || null : null,
+    siteName: choseReadability ? cleanText(readable?.siteName ?? "") || null : null,
     publishedAt,
+    modifiedAt,
     contentType,
-    text,
-    markdown,
-    links: resolved.links,
+    text: selected.text,
+    markdown: selected.markdown,
+    links: selected.links,
   };
 }
 

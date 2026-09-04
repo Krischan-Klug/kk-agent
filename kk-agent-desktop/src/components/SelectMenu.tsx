@@ -17,19 +17,23 @@ const Wrapper = styled.div`
   display: inline-block;
 `;
 
-const Trigger = styled.button<{ $variant: TriggerVariant; $optionColor?: string }>`
+const Trigger = styled.button<{ $variant: TriggerVariant; $optionColor?: string; $compact?: boolean }>`
   display: inline-flex;
   align-items: center;
   gap: var(--space-xs);
-  padding: 2px var(--space-sm);
+  box-sizing: border-box;
+  height: 28px;
+  padding: 0 8px;
   background: var(--bg-surface);
-  color: var(--text-primary);
+  color: ${(p) => p.$optionColor
+    ? `color-mix(in srgb, ${p.$optionColor} 78%, var(--text-primary))`
+    : "var(--text-primary)"};
   border: 1px solid ${(p) => p.$optionColor
     ? `color-mix(in srgb, ${p.$optionColor} 58%, var(--border))`
     : p.$variant === "warning" ? "var(--warning)" : p.$variant === "info" ? "var(--info)" : p.$variant === "neutral" ? "var(--border)" : "var(--accent)"};
-  border-radius: var(--radius-sm);
-  font-size: var(--font-size-sm);
-  font-weight: 500;
+  border-radius: var(--radius-md);
+  font-size: ${(p) => p.$compact ? "11px" : "var(--font-size-sm)"};
+  font-weight: ${(p) => p.$compact ? 700 : 500};
   cursor: pointer;
   white-space: nowrap;
 
@@ -111,6 +115,7 @@ type Props = {
   minWidth?: string;
   variant?: TriggerVariant;
   mono?: boolean;
+  compact?: boolean;
 };
 
 export default function SelectMenu({
@@ -122,13 +127,14 @@ export default function SelectMenu({
   minWidth,
   variant = "accent",
   mono = false,
+  compact = false,
 }: Props) {
   const { open, ref, toggle, close } = useDropdown<HTMLDivElement>();
   const active = options.find((option) => option.value === value) ?? options[0];
 
   return (
     <Wrapper ref={ref}>
-      <Trigger type="button" $variant={variant} $optionColor={active?.color} onClick={toggle}>
+      <Trigger type="button" $variant={variant} $optionColor={active?.color} $compact={compact} onClick={toggle}>
         {active?.label ?? value}
       </Trigger>
       {open && (

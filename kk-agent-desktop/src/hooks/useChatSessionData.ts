@@ -181,15 +181,6 @@ export function useChatSessionData({ onDebugOpen, setDebugOpen }: Options) {
     }
   }, [session, updateSessionAndSet]);
 
-  const handleModeSwitch = useCallback(async (activeModeId: SessionState["activeModeId"]) => {
-    if (!session || activeModeId === session.activeModeId) return;
-    try {
-      await updateSessionAndSet({ activeModeId });
-    } catch (err) {
-      reportError("Failed to switch mode", err);
-    }
-  }, [session, updateSessionAndSet]);
-
   const handleApprovalModeSwitch = useCallback(async (approvalMode: ApprovalMode) => {
     if (!session || approvalMode === session.approvalMode) return;
     try {
@@ -228,7 +219,6 @@ export function useChatSessionData({ onDebugOpen, setDebugOpen }: Options) {
     loadDebugData,
     handleReasoningEffort,
     handleAgentSwitch,
-    handleModeSwitch,
     handleApprovalModeSwitch,
     handleNewSession,
   };

@@ -48,6 +48,11 @@ test("safeFetch enforces redirects, status checks, and response size", async (t)
       response.end("missing");
       return;
     }
+    if (request.url === "/limited") {
+      response.writeHead(429, { "content-type": "text/plain", "retry-after": "2" });
+      response.end("limited");
+      return;
+    }
     response.writeHead(200, { "content-type": "text/plain" });
     response.end("ok");
   });
@@ -63,6 +68,14 @@ test("safeFetch enforces redirects, status checks, and response size", async (t)
 
   const missing = await safeFetch(`${base}/missing`, { allowPrivateAddresses: true });
   assert.throws(() => requireSuccessfulStatus(missing), /HTTP 404/u);
+
+  const limited = await safeFetch(`${base}/limited`, { allowPrivateAddresses: true });
+  assert.throws(
+    () => requireSuccessfulStatus(limited),
+    (error: unknown) => error instanceof Error
+      && "options" in error
+      && (error as { options: { details?: { retryAfterMs?: number } } }).options.details?.retryAfterMs === 2_000,
+  );
 
   await assert.rejects(
     safeFetch(`${base}/large`, { allowPrivateAddresses: true, maxBytes: 1_024 }),

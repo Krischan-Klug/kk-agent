@@ -223,9 +223,16 @@ export async function safeFetch(input: string, options: SafeFetchOptions = {}): 
 
 export function requireSuccessfulStatus(resource: WebResource): void {
   if (resource.status >= 200 && resource.status < 300) return;
+  const retryAfter = resource.headers["retry-after"];
+  const retryAfterMs = retryAfter === undefined
+    ? undefined
+    : /^\d+$/u.test(retryAfter.trim())
+      ? Number(retryAfter.trim()) * 1_000
+      : Math.max(0, Date.parse(retryAfter) - Date.now());
   throw new WebToolError(`Web server returned HTTP ${resource.status}.`, "http_error", {
     status: resource.status,
     retryable: resource.status === 408 || resource.status === 429 || resource.status >= 500,
     url: resource.finalUrl,
+    details: retryAfterMs === undefined || !Number.isFinite(retryAfterMs) ? undefined : { retryAfterMs },
   });
 }

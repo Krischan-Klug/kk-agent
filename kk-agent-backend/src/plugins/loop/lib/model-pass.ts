@@ -27,26 +27,23 @@ export function buildModelPassInput(
   runtimeContext: string,
   retryInstruction?: string,
 ): { instructions: string; estimatedFixedTokens: number } {
-  const modeConfig = opts.modeConfigs[opts.activeModeId];
-  if (!modeConfig) throw new Error(`Missing mode config for mode "${opts.activeModeId}"`);
+  const runtimeConfig = opts.runtimeConfig;
   const variables: Record<string, string> = {
     ...getSystemVariables({ CURRENT_MODEL: opts.model }),
-    ...(modeConfig.runtimeVariables ?? {}),
-    mode: modeConfig.modeId,
+    ...(runtimeConfig.runtimeVariables ?? {}),
     ...opts.agentVariables,
   };
   const systemPrompt = buildPrompt(
-    modeConfig.promptSections,
-    modeConfig.modeInstruction,
-    modeConfig.mcpInstructions,
-    modeConfig.skillsCatalog,
+    runtimeConfig.promptSections,
+    runtimeConfig.mcpInstructions,
+    runtimeConfig.skillsCatalog,
     variables,
-    { sessionId: opts.sessionId, modeId: modeConfig.modeId, modeName: modeConfig.modePromptName },
+    { sessionId: opts.sessionId },
     runtimeContext,
   );
   const instructions = buildInstructions(systemPrompt, retryInstruction);
   const estimatedFixedTokens = estimateTextTokens(instructions)
-    + estimateTextTokens(JSON.stringify(modeConfig.allTools))
+    + estimateTextTokens(JSON.stringify(runtimeConfig.allTools))
     + 64;
   return { instructions, estimatedFixedTokens };
 }
@@ -98,8 +95,7 @@ export async function runModelPass(
   attempt = 0,
   purpose: "agent" | "recovery" = "agent",
 ) {
-  const modeConfig = opts.modeConfigs[opts.activeModeId];
-  if (!modeConfig) throw new Error(`Missing mode config for mode "${opts.activeModeId}"`);
+  const runtimeConfig = opts.runtimeConfig;
   const modelPassInput = buildModelPassInput(opts, runtimeContext, retryInstruction);
 
   let receivedProviderStats = false;
@@ -111,7 +107,7 @@ export async function runModelPass(
       model: opts.model,
       instructions: modelPassInput.instructions,
       messages: repairTranscript(messages),
-      tools: modeConfig.allTools.length > 0 ? modeConfig.allTools : undefined,
+      tools: runtimeConfig.allTools.length > 0 ? runtimeConfig.allTools : undefined,
       llmRequestConfig: opts.llmRequestConfig,
       transportState: providerState,
       modelContentByMessageId: opts.modelContentByMessageId,

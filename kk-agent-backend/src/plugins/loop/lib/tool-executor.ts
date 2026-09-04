@@ -7,7 +7,6 @@ import {
 } from "kk-agent-contract";
 import type { ToolExecutionStatus } from "kk-agent-contract";
 import type {
-  ModeRuntimeRef,
   RuntimeToolDefinition,
   ToolExecutionResult,
   ToolRuntimeContext,
@@ -81,16 +80,13 @@ export class StreamingToolExecutor {
     private readonly executeTool: (
       toolName: string,
       args: Record<string, unknown>,
-      mode: ModeRuntimeRef,
       context: ToolRuntimeContext,
     ) => Promise<ToolExecutionResult>,
-    private readonly mode: ModeRuntimeRef,
     private readonly runtimeToolsByName: Record<string, RuntimeToolDefinition>,
     private readonly resolveToolPermission: (
       runtimeTool: RuntimeToolDefinition,
       toolName: string,
       args: Record<string, unknown>,
-      mode: ModeRuntimeRef,
     ) => Promise<{ allowed: boolean; reason?: string }>,
     private readonly onUpdate?: (update: ToolExecutionUpdate) => void,
     initialContext: ToolRuntimeContext = { values: {} },
@@ -99,8 +95,8 @@ export class StreamingToolExecutor {
       this.resolveDiscarded = resolve;
     });
     this.runtimeContext = {
+      ...initialContext,
       values: { ...initialContext.values },
-      abortSignal: initialContext.abortSignal,
     };
   }
 
@@ -273,7 +269,7 @@ export class StreamingToolExecutor {
         }
 
         const runtimeTool = tracked.runtimeTool!;
-        const permission = await this.resolveToolPermission(runtimeTool, tracked.toolUse.name, tracked.executionInput, this.mode);
+        const permission = await this.resolveToolPermission(runtimeTool, tracked.toolUse.name, tracked.executionInput);
         if (this.discarded) return;
         if (!permission.allowed) {
           const message = permission.reason ?? `Tool "${tracked.toolUse.name}" was blocked by runtime permissions.`;
@@ -284,7 +280,6 @@ export class StreamingToolExecutor {
         const execution = await this.executeTool(
           tracked.toolUse.name,
           tracked.executionInput,
-          this.mode,
           this.runtimeContext,
         );
         if (this.discarded) {

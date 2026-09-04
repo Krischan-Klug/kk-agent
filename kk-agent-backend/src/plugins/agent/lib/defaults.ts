@@ -1,21 +1,18 @@
-import type { AgentDefinition, ModeBehavior } from "../types.js";
-import { buildDefaultModes, resolveDefaultModeId } from "./mode-config.js";
+import type { AgentDefinition } from "../types.js";
+import { buildDefaultAgentConfig } from "./agent-config.js";
 
 function buildAgent(
   id: string,
   name: string,
   description: string,
-  defaultModeBehavior: ModeBehavior,
   defaultModel?: string,
 ): AgentDefinition {
   const now = new Date().toISOString();
-  const modes = buildDefaultModes();
   return {
     id,
     name,
     description,
-    defaultModeId: resolveDefaultModeId(defaultModeBehavior, modes),
-    modes,
+    ...buildDefaultAgentConfig(),
     variables: {},
     defaultModel,
     createdAt: now,
@@ -28,7 +25,6 @@ function getDefaultAgent(): AgentDefinition {
     "swagos",
     "Swagos",
     "Von Krischan entwickelter allgemeiner Agent fuer vielseitige Aufgaben.",
-    "edit",
   );
 }
 

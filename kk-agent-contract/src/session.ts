@@ -1,5 +1,5 @@
 import type { ModelInputDebug, ProviderTurnDebug, LlmRequestConfig } from "./provider.js";
-import type { AgentLoopState, AgentPromptSections, ModeBehavior } from "./agent.js";
+import type { AgentLoopState, AgentPromptSections, ToolAccessScope } from "./agent.js";
 import type { ApprovalMode } from "./tool.js";
 import type { ToolExecutionStatus, TranscriptBlock, TranscriptMessage } from "./transcript.js";
 
@@ -66,7 +66,6 @@ export interface SessionState {
   providerId: string;
   model: string;
   agentId: string;
-  activeModeId: string;
   approvalMode: ApprovalMode;
   activeToolIds: string[];
   activeMcpIds: string[];
@@ -149,7 +148,6 @@ export interface AgentRun {
 export interface CreateSessionBody {
   agentId: string;
   providerId?: string;
-  activeModeId?: string;
   approvalMode?: ApprovalMode;
   model?: string;
   activeToolIds?: string[];
@@ -161,7 +159,6 @@ export interface CreateSessionBody {
 export interface UpdateSessionBody {
   agentId?: string;
   providerId?: string;
-  activeModeId?: string;
   approvalMode?: ApprovalMode;
   model?: string;
   activeToolIds?: string[];
@@ -235,15 +232,15 @@ export interface MemoryFact {
 
 export interface AppDefaults {
   agent: {
-    defaultModeBehavior: ModeBehavior;
+    color: string;
     promptSections: AgentPromptSections;
-    modeTemplates: Record<ModeBehavior, {
-      label: string;
-      modeInstruction: string;
-      toolIds: string[];
-      allowedToolNames: string[];
-      toolInstructions: Record<string, string>;
-    }>;
+    toolIds: string[];
+    mcpIds: string[];
+    skillIds: string[];
+    toolAccessScopes: Record<string, ToolAccessScope>;
+    toolInstructions: Record<string, string>;
+    mcpInstructions: Record<string, string>;
+    allowedToolNames: string[];
   };
   retry: {
     emptyResponseInstruction: string;

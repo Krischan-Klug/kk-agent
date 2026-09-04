@@ -61,16 +61,12 @@ export function cloneToolContext(context: ToolRuntimeContext): ToolRuntimeContex
 }
 
 export function buildLoopState(opts: LoopOptions): AgentLoopState {
-  const modeConfig = opts.modeConfigs[opts.activeModeId];
-  if (!modeConfig) throw new Error(`Missing mode config for mode "${opts.activeModeId}"`);
   const now = new Date().toISOString();
   return {
     runId: opts.runId,
     sessionId: opts.sessionId,
     agentId: opts.agentId,
     status: "running",
-    modeId: opts.activeModeId,
-    modeBehavior: modeConfig.modeBehavior,
     step: 0,
     attempt: 0,
     toolBatch: 0,

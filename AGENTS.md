@@ -8,7 +8,7 @@ Quick reference for AI agents working in this repo.
 - `kk-agent-contract`: Private local workspace for shared TypeScript types and request/capability helpers
 
 ## Backend at a Glance
-- `agent`: Agent definitions, variables, loop modes
+- `agent`: Agent definitions, variables, prompts, and capability selections
 - `loop`: Agent loop, committed steps, attempts, retry logic
 - `systemprompt`: Builds the final LLM prompt
 - `tools`: Internal system tools, tool state APIs, task and memory state
@@ -59,7 +59,7 @@ Backend features register through a fixed, explicit initializer list. There is n
 - Prompt templates are code-owned defaults; Security settings own the editable access-scope and approval defaults.
 - New prompt variables must be registered, populated at runtime, and visible in the Agent editor.
 - Prompt structure must stay consistent as XML.
-- Escape XML attributes and wrap free-form runtime text in CDATA; keep the effective mode as the final prompt block.
+- Escape XML attributes and wrap free-form runtime text in CDATA; keep request-scoped runtime context after the stable prompt prefix.
 - Loop behavior remains configurable per agent; `simple` loops must work without forced plan/verify steps.
 - Providers use a unified capability model and are configured only via `name`, `baseUrl`, and optional `apiKey`.
 - Every usable model requires an explicit stable inference profile; the profile ID identifies the model or generic transport recipe and is updated in place. New models receive new profiles. Profiles fix endpoint, transport, modalities, tools, reasoning translation, and manufacturer sampling defaults. Do not infer these from model names or retry across endpoints.

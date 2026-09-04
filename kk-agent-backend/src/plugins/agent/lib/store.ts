@@ -1,46 +1,55 @@
 import { loadState, saveState } from "../../lib/state.js";
 import type { AgentDefinition } from "../types.js";
 import type { PersistedAgentsState, PersistedAgentDefinition } from "./persisted-types.js";
-import {
-  buildDefaultModes,
-  compactEffectiveMode,
-  expandPersistedMode,
-  normalizeModeDefinitions,
-  resolveDefaultModeId,
-} from "./mode-config.js";
-import { isModeBehavior } from "./modes.js";
+import { compactAgentConfig, expandAgentConfig, normalizeAgentConfig } from "./agent-config.js";
 import { getBundledAgents } from "./defaults.js";
 
 const STATE_FILE = "agents.json";
-const AGENT_SCHEMA_VERSION = 5;
+const AGENT_SCHEMA_VERSION = 6;
 
 let cache: PersistedAgentDefinition[] | null = null;
 
 function expandPersistedAgent(agent: PersistedAgentDefinition): AgentDefinition {
+  const { configOverrides, ...definition } = agent;
   return {
-    ...agent,
-    modes: agent.modes.map(expandPersistedMode),
+    ...definition,
+    ...expandAgentConfig(configOverrides),
   };
 }
 
 function compactEffectiveAgent(agent: AgentDefinition): PersistedAgentDefinition {
+  const {
+    color,
+    promptSections,
+    toolIds,
+    mcpIds,
+    skillIds,
+    toolAccessScopes,
+    toolInstructions,
+    mcpInstructions,
+    allowedToolNames,
+    ...definition
+  } = agent;
   return {
-    ...agent,
-    modes: agent.modes.map(compactEffectiveMode),
+    ...definition,
+    configOverrides: compactAgentConfig({
+      color,
+      promptSections,
+      toolIds,
+      mcpIds,
+      skillIds,
+      toolAccessScopes,
+      toolInstructions,
+      mcpInstructions,
+      allowedToolNames,
+    }),
   };
 }
 
 function normalizePersistedAgent(agent: PersistedAgentDefinition): PersistedAgentDefinition {
-  const supportedModes = agent.modes
-    .filter((mode) => isModeBehavior(mode.behavior))
-    .map(expandPersistedMode);
-  const modes = supportedModes.some((mode) => mode.enabled)
-    ? normalizeModeDefinitions(supportedModes)
-    : buildDefaultModes();
   return compactEffectiveAgent({
-    ...agent,
-    defaultModeId: resolveDefaultModeId(agent.defaultModeId, modes),
-    modes,
+    ...expandPersistedAgent(agent),
+    ...normalizeAgentConfig(agent.configOverrides),
   });
 }
 
@@ -102,7 +111,6 @@ export async function updateAgent(id: string, update: Partial<AgentDefinition>):
   const nextEffective: AgentDefinition = {
     ...currentEffective,
     ...update,
-    modes: update.modes ?? currentEffective.modes,
     updatedAt: new Date().toISOString(),
   };
 

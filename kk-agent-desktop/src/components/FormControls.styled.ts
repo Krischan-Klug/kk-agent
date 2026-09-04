@@ -46,32 +46,19 @@ export const InlineSelect = styled.select`
   font-size: var(--font-size-xs);
 `;
 
-export const ModeTabs = styled.div`
-  display: flex;
-  gap: var(--space-xs);
-  flex-wrap: wrap;
-`;
-
-export const ModeTab = styled.button<{ $active: boolean; $enabled?: boolean; $variant?: "accent" | "info" | "warning"; $color?: string }>`
+export const WorkspaceTab = styled.button<{ $active: boolean }>`
   padding: 2px var(--space-sm);
-  background: ${({ $active, $enabled = true, $variant = "accent", $color }) => !$enabled
-    ? "var(--bg-surface)"
-    : $active
-    ? `color-mix(in srgb, ${$color ?? `var(--${$variant})`} 8%, transparent)`
+  background: ${({ $active }) => $active
+    ? "color-mix(in srgb, var(--accent) 8%, transparent)"
     : "var(--bg-surface)"};
-  color: ${({ $enabled = true }) => $enabled ? "var(--text-primary)" : "var(--text-muted)"};
-  border: 1px solid ${({ $enabled = true, $variant = "accent", $color }) => $enabled
-    ? `color-mix(in srgb, ${$color ?? `var(--${$variant})`} 58%, var(--border))`
-    : "var(--border)"};
+  color: var(--text-primary);
+  border: 1px solid color-mix(in srgb, var(--accent) 58%, var(--border));
   border-radius: var(--radius-sm);
   font-size: var(--font-size-sm);
   cursor: pointer;
-  opacity: ${({ $enabled = true }) => $enabled ? 1 : 0.6};
 
   &:hover:not(:disabled) {
-    background: ${({ $enabled = true, $variant = "accent", $color }) => $enabled
-      ? `color-mix(in srgb, ${$color ?? `var(--${$variant})`} 12%, transparent)`
-      : "var(--bg-hover)"};
+    background: color-mix(in srgb, var(--accent) 12%, transparent);
   }
 `;
 

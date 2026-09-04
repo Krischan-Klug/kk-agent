@@ -21,23 +21,25 @@ export interface WebSearchResult {
 export interface WebSearchResponse {
   provider: string;
   query: string;
+  executedQuery?: string;
   results: WebSearchResult[];
   durationMs: number;
+  qualityWarning?: string;
   providerTrace?: WebSearchProviderTrace[];
 }
 
 export interface WebSearchProviderTrace {
   provider: string;
-  status: "skipped" | "failed" | "succeeded";
+  status: "failed" | "succeeded";
   attempts: number;
   durationMs: number;
-  selectedProvider?: string;
+  executedQuery?: string;
+  refined?: boolean;
   reason?: string;
 }
 
 export interface WebSearchProvider {
   readonly id: string;
-  isAvailable(): boolean;
   search(query: string, options: WebSearchOptions): Promise<WebSearchResponse>;
 }
 
@@ -58,6 +60,7 @@ export interface ExtractedWebDocument {
   excerpt: string | null;
   siteName: string | null;
   publishedAt?: string;
+  modifiedAt?: string;
   contentType: string;
   text: string;
   markdown: string;
@@ -74,6 +77,7 @@ export interface WebSourceRecord {
   provider: string;
   query?: string;
   publishedAt?: string;
+  modifiedAt?: string;
   fetchedAt?: string;
   contentType?: string;
   httpStatus?: number;

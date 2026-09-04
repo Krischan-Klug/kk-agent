@@ -122,7 +122,7 @@ export function renderToolCardBody(toolCall: ActiveToolCall): ReactNode {
     if (name === "WebSearch" && Array.isArray(meta.providerTrace)) {
       nodes.push(
         <ToolDetailSection key="provider-trace">
-          <ToolDetailMuted>Provider chain:</ToolDetailMuted>
+          <ToolDetailMuted>Search provenance:</ToolDetailMuted>
           {meta.providerTrace.map((rawEntry: unknown, index: number) => {
             const entry = rawEntry as Record<string, unknown>;
             const query = typeof entry.query === "string" ? entry.query : "query";
@@ -132,8 +132,10 @@ export function renderToolCardBody(toolCall: ActiveToolCall): ReactNode {
               const step = rawStep as Record<string, unknown>;
               const provider = typeof step.provider === "string" ? step.provider : "unknown";
               const status = typeof step.status === "string" ? step.status : "unknown";
-              const selected = typeof step.selectedProvider === "string" ? ` as ${step.selectedProvider}` : "";
-              return `${provider}: ${status}${selected}`;
+              const refined = step.refined === true && typeof step.executedQuery === "string"
+                ? `; refined as ${step.executedQuery}`
+                : "";
+              return `${provider}: ${status}${refined}`;
             }).join(" → ");
             return <ToolDetailLine key={`${query}-${index}`}>- {query} ({cached ? "cache hit" : "cache miss"}): {summary}</ToolDetailLine>;
           })}

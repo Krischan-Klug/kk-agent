@@ -276,8 +276,6 @@ test("managed background tasks expose status and stop through their task id", as
 
     const context = buildRuntimeContext({
       sessionId,
-      modeId: "edit",
-      modeName: "edit",
       model: "test-model",
       runtimeVariables: {
         TERMINAL_ACCESS_SCOPE: "user",
@@ -319,8 +317,6 @@ test("managed background tasks expose status and stop through their task id", as
     assert.match(statusJson, /"status": "stopped"/);
     assert.doesNotMatch(buildRuntimeContext({
       sessionId,
-      modeId: "edit",
-      modeName: "edit",
       model: "test-model",
       runtimeVariables: {
         TERMINAL_ACCESS_SCOPE: "user",

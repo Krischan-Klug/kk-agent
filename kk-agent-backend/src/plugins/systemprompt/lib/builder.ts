@@ -10,8 +10,6 @@ interface SystemVariableDefinition {
 
 interface PromptBuildContext {
   sessionId?: string;
-  modeId?: string;
-  modeName?: string;
 }
 
 interface ResolvedVariableContext extends PromptBuildContext {
@@ -37,10 +35,6 @@ const SYSTEM_VARIABLE_DEFINITIONS: SystemVariableDefinition[] = [
   {
     name: "CURRENT_MODEL",
     resolve: (context) => context.rawVariables.CURRENT_MODEL ?? "",
-  },
-  {
-    name: "mode",
-    resolve: (context) => context.modeId ?? context.rawVariables.mode ?? "edit",
   },
   {
     name: "TASK_SUMMARY",
@@ -183,19 +177,6 @@ function buildToolUsageSection(toolUsage: string, variables: Record<string, stri
   return buildOptionalTextSection("tool_policy", toolUsage, variables);
 }
 
-function buildModeSection(
-  modeInstruction: string,
-  modeId?: string,
-  modeName?: string,
-  variables: Record<string, string> = {},
-): string {
-  const effectiveModeName = modeName ?? modeId ?? "edit";
-  return [
-    `<mode_context mode="${escapeXml(effectiveModeName)}">`,
-    toCData(resolveVariables(modeInstruction, variables)),
-    "</mode_context>",
-  ].join("\n");
-}
 function buildResolvedSystemVariables(
   variables: Record<string, string>,
   context: PromptBuildContext,
@@ -218,7 +199,6 @@ function buildResolvedSystemVariables(
 
 export function buildPrompt(
   promptSections: AgentPromptSections,
-  modeInstruction: string,
   mcpInstructions: string,
   skillsCatalog: string,
   variables: Record<string, string>,
@@ -230,8 +210,8 @@ export function buildPrompt(
     ...buildResolvedSystemVariables(variables, context),
   };
 
-  // Keep stable policy before request-scoped mode and runtime instructions so
-  // providers can cache the reusable prefix.
+  // Keep stable policy before request-scoped runtime data so providers can
+  // cache the reusable prefix.
   const stableParts = [
     "<agent_runtime_prompt>",
     ...buildBaseSections(promptSections, resolvedVariables),
@@ -246,7 +226,6 @@ export function buildPrompt(
   const volatileParts = [
     "<!-- DYNAMIC_CONTEXT_BOUNDARY -->",
     runtimeContext.trim(),
-    buildModeSection(modeInstruction, context.modeId, context.modeName, resolvedVariables),
     "</agent_runtime_prompt>",
   ];
 

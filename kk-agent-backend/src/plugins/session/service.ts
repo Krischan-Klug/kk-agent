@@ -18,7 +18,7 @@ import {
 import {
   buildAssetRuntimeContext,
   buildCurrentSystemPrompt,
-  buildModeRuntimeConfig,
+  buildAgentRuntimeConfig,
   buildRuntimeContext,
   getLatestAssetRefs,
 } from "./lib/runtime-context.js";
@@ -31,9 +31,9 @@ import { COMPACTION_INSTRUCTIONS } from "../loop/lib/context-compaction.js";
 export { getSessionRecordOrThrow, normalizeSessionRequestConfig, toPublicSession } from "./lib/session-records.js";
 export {
   buildAssetRuntimeContext,
-  buildModeRuntimeConfig,
+  buildAgentRuntimeConfig,
   buildRuntimeContext,
-  type SessionModeRuntimeConfig,
+  type SessionAgentRuntimeConfig,
 } from "./lib/runtime-context.js";
 
 function sameIds(left: string[], right: string[]): boolean {
@@ -47,7 +47,6 @@ export async function createSession(body: CreateSessionBody): Promise<SessionSta
     agentId: body.agentId,
     providerId: defaults.providerId,
     model: defaults.model,
-    activeModeId: defaults.activeModeId,
     approvalMode: body.approvalMode ?? getSecuritySettings().approvalMode,
     activeToolIds: defaults.activeToolIds,
     activeMcpIds: defaults.activeMcpIds,
@@ -84,7 +83,7 @@ export async function deleteSession(id: string): Promise<void> {
 export function getCurrentPromptDebug(sessionId: string): SessionPromptDebug {
   const session = getSessionRecordOrThrow(sessionId);
   const agent = getAgent(session.agentId);
-  const modeRuntimeConfig = buildModeRuntimeConfig(session, agent, session.activeModeId);
+  const runtimeConfig = buildAgentRuntimeConfig(session, agent);
   const systemPrompt = buildCurrentSystemPrompt(sessionId, session, agent);
   const latestAssetRefs = isLoopActive(sessionId) ? getLatestAssetRefs(session.messages) : [];
   const latestAssets = getSessionAssetsByIds(sessionId, latestAssetRefs.map((ref) => ref.assetId));
@@ -101,7 +100,7 @@ export function getCurrentPromptDebug(sessionId: string): SessionPromptDebug {
   });
   const loadedSkills = buildLoadedSkillContexts(
     session.loadedSkillIds,
-    modeRuntimeConfig.activeSkillIds,
+    runtimeConfig.activeSkillIds,
   );
   const latestRun = session.runs.at(-1);
   const shellResolution = getTerminalShellResolution();
@@ -110,14 +109,12 @@ export function getCurrentPromptDebug(sessionId: string): SessionPromptDebug {
     systemPrompt,
     runtimeContext: buildRuntimeContext({
       sessionId,
-      modeId: modeRuntimeConfig.modeId,
-      modeName: modeRuntimeConfig.modePromptName,
       model: session.model,
-      runtimeVariables: modeRuntimeConfig.runtimeVariables,
+      runtimeVariables: runtimeConfig.runtimeVariables,
       toolContext: { sessionId, values: loadedSkills },
       assetContext,
     }),
-    runtimeTools: Object.values(modeRuntimeConfig.runtimeToolsByName).map((tool) => ({
+    runtimeTools: Object.values(runtimeConfig.runtimeToolsByName).map((tool) => ({
       name: tool.name,
       description: tool.description,
       capabilityId: tool.capabilityId,
@@ -125,7 +122,7 @@ export function getCurrentPromptDebug(sessionId: string): SessionPromptDebug {
       inputSchema: tool.parameters,
     })),
     runtimeMcps: getAllMcpsCached()
-      .filter((mcp) => modeRuntimeConfig.activeMcpIds.includes(mcp.id))
+      .filter((mcp) => runtimeConfig.activeMcpIds.includes(mcp.id))
       .map((mcp) => ({
         id: mcp.id,
         name: mcp.name,
@@ -141,7 +138,7 @@ export function getCurrentPromptDebug(sessionId: string): SessionPromptDebug {
         })),
       })),
     runtimeSkills: listSkills()
-      .filter((skill) => modeRuntimeConfig.activeSkillIds.includes(skill.id))
+      .filter((skill) => runtimeConfig.activeSkillIds.includes(skill.id))
       .map((skill) => ({
         id: skill.id,
         name: skill.name,
@@ -198,7 +195,6 @@ async function updateSession(id: string, body: Partial<CreateSessionBody>): Prom
         activeToolIds: body.activeToolIds,
         activeMcpIds: body.activeMcpIds,
         activeSkillIds: body.activeSkillIds,
-        activeModeId: body.activeModeId,
         model: body.model,
         llmRequestConfig: body.llmRequestConfig,
       }
@@ -207,7 +203,6 @@ async function updateSession(id: string, body: Partial<CreateSessionBody>): Prom
         activeToolIds: body.activeToolIds,
         activeMcpIds: body.activeMcpIds,
         activeSkillIds: body.activeSkillIds,
-        activeModeId: body.activeModeId ?? session.activeModeId,
         model: body.model ?? session.model,
         llmRequestConfig: body.llmRequestConfig ?? session.llmRequestConfig,
       };
@@ -219,7 +214,6 @@ async function updateSession(id: string, body: Partial<CreateSessionBody>): Prom
   const runtimeContextChanged = switchingAgent
     || session.providerId !== defaults.providerId
     || session.model !== defaults.model
-    || session.activeModeId !== defaults.activeModeId
     || !sameIds(session.activeToolIds, defaults.activeToolIds)
     || !sameIds(session.activeMcpIds, defaults.activeMcpIds)
     || !sameIds(session.activeSkillIds, defaults.activeSkillIds);
@@ -228,7 +222,6 @@ async function updateSession(id: string, body: Partial<CreateSessionBody>): Prom
     agentId: nextAgentId,
     providerId: defaults.providerId,
     model: defaults.model,
-    activeModeId: defaults.activeModeId,
     approvalMode: body.approvalMode ?? session.approvalMode,
     activeToolIds: defaults.activeToolIds,
     activeMcpIds: defaults.activeMcpIds,

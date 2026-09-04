@@ -48,3 +48,24 @@ test("extractWebDocument formats JSON and rejects binary content", async () => {
     /Unsupported web content type/u,
   );
 });
+
+test("extractWebDocument does not mislabel a generic time element as publication date", async () => {
+  const document = await extractWebDocument(resource(`<!doctype html><html><head>
+    <title>Reference</title><meta itemprop="dateModified" content="2026-09-03T12:00:00Z">
+    </head><body><main><h1>Reference</h1><p>This reference contains useful server-rendered content.</p>
+    <time datetime="2025-01-01T00:00:00Z">Last updated</time></main></body></html>`));
+  assert.equal(document.publishedAt, undefined);
+  assert.equal(document.modifiedAt, "2026-09-03T12:00:00.000Z");
+});
+
+test("extractWebDocument prefers a materially richer main section over a weak reader candidate", async () => {
+  const paragraphs = Array.from({ length: 12 }, (_, index) =>
+    `<p>Release ${index + 1} contains detailed notes about runtime changes, security updates, support dates, and upgrade guidance.</p>`).join("");
+  const document = await extractWebDocument(resource(`<!doctype html><html><head><title>Release archive</title></head><body>
+    <main><h1>Release archive</h1>${paragraphs}</main>
+    <article><pre><code>npm install example</code></pre></article>
+    <footer>Copyright Example. Privacy policy. Terms of use.</footer>
+  </body></html>`));
+  assert.match(document.markdown, /Release 12 contains detailed notes/u);
+  assert.ok(document.markdown.length > 700);
+});

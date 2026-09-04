@@ -1,4 +1,4 @@
-import { Fragment, useRef, useState, useCallback, useLayoutEffect } from "react";
+import { Fragment, useRef, useState, useCallback, useLayoutEffect, useEffect } from "react";
 import styled from "styled-components";
 import { SUPPORTED_ASSET_EXTENSIONS } from "kk-agent-contract";
 import type {
@@ -8,7 +8,7 @@ import type {
 } from "kk-agent-contract";
 import type { PendingAsset } from "@/hooks/useAssets";
 import SelectMenu, { type SelectMenuOption } from "@/components/SelectMenu";
-import { getModeColor } from "@/lib/modeColors";
+import { getAgentColor } from "@/lib/agentColors";
 import Spinner from "@/components/Spinner";
 import AssetPreview from "./AssetPreview";
 import type { TokenDisplayStats } from "./types";
@@ -100,9 +100,9 @@ const TasksToggleButton = styled.button<{ $active: boolean }>`
   gap: 6px;
   justify-content: center;
   min-width: 36px;
-  min-height: 36px;
+  min-height: 30px;
   padding: 4px 8px;
-  border-radius: 999px;
+  border-radius: var(--radius-md);
   border: 1px solid ${(p) => (p.$active ? "var(--accent)" : "var(--border)")};
   background: ${(p) =>
     p.$active ? "var(--accent-muted)" : "var(--bg-elevated)"};
@@ -229,6 +229,96 @@ const ComposerActions = styled.div`
   flex-wrap: wrap;
 `;
 
+const ApprovalToggle = styled.button<{ $color: string }>`
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  width: 34px;
+  height: 28px;
+  padding: 0 8px;
+  border: 1px solid ${(p) => `color-mix(in srgb, ${p.$color} 62%, var(--border))`};
+  border-radius: var(--radius-md);
+  background: ${(p) => `color-mix(in srgb, ${p.$color} 12%, var(--bg-surface))`};
+  color: ${(p) => p.$color};
+  cursor: pointer;
+
+  &:hover {
+    background: ${(p) => `color-mix(in srgb, ${p.$color} 20%, var(--bg-hover))`};
+  }
+`;
+
+const ReasoningControl = styled.label<{ $color: string }>`
+  display: inline-flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 9px;
+  box-sizing: border-box;
+  width: 170px;
+  height: 28px;
+  padding: 0 8px;
+  border: 1px solid color-mix(in srgb, ${(p) => p.$color} 34%, var(--border));
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, ${(p) => p.$color} 7%, var(--bg-surface));
+  color: ${(p) => p.$color};
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
+`;
+
+const ReasoningSlider = styled.input<{ $color: string; $progress: number }>`
+  appearance: none;
+  width: 104px;
+  margin: 0;
+  height: 16px;
+  background: transparent;
+  cursor: pointer;
+
+  &::-webkit-slider-runnable-track {
+    height: 4px;
+    border-radius: 999px;
+    background: linear-gradient(
+      to right,
+      ${(p) => p.$color} 0%,
+      ${(p) => p.$color} ${(p) => p.$progress * 100}%,
+      color-mix(in srgb, ${(p) => p.$color} 22%, var(--border)) ${(p) => p.$progress * 100}%,
+      color-mix(in srgb, ${(p) => p.$color} 22%, var(--border)) 100%
+    );
+  }
+
+  &::-webkit-slider-thumb {
+    appearance: none;
+    width: 13px;
+    height: 13px;
+    margin-top: -4.5px;
+    border: 2px solid var(--bg-elevated);
+    border-radius: 50%;
+    background: ${(p) => p.$color};
+    box-shadow: 0 0 0 1px ${(p) => p.$color};
+  }
+
+  &::-moz-range-track {
+    height: 4px;
+    border-radius: 999px;
+    background: color-mix(in srgb, ${(p) => p.$color} 22%, var(--border));
+  }
+
+  &::-moz-range-progress {
+    height: 4px;
+    border-radius: 999px;
+    background: ${(p) => p.$color};
+  }
+
+  &::-moz-range-thumb {
+    width: 9px;
+    height: 9px;
+    border: 2px solid var(--bg-elevated);
+    border-radius: 50%;
+    background: ${(p) => p.$color};
+    box-shadow: 0 0 0 1px ${(p) => p.$color};
+  }
+`;
+
 const ContextIndicator = styled.div`
   display: flex;
   align-items: center;
@@ -262,13 +352,13 @@ const ChatInput = styled.textarea`
 `;
 
 const IconButton = styled.button`
-  width: 36px;
-  height: 36px;
+  width: 30px;
+  height: 30px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   border: none;
-  border-radius: 50%;
+  border-radius: var(--radius-md);
   cursor: pointer;
   font-size: 16px;
   font-weight: 700;
@@ -350,6 +440,22 @@ function formatTokens(n: number): string {
   return String(n);
 }
 
+function ApprovalIcon({ mode }: { mode: ApprovalMode }) {
+  if (mode === "full_access") {
+    return (
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+        <path d="m13 2-8 12h6l-1 8 8-12h-6l1-8Z" stroke="currentColor" strokeWidth="2" strokeLinejoin="round" />
+      </svg>
+    );
+  }
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path d="M12 3 20 6v5c0 5-3.4 8.4-8 10-4.6-1.6-8-5-8-10V6l8-3Z" stroke="currentColor" strokeWidth="2" strokeLinejoin="round" />
+      <path d="M9.8 10a2.2 2.2 0 1 1 3.7 1.6c-.9.8-1.5 1.1-1.5 2.4M12 17.2v.1" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+    </svg>
+  );
+}
+
 type Props = {
   input: string;
   sending: boolean;
@@ -358,7 +464,6 @@ type Props = {
   currentAgentId: string;
   reasoningValue?: string;
   reasoningOptions: SelectMenuOption[];
-  activeModeId: string;
   approvalMode: ApprovalMode;
   maxCtx: number;
   tokenStats: TokenDisplayStats | null;
@@ -368,7 +473,6 @@ type Props = {
   onKeyDown: (e: React.KeyboardEvent<HTMLTextAreaElement>) => void;
   onAgentSwitch: (agentId: string) => void;
   onReasoningSelect: (effort: string) => void;
-  onModeSwitch: (modeId: string) => void;
   onApprovalModeSwitch: (approvalMode: ApprovalMode) => void;
   onSend: () => void;
   onAbort?: () => void;
@@ -384,7 +488,6 @@ export default function ChatComposer({
   currentAgentId,
   reasoningValue,
   reasoningOptions,
-  activeModeId,
   approvalMode,
   maxCtx,
   tokenStats,
@@ -394,7 +497,6 @@ export default function ChatComposer({
   onKeyDown,
   onAgentSwitch,
   onReasoningSelect,
-  onModeSwitch,
   onApprovalModeSwitch,
   onSend,
   onAbort,
@@ -405,22 +507,21 @@ export default function ChatComposer({
   const textAreaRef = useRef<HTMLTextAreaElement>(null);
   const [dragOver, setDragOver] = useState(false);
   const [tasksOpen, setTasksOpen] = useState(false);
-  const currentAgent = agents.find((agent) => agent.id === currentAgentId);
+  const externalReasoningIndex = Math.max(0, reasoningOptions.findIndex((option) => option.value === reasoningValue));
+  const [reasoningSliderIndex, setReasoningSliderIndex] = useState(externalReasoningIndex);
   const openTasks = tasks.filter((task) => task.status !== "completed");
   const completedTasks = tasks.filter((task) => task.status === "completed");
   const orderedTasks = [...openTasks, ...completedTasks];
   const usedContextTokens = tokenStats?.used ?? ((tokenStats?.input ?? 0) + (tokenStats?.output ?? 0));
-  const modeOptions = (currentAgent?.modes ?? [])
-    .filter((mode) => mode.enabled)
-    .map((mode) => ({
-      value: mode.id,
-      label: mode.label,
-      color: getModeColor(mode.color, mode.behavior),
-    }));
-  const activeModeBehavior = currentAgent?.modes.find((mode) => mode.id === activeModeId)?.behavior ?? "edit";
-
   const canSend =
     !sending && (input.trim().length > 0 || pendingAssets.length > 0);
+  const approvalColor = approvalMode === "full_access" ? "var(--warning)" : "var(--info)";
+  const reasoningIndex = Math.min(reasoningSliderIndex, Math.max(0, reasoningOptions.length - 1));
+  const activeReasoning = reasoningOptions[reasoningIndex];
+
+  useEffect(() => {
+    setReasoningSliderIndex(externalReasoningIndex);
+  }, [externalReasoningIndex]);
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -536,44 +637,49 @@ export default function ChatComposer({
                   <SelectMenu
                     value={currentAgentId}
                     direction="up"
-                    minWidth="220px"
+                    minWidth="170px"
+                    compact
                     options={agents.map((agent) => ({
                       value: agent.id,
                       label: agent.name,
                       description: agent.description || undefined,
+                      color: getAgentColor(agent.color),
                     }))}
                     onSelect={onAgentSwitch}
                   />
                 )}
-                <SelectMenu
-                  value={activeModeId}
-                  options={modeOptions}
-                  onSelect={onModeSwitch}
-                  direction="up"
-                  minWidth="max-content"
-                  variant={activeModeBehavior === "plan" ? "info" : "warning"}
-                />
-                <SelectMenu
-                  value={approvalMode}
-                  options={[
-                    { value: "ask_approval", label: "Ask approval", color: "var(--info)" },
-                    { value: "full_access", label: "Do not ask", color: "var(--warning)" },
-                  ]}
-                  onSelect={(value) => onApprovalModeSwitch(value as ApprovalMode)}
-                  direction="up"
-                  minWidth="max-content"
-                  variant={approvalMode === "full_access" ? "warning" : "info"}
-                />
-                {reasoningValue && reasoningOptions.length > 0 && (
-                  <SelectMenu
-                    value={reasoningValue}
-                    direction="up"
-                    minWidth="max-content"
-                    variant="neutral"
-                    options={reasoningOptions}
-                    onSelect={onReasoningSelect}
-                  />
+                {reasoningValue && activeReasoning && (
+                  <ReasoningControl $color={activeReasoning.color ?? "var(--accent)"}>
+                    <span>{activeReasoning.label}</span>
+                    <ReasoningSlider
+                      type="range"
+                      min={0}
+                      max={reasoningOptions.length - 1}
+                      step={1}
+                      value={reasoningIndex}
+                      $color={activeReasoning.color ?? "var(--accent)"}
+                      $progress={reasoningOptions.length > 1 ? reasoningIndex / (reasoningOptions.length - 1) : 1}
+                      aria-label="Reasoning effort"
+                      onChange={(event) => {
+                        const nextIndex = Number(event.target.value);
+                        const option = reasoningOptions[nextIndex];
+                        if (option) {
+                          setReasoningSliderIndex(nextIndex);
+                          onReasoningSelect(option.value);
+                        }
+                      }}
+                    />
+                  </ReasoningControl>
                 )}
+                <ApprovalToggle
+                  type="button"
+                  $color={approvalColor}
+                  onClick={() => onApprovalModeSwitch(approvalMode === "full_access" ? "ask_approval" : "full_access")}
+                  aria-label={approvalMode === "full_access" ? "Ask approval" : "Do not ask"}
+                  title={approvalMode === "full_access" ? "Ask approval" : "Do not ask"}
+                >
+                  <ApprovalIcon mode={approvalMode} />
+                </ApprovalToggle>
               </ComposerMeta>
               <ComposerActions>
                 {tasks.length > 0 && (

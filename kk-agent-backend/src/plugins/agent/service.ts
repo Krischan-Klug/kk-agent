@@ -1,27 +1,23 @@
 import type {
   AgentDefinition,
+  AgentConfig,
   CreateAgentBody,
   UpdateAgentBody,
-  AgentModeConfig,
-  AgentModeDefinition,
 } from "./types.js";
 import * as store from "./lib/store.js";
 import { getDefaults } from "../lib/defaults.js";
 import { createSlugId } from "../lib/ids.js";
 import { compactLlmRequestConfig } from "kk-agent-contract";
 import { getSystemVariableNames } from "../systemprompt/lib/builder.js";
-import { buildDefaultModes, normalizeModeDefinitions, resolveDefaultModeId } from "./lib/mode-config.js";
+import { normalizeAgentConfig } from "./lib/agent-config.js";
 import { NotFoundError } from "../../lib/errors.js";
 
 function normalizeAgent(agent: AgentDefinition): AgentDefinition {
-  const defaults = getDefaults();
-  const modes = normalizeModeDefinitions(agent.modes);
   return {
     id: agent.id,
     name: agent.name,
     description: agent.description,
-    defaultModeId: resolveDefaultModeId(agent.defaultModeId ?? defaults.agent.defaultModeBehavior, modes),
-    modes,
+    ...normalizeAgentConfig(agent),
     variables: agent.variables ?? {},
     defaultProviderId: agent.defaultProviderId,
     defaultModel: agent.defaultModel,
@@ -54,17 +50,14 @@ export function getAgentTemplates() {
 }
 
 export async function createAgent(body: CreateAgentBody): Promise<AgentDefinition> {
-  const defaults = getDefaults();
   const id = createSlugId(body.name);
   const now = new Date().toISOString();
-  const modes = normalizeModeDefinitions(body.modes ?? buildDefaultModes());
 
   const agent: AgentDefinition = {
     id,
     name: body.name,
     description: body.description ?? "",
-    defaultModeId: resolveDefaultModeId(body.defaultModeId ?? defaults.agent.defaultModeBehavior, modes),
-    modes,
+    ...normalizeAgentConfig(body),
     variables: body.variables ?? {},
     defaultProviderId: body.defaultProviderId,
     defaultModel: body.defaultModel,
@@ -78,12 +71,20 @@ export async function createAgent(body: CreateAgentBody): Promise<AgentDefinitio
 
 export async function updateAgent(id: string, body: UpdateAgentBody): Promise<AgentDefinition> {
   const existing = getAgent(id);
-  const nextModes = body.modes !== undefined ? normalizeModeDefinitions(body.modes) : existing.modes;
   const patch: Partial<AgentDefinition> = {
     name: body.name ?? existing.name,
     description: body.description ?? existing.description,
-    defaultModeId: resolveDefaultModeId(body.defaultModeId ?? existing.defaultModeId, nextModes),
-    modes: nextModes,
+    ...normalizeAgentConfig({
+      color: body.color ?? existing.color,
+      promptSections: body.promptSections ?? existing.promptSections,
+      toolIds: body.toolIds ?? existing.toolIds,
+      mcpIds: body.mcpIds ?? existing.mcpIds,
+      skillIds: body.skillIds ?? existing.skillIds,
+      toolAccessScopes: body.toolAccessScopes ?? existing.toolAccessScopes,
+      toolInstructions: body.toolInstructions ?? existing.toolInstructions,
+      mcpInstructions: body.mcpInstructions ?? existing.mcpInstructions,
+      allowedToolNames: body.allowedToolNames ?? existing.allowedToolNames,
+    }),
     variables: body.variables ?? existing.variables,
     defaultProviderId: body.defaultProviderId ?? existing.defaultProviderId,
     defaultModel: body.defaultModel ?? existing.defaultModel,
@@ -103,53 +104,53 @@ export async function deleteAgent(id: string): Promise<void> {
   if (!removed) throw new NotFoundError("Agent", id);
 }
 
-type ModeConfigTransform = (
-  modeConfig: AgentModeConfig,
+type AgentConfigTransform = (
+  config: AgentConfig,
   id: string,
-) => AgentModeConfig;
+) => AgentConfig;
 
-const REMOVE_TRANSFORMS: Record<"tool" | "mcp" | "skill", ModeConfigTransform> = {
-  tool(modeConfig, id) {
-    const nextToolIds = modeConfig.toolIds.filter((entry) => entry !== id);
-    const nextToolAccessScopes = { ...modeConfig.toolAccessScopes };
-    const nextToolInstructions = { ...modeConfig.toolInstructions };
+const REMOVE_TRANSFORMS: Record<"tool" | "mcp" | "skill", AgentConfigTransform> = {
+  tool(config, id) {
+    const nextToolIds = config.toolIds.filter((entry) => entry !== id);
+    const nextToolAccessScopes = { ...config.toolAccessScopes };
+    const nextToolInstructions = { ...config.toolInstructions };
     delete nextToolAccessScopes[id];
     delete nextToolInstructions[id];
     if (
-      nextToolIds.length === modeConfig.toolIds.length &&
-      Object.keys(nextToolAccessScopes).length === Object.keys(modeConfig.toolAccessScopes).length &&
-      Object.keys(nextToolInstructions).length === Object.keys(modeConfig.toolInstructions).length
+      nextToolIds.length === config.toolIds.length &&
+      Object.keys(nextToolAccessScopes).length === Object.keys(config.toolAccessScopes).length &&
+      Object.keys(nextToolInstructions).length === Object.keys(config.toolInstructions).length
     ) {
-      return modeConfig;
+      return config;
     }
     return {
-      ...modeConfig,
+      ...config,
       toolIds: nextToolIds,
       toolAccessScopes: nextToolAccessScopes,
       toolInstructions: nextToolInstructions,
     };
   },
-  mcp(modeConfig, id) {
-    const nextMcpIds = modeConfig.mcpIds.filter((entry) => entry !== id);
-    const nextMcpInstructions = { ...modeConfig.mcpInstructions };
+  mcp(config, id) {
+    const nextMcpIds = config.mcpIds.filter((entry) => entry !== id);
+    const nextMcpInstructions = { ...config.mcpInstructions };
     delete nextMcpInstructions[id];
     if (
-      nextMcpIds.length === modeConfig.mcpIds.length &&
-      Object.keys(nextMcpInstructions).length === Object.keys(modeConfig.mcpInstructions).length
+      nextMcpIds.length === config.mcpIds.length &&
+      Object.keys(nextMcpInstructions).length === Object.keys(config.mcpInstructions).length
     ) {
-      return modeConfig;
+      return config;
     }
     return {
-      ...modeConfig,
+      ...config,
       mcpIds: nextMcpIds,
       mcpInstructions: nextMcpInstructions,
     };
   },
-  skill(modeConfig, id) {
-    const nextSkillIds = modeConfig.skillIds.filter((entry) => entry !== id);
-    if (nextSkillIds.length === modeConfig.skillIds.length) return modeConfig;
+  skill(config, id) {
+    const nextSkillIds = config.skillIds.filter((entry) => entry !== id);
+    if (nextSkillIds.length === config.skillIds.length) return config;
     return {
-      ...modeConfig,
+      ...config,
       skillIds: nextSkillIds,
     };
   },
@@ -158,21 +159,9 @@ const REMOVE_TRANSFORMS: Record<"tool" | "mcp" | "skill", ModeConfigTransform> =
 async function removeFromAllAgents(id: string, kind: "tool" | "mcp" | "skill"): Promise<void> {
   const transform = REMOVE_TRANSFORMS[kind];
   const updates = listAgents().map(async (agent) => {
-    let changed = false;
-    const nextModes: AgentModeDefinition[] = agent.modes.map((mode) => {
-      const nextConfig = transform(mode.config, id);
-      if (nextConfig !== mode.config) {
-        changed = true;
-        return {
-          ...mode,
-          config: nextConfig,
-        };
-      }
-      return mode;
-    });
-
-    if (changed) {
-      await store.updateAgent(agent.id, { modes: nextModes });
+    const nextConfig = transform(agent, id);
+    if (nextConfig !== agent) {
+      await store.updateAgent(agent.id, nextConfig);
     }
   });
   await Promise.all(updates);

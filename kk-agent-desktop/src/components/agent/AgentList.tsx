@@ -26,25 +26,23 @@ export default function AgentList({ agents, tools, mcps, selectedId, onSelect, o
         New Agent
       </Button>
       {agents.map((agent) => {
-        const toolIds = [...new Set((agent.modes ?? []).flatMap((mode) => mode.config.toolIds ?? []))];
-        const mcpIds = [...new Set((agent.modes ?? []).flatMap((mode) => mode.config.mcpIds ?? []))];
         return (
           <SidebarItem key={agent.id} type="button" $active={agent.id === selectedId} onClick={() => onSelect(agent.id)}>
             <SidebarItemTitle>{agent.name}</SidebarItemTitle>
             {agent.description && <SidebarItemDescription>{agent.description}</SidebarItemDescription>}
             <SidebarMeta>
-              {toolIds.length > 0 && (
+              {agent.toolIds.length > 0 && (
                 <Badge variant="success">
-                  {toolIds.map((id) => (
+                  {agent.toolIds.map((id) => (
                     id === "skill"
                       ? <SkillIcon key={id} />
                       : <span key={id}>{tools.find((tool) => tool.id === id)?.emoji || "T"}</span>
                   ))}
                 </Badge>
               )}
-              {mcpIds.length > 0 && (
+              {agent.mcpIds.length > 0 && (
                 <Badge variant="warning">
-                  {mcpIds.map((id) => <span key={id}>{mcps.find((mcp) => mcp.id === id)?.emoji || "M"}</span>)}
+                  {agent.mcpIds.map((id) => <span key={id}>{mcps.find((mcp) => mcp.id === id)?.emoji || "M"}</span>)}
                 </Badge>
               )}
             </SidebarMeta>

@@ -36,7 +36,6 @@ test("tool executor adds display text without sending it to the tool", async () 
       executionInput = input;
       return { content: "ok" };
     },
-    { id: "edit", behavior: "edit" },
     { Read: runtimeTool },
     async () => ({ allowed: true }),
     (update) => {
@@ -50,6 +49,36 @@ test("tool executor adds display text without sending it to the tool", async () 
   assert.equal(toolUse.input.tool_call_description, undefined);
   assert.deepEqual(executionInput, { file_path: "README.md" });
   assert.equal(displayInput?.tool_call_description, "Read");
+});
+
+test("tool executor preserves session-bound runtime context", async () => {
+  const runtimeTool: RuntimeToolDefinition = {
+    name: "create_tasks",
+    description: "Create tasks.",
+    parameters: { type: "object" },
+    source: "internal",
+    capabilityId: "task",
+    isConcurrencySafe: () => false,
+    resultPolicy: {},
+    permissionPolicy: { kind: "allow" },
+  };
+  let observedSessionId: string | undefined;
+  const executor = new StreamingToolExecutor(
+    async (_toolName, _input, context) => {
+      observedSessionId = context.sessionId;
+      return { content: "ok" };
+    },
+    { create_tasks: runtimeTool },
+    async () => ({ allowed: true }),
+    undefined,
+    { sessionId: "session-1", values: { scope: "test" } },
+  );
+
+  executor.addTool(toolUseBlock("call-context", "create_tasks", { tasks: [] }));
+  await executor.getFinalResults();
+
+  assert.equal(observedSessionId, "session-1");
+  assert.equal(executor.getRuntimeContext().sessionId, "session-1");
 });
 
 test("tool executor stops waiting for an in-flight tool when the run is discarded", async () => {
@@ -70,7 +99,6 @@ test("tool executor stops waiting for an in-flight tool when the run is discarde
   const updates: string[] = [];
   const executor = new StreamingToolExecutor(
     () => toolExecution,
-    { id: "edit", behavior: "edit" },
     { Terminal: runtimeTool },
     async () => ({ allowed: true }),
     (update) => updates.push(update.status),

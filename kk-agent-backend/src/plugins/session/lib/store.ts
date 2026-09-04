@@ -11,13 +11,11 @@ import {
 } from "../../lib/state.js";
 import { ensureSessionFactsLoaded } from "../../tools/lib/memory-state.js";
 import { ensureTasksLoaded } from "../../tools/lib/task-state.js";
-import { getAgent } from "../../agent/service.js";
-import { getEnabledAgentModes } from "../../agent/lib/mode-config.js";
 import type { PersistedAgentRun, SessionRecord, SessionState } from "../types.js";
 
 const logger = createLogger("session/store");
 const SESSION_FILE = "session.json";
-const SESSION_SCHEMA_VERSION = 9;
+const SESSION_SCHEMA_VERSION = 10;
 
 const sessions = new Map<string, SessionRecord>();
 
@@ -67,7 +65,6 @@ function isCompatibleSession(value: unknown, id: string): value is SessionRecord
     && typeof session.providerId === "string"
     && typeof session.model === "string"
     && typeof session.agentId === "string"
-    && typeof session.activeModeId === "string"
     && (session.approvalMode === "ask_approval" || session.approvalMode === "full_access")
     && isStringArray(session.activeToolIds)
     && isStringArray(session.activeMcpIds)
@@ -137,13 +134,6 @@ export async function initStore(): Promise<void> {
         await deleteSessionData(id);
         continue;
       }
-      const agent = getAgent(stored.agentId);
-      if (!getEnabledAgentModes(agent).some((mode) => mode.id === stored.activeModeId)) {
-        logger.warn(`Deleting session "${id}" with an unavailable mode.`);
-        await deleteSessionData(id);
-        continue;
-      }
-
       const interrupted = abortInterruptedRuns(stored.runs, stored.messages, id);
       const session = interrupted.changed ? { ...stored, runs: interrupted.runs } : stored;
       sessions.set(id, session);
@@ -164,7 +154,6 @@ export async function createSession(data: {
   agentId: string;
   providerId: string;
   model: string;
-  activeModeId: SessionState["activeModeId"];
   approvalMode: SessionState["approvalMode"];
   activeToolIds: string[];
   activeMcpIds: string[];
@@ -179,7 +168,6 @@ export async function createSession(data: {
     providerId: data.providerId,
     model: data.model,
     agentId: data.agentId,
-    activeModeId: data.activeModeId,
     approvalMode: data.approvalMode,
     activeToolIds: data.activeToolIds,
     activeMcpIds: data.activeMcpIds,

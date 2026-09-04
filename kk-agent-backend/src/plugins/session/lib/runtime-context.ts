@@ -2,8 +2,7 @@ import type { SessionState } from "../types.js";
 import { getSystemVariables, buildPrompt } from "../../systemprompt/lib/builder.js";
 import { buildResolvedInternalToolRuntime, getInternalToolState, getMemoryPromptContext, getTaskSummary } from "../../tools/service.js";
 import { buildActiveSkillCatalogSection } from "../../skills/service.js";
-import type { ModeRuntimeConfig } from "../../loop/types.js";
-import { getAgentMode } from "../../agent/lib/mode-config.js";
+import type { AgentRuntimeConfig } from "../../loop/types.js";
 import type { AgentDefinition } from "../../agent/types.js";
 import { type TranscriptAssetRefBlock, type TranscriptMessage } from "kk-agent-contract";
 import type { ToolRuntimeContext } from "../../loop/types.js";
@@ -20,52 +19,45 @@ function compactTerminalCommand(command: string): string {
   return normalized.length <= 240 ? normalized : `${normalized.slice(0, 237)}...`;
 }
 
-function intersectIds(sessionIds: string[], modeIds: string[]): string[] {
+function intersectIds(sessionIds: string[], agentIds: string[]): string[] {
   const sessionSet = new Set(sessionIds);
-  return modeIds.filter((id) => sessionSet.has(id));
+  return agentIds.filter((id) => sessionSet.has(id));
 }
 
-export interface SessionModeRuntimeConfig extends ModeRuntimeConfig {
+export interface SessionAgentRuntimeConfig extends AgentRuntimeConfig {
   runtimeNotices: string[];
   activeToolIds: string[];
   activeMcpIds: string[];
 }
 
-export function buildModeRuntimeConfig(
+export function buildAgentRuntimeConfig(
   session: Pick<SessionState, "activeToolIds" | "activeMcpIds" | "activeSkillIds" | "approvalMode" | "model">,
   agent: AgentDefinition,
-  modeId: string,
-): SessionModeRuntimeConfig {
-  const mode = getAgentMode(agent, modeId);
-  const config = mode.config;
-  const configuredActiveToolIds = intersectIds(session.activeToolIds, config.toolIds);
-  const activeMcpIds = intersectIds(session.activeMcpIds, config.mcpIds);
-  const selectedSkillIds = intersectIds(session.activeSkillIds, config.skillIds);
+): SessionAgentRuntimeConfig {
+  const configuredActiveToolIds = intersectIds(session.activeToolIds, agent.toolIds);
+  const activeMcpIds = intersectIds(session.activeMcpIds, agent.mcpIds);
+  const selectedSkillIds = intersectIds(session.activeSkillIds, agent.skillIds);
   const activeSkillIds = configuredActiveToolIds.includes("skill") ? selectedSkillIds : [];
   const activeToolIds = activeSkillIds.length > 0
     ? configuredActiveToolIds
     : configuredActiveToolIds.filter((id) => id !== "skill");
   const systemToolRuntime = buildResolvedInternalToolRuntime(
     activeToolIds,
-    config.toolAccessScopes,
-    config.toolInstructions,
+    agent.toolAccessScopes,
+    agent.toolInstructions,
     session.approvalMode,
   );
   const runtimeToolCollection = buildRuntimeToolCollection(
     systemToolRuntime,
     activeMcpIds,
-    config.allowedToolNames,
+    agent.allowedToolNames,
   );
   const effectiveInstructions = {
     ...systemToolRuntime.instructionsById,
-    ...config.mcpInstructions,
+    ...agent.mcpInstructions,
   };
   return {
-    modeId: mode.id,
-    modePromptName: mode.source === "custom" ? mode.label : mode.id,
-    modeBehavior: mode.behavior,
-    promptSections: config.promptSections,
-    modeInstruction: config.modeInstruction,
+    promptSections: agent.promptSections,
     mcpInstructions: buildRunnableMcpInstructions(
       activeToolIds,
       activeMcpIds,
@@ -86,27 +78,22 @@ export function buildModeRuntimeConfig(
 
 export function buildCurrentSystemPrompt(
   sessionId: string,
-  session: Pick<SessionState, "activeToolIds" | "activeMcpIds" | "activeSkillIds" | "activeModeId" | "approvalMode" | "model">,
+  session: Pick<SessionState, "activeToolIds" | "activeMcpIds" | "activeSkillIds" | "approvalMode" | "model">,
   agent: AgentDefinition,
 ): string {
-  const modeRuntimeConfig = buildModeRuntimeConfig(session, agent, session.activeModeId);
+  const runtimeConfig = buildAgentRuntimeConfig(session, agent);
   const variables: Record<string, string> = {
     ...getSystemVariables({ CURRENT_MODEL: session.model }),
-    ...modeRuntimeConfig.runtimeVariables,
+    ...runtimeConfig.runtimeVariables,
     ...agent.variables,
   };
 
   return buildPrompt(
-    modeRuntimeConfig.promptSections,
-    modeRuntimeConfig.modeInstruction,
-    modeRuntimeConfig.mcpInstructions,
-    modeRuntimeConfig.skillsCatalog,
+    runtimeConfig.promptSections,
+    runtimeConfig.mcpInstructions,
+    runtimeConfig.skillsCatalog,
     variables,
-    {
-      sessionId,
-      modeId: modeRuntimeConfig.modeId,
-      modeName: modeRuntimeConfig.modePromptName,
-    },
+    { sessionId },
   );
 }
 
@@ -118,8 +105,6 @@ function readStringArray(value: unknown): string[] {
 
 export function buildRuntimeContext(input: {
   sessionId: string;
-  modeId: string;
-  modeName: string;
   model: string;
   runtimeVariables?: Record<string, string>;
   toolContext?: ToolRuntimeContext;
@@ -127,7 +112,6 @@ export function buildRuntimeContext(input: {
 }): string {
   const variables = getSystemVariables({
     CURRENT_MODEL: input.model,
-    mode: input.modeName,
     ...(input.runtimeVariables ?? {}),
   });
   const internalState = getInternalToolState(input.sessionId);

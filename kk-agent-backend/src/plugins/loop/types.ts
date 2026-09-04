@@ -1,6 +1,6 @@
 import type { AgentLoopState, ModelInputDebug, RunEvent, RuntimeToolSource, SessionContextState, SessionContextUsage, ToolExecutionStatus, TranscriptMessage } from "kk-agent-contract";
 import type { ModelContentPart, ProviderTransportState, ProviderTurnDebug, TokenStats, UnifiedToolDefinition } from "../provider/lib/types.js";
-import type { ModeBehavior, AgentPromptSections } from "../agent/types.js";
+import type { AgentPromptSections } from "../agent/types.js";
 import type { LlmRequestConfig } from "../provider/types.js";
 
 interface RuntimeToolResultPolicy {
@@ -29,11 +29,6 @@ export interface ToolRuntimeContext {
   abortSignal?: AbortSignal;
 }
 
-export interface ModeRuntimeRef {
-  id: string;
-  behavior: ModeBehavior;
-}
-
 export interface RuntimeToolDefinition extends UnifiedToolDefinition {
   source: RuntimeToolSource;
   capabilityId: string;
@@ -44,7 +39,6 @@ export interface RuntimeToolDefinition extends UnifiedToolDefinition {
   resolvePermission?: (
     toolName: string,
     args: Record<string, unknown>,
-    mode: ModeRuntimeRef,
   ) => Promise<RuntimeToolPermissionPolicy> | RuntimeToolPermissionPolicy;
 }
 
@@ -55,12 +49,8 @@ export interface ToolExecutionResult {
   metadata?: Record<string, unknown>;
 }
 
-export interface ModeRuntimeConfig {
-  modeId: string;
-  modePromptName: string;
-  modeBehavior: ModeBehavior;
+export interface AgentRuntimeConfig {
   promptSections: AgentPromptSections;
-  modeInstruction: string;
   mcpInstructions: string;
   skillsCatalog: string;
   activeSkillIds: string[];
@@ -81,19 +71,15 @@ export interface LoopOptions {
   buildRuntimeContext?: (input: {
     sessionId: string;
     agentId: string;
-    modeId: string;
-    modeName?: string;
     model: string;
     step: number;
     toolContext: ToolRuntimeContext;
   }) => string;
-  modeConfigs: Record<string, ModeRuntimeConfig>;
-  activeModeId: string;
+  runtimeConfig: AgentRuntimeConfig;
   agentVariables: Record<string, string>;
   executeTool: (
     toolName: string,
     args: Record<string, unknown>,
-    mode: ModeRuntimeRef,
     context: ToolRuntimeContext,
   ) => Promise<ToolExecutionResult>;
   toolContext?: ToolRuntimeContext;
@@ -123,7 +109,6 @@ export interface LoopOptions {
     runtimeTool: RuntimeToolDefinition,
     toolName: string,
     args: Record<string, unknown>,
-    mode: ModeRuntimeRef,
   ) => Promise<{ allowed: boolean; reason?: string }>;
   onLoopState?: (state: AgentLoopState) => void;
   onStats?: (stats: TokenStats) => void;

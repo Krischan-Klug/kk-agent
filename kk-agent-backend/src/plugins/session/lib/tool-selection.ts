@@ -3,8 +3,7 @@ import { getKnownMcpIds, getRunnableMcpIds } from "../../mcp/service.js";
 import { getKnownInternalToolIds, getRunnableInternalToolIds } from "../../tools/service.js";
 import { listSkills } from "../../skills/service.js";
 import { filterToKnownIds } from "../../lib/ids.js";
-import type { AgentDefinition, AgentModeDefinition } from "../../agent/types.js";
-import { getEnabledAgentModes } from "../../agent/lib/mode-config.js";
+import type { AgentDefinition } from "../../agent/types.js";
 
 const REQUIRED_SESSION_TOOL_IDS = ["attachment"];
 
@@ -34,33 +33,31 @@ export function buildRunnableMcpInstructions(
 }
 
 function resolveSessionIds(
-  agent: Pick<AgentDefinition, "modes">,
+  configuredIds: string[],
   activeIds: string[] | undefined,
-  accessor: (mode: AgentModeDefinition) => string[],
   sanitize: (ids: string[]) => string[],
 ): string[] {
-  if (activeIds !== undefined) return sanitize(activeIds);
-  const modeIds = getEnabledAgentModes(agent).flatMap((mode) => accessor(mode));
-  return sanitize(modeIds);
+  const configured = new Set(configuredIds);
+  return sanitize((activeIds ?? configuredIds).filter((id) => configured.has(id)));
 }
 
 export function resolveSessionToolIds(
-  agent: Pick<AgentDefinition, "modes">,
+  agent: Pick<AgentDefinition, "toolIds">,
   activeToolIds?: string[],
 ): string[] {
-  return resolveSessionIds(agent, activeToolIds, (mode) => mode.config.toolIds, sanitizeToolIds);
+  return resolveSessionIds(agent.toolIds, activeToolIds, sanitizeToolIds);
 }
 
 export function resolveSessionMcpIds(
-  agent: Pick<AgentDefinition, "modes">,
+  agent: Pick<AgentDefinition, "mcpIds">,
   activeMcpIds?: string[],
 ): string[] {
-  return resolveSessionIds(agent, activeMcpIds, (mode) => mode.config.mcpIds, sanitizeMcpIds);
+  return resolveSessionIds(agent.mcpIds, activeMcpIds, sanitizeMcpIds);
 }
 
 export function resolveSessionSkillIds(
-  agent: Pick<AgentDefinition, "modes">,
+  agent: Pick<AgentDefinition, "skillIds">,
   activeSkillIds?: string[],
 ): string[] {
-  return resolveSessionIds(agent, activeSkillIds, (mode) => mode.config.skillIds, sanitizeSkillIds);
+  return resolveSessionIds(agent.skillIds, activeSkillIds, sanitizeSkillIds);
 }

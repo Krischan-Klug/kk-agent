@@ -43,9 +43,9 @@ const AgentPromptSectionsSchema = z.object({
   communication: z.string(),
 });
 
-const AgentModeConfigSchema = z.object({
+const AgentConfigSchema = z.object({
+  color: z.string().regex(/^#[0-9a-fA-F]{6}$/),
   promptSections: AgentPromptSectionsSchema,
-  modeInstruction: z.string(),
   toolIds: z.array(z.string()),
   mcpIds: z.array(z.string()),
   skillIds: z.array(z.string()),
@@ -53,16 +53,6 @@ const AgentModeConfigSchema = z.object({
   toolInstructions: z.record(z.string()),
   mcpInstructions: z.record(z.string()),
   allowedToolNames: z.array(z.string()),
-});
-
-const AgentModeDefinitionSchema = z.object({
-  id: NonEmptyStringSchema,
-  label: NonEmptyStringSchema,
-  behavior: z.enum(["plan", "edit"]),
-  source: z.enum(["builtin", "custom"]),
-  color: z.string().regex(/^#[0-9a-fA-F]{6}$/).optional(),
-  enabled: z.boolean(),
-  config: AgentModeConfigSchema,
 });
 
 export const PromptResponseBodySchema = z.object({
@@ -80,19 +70,17 @@ export const ChatBodySchema = z.object({
 export const CreateSessionBodySchema = z.object({
   agentId: NonEmptyStringSchema,
   providerId: OptionalTrimmedStringSchema,
-  activeModeId: OptionalTrimmedStringSchema,
   approvalMode: z.enum(["ask_approval", "full_access"]).optional(),
   model: OptionalTrimmedStringSchema,
   activeToolIds: z.array(NonEmptyStringSchema).optional(),
   activeMcpIds: z.array(NonEmptyStringSchema).optional(),
   activeSkillIds: z.array(NonEmptyStringSchema).optional(),
   llmRequestConfig: LlmRequestConfigSchema,
-});
+}).strict();
 
 export const UpdateSessionBodySchema = z.object({
   agentId: OptionalTrimmedStringSchema,
   providerId: OptionalTrimmedStringSchema,
-  activeModeId: OptionalTrimmedStringSchema,
   approvalMode: z.enum(["ask_approval", "full_access"]).optional(),
   model: OptionalTrimmedStringSchema,
   activeToolIds: z.array(NonEmptyStringSchema).optional(),
@@ -141,7 +129,7 @@ export const UpdateMcpBodySchema = z.object({
   url: OptionalTrimmedStringSchema,
   instruction: z.string().optional(),
   emoji: z.string().optional(),
-});
+}).strict();
 
 export const UpdateInternalToolBodySchema = z.object({
   name: OptionalTrimmedStringSchema,
@@ -153,22 +141,18 @@ export const UpdateInternalToolBodySchema = z.object({
 
 /* Agent */
 
-export const CreateAgentBodySchema = z.object({
+export const CreateAgentBodySchema = AgentConfigSchema.partial().extend({
   name: NonEmptyStringSchema,
   description: z.string().optional(),
-  defaultModeId: OptionalTrimmedStringSchema,
-  modes: z.array(AgentModeDefinitionSchema).optional(),
   variables: z.record(z.string()).optional(),
   defaultProviderId: OptionalTrimmedStringSchema,
   defaultModel: OptionalTrimmedStringSchema,
   llmRequestConfig: LlmRequestConfigSchema,
-});
+}).strict();
 
-export const UpdateAgentBodySchema = z.object({
+export const UpdateAgentBodySchema = AgentConfigSchema.partial().extend({
   name: OptionalTrimmedStringSchema,
   description: z.string().optional(),
-  defaultModeId: OptionalTrimmedStringSchema,
-  modes: z.array(AgentModeDefinitionSchema).optional(),
   variables: z.record(z.string()).optional(),
   defaultProviderId: OptionalTrimmedStringSchema,
   defaultModel: OptionalTrimmedStringSchema,
@@ -196,7 +180,7 @@ export const ModelSettingsBodySchema = z.object({
     contextLimit: z.number().int().positive().optional(),
     llmRequestConfig: LlmRequestConfigSchema,
   }).strict(),
-});
+}).strict();
 
 /* Tools / Memory / Tasks */
 

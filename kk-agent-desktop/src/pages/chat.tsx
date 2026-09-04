@@ -22,11 +22,11 @@ import { getSessionModelRef } from "@/lib/modelRefs";
 import type { ReasoningEffort, SessionPromptDebug } from "kk-agent-contract";
 
 const REASONING_COLORS: Record<ReasoningEffort, string> = {
-  none: "#9d9d9d",
-  low: "#1eff00",
-  medium: "#0070dd",
-  high: "#a335ee",
-  xhigh: "#ff8000",
+  none: "var(--text-muted)",
+  low: "var(--success)",
+  medium: "var(--info)",
+  high: "var(--accent)",
+  xhigh: "var(--warning)",
 };
 
 const ChatWrapper = styled.div`
@@ -197,7 +197,6 @@ export default function ChatPage() {
         currentAgentId={activeSession.agentId}
         reasoningValue={resolvedEffort}
         reasoningOptions={reasoningOptions}
-        activeModeId={activeSession.activeModeId}
         approvalMode={activeSession.approvalMode}
         maxCtx={maxCtx}
         tokenStats={tokenStats}
@@ -207,7 +206,6 @@ export default function ChatPage() {
         onKeyDown={streaming.handleKeyDown}
         onAgentSwitch={(agentId) => void streaming.handleAgentSwitch(agentId, sessionData.handleAgentSwitch)}
         onReasoningSelect={(effort) => void sessionData.handleReasoningEffort(effort)}
-        onModeSwitch={(mode) => void sessionData.handleModeSwitch(mode)}
         onApprovalModeSwitch={(approvalMode) => void sessionData.handleApprovalModeSwitch(approvalMode)}
         onSend={() => void streaming.handleSend()}
         onAbort={() => void streaming.handleAbort()}

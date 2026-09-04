@@ -50,7 +50,7 @@ export default function SecurityPage() {
         <SettingsCard>
           <Section>
             <SectionTitle>Security defaults</SectionTitle>
-            <MutedText>Scope is inherited by agent modes without an override. Approval initializes new sessions. Both settings remain independent.</MutedText>
+            <MutedText>Scope is inherited by agents without an override. Approval initializes new sessions. Both settings remain independent.</MutedText>
           </Section>
           <FormField>
             <FieldLabel>Access scope</FieldLabel>

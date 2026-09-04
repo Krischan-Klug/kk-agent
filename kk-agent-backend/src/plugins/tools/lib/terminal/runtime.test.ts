@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { execFile } from "node:child_process";
+import { existsSync } from "node:fs";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -10,8 +11,23 @@ import { terminalDefinition } from "./definition.js";
 import { executeTerminalTool } from "./runtime.js";
 import { getTerminalShellResolution, initializeTerminalShell } from "./shell-profile.js";
 import { buildRuntimeContext } from "../../../session/lib/runtime-context.js";
+import {
+  disposeSessionTerminalTasks,
+  setTerminalTaskSessionsRootForTests,
+} from "./background-tasks.js";
 
 const execFileAsync = promisify(execFile);
+let terminalTaskTestRoot = "";
+
+test.before(async () => {
+  terminalTaskTestRoot = await mkdtemp(join(tmpdir(), "kk-agent-terminal-state-test-"));
+  setTerminalTaskSessionsRootForTests(terminalTaskTestRoot);
+});
+
+test.after(async () => {
+  setTerminalTaskSessionsRootForTests();
+  await rm(terminalTaskTestRoot, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
+});
 
 const sessionContext = (sessionId: string) => ({ sessionId, values: {} });
 
@@ -145,13 +161,14 @@ test("background execution uses the same detected shell and writes status and UT
     return;
   }
 
+  const sessionId = "background-completion-test";
   const cwd = await mkdtemp(join(tmpdir(), "kk-agent-terminal-test-"));
   try {
     const result = await executeTerminalTool(terminalDefinition, "Terminal", {
-      command: "node -e \"setTimeout(() => process.stdout.write('hintergründig'), 50)\"",
+      command: "node -e \"setTimeout(() => process.stdout.write('hintergründig', () => process.exit(0)), 50)\"",
       cwd,
       run_in_background: true,
-    }, sessionContext("background-completion-test"));
+    }, sessionContext(sessionId));
     assert.ok(result);
     assert.equal(result.isError, false);
     assert.equal(result.metadata?.shell, resolution.profile.kind);
@@ -159,12 +176,16 @@ test("background execution uses the same detected shell and writes status and UT
 
     const statusPath = String(result.metadata?.statusPath ?? "");
     const stdoutPath = String(result.metadata?.stdoutPath ?? "");
+    const taskId = String(result.metadata?.taskId ?? "");
+    assert.equal(statusPath, join(terminalTaskTestRoot, sessionId, "terminal-tasks", taskId, "status.json"));
+    assert.equal(existsSync(join(cwd, ".kk-agent-shell-tasks")), false);
     const status = await waitForStatus(statusPath, "completed");
     assert.match(status, /"status": "completed"/);
     assert.match(status, /"privilege": "current_user"/);
     assert.doesNotMatch(status, /"elevated"/);
     assert.match(await readFile(stdoutPath, "utf8"), /hintergründig/);
   } finally {
+    await disposeSessionTerminalTasks(sessionId);
     await rm(cwd, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
   }
 });
@@ -177,6 +198,7 @@ test("an explicit background timeout terminates the process and updates its stat
     return;
   }
 
+  const sessionId = "background-timeout-test";
   const cwd = await mkdtemp(join(tmpdir(), "kk-agent-terminal-timeout-test-"));
   try {
     const result = await executeTerminalTool(terminalDefinition, "Terminal", {
@@ -184,7 +206,7 @@ test("an explicit background timeout terminates the process and updates its stat
       cwd,
       run_in_background: true,
       timeoutMs: 100,
-    }, sessionContext("background-timeout-test"));
+    }, sessionContext(sessionId));
     assert.ok(result);
     assert.equal(result.isError, false);
     assert.equal(result.metadata?.timeoutMs, 100);
@@ -195,6 +217,7 @@ test("an explicit background timeout terminates the process and updates its stat
     assert.match(status, /"timedOut": true/);
     assert.match(status, /"privilege": "current_user"/);
   } finally {
+    await disposeSessionTerminalTasks(sessionId);
     await rm(cwd, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
   }
 });
@@ -324,6 +347,45 @@ test("managed background tasks expose status and stop through their task id", as
       },
     }), /<terminal_tasks>/);
   } finally {
+    await disposeSessionTerminalTasks(sessionId);
+    await rm(cwd, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
+  }
+});
+
+test("disposing a session stops its background tasks and removes their files", async (t) => {
+  initializeTerminalShell();
+  const resolution = getTerminalShellResolution();
+  if (resolution.status === "unavailable") {
+    t.skip(resolution.error);
+    return;
+  }
+
+  const sessionId = "background-session-disposal-test";
+  const cwd = await mkdtemp(join(tmpdir(), "kk-agent-terminal-disposal-test-"));
+  const taskRoot = join(terminalTaskTestRoot, sessionId, "terminal-tasks");
+  try {
+    const started = await executeTerminalTool(terminalDefinition, "Terminal", {
+      action: "run",
+      command: "node -e \"setTimeout(() => {}, 10000)\"",
+      cwd,
+      run_in_background: true,
+    }, sessionContext(sessionId));
+    assert.ok(started);
+    assert.equal(started.isError, false, JSON.stringify(started, null, 2));
+    const taskId = String(started.metadata?.taskId ?? "");
+    assert.equal(existsSync(taskRoot), true);
+
+    await disposeSessionTerminalTasks(sessionId);
+
+    assert.equal(existsSync(taskRoot), false);
+    const status = await executeTerminalTool(terminalDefinition, "Terminal", {
+      action: "status",
+      taskId,
+    }, sessionContext(sessionId));
+    assert.equal(status?.metadata?.errorKind, "task_not_found");
+    assert.equal(existsSync(join(cwd, ".kk-agent-shell-tasks")), false);
+  } finally {
+    await disposeSessionTerminalTasks(sessionId);
     await rm(cwd, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
   }
 });
@@ -394,6 +456,7 @@ test("stopping a Git Bash task terminates nested children without waiting for in
     assert.equal(persisted.terminationVerified, true);
     assert.ok(Number(persisted.terminationDurationMs) < 8_000);
   } finally {
+    await disposeSessionTerminalTasks(sessionId);
     for (const pid of childPids) {
       try {
         process.kill(pid, "SIGKILL");

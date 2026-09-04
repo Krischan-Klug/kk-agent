@@ -27,6 +27,7 @@ import {
   getTerminalShellResolution,
   initializeTerminalShell,
 } from "./lib/terminal/shell-profile.js";
+import { disposeSessionTerminalTasks } from "./lib/terminal/background-tasks.js";
 import { getSecuritySettings } from "../security/service.js";
 import { disposePythonSandbox, getPythonRuntimeResolution } from "./lib/python/runner.js";
 import {
@@ -398,6 +399,7 @@ export async function refreshManagedMcpConnections(changedCredentialIds?: Readon
 export {
   clearSessionFacts,
   clearTasks,
+  disposeSessionTerminalTasks,
   disposePythonSandbox,
   getMemoryPromptContext,
   getTaskSummary,

@@ -1,7 +1,8 @@
 import { randomUUID } from "node:crypto";
 import { createWriteStream, type WriteStream } from "node:fs";
-import { mkdir, rename, writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import { mkdir, rename, rm, rmdir, writeFile } from "node:fs/promises";
+import { dirname, isAbsolute, join, relative, resolve } from "node:path";
+import { getStateDirPath } from "../../../lib/state.js";
 import type { AccessScope } from "../../types.js";
 import type { TerminalShellProfile } from "./shell-profile.js";
 import {
@@ -54,6 +55,7 @@ interface TerminalTaskRecord extends TerminalTaskSnapshot {
   termination?: Promise<ProcessTermination>;
   settled: Promise<void>;
   writeQueue: Promise<void>;
+  disposed: boolean;
   error?: string;
   terminationMethod?: ProcessTermination["method"];
   terminationVerified?: boolean;
@@ -63,6 +65,25 @@ interface TerminalTaskRecord extends TerminalTaskSnapshot {
 const MAX_RETAINED_TASKS_PER_SESSION = 100;
 const STOP_SETTLE_TIMEOUT_MS = 1_500;
 const records = new Map<string, TerminalTaskRecord>();
+let terminalTaskSessionsRootOverride: string | undefined;
+
+export function setTerminalTaskSessionsRootForTests(root?: string): void {
+  terminalTaskSessionsRootOverride = root ? resolve(root) : undefined;
+}
+
+function sessionTaskRoot(sessionId: string): string {
+  const sessionsRoot = terminalTaskSessionsRootOverride ?? resolve(getStateDirPath("sessions"));
+  const root = resolve(sessionsRoot, sessionId, "terminal-tasks");
+  const relativeRoot = relative(sessionsRoot, root);
+  if (!relativeRoot || relativeRoot.startsWith("..") || isAbsolute(relativeRoot)) {
+    throw new Error("Invalid terminal task session id.");
+  }
+  return root;
+}
+
+async function removeTaskFiles(record: TerminalTaskRecord): Promise<void> {
+  await rm(dirname(record.statusPath), { recursive: true, force: true });
+}
 
 function waitForStream(stream: WriteStream): Promise<void> {
   if (stream.writableFinished || stream.destroyed) return Promise.resolve();
@@ -77,6 +98,7 @@ function waitForStream(stream: WriteStream): Promise<void> {
 function persistedStatus(record: TerminalTaskRecord): Record<string, unknown> {
   return {
     id: record.id,
+    sessionId: record.sessionId,
     status: record.status,
     command: record.command,
     cwd: record.cwd,
@@ -98,6 +120,7 @@ function persistedStatus(record: TerminalTaskRecord): Record<string, unknown> {
 }
 
 function queueStatusWrite(record: TerminalTaskRecord): Promise<void> {
+  if (record.disposed) return Promise.resolve();
   const snapshot = JSON.stringify(persistedStatus(record), null, 2);
   record.writeQueue = record.writeQueue
     .catch(() => undefined)
@@ -135,16 +158,19 @@ async function settleStoppedTask(record: TerminalTaskRecord): Promise<void> {
   record.error = `Process did not report exit within ${STOP_SETTLE_TIMEOUT_MS}ms after verified containment termination.`;
   record.completedAt = new Date().toISOString();
   await queueStatusWrite(record).catch(() => undefined);
-  pruneCompletedRecords(record.sessionId);
+  await pruneCompletedRecords(record.sessionId);
 }
 
-function pruneCompletedRecords(sessionId: string): void {
+async function pruneCompletedRecords(sessionId: string): Promise<void> {
   const completed = [...records.values()]
     .filter((record) => record.sessionId === sessionId && !["running", "stopping"].includes(record.status))
     .sort((left, right) => left.startedAt.localeCompare(right.startedAt));
   while (completed.length > MAX_RETAINED_TASKS_PER_SESSION) {
     const oldest = completed.shift();
-    if (oldest) records.delete(oldest.id);
+    if (!oldest) continue;
+    oldest.disposed = true;
+    records.delete(oldest.id);
+    await removeTaskFiles(oldest).catch(() => undefined);
   }
 }
 
@@ -181,12 +207,12 @@ export async function startBackgroundTerminalTask(input: {
   timeoutMs?: number;
 }): Promise<TerminalTaskSnapshot> {
   const id = randomUUID();
-  const taskDirectory = join(input.cwd, ".kk-agent-shell-tasks");
+  const taskDirectory = join(sessionTaskRoot(input.sessionId), id);
   await mkdir(taskDirectory, { recursive: true });
 
-  const stdoutPath = join(taskDirectory, `${id}.stdout.txt`);
-  const stderrPath = join(taskDirectory, `${id}.stderr.txt`);
-  const statusPath = join(taskDirectory, `${id}.status.json`);
+  const stdoutPath = join(taskDirectory, "stdout.txt");
+  const stderrPath = join(taskDirectory, "stderr.txt");
+  const statusPath = join(taskDirectory, "status.json");
   const processHandle = await spawnShellProcess(input.profile, input.command, input.cwd, input.env);
   const { child } = processHandle;
   const stdoutStream = createWriteStream(stdoutPath, { flags: "a" });
@@ -216,6 +242,7 @@ export async function startBackgroundTerminalTask(input: {
     timedOut: false,
     settled: Promise.resolve(),
     writeQueue: Promise.resolve(),
+    disposed: false,
   };
 
   records.set(id, record);
@@ -226,6 +253,7 @@ export async function startBackgroundTerminalTask(input: {
     await terminate(record);
     await completion;
     records.delete(id);
+    await rm(taskDirectory, { recursive: true, force: true }).catch(() => undefined);
     throw error;
   }
 
@@ -263,7 +291,7 @@ export async function startBackgroundTerminalTask(input: {
           : "failed";
     record.completedAt = new Date().toISOString();
     await queueStatusWrite(record).catch(() => undefined);
-    pruneCompletedRecords(record.sessionId);
+    await pruneCompletedRecords(record.sessionId);
   });
   child.unref();
 
@@ -313,4 +341,30 @@ export async function stopAllBackgroundTerminalTasks(): Promise<void> {
     }
     await settleStoppedTask(record);
   }));
+}
+
+export async function disposeSessionTerminalTasks(sessionId: string): Promise<void> {
+  const owned = [...records.values()].filter((record) => record.sessionId === sessionId);
+  const stopped = await Promise.allSettled(owned.map(async (record) => {
+    if (["running", "stopping"].includes(record.status)) {
+      const result = await stopTerminalTask(sessionId, record.id);
+      if (result?.status === "stop_failed") {
+        throw new Error(result.error ?? `Terminal task "${record.id}" could not be stopped.`);
+      }
+    } else {
+      await record.settled;
+    }
+    await record.writeQueue.catch(() => undefined);
+  }));
+  const failure = stopped.find((result): result is PromiseRejectedResult => result.status === "rejected");
+  if (failure) throw failure.reason;
+
+  for (const record of owned) {
+    record.disposed = true;
+    if (record.timeout) clearTimeout(record.timeout);
+    records.delete(record.id);
+  }
+  const root = sessionTaskRoot(sessionId);
+  await rm(root, { recursive: true, force: true });
+  await rmdir(dirname(root)).catch(() => undefined);
 }

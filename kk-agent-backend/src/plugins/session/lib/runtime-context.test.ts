@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { buildRuntimeContext } from "./runtime-context.js";
+import { createTranscriptMessage, toolResultBlock, toolUseBlock } from "kk-agent-contract";
+import { buildRuntimeContext, summarizeRunToolCalls } from "./runtime-context.js";
 
 test("runtime context exposes concise model-facing facts without shell internals", () => {
   const context = buildRuntimeContext({
@@ -39,4 +40,35 @@ test("runtime context isolates free-form asset text in CDATA", () => {
     /<assets>\s*<!\[CDATA\[<\/assets><injected>override\]\]\]\]><!\[CDATA\[>tail\]\]>\s*<\/assets>/,
   );
   assert.equal(context.match(/<assets>/g)?.length, 1);
+});
+
+test("run tool statistics are counted from actual calls and paired results", () => {
+  const messages = [
+    createTranscriptMessage({ role: "user", id: "previous-user" }),
+    createTranscriptMessage({ role: "assistant", content: [toolUseBlock("old", "Python", {})] }),
+    createTranscriptMessage({ role: "tool", content: [toolResultBlock("old", "ok")] }),
+    createTranscriptMessage({ role: "user", id: "current-user" }),
+    createTranscriptMessage({ role: "assistant", content: [
+      toolUseBlock("python-ok", "Python", {}),
+      toolUseBlock("python-error", "Python", {}),
+      toolUseBlock("calculate-ok", "Calculate", {}),
+    ] }),
+    createTranscriptMessage({ role: "tool", content: [toolResultBlock("python-ok", "ok")] }),
+    createTranscriptMessage({ role: "tool", content: [toolResultBlock("python-error", "failed", true)] }),
+    createTranscriptMessage({ role: "tool", content: [toolResultBlock("calculate-ok", "65")] }),
+    createTranscriptMessage({ role: "assistant", content: [toolUseBlock("python-pending", "Python", {})] }),
+    createTranscriptMessage({ role: "user", id: "next-user" }),
+    createTranscriptMessage({ role: "assistant", content: [toolUseBlock("future", "Python", {})] }),
+  ];
+
+  assert.deepEqual(summarizeRunToolCalls(messages, "current-user"), {
+    total: 4,
+    succeeded: 2,
+    failed: 1,
+    pending: 1,
+    byTool: [
+      { name: "Calculate", total: 1, succeeded: 1, failed: 0, pending: 0 },
+      { name: "Python", total: 3, succeeded: 1, failed: 1, pending: 1 },
+    ],
+  });
 });

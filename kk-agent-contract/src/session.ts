@@ -3,7 +3,16 @@ import type { AgentLoopState, AgentPromptSections, ToolAccessScope } from "./age
 import type { ApprovalMode } from "./tool.js";
 import type { ToolExecutionStatus, TranscriptBlock, TranscriptMessage } from "./transcript.js";
 
-export type AssetKind = "image" | "pdf" | "document" | "presentation" | "spreadsheet" | "text";
+export type AssetKind =
+  | "image"
+  | "pdf"
+  | "document"
+  | "presentation"
+  | "spreadsheet"
+  | "text"
+  | "model"
+  | "archive"
+  | "binary";
 export type AssetSource = "user" | "assistant";
 
 export const ASSET_EXTENSION_KINDS = {
@@ -16,6 +25,10 @@ export const ASSET_EXTENSION_KINDS = {
   ".tsx": "text", ".jsx": "text", ".py": "text", ".rs": "text", ".go": "text",
   ".java": "text", ".c": "text", ".cpp": "text", ".h": "text", ".sh": "text",
   ".sql": "text", ".toml": "text", ".ini": "text", ".log": "text", ".env": "text",
+  ".svg": "text", ".geojson": "text",
+  ".obj": "model", ".stl": "model", ".ply": "model", ".gltf": "model", ".glb": "model",
+  ".zip": "archive", ".gz": "archive",
+  ".npy": "binary", ".npz": "binary", ".parquet": "binary", ".bin": "binary",
 } as const satisfies Record<string, AssetKind>;
 
 export const SUPPORTED_ASSET_EXTENSIONS = Object.keys(ASSET_EXTENSION_KINDS);

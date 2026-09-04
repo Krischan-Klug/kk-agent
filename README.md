@@ -10,6 +10,7 @@ The Electron application uses a Next.js renderer and connects to the plugin-base
 
 - Runs plan and edit agent loops against local models
 - Separates internal tools, external MCPs, and standard Agent Skills
+- Provides deterministic calculation and isolated Python execution for compute and artifact generation
 - Streams assistant text, reasoning, tool activity, and loop state live
 - Persists lightweight JSON state without a database
 

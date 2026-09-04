@@ -11,6 +11,7 @@ import { buildRuntimeToolCollection } from "./runtime-tools.js";
 import { getDefaults } from "../../lib/defaults.js";
 import { escapeXml, toCData } from "../../lib/xml.js";
 import { listActiveTerminalTasks } from "../../tools/lib/terminal/background-tasks.js";
+import * as sessionStore from "./store.js";
 
 const MAX_CONTEXT_TERMINAL_TASKS = 20;
 
@@ -103,9 +104,57 @@ function readStringArray(value: unknown): string[] {
     : [];
 }
 
+export interface RunToolCallStats {
+  total: number;
+  succeeded: number;
+  failed: number;
+  pending: number;
+  byTool: Array<{ name: string; total: number; succeeded: number; failed: number; pending: number }>;
+}
+
+export function summarizeRunToolCalls(messages: TranscriptMessage[], userMessageId: string): RunToolCallStats | null {
+  const start = messages.findIndex((message) => message.id === userMessageId && message.role === "user");
+  if (start < 0) return null;
+  const nextUserOffset = messages.slice(start + 1).findIndex((message) => message.role === "user");
+  const end = nextUserOffset < 0 ? messages.length : start + 1 + nextUserOffset;
+  const runMessages = messages.slice(start + 1, end);
+  const uses = runMessages.flatMap((message) => message.content.filter((block) => block.type === "tool_use"));
+  const results = new Map(runMessages.flatMap((message) => message.content
+    .filter((block) => block.type === "tool_result")
+    .map((block) => [block.tool_use_id, block] as const)));
+  const byTool = new Map<string, { name: string; total: number; succeeded: number; failed: number; pending: number }>();
+  let succeeded = 0;
+  let failed = 0;
+  let pending = 0;
+  for (const use of uses) {
+    const aggregate = byTool.get(use.name) ?? { name: use.name, total: 0, succeeded: 0, failed: 0, pending: 0 };
+    aggregate.total += 1;
+    const result = results.get(use.id);
+    if (!result) {
+      aggregate.pending += 1;
+      pending += 1;
+    } else if (result.is_error) {
+      aggregate.failed += 1;
+      failed += 1;
+    } else {
+      aggregate.succeeded += 1;
+      succeeded += 1;
+    }
+    byTool.set(use.name, aggregate);
+  }
+  return {
+    total: uses.length,
+    succeeded,
+    failed,
+    pending,
+    byTool: [...byTool.values()].sort((left, right) => left.name.localeCompare(right.name)),
+  };
+}
+
 export function buildRuntimeContext(input: {
   sessionId: string;
   model: string;
+  runUserMessageId?: string;
   runtimeVariables?: Record<string, string>;
   toolContext?: ToolRuntimeContext;
   assetContext?: string;
@@ -165,6 +214,16 @@ export function buildRuntimeContext(input: {
   }
   if (input.assetContext) lines.push("  <assets>", `    ${toCData(input.assetContext)}`, "  </assets>");
   if (skillContexts.length > 0) lines.push("  <loaded_skills>", ...skillContexts, "  </loaded_skills>");
+  const runStats = input.runUserMessageId
+    ? summarizeRunToolCalls(sessionStore.getSession(input.sessionId)?.messages ?? [], input.runUserMessageId)
+    : null;
+  if (runStats && runStats.total > 0) {
+    lines.push(
+      `  <run_tool_stats authoritative="true" total="${runStats.total}" succeeded="${runStats.succeeded}" failed="${runStats.failed}" pending="${runStats.pending}">`,
+      ...runStats.byTool.map((tool) => `    <tool name="${escapeXml(tool.name)}" total="${tool.total}" succeeded="${tool.succeeded}" failed="${tool.failed}" pending="${tool.pending}" />`),
+      "  </run_tool_stats>",
+    );
+  }
   lines.push("</runtime_context>");
   return lines.join("\n");
 }

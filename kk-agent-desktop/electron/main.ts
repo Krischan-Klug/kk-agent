@@ -246,6 +246,9 @@ async function startBackend(apiToken: string, hostToken: string): Promise<string
       KK_AGENT_API_TOKEN: apiToken,
       KK_AGENT_HOST_TOKEN: hostToken,
       KK_AGENT_STATE_DIR: stateDir,
+      KK_AGENT_PYODIDE_DIR: app.isPackaged
+        ? path.join(process.resourcesPath, "backend", "pyodide")
+        : path.resolve(getDesktopRoot(), "..", "node_modules", "pyodide"),
     },
     stdio: ["ignore", "pipe", "pipe"],
     windowsHide: true,

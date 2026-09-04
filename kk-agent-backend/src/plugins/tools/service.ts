@@ -28,6 +28,7 @@ import {
   initializeTerminalShell,
 } from "./lib/terminal/shell-profile.js";
 import { getSecuritySettings } from "../security/service.js";
+import { disposePythonSandbox, getPythonRuntimeResolution } from "./lib/python/runner.js";
 import {
   buildManagedMcpConfig,
   getManagedCredentialDescriptors,
@@ -71,6 +72,7 @@ function isConcurrencySafeInternalTool(toolName: string, input: Record<string, u
     "WebOpen",
     "WebFind",
     "WebFetch",
+    "Calculate",
     "list_assets",
     "search_asset",
     "read_asset",
@@ -168,6 +170,7 @@ function resolveInternalTool(
   const definition = getInternalTool(id);
   if (!definition) return null;
   if (id === "terminal" && getTerminalShellResolution().status === "unavailable") return null;
+  if (id === "python" && getPythonRuntimeResolution().status === "unavailable") return null;
 
   const security = getSecuritySettings();
   const accessScope = accessScopeOverride ?? security.accessScope;
@@ -241,6 +244,12 @@ export function getInternalToolRuntimeState(tool: InternalToolDefinition): { sta
   if (tool.id === "terminal") {
     const resolution = getTerminalShellResolution();
     if (resolution.status === "unavailable") return { status: "unavailable", error: resolution.error };
+  }
+  if (tool.id === "python") {
+    const resolution = getPythonRuntimeResolution();
+    return resolution.status === "running"
+      ? { status: "running" }
+      : { status: "unavailable", error: resolution.error };
   }
   return { status: "running" };
 }
@@ -389,6 +398,7 @@ export async function refreshManagedMcpConnections(changedCredentialIds?: Readon
 export {
   clearSessionFacts,
   clearTasks,
+  disposePythonSandbox,
   getMemoryPromptContext,
   getTaskSummary,
   listSessionFacts,

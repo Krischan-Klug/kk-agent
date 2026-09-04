@@ -4,7 +4,7 @@ import * as store from "./lib/store.js";
 import { getAllMcpsCached, getMcpTools, getRunnableMcpIds } from "../mcp/service.js";
 import { getAgent } from "../agent/service.js";
 import { isLoopActive } from "../loop/lib/run-registry.js";
-import { clearSessionFacts, clearTasks } from "../tools/service.js";
+import { clearSessionFacts, clearTasks, disposePythonSandbox } from "../tools/service.js";
 import { getSecuritySettings } from "../security/service.js";
 import { resolveSessionDefaults } from "./lib/session-resolution.js";
 import { getModelCapabilities } from "../provider/service.js";
@@ -76,6 +76,7 @@ export async function deleteSession(id: string): Promise<void> {
     throw new ConflictError(`Session "${id}" cannot be deleted while a run is active.`);
   }
   if (!(await store.deleteSession(id))) throw new NotFoundError("Session", id);
+  await disposePythonSandbox(id);
   clearTasks(id);
   clearSessionFacts(id);
 }

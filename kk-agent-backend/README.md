@@ -157,6 +157,7 @@ Persistent JSON state lives under `state/`:
 - `system-mcps.json`
 - `user-memory.json`
 - `agent-skills/`
+- `python-package-cache/`
 - `sessions/<sessionId>/session.json`
 - `sessions/<sessionId>/tasks.json`
 - `sessions/<sessionId>/facts.json`

@@ -4,7 +4,8 @@
   "workspaces": {
     "kk-agent-backend": {
       "entry": ["index.ts"],
-      "project": ["index.ts", "src/**/*.ts", "tsup*.ts"]
+      "project": ["index.ts", "src/**/*.ts", "tsup*.ts"],
+      "ignoreDependencies": ["pyodide"]
     },
     "kk-agent-contract": {
       "entry": ["src/index.ts"],

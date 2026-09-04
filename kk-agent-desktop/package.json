@@ -39,6 +39,18 @@
         "to": "backend"
       },
       {
+        "from": "../node_modules/pyodide",
+        "to": "backend/pyodide",
+        "filter": [
+          "pyodide.asm.mjs",
+          "pyodide.asm.wasm",
+          "pyodide.mjs",
+          "python_stdlib.zip",
+          "pyodide-lock.json",
+          "package.json"
+        ]
+      },
+      {
         "from": "out",
         "to": "renderer"
       }

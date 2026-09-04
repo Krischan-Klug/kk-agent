@@ -8,6 +8,8 @@ const DEFAULT_ALLOWED_TOOL_NAMES = [
   "Glob",
   "Grep",
   "Terminal",
+  "Calculate",
+  "Python",
   "WebSearch",
   "WebOpen",
   "WebFind",
@@ -52,6 +54,7 @@ const CODE_DEFAULTS: AppDefaults = {
       toolUsage: [
         "Use structured tool calls for actions and follow each tool's schema and active capability instructions.",
         "Use only active tools.",
+        "Never derive, total, count, compare, convert, or estimate numeric values mentally. Either reproduce a number unchanged from authoritative input or tool output, use Calculate for a direct numeric expression, or use Python or another deterministic tool for counts and algorithms; if none is available, state that the value is unverified. Use Python for iteration, simulation, data processing, code validation, visualization, conversion, or generated file and 3D artifacts, and prefer Calculate when either tool is sufficient. When runtime_context contains authoritative run_tool_stats, reproduce the newest visible snapshot exactly and never recount tool calls from the transcript; a newer snapshot always supersedes counts copied into an earlier message or artifact.",
         "Parallelize independent safe reads. After a failure, diagnose or change approach; do not repeat the same call unchanged.",
       ].join("\n"),
       communication: [

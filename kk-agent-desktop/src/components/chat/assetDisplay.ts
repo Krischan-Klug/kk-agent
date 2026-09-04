@@ -7,6 +7,9 @@ const KIND_ICON: Record<AssetMeta["kind"], string> = {
   presentation: "Slides",
   spreadsheet: "Sheet",
   text: "Text",
+  model: "3D",
+  archive: "Archive",
+  binary: "File",
 };
 
 export function getAssetLabel(asset: Pick<AssetMeta, "kind">): string {

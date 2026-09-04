@@ -2,6 +2,8 @@ export const INTERNAL_TOOL_IDS = [
   "filesystem",
   "web-search",
   "terminal",
+  "calculator",
+  "python",
   "user-interaction",
   "task",
   "memory",

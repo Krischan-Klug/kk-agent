@@ -105,6 +105,9 @@ export async function updateTasks(sessionId: string, updates: TaskUpdateInput[])
   for (const update of updates) {
     const id = String(update.id ?? "").trim();
     if (!id) throw new Error("Task id is required");
+    if (update.title === undefined && update.notes === undefined) {
+      throw new Error("Task update requires a title or notes change");
+    }
     const existing = resolveTaskReference(current, id);
     if (!existing) throw new Error(`Task "${id}" not found`);
 

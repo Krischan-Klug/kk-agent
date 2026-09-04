@@ -198,6 +198,53 @@ export interface ManagedShellProcess {
   finalizeAfterExit(): Promise<ProcessTermination | undefined>;
 }
 
+export async function attachProcessContainment(child: ChildProcess): Promise<ManagedShellProcess> {
+  await waitForSpawn(child);
+  if (process.platform === "win32") {
+    let controller: WindowsJobController | undefined;
+    try {
+      controller = await startWindowsJobController(child.pid!);
+      const assignedController = controller;
+      let termination: Promise<ProcessTermination> | undefined;
+      const terminate = () => {
+        termination ??= assignedController.terminate();
+        return termination;
+      };
+      return { child, terminate, finalizeAfterExit: terminate };
+    } catch (error) {
+      await controller?.terminate().catch(() => undefined);
+      child.stdin?.destroy();
+      child.kill("SIGKILL");
+      throw error;
+    }
+  }
+
+  let termination: Promise<ProcessTermination> | undefined;
+  const terminate = () => {
+    termination ??= Promise.resolve().then(() => {
+      const startedAt = Date.now();
+      try {
+        process.kill(-child.pid!, "SIGKILL");
+        return { method: "process_group" as const, success: true, durationMs: Date.now() - startedAt };
+      } catch (groupError) {
+        try {
+          child.kill("SIGKILL");
+          return { method: "root_process" as const, success: true, durationMs: Date.now() - startedAt };
+        } catch {
+          return {
+            method: "root_process" as const,
+            success: false,
+            durationMs: Date.now() - startedAt,
+            error: groupError instanceof Error ? groupError.message : String(groupError),
+          };
+        }
+      }
+    });
+    return termination;
+  };
+  return { child, terminate, finalizeAfterExit: async () => undefined };
+}
+
 function waitForSpawn(child: ChildProcess): Promise<void> {
   return new Promise((resolveSpawn, rejectSpawn) => {
     child.once("spawn", resolveSpawn);

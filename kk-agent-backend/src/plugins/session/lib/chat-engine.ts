@@ -283,6 +283,7 @@ function buildLoopRequest(
     buildRuntimeContext: ({ model, toolContext }) => buildRuntimeContext({
       sessionId: prepared.session.id,
       model,
+      runUserMessageId: prepared.run.userMessageId,
       runtimeVariables: runtimeConfig.runtimeVariables,
       toolContext,
       assetContext: prepared.assetContext,

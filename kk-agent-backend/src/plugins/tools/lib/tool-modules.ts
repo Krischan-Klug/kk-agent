@@ -6,6 +6,12 @@ import { terminalDefinition } from "./terminal/definition.js";
 import { executeTerminalTool } from "./terminal/runtime.js";
 import { TERMINAL_TOOLS } from "./terminal/tools.js";
 import { getTerminalShellProfile } from "./terminal/shell-profile.js";
+import { calculatorDefinition } from "./calculator/definition.js";
+import { executeCalculatorTool } from "./calculator/runtime.js";
+import { calculatorTools } from "./calculator/tools.js";
+import { pythonDefinition } from "./python/definition.js";
+import { executePythonTool } from "./python/runtime.js";
+import { pythonTools } from "./python/tools.js";
 import { webSearchDefinition } from "./web-search/definition.js";
 import { executeWebSearchTool } from "./web-search/runtime.js";
 import { webSearchTools } from "./web-search/tools.js";
@@ -57,6 +63,16 @@ const INTERNAL_TOOL_MODULES: Record<InternalToolId, InternalToolModule> = {
     definition: terminalDefinition,
     tools: [],
     execute: executeTerminalTool,
+  },
+  calculator: {
+    definition: calculatorDefinition,
+    tools: calculatorTools,
+    execute: executeCalculatorTool,
+  },
+  python: {
+    definition: pythonDefinition,
+    tools: pythonTools,
+    execute: executePythonTool,
   },
   "user-interaction": {
     definition: userInteractionDefinition,

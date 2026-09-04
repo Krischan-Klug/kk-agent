@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { existsSync } from "node:fs";
 import { mkdir, readFile, readdir, rename, rm, stat, writeFile } from "node:fs/promises";
 import { basename, extname, join, resolve } from "node:path";
+import { inflateSync } from "node:zlib";
 import { fileTypeFromBuffer } from "file-type";
 import { unzipSync } from "fflate";
 import readXlsxFile from "read-excel-file/node";
@@ -20,6 +21,11 @@ const MAX_ARCHIVE_UNCOMPRESSED_BYTES = 200 * 1024 * 1024;
 const MAX_ARCHIVE_ENTRY_BYTES = 25 * 1024 * 1024;
 const CHUNK_SIZE = 4_000;
 const CHUNK_OVERLAP = 400;
+const CRC32_TABLE = Uint32Array.from({ length: 256 }, (_unused, index) => {
+  let value = index;
+  for (let bit = 0; bit < 8; bit += 1) value = (value >>> 1) ^ (0xedb88320 & -(value & 1));
+  return value >>> 0;
+});
 
 const MIME_KIND = new Map<string, AssetKind>([
   ["image/png", "image"], ["image/jpeg", "image"], ["image/gif", "image"], ["image/webp", "image"],
@@ -31,13 +37,44 @@ const MIME_KIND = new Map<string, AssetKind>([
   ["application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "spreadsheet"],
   ["application/vnd.oasis.opendocument.spreadsheet", "spreadsheet"],
   ["text/csv", "spreadsheet"], ["text/tab-separated-values", "spreadsheet"],
+  ["image/svg+xml", "text"], ["application/json", "text"], ["application/geo+json", "text"],
+  ["model/obj", "model"], ["model/stl", "model"], ["model/gltf+json", "model"],
+  ["model/gltf-binary", "model"], ["application/vnd.ms-pki.stl", "model"],
+  ["application/zip", "archive"], ["application/gzip", "archive"],
+  ["application/x-npy", "binary"], ["application/x-npz", "binary"],
+  ["application/vnd.apache.parquet", "binary"], ["application/octet-stream", "binary"],
 ]);
 
 const EXTENSION_KIND = new Map<string, AssetKind>(Object.entries(ASSET_EXTENSION_KINDS));
+const EXTENSION_MIME = new Map<string, string>([
+  [".png", "image/png"],
+  [".jpg", "image/jpeg"],
+  [".jpeg", "image/jpeg"],
+  [".gif", "image/gif"],
+  [".webp", "image/webp"],
+  [".csv", "text/csv"],
+  [".tsv", "text/tab-separated-values"],
+  [".json", "application/json"],
+  [".svg", "image/svg+xml"],
+  [".geojson", "application/geo+json"],
+  [".py", "text/x-python"],
+  [".obj", "model/obj"],
+  [".stl", "model/stl"],
+  [".ply", "model/ply"],
+  [".gltf", "model/gltf+json"],
+  [".glb", "model/gltf-binary"],
+  [".zip", "application/zip"],
+  [".gz", "application/gzip"],
+  [".npy", "application/x-npy"],
+  [".npz", "application/x-npz"],
+  [".parquet", "application/vnd.apache.parquet"],
+  [".bin", "application/octet-stream"],
+]);
 
 const KIND_MIME: Record<AssetKind, string> = {
   image: "application/octet-stream", pdf: "application/pdf", document: "application/octet-stream",
   presentation: "application/octet-stream", spreadsheet: "application/octet-stream", text: "text/plain",
+  model: "application/octet-stream", archive: "application/octet-stream", binary: "application/octet-stream",
 };
 
 function assetsDir(sessionId: string): string {
@@ -124,7 +161,7 @@ function extractRtfText(buffer: Buffer): string {
     .trim();
 }
 
-function validateOfficeArchive(buffer: Buffer): void {
+function validateZipArchive(buffer: Buffer): void {
   let entries = 0;
   let totalSize = 0;
   unzipSync(new Uint8Array(buffer), {
@@ -132,7 +169,7 @@ function validateOfficeArchive(buffer: Buffer): void {
       entries += 1;
       totalSize += entry.originalSize;
       if (entries > MAX_ARCHIVE_ENTRIES || entry.originalSize > MAX_ARCHIVE_ENTRY_BYTES || totalSize > MAX_ARCHIVE_UNCOMPRESSED_BYTES) {
-        throw new Error("Office archive exceeds safe expansion limits.");
+        throw new Error("Archive exceeds safe expansion limits.");
       }
       return false;
     },
@@ -141,7 +178,7 @@ function validateOfficeArchive(buffer: Buffer): void {
 
 function extractOfficeText(buffer: Buffer, extension: string): string {
   if (extension === ".rtf") return extractRtfText(buffer);
-  validateOfficeArchive(buffer);
+  validateZipArchive(buffer);
   const archive = unzipSync(new Uint8Array(buffer), {
     filter: (entry) => entry.name === "content.xml"
       || /^word\/(?:document|header\d+|footer\d+|footnotes|endnotes|comments)\.xml$/u.test(entry.name)
@@ -202,7 +239,7 @@ async function processSpreadsheet(buffer: Buffer, extension: string): Promise<Pr
     const text = extractOfficeText(buffer, extension);
     return { text, chunks: chunkText(text, "sheet"), previews: [] };
   }
-  validateOfficeArchive(buffer);
+  validateZipArchive(buffer);
   const sheets = await readXlsxFile(buffer);
   const sections = sheets.map(({ sheet, data }) => {
     const rows = data.map((row) => row.map(stringifyCell).join("\t")).join("\n");
@@ -216,8 +253,23 @@ async function processSpreadsheet(buffer: Buffer, extension: string): Promise<Pr
   };
 }
 
-async function processAsset(kind: AssetKind, buffer: Buffer, extension: string): Promise<ProcessedAsset> {
-  if (kind === "image") return { text: "", chunks: [], previews: [] };
+function isBinaryModel(buffer: Buffer, extension: string): boolean {
+  if (extension === ".glb") return true;
+  if (extension === ".stl" && buffer.length >= 84) {
+    const triangles = buffer.readUInt32LE(80);
+    if (84 + triangles * 50 === buffer.length) return true;
+  }
+  if (extension === ".ply" && /format\s+binary_(?:little|big)_endian/iu.test(buffer.subarray(0, 1_024).toString("ascii"))) {
+    return true;
+  }
+  return buffer.subarray(0, Math.min(buffer.length, 8_192)).includes(0);
+}
+
+async function processAsset(kind: AssetKind, buffer: Buffer, extension: string, mimeType: string): Promise<ProcessedAsset> {
+  if (kind === "image") {
+    validateImageBuffer(buffer, mimeType);
+    return { text: "", chunks: [], previews: [] };
+  }
   if (kind === "pdf") return processPdf(buffer);
   if (kind === "spreadsheet" && extension !== ".csv" && extension !== ".tsv") {
     return processSpreadsheet(buffer, extension);
@@ -226,21 +278,36 @@ async function processAsset(kind: AssetKind, buffer: Buffer, extension: string):
     const text = extractOfficeText(buffer, extension);
     return { text, chunks: chunkText(text, kind), previews: [] };
   }
+  if (kind === "archive") {
+    if (extension === ".zip") validateZipArchive(buffer);
+    return { text: "", chunks: [], previews: [] };
+  }
+  if (kind === "binary") return { text: "", chunks: [], previews: [] };
+  if (kind === "model" && isBinaryModel(buffer, extension)) {
+    return { text: "", chunks: [], previews: [] };
+  }
   const text = decodeText(buffer);
   return { text, chunks: chunkText(text, kind), previews: [] };
 }
 
-async function resolveInputType(input: AssetInput): Promise<{ kind: AssetKind; mimeType: string }> {
+export async function resolveAssetInputType(input: AssetInput): Promise<{ kind: AssetKind; mimeType: string }> {
   const extension = extname(input.filename).toLowerCase();
   const detected = await fileTypeFromBuffer(input.buffer);
   const declared = input.declaredMimeType?.toLowerCase().split(";", 1)[0]?.trim();
-  const kind = (detected && MIME_KIND.get(detected.mime)) || (declared && MIME_KIND.get(declared)) || EXTENSION_KIND.get(extension);
+  const detectedKind = detected && MIME_KIND.get(detected.mime);
+  const declaredKind = declared && declared !== "application/octet-stream" ? MIME_KIND.get(declared) : undefined;
+  const extensionKind = EXTENSION_KIND.get(extension);
+  const compatibleContainer = extension === ".npz" && detectedKind === "archive";
+  const kind = (compatibleContainer ? extensionKind : detectedKind)
+    || declaredKind || extensionKind || (input.source === "assistant" ? "binary" : undefined);
   if (!kind) throw new Error(`Unsupported asset format: ${input.filename}`);
-  if (detected) {
-    const detectedKind = MIME_KIND.get(detected.mime);
-    if (!detectedKind || detectedKind !== kind) throw new Error(`File content does not match its supported format: ${input.filename}`);
+  if (detectedKind && extensionKind && detectedKind !== extensionKind && !compatibleContainer) {
+    throw new Error(`File content does not match its supported format: ${input.filename}`);
   }
-  const mimeType = detected?.mime || (declared && declared !== "application/octet-stream" ? declared : undefined) || KIND_MIME[kind];
+  const mimeType = EXTENSION_MIME.get(extension)
+    || detected?.mime
+    || (declared && declared !== "application/octet-stream" ? declared : undefined)
+    || KIND_MIME[kind];
   return { kind, mimeType };
 }
 
@@ -248,13 +315,13 @@ export async function ingestAsset(sessionId: string, input: AssetInput): Promise
   const session = sessionStore.getSession(sessionId);
   if (!session) throw new Error(`Session "${sessionId}" not found.`);
   if (input.buffer.length === 0) throw new Error("Asset must not be empty.");
-  const { kind, mimeType } = await resolveInputType(input);
+  const { kind, mimeType } = await resolveAssetInputType(input);
   if (input.buffer.length > maxSize(kind)) throw new Error(`Asset exceeds the ${Math.round(maxSize(kind) / 1024 / 1024)} MB limit.`);
 
   const id = randomUUID();
   const stageDir = join(assetsDir(sessionId), `.staging-${id}`);
   const finalDir = assetDir(sessionId, id);
-  const processed = await processAsset(kind, input.buffer, extname(input.filename).toLowerCase());
+  const processed = await processAsset(kind, input.buffer, extname(input.filename).toLowerCase(), mimeType);
   const meta: AssetMeta = {
     id,
     filename: sanitizeFilename(input.filename),
@@ -388,5 +455,80 @@ export async function readAssetPreview(sessionId: string, assetId: string, page 
 
 export function describeAsset(asset: AssetMeta): string {
   const size = asset.size < 1024 * 1024 ? `${Math.ceil(asset.size / 1024)} KB` : `${(asset.size / 1024 / 1024).toFixed(1)} MB`;
-  return `${asset.filename} (${asset.kind}, ${size}, id=${asset.id}, source=${asset.source})`;
+  return `${asset.filename} (${asset.kind}, mime=${asset.mimeType}, ${size}, id=${asset.id}, source=${asset.source})`;
+}
+
+function crc32(buffer: Buffer): number {
+  let crc = 0xffffffff;
+  for (const byte of buffer) crc = (crc >>> 8) ^ CRC32_TABLE[(crc ^ byte) & 0xff]!;
+  return (crc ^ 0xffffffff) >>> 0;
+}
+
+function validatePng(buffer: Buffer): void {
+  const signature = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]);
+  if (buffer.length < 33 || !buffer.subarray(0, 8).equals(signature)) throw new Error("Invalid PNG image data.");
+  let offset = 8;
+  let width = 0;
+  let height = 0;
+  let bitDepth = 0;
+  let colorType = -1;
+  let interlace = -1;
+  let sawHeader = false;
+  let sawEnd = false;
+  const compressed: Buffer[] = [];
+  while (offset < buffer.length) {
+    if (offset + 12 > buffer.length) throw new Error("Invalid PNG chunk structure.");
+    const length = buffer.readUInt32BE(offset);
+    const end = offset + 12 + length;
+    if (end > buffer.length) throw new Error("Invalid PNG chunk length.");
+    const type = buffer.toString("ascii", offset + 4, offset + 8);
+    const data = buffer.subarray(offset + 8, offset + 8 + length);
+    const expectedCrc = buffer.readUInt32BE(offset + 8 + length);
+    if (crc32(buffer.subarray(offset + 4, offset + 8 + length)) !== expectedCrc) throw new Error("Invalid PNG checksum.");
+    if (!sawHeader) {
+      if (type !== "IHDR" || length !== 13) throw new Error("PNG must begin with a valid IHDR chunk.");
+      width = data.readUInt32BE(0);
+      height = data.readUInt32BE(4);
+      bitDepth = data[8]!;
+      colorType = data[9]!;
+      interlace = data[12]!;
+      if (width < 1 || height < 1 || width * height > 100_000_000) throw new Error("PNG dimensions are invalid or too large.");
+      sawHeader = true;
+    } else if (type === "IHDR") {
+      throw new Error("PNG contains multiple IHDR chunks.");
+    }
+    if (type === "IDAT") compressed.push(data);
+    if (type === "IEND") {
+      if (length !== 0) throw new Error("Invalid PNG IEND chunk.");
+      sawEnd = true;
+      if (end !== buffer.length) throw new Error("PNG contains trailing data.");
+    }
+    offset = end;
+  }
+  if (!sawHeader || !sawEnd || compressed.length === 0) throw new Error("PNG is missing required image data.");
+  const decoded = inflateSync(Buffer.concat(compressed), { maxOutputLength: MAX_IMAGE_BYTES * 4 });
+  if (interlace === 0) {
+    const channels = new Map([[0, 1], [2, 3], [3, 1], [4, 2], [6, 4]]).get(colorType);
+    if (!channels || ![1, 2, 4, 8, 16].includes(bitDepth)) throw new Error("PNG uses an unsupported color layout.");
+    const expected = height * (1 + Math.ceil(width * channels * bitDepth / 8));
+    if (decoded.length !== expected) throw new Error("PNG pixel data is incomplete or malformed.");
+  } else if (interlace !== 1 || decoded.length === 0) {
+    throw new Error("PNG interlace data is invalid.");
+  }
+}
+
+export function validateImageBuffer(buffer: Buffer, mimeType: string): void {
+  if (mimeType === "image/png") {
+    validatePng(buffer);
+    return;
+  }
+  if (mimeType === "image/jpeg" && (buffer.length < 4 || buffer[0] !== 0xff || buffer[1] !== 0xd8
+    || buffer.at(-2) !== 0xff || buffer.at(-1) !== 0xd9)) throw new Error("Invalid JPEG image data.");
+  if (mimeType === "image/gif" && (buffer.length < 14 || !buffer.subarray(0, 6).toString("ascii").match(/^GIF8[79]a$/u)
+    || buffer.at(-1) !== 0x3b)) throw new Error("Invalid GIF image data.");
+  if (mimeType === "image/webp") {
+    const declaredSize = buffer.length >= 12 ? buffer.readUInt32LE(4) + 8 : -1;
+    if (buffer.length < 20 || buffer.toString("ascii", 0, 4) !== "RIFF" || buffer.toString("ascii", 8, 12) !== "WEBP"
+      || declaredSize !== buffer.length) throw new Error("Invalid WebP image data.");
+  }
 }

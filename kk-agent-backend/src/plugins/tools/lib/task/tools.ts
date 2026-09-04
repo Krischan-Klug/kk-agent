@@ -38,6 +38,8 @@ export const taskTools: InternalToolDescriptor[] = [
               notes: { type: "string" },
             },
             required: ["id"],
+            anyOf: [{ required: ["title"] }, { required: ["notes"] }],
+            additionalProperties: false,
           },
         },
       },

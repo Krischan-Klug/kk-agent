@@ -24,7 +24,7 @@ function normalize(value: string): string {
   return value.normalize("NFKD").replace(/\p{M}/gu, "").toLocaleLowerCase();
 }
 
-export function searchQueryTerms(query: string): string[] {
+function searchQueryTerms(query: string): string[] {
   const withoutOperators = query.replace(/-?site:\S+/giu, " ");
   return [...new Set((normalize(withoutOperators).match(/[\p{L}\p{N}][\p{L}\p{N}.+#-]{1,}/gu) ?? [])
     .map((term) => term.replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}+#.]+$/gu, ""))

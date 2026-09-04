@@ -27,6 +27,9 @@ test("default prompt keeps one compact policy source and runtime data last", () 
   assert.doesNotMatch(prompt, /default first action is create_tasks/);
   assert.equal(prompt.match(/The harness handles tool approval\./g)?.length, 1);
   assert.equal(prompt.match(/do not claim runtime or interactive behavior was verified unless it was exercised\./g)?.length, 1);
+  assert.match(prompt, /Never derive, total, count, compare, convert, or estimate numeric values mentally\./u);
+  assert.match(prompt, /reproduce the newest visible snapshot exactly and never recount tool calls from the transcript/u);
+  assert.match(prompt, /a newer snapshot always supersedes counts copied into an earlier message or artifact\./u);
   assert.ok(prompt.indexOf("<runtime_context>") < prompt.indexOf("</agent_runtime_prompt>"));
 });
 

@@ -68,10 +68,10 @@ export function groupMessages(messages: TranscriptMessage[]): MessageGroup[] {
 }
 
 export function buildStreamingStepGroups(steps: AgentStepView[]): AgentStepGroup[] {
-  return steps.map((step) => ({
+  return steps.map((step, index) => ({
     kind: "agent-step",
     step,
     key: `streaming-${step.assistant.id}`,
-    streaming: true,
+    streaming: index === steps.length - 1,
   }));
 }

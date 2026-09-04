@@ -18,6 +18,9 @@ contextBridge.exposeInMainWorld("kkAgentDesktop", {
   apiToken,
   appVersion,
   platform: process.platform,
+  external: {
+    open: (url: string) => ipcRenderer.invoke("kk-agent:open-external", url),
+  },
   windowControls: {
     minimize: () => ipcRenderer.invoke("kk-agent:window:minimize"),
     toggleMaximize: () => ipcRenderer.invoke("kk-agent:window:toggle-maximize"),

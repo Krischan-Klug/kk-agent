@@ -8,6 +8,9 @@ declare global {
       apiToken?: string;
       platform?: string;
       appVersion?: string;
+      external: {
+        open: (url: string) => Promise<boolean>;
+      };
       windowControls: {
         minimize: () => Promise<void>;
         toggleMaximize: () => Promise<boolean>;

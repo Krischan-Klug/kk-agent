@@ -63,7 +63,7 @@ function getPersistedToolMetadata(
   toolUse: TranscriptToolUseBlock,
   metadata?: Record<string, unknown>,
 ): Record<string, unknown> | undefined {
-  return toolUse.name === "Terminal" ? metadata : undefined;
+  return toolUse.name === "Terminal" || toolUse.name.startsWith("Web") ? metadata : undefined;
 }
 
 function partitionCanRunTogether(executing: TrackedTool[], next: TrackedTool): boolean {

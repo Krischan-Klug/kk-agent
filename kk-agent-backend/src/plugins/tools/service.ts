@@ -57,6 +57,8 @@ function isConcurrencySafeInternalTool(toolName: string, input: Record<string, u
     "Glob",
     "Grep",
     "WebSearch",
+    "WebOpen",
+    "WebFind",
     "WebFetch",
     "list_assets",
     "search_asset",

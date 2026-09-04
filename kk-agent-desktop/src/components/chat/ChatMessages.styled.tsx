@@ -216,6 +216,13 @@ export const ToolDetailLine = styled.div`
   margin-top: 2px;
 `;
 
+export const ToolDetailLink = styled.a`
+  color: var(--accent-hover);
+  text-decoration: none;
+  word-break: break-word;
+  &:hover { text-decoration: underline; }
+`;
+
 export const ToolDetailPre = styled.pre`
   background: var(--bg-surface);
   padding: var(--space-sm);

@@ -1,4 +1,4 @@
-import type { ComponentProps } from "react";
+import type { ComponentProps, MouseEvent } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import styled from "styled-components";
@@ -134,12 +134,34 @@ type CodeProps = ComponentProps<"code"> & {
   node?: unknown;
 };
 
+function openExternal(event: MouseEvent<HTMLAnchorElement>, url: string): void {
+  event.preventDefault();
+  if (window.kkAgentDesktop?.external) {
+    void window.kkAgentDesktop.external.open(url);
+    return;
+  }
+  window.open(url, "_blank", "noopener,noreferrer");
+}
+
 export default function MarkdownMessage({ content }: MarkdownMessageProps) {
   return (
     <Wrapper>
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
         components={{
+          a({ href, children, node, ...props }) {
+            void node;
+            const external = typeof href === "string" && /^https?:\/\//iu.test(href);
+            return (
+              <a
+                {...props}
+                href={href}
+                {...(external ? { onClick: (event) => openExternal(event, href) } : {})}
+              >
+                {children}
+              </a>
+            );
+          },
           pre({ children }) {
             const codeEl = Array.isArray(children) ? children[0] : children;
             if (

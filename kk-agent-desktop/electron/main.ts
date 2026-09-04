@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, Menu, net, protocol } from "electron";
+import { app, BrowserWindow, ipcMain, Menu, net, protocol, shell } from "electron";
 import { spawn, type ChildProcess } from "node:child_process";
 import { randomBytes } from "node:crypto";
 import { createInterface } from "node:readline";
@@ -42,6 +42,18 @@ let mainWindow: BrowserWindow | null = null;
 let backendProcess: ChildProcess | null = null;
 
 function registerWindowControlHandlers(): void {
+  ipcMain.handle("kk-agent:open-external", async (_event, rawUrl: unknown) => {
+    if (typeof rawUrl !== "string") return false;
+    try {
+      const url = new URL(rawUrl);
+      if (url.protocol !== "http:" && url.protocol !== "https:") return false;
+      await shell.openExternal(url.toString());
+      return true;
+    } catch {
+      return false;
+    }
+  });
+
   ipcMain.handle("kk-agent:window:minimize", (event) => {
     BrowserWindow.fromWebContents(event.sender)?.minimize();
   });

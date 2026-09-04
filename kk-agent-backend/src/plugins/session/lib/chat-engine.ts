@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import type { AgentRunStatus, RunEvent } from "kk-agent-contract";
+import type { AgentRunStatus, RunEvent, TranscriptMessage } from "kk-agent-contract";
 import type { PersistedAgentRun, SessionRecord, SSEEvent } from "../types.js";
 import * as store from "./store.js";
 import { getSessionAssetsByIds } from "./assets.js";
@@ -9,6 +9,7 @@ import { supportsInputModality } from "kk-agent-contract";
 import {
   assetRefBlock,
   createTranscriptMessage,
+  getToolResults,
   textBlock,
   type TranscriptBlock,
 } from "kk-agent-contract";
@@ -58,6 +59,23 @@ function readStringArray(value: unknown): string[] {
   return Array.isArray(value)
     ? value.filter((entry): entry is string => typeof entry === "string" && entry.trim().length > 0)
     : [];
+}
+
+function readPersistedWebSources(messages: TranscriptMessage[]): Record<string, unknown>[] {
+  const sources = new Map<string, Record<string, unknown>>();
+  for (const message of messages) {
+    for (const result of getToolResults(message)) {
+      const entries = result.metadata?.sources;
+      if (!Array.isArray(entries)) continue;
+      for (const entry of entries) {
+        if (!entry || typeof entry !== "object") continue;
+        const source = entry as Record<string, unknown>;
+        if (typeof source.id !== "string" || typeof source.url !== "string") continue;
+        sources.set(source.id, source);
+      }
+    }
+  }
+  return [...sources.values()].slice(-200);
 }
 
 function getExplicitSkillId(message: string, availableSkillIds: string[]): string | undefined {
@@ -251,6 +269,7 @@ function buildLoopRequest(
     values: {
       ...prepared.loadedSkills,
       availableSkillIds: activeModeConfig.activeSkillIds,
+      webSources: readPersistedWebSources(prepared.messages),
       publishedAssetIds: [],
       assetPublishRoots: [...new Set([
         activeModeConfig.runtimeVariables?.FILESYSTEM_ROOT,

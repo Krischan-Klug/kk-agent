@@ -44,6 +44,7 @@ Backend features register through a fixed, explicit initializer list. There is n
 - Preserve existing structure; extend an existing plugin, route, component, or helper before adding a new system.
 - Internal tools are not user MCPs. Skills are not internal tools or user MCPs.
 - Code-owned managed MCP manifests are MCP-backed internal tools: they use `toolIds`, reuse the MCP runtime, and remain separate from user-managed `mcpIds` and `state/mcps.json`.
+- Web search is the code-owned `web-search` managed MCP backed by the pinned DuckDuckGo MCP server; packaged desktop builds supply its pinned `uvx` launcher and expose the upstream `search`, `fetch_content`, and `expand_link` tools directly. Search calls are serialized while the MCP owns rate limiting, caching, extraction, and SSRF protection.
 - Skills use the Agent Skills `SKILL.md` format unchanged; KK-Agent adds no bundle overlays, capability links, or provider-specific adapters.
 - Managed skill imports accept any source folder name and install under the canonical frontmatter `name`.
 - Skill discovery precedence is workspace `.agents/skills`, managed `state/agent-skills`, then user `~/.agents/skills`.

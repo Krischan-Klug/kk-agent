@@ -23,6 +23,8 @@ Runtime configuration:
 - `PORT`: API port, `0` allowed for an ephemeral port
 - `KK_AGENT_STATE_DIR`: optional absolute override for persisted state; by default desktop and development share the OS app-data `KK-Agent/state` directory
 
+The packaged desktop includes the pinned `uvx` launcher used by the internal DuckDuckGo web-search MCP. Backend-only development expects `uvx` on `PATH`.
+
 Shared contract dependency:
 
 - `kk-agent-contract` from the local workspace

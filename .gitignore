@@ -24,6 +24,7 @@ pnpm-debug.log*
 **/dist/
 **/desktop-dist/
 **/release/
+**/managed-runtimes/
 **/build/
 !kk-agent-desktop/build/
 !kk-agent-desktop/build/icon.svg

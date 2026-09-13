@@ -20,6 +20,11 @@ function buildCredentialBindings(manifest: ManagedMcpManifest): McpCredentialBin
   }));
 }
 
+function resolveStdioCommand(command: string): string {
+  if (command !== "uvx") return command;
+  return process.env.KK_AGENT_UVX_PATH?.trim() || command;
+}
+
 export function listManagedMcpManifests(): ManagedMcpManifest[] {
   return [...manifests];
 }
@@ -52,7 +57,7 @@ export function buildManagedMcpConfig(tool: InternalToolDefinition): McpServerCo
     emoji: tool.emoji,
     transport: connection.transport,
     server: connection.transport === "stdio"
-      ? { command: connection.command, args: connection.args, ...(connection.env ? { env: connection.env } : {}) }
+      ? { command: resolveStdioCommand(connection.command), args: connection.args, ...(connection.env ? { env: connection.env } : {}) }
       : { url: connection.url, ...(connection.headers ? { headers: connection.headers } : {}) },
     credentialBindings: buildCredentialBindings(manifest),
     allowedTools: manifest.allowedTools,

@@ -55,7 +55,7 @@ kk-agent/
 Contract and desktop notes:
 
 - `kk-agent-contract` is a private local workspace package. It is not published or installed from an external registry.
-- `kk-agent-desktop` owns both the Electron host and renderer and embeds its generated `out` directory plus `kk-agent-backend/desktop-dist` for packaged builds.
+- `kk-agent-desktop` owns both the Electron host and renderer and embeds its generated `out` directory, `kk-agent-backend/desktop-dist`, and the pinned `uvx` launcher for managed Python MCPs in packaged builds.
 - Desktop and workspace development share one runtime state under the OS app-data `KK-Agent/state` directory. The repository contains no live state.
 
 ## Monorepo Commands

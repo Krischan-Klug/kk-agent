@@ -1,5 +1,6 @@
 import { spawn } from "node:child_process";
 import { randomBytes } from "node:crypto";
+import { existsSync } from "node:fs";
 import net from "node:net";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -11,6 +12,7 @@ const pollIntervalMs = 500;
 const portCheckTimeoutMs = 750;
 const startupTimeoutMs = 60_000;
 const useShell = process.platform === "win32";
+const preparedUvxPath = path.join(repoRoot, "kk-agent-backend", "managed-runtimes", "uv", "uvx.exe");
 const managedChildren = [];
 const apiToken = process.env.KK_AGENT_API_TOKEN?.trim() || randomBytes(32).toString("hex");
 const hostToken = process.env.KK_AGENT_HOST_TOKEN?.trim() || randomBytes(32).toString("hex");
@@ -62,6 +64,9 @@ function spawnManaged(name, args) {
     KK_AGENT_API_TOKEN: apiToken,
     NEXT_PUBLIC_KK_AGENT_API_TOKEN: apiToken,
     KK_AGENT_HOST_TOKEN: hostToken,
+    ...(process.platform === "win32" && existsSync(preparedUvxPath)
+      ? { KK_AGENT_UVX_PATH: preparedUvxPath }
+      : {}),
   };
   const child = spawn("npm", args, {
     cwd: repoRoot,

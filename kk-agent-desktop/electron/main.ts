@@ -129,6 +129,10 @@ function getBackendEntry(): string {
     : path.resolve(getDesktopRoot(), "..", "kk-agent-backend", "desktop-dist", "index.cjs");
 }
 
+function getBundledUvxPath(): string {
+  return path.join(process.resourcesPath, "backend", "uv", "uvx.exe");
+}
+
 function getWindowIconPath(): string {
   return path.join(app.getAppPath(), "assets", "icon.ico");
 }
@@ -246,6 +250,7 @@ async function startBackend(apiToken: string, hostToken: string): Promise<string
       KK_AGENT_API_TOKEN: apiToken,
       KK_AGENT_HOST_TOKEN: hostToken,
       KK_AGENT_STATE_DIR: stateDir,
+      KK_AGENT_UVX_PATH: getBundledUvxPath(),
       KK_AGENT_PYODIDE_DIR: app.isPackaged
         ? path.join(process.resourcesPath, "backend", "pyodide")
         : path.resolve(getDesktopRoot(), "..", "node_modules", "pyodide"),

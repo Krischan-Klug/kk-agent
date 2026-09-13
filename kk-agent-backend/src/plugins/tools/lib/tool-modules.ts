@@ -12,9 +12,6 @@ import { calculatorTools } from "./calculator/tools.js";
 import { pythonDefinition } from "./python/definition.js";
 import { executePythonTool } from "./python/runtime.js";
 import { pythonTools } from "./python/tools.js";
-import { webSearchDefinition } from "./web-search/definition.js";
-import { executeWebSearchTool } from "./web-search/runtime.js";
-import { webSearchTools } from "./web-search/tools.js";
 import { userInteractionDefinition } from "./user-interaction/definition.js";
 import { executeUserInteractionTool } from "./user-interaction/runtime.js";
 import { userInteractionTools } from "./user-interaction/tools.js";
@@ -44,20 +41,13 @@ type InternalToolModule = {
   ) => Promise<ToolExecutionResult | null>;
 };
 
-function isInternalToolId(value: unknown): value is InternalToolId {
-  return typeof value === "string" && value in INTERNAL_TOOL_MODULES;
-}
+type NativeInternalToolId = Exclude<InternalToolId, "web-search">;
 
-const INTERNAL_TOOL_MODULES: Record<InternalToolId, InternalToolModule> = {
+const INTERNAL_TOOL_MODULES: Record<NativeInternalToolId, InternalToolModule> = {
   filesystem: {
     definition: filesystemDefinition,
     tools: filesystemTools,
     execute: executeFilesystemTool,
-  },
-  "web-search": {
-    definition: webSearchDefinition,
-    tools: webSearchTools,
-    execute: executeWebSearchTool,
   },
   terminal: {
     definition: terminalDefinition,
@@ -101,6 +91,10 @@ const INTERNAL_TOOL_MODULES: Record<InternalToolId, InternalToolModule> = {
   },
 };
 
+function isNativeInternalToolId(value: unknown): value is NativeInternalToolId {
+  return typeof value === "string" && value in INTERNAL_TOOL_MODULES;
+}
+
 function cloneDefinition(definition: InternalToolDefinition): InternalToolDefinition {
   return {
     ...definition,
@@ -113,14 +107,14 @@ function cloneDefinition(definition: InternalToolDefinition): InternalToolDefini
   };
 }
 
-export function getDefaultInternalToolMap(): Record<InternalToolId, InternalToolDefinition> {
+export function getDefaultInternalToolMap(): Partial<Record<InternalToolId, InternalToolDefinition>> {
   return Object.fromEntries(
-    (Object.keys(INTERNAL_TOOL_MODULES) as InternalToolId[]).map((id) => [id, cloneDefinition(INTERNAL_TOOL_MODULES[id].definition)]),
-  ) as Record<InternalToolId, InternalToolDefinition>;
+    (Object.keys(INTERNAL_TOOL_MODULES) as NativeInternalToolId[]).map((id) => [id, cloneDefinition(INTERNAL_TOOL_MODULES[id].definition)]),
+  ) as Partial<Record<InternalToolId, InternalToolDefinition>>;
 }
 
 export function getToolDescriptors(id: string): InternalToolDescriptor[] {
-  if (!isInternalToolId(id)) return [];
+  if (!isNativeInternalToolId(id)) return [];
   if (id === "terminal") {
     return getTerminalShellProfile() ? TERMINAL_TOOLS : [];
   }
@@ -134,7 +128,7 @@ export async function executeInternalTool(
   context?: ToolRuntimeContext,
 ): Promise<ToolExecutionResult | null> {
   try {
-    if (!isInternalToolId(tool.id)) return null;
+    if (!isNativeInternalToolId(tool.id)) return null;
     return await INTERNAL_TOOL_MODULES[tool.id].execute(tool, toolName, args, context);
   } catch (err) {
     return { content: getErrorMessage(err), isError: true };

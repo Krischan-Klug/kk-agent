@@ -51,6 +51,15 @@
         ]
       },
       {
+        "from": "../kk-agent-backend/managed-runtimes/uv",
+        "to": "backend/uv",
+        "filter": [
+          "uv.exe",
+          "uvx.exe",
+          "runtime.json"
+        ]
+      },
+      {
         "from": "out",
         "to": "renderer"
       }

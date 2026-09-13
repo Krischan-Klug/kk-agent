@@ -8,6 +8,7 @@
   "scripts": {
     "build": "npm --prefix .. --workspace kk-agent-contract run build && node -e \"require('node:fs').rmSync('dist',{recursive:true,force:true})\" && tsc -p tsconfig.build.json",
     "build:desktop": "tsup --config tsup.desktop.config.ts",
+    "prepare:managed-runtimes": "node scripts/prepare-managed-runtimes.mjs",
     "prestart": "npm run build",
     "start": "node dist/index.js",
     "dev": "tsx watch index.ts",
@@ -26,28 +27,23 @@
   "license": "MIT",
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.27.1",
-    "@mozilla/readability": "^0.6.0",
     "cors": "^2.8.6",
     "dotenv": "^17.4.2",
     "express": "^5.2.1",
     "fflate": "^0.8.2",
     "file-type": "^22.0.1",
-    "iconv-lite": "^0.7.3",
     "kk-agent-contract": "0.1.0",
-    "linkedom": "^0.18.13",
     "mathjs": "^15.2.0",
     "multer": "^2.2.0",
     "pdf-parse": "^2.4.5",
     "pyodide": "^314.0.6",
     "read-excel-file": "^9.3.10",
-    "turndown": "^7.2.4",
     "yaml": "^2.8.1",
     "zod": "^3.25.76"
   },
   "devDependencies": {
     "@types/cors": "^2.8.19",
     "@types/express": "^5.0.6",
-    "@types/multer": "^2.1.0",
-    "@types/turndown": "^5.0.6"
+    "@types/multer": "^2.1.0"
   }
 }

@@ -14,7 +14,7 @@ test("harness adds a minimal tool description without model input", () => {
 
 test("harness preserves a provided tool description", () => {
   const input = { query: "docs", tool_call_description: "Search docs" };
-  assert.equal(withHarnessToolCallDescription("WebSearch", input), input);
+  assert.equal(withHarnessToolCallDescription("search", input), input);
 });
 
 test("tool executor adds display text without sending it to the tool", async () => {

@@ -8,12 +8,12 @@ export const attachmentTools: InternalToolDescriptor[] = [
   },
   {
     name: "search_asset",
-    description: "Search the extracted, chunked text of one managed session asset.",
+    description: "Search one managed session asset with hybrid semantic and full-text retrieval. Results include document sections and page locations when available.",
     inputSchema: {
       type: "object",
       properties: {
         assetId: { type: "string", description: "Asset id from list_assets." },
-        query: { type: "string", description: "Case-insensitive text to find." },
+        query: { type: "string", description: "Natural-language question, concept, name, or exact phrase to find (maximum 4096 characters)." },
         maxResults: { type: "number", description: "Maximum matches to return (default 10, maximum 25)." },
       },
       required: ["assetId", "query"],

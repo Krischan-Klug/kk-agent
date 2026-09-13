@@ -1,8 +1,9 @@
 import Badge from "@/components/Badge";
 import MarkdownMessage from "@/components/MarkdownMessage";
-import type { AssetMeta } from "kk-agent-contract";
+import type { AssetMeta, RunToolCallStats } from "kk-agent-contract";
 import type { RuntimeCapability } from "@/types/runtime";
 import MessageAssets from "./MessageAssets";
+import RunToolStats from "./RunToolStats";
 import ToolCallCards from "./ToolCallCards";
 import { collectReasoning, collectText } from "./messageBlocks";
 import {
@@ -26,6 +27,7 @@ type Props = {
   step: AgentStepView;
   streaming?: boolean;
   artifacts?: AssetMeta[];
+  toolStats?: RunToolCallStats | null;
 };
 
 function formatChatTime(value: string): string {
@@ -52,6 +54,7 @@ export default function AgentStepBubble({
   step,
   streaming = false,
   artifacts = [],
+  toolStats,
 }: Props) {
   const reasoning = collectReasoning(step.assistant.content).trim();
   const text = collectText(step.assistant.content).trim();
@@ -65,6 +68,10 @@ export default function AgentStepBubble({
         {streaming && <StreamingDot />}
       </RoleLabel>
 
+      {artifacts.length > 0 && <MessageAssets sessionId={sessionId} assets={artifacts} />}
+
+      {toolStats && <RunToolStats stats={toolStats} />}
+
       {reasoning && (
         <ReasoningCard>
           {renderReasoningSummary(showThinking, animateThinking)}
@@ -75,8 +82,6 @@ export default function AgentStepBubble({
       {text && <MarkdownMessage content={text} />}
 
       {step.toolCalls.length > 0 && <ToolCallCards capabilities={capabilities} toolCalls={step.toolCalls} />}
-
-      {artifacts.length > 0 && <MessageAssets sessionId={sessionId} assets={artifacts} />}
 
       <MessageFooter>
         <MessageTimestamp>{formatChatTime(step.assistant.timestamp)}</MessageTimestamp>

@@ -68,7 +68,7 @@ function posixProfile(
     executable,
     version: bashVersion(versionOutput),
     pathConvention: kind === "git-bash"
-      ? "Use POSIX paths and forward slashes. Windows drives are available as /c/..., and the null device is /dev/null."
+      ? "Use POSIX paths and forward slashes in shell operations. Windows drives are available as /c/..., and the null device is /dev/null. For paths passed to native Windows programs such as node.exe, use relative paths from the working directory or Windows paths; Git Bash paths such as /tmp are not portable into those programs."
       : "Use POSIX paths with forward slashes and /dev/null as the null device.",
     syntaxRules: "Use POSIX shell syntax, including &&, ||, pipes, redirects, and shell quoting. Pipeline failures propagate through pipefail. Do not use PowerShell or cmd.exe syntax.",
   };
@@ -205,5 +205,9 @@ export function buildShellCommandArgs(profile: TerminalShellProfile, command: st
     return ["-NoLogo", "-NoProfile", "-NonInteractive", "-Command", `${powershellUtf8Preamble()}\n${command}`];
   }
   const pipelineSafeCommand = profile.kind === "sh" ? command : `set -o pipefail\n${command}`;
-  return ["-lc", pipelineSafeCommand];
+  if (profile.kind === "bash" || profile.kind === "git-bash") {
+    return ["--noprofile", "--norc", "-c", pipelineSafeCommand];
+  }
+  if (profile.kind === "zsh") return ["-f", "-c", pipelineSafeCommand];
+  return ["-c", pipelineSafeCommand];
 }

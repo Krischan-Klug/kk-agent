@@ -15,7 +15,7 @@ export async function executeRead(
   config: InternalToolDefinition,
   args: Record<string, unknown>,
 ): Promise<ToolCallResult> {
-  const path = resolveFilesystemPath(config, args.file_path);
+  const path = await resolveFilesystemPath(config, args.file_path);
 
   if (isBlockedDevicePath(path)) {
     return {

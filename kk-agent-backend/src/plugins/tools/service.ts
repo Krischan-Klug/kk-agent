@@ -18,6 +18,7 @@ import {
 import { NotFoundError } from "../../lib/errors.js";
 import { normalizeInternalToolConfig } from "./lib/internal-tool-config.js";
 import { isReadOnlyShellCommand } from "./lib/terminal/command-policy.js";
+import { resolveFilesystemToolPermission } from "./lib/filesystem/approval-policy.js";
 import {
   resolveApprovalMode,
   resolveTerminalCommandPermission,
@@ -60,7 +61,7 @@ const SELF_BOUNDED_READ_TOOLS = new Set([
 function isConcurrencySafeInternalTool(toolName: string, input: Record<string, unknown>): boolean {
   if (toolName === "Terminal") {
     const action = input.action === undefined ? "run" : String(input.action).trim().toLowerCase();
-    if (action === "status") return true;
+    if (action === "status" || action === "output") return true;
     if (action !== "run") return false;
     return isReadOnlyShellCommand(String(input.command ?? ""), getTerminalShellProfile()?.dialect);
   }
@@ -69,6 +70,8 @@ function isConcurrencySafeInternalTool(toolName: string, input: Record<string, u
     "Read",
     "Glob",
     "Grep",
+    "List",
+    "Stat",
     "Calculate",
     "list_assets",
     "search_asset",
@@ -93,6 +96,13 @@ function buildToolPermissionResolver(
   toolName: string,
   approvalMode: ApprovalMode,
 ): RuntimeToolDefinition["resolvePermission"] | undefined {
+  if (toolName === "Remove") {
+    return (resolvedToolName, args) => resolveFilesystemToolPermission({
+      toolName: resolvedToolName,
+      args,
+      approvalMode,
+    });
+  }
   if (toolName !== "Terminal") return undefined;
 
   return (_resolvedToolName, args) => {
@@ -102,6 +112,7 @@ function buildToolPermissionResolver(
       action: args.action,
       command,
       taskId: args.taskId,
+      outputId: args.outputId,
       shellDialect: profile?.dialect,
       approvalMode,
     });
@@ -178,7 +189,10 @@ function resolveInternalTool(
       ...mergeToolConfig(definition.id, definition.config),
       ...((id === "filesystem" || id === "terminal") ? {
         accessScope,
-        ...(id === "filesystem" ? { basePath: getDefaultPathForScope(accessScope) } : {}),
+        ...(id === "filesystem" ? {
+          basePath: getDefaultPathForScope(accessScope),
+          approvalMode,
+        } : {}),
         ...(id === "terminal" ? {
           workingDirectory: getDefaultPathForScope(accessScope),
           approvalMode,
@@ -197,7 +211,9 @@ function resolveInternalTool(
           profile.pathConvention,
           profile.syntaxRules,
           "Commands run with the current operating-system user privileges. Access scope never grants administrator or root privileges.",
+          "The configured working-directory scope is a navigation and approval guardrail, not an operating-system sandbox; commands can access anything allowed to the current user.",
           "For background commands, keep the returned taskId and use Terminal action=status or action=stop; never construct raw process-kill commands.",
+          "Large foreground output is retained under the session; use Terminal action=output with the returned outputId to page or search it.",
           "The active shell profile is fixed for this run. Do not assume or silently switch to a different shell dialect.",
         ].join(" ")
       : baseInstruction,

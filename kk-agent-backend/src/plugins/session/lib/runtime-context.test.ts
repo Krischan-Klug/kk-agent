@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { createTranscriptMessage, toolResultBlock, toolUseBlock } from "kk-agent-contract";
-import { buildRuntimeContext, summarizeRunToolCalls } from "./runtime-context.js";
+import { summarizeRunToolCalls } from "kk-agent-contract";
+import { buildRuntimeContext } from "./runtime-context.js";
 
 test("runtime context exposes concise model-facing facts without shell internals", () => {
   const context = buildRuntimeContext({

@@ -142,12 +142,14 @@ export {
   normalizeToolResultContent,
   reasoningBlock,
   repairTranscript,
+  summarizeRunToolCalls,
   textBlock,
   toolResultBlock,
   toolUseBlock,
 } from "./transcript.js";
 
 export type {
+  RunToolCallStats,
   RuntimeToolSource,
   ToolExecutionStatus,
   TranscriptAssetRefBlock,

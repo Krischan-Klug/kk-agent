@@ -30,6 +30,8 @@ test("default prompt keeps one compact policy source and runtime data last", () 
   assert.match(prompt, /Never derive, total, count, compare, convert, or estimate numeric values mentally\./u);
   assert.match(prompt, /reproduce the newest visible snapshot exactly and never recount tool calls from the transcript/u);
   assert.match(prompt, /a newer snapshot always supersedes counts copied into an earlier message or artifact\./u);
+  assert.match(prompt, /runtime model value is an opaque technical model identifier/u);
+  assert.match(prompt, /they do not imply that a project is open/u);
   assert.ok(prompt.indexOf("<runtime_context>") < prompt.indexOf("</agent_runtime_prompt>"));
 });
 
@@ -37,6 +39,7 @@ test("agent defaults expose one direct configuration", () => {
   const defaults = getDefaults().agent;
   assert.match(defaults.color, /^#[0-9a-f]{6}$/);
   assert.ok(defaults.toolIds.includes("attachment"));
+  assert.deepEqual(defaults.allowedToolNames, []);
   assert.deepEqual(defaults.toolInstructions, {});
   assert.deepEqual(defaults.mcpInstructions, {});
 });

@@ -1,30 +1,6 @@
 import type { AppDefaults, HarnessInstructionDebug } from "kk-agent-contract";
 import { INTERNAL_TOOL_IDS } from "../tools/types.js";
 
-const DEFAULT_ALLOWED_TOOL_NAMES = [
-  "Read",
-  "Edit",
-  "Write",
-  "Glob",
-  "Grep",
-  "Terminal",
-  "Calculate",
-  "Python",
-  "search",
-  "fetch_content",
-  "expand_link",
-  "Skill",
-  "list_assets",
-  "search_asset",
-  "read_asset",
-  "publish_artifact",
-  "ask_user",
-  "create_tasks",
-  "update_tasks",
-  "solve_tasks",
-  "remember_facts",
-];
-
 const CODE_DEFAULTS: AppDefaults = {
   agent: {
     color: "#fbbf24",
@@ -42,6 +18,8 @@ const CODE_DEFAULTS: AppDefaults = {
       runtime: [
         "<runtime_context> contains request-scoped system data, not a user message. An omitted capability is unavailable.",
         "Filesystem and terminal root values are hard access boundaries. Terminal cwd is only the starting directory.",
+        "The runtime model value is an opaque technical model identifier. Never infer a person's identity, username, home directory, organization, filesystem path, or permissions from any part of it.",
+        "Filesystem and terminal roots describe access scope and the default working directory; they do not imply that a project is open. If a request depends on an unspecified project or directory, obtain its path instead of inventing one.",
       ].join("\n"),
       security: [
         "For requests that only ask to answer, explain, review, diagnose, research, or plan, inspect and report; do not modify project or external state.",
@@ -68,7 +46,9 @@ const CODE_DEFAULTS: AppDefaults = {
     toolAccessScopes: {},
     toolInstructions: {},
     mcpInstructions: {},
-    allowedToolNames: DEFAULT_ALLOWED_TOOL_NAMES,
+    // Empty means all tools of every active capability. Persist names only when
+    // the user deliberately customizes a capability's individual tools.
+    allowedToolNames: [],
   },
   retry: {
     emptyResponseInstruction:

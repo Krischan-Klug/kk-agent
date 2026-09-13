@@ -194,6 +194,7 @@ interface WindowsJobController {
 
 export interface ManagedShellProcess {
   child: ChildProcess;
+  start(): void;
   terminate(): Promise<ProcessTermination>;
   finalizeAfterExit(): Promise<ProcessTermination | undefined>;
 }
@@ -210,7 +211,7 @@ export async function attachProcessContainment(child: ChildProcess): Promise<Man
         termination ??= assignedController.terminate();
         return termination;
       };
-      return { child, terminate, finalizeAfterExit: terminate };
+      return { child, start: () => undefined, terminate, finalizeAfterExit: terminate };
     } catch (error) {
       await controller?.terminate().catch(() => undefined);
       child.stdin?.destroy();
@@ -242,7 +243,7 @@ export async function attachProcessContainment(child: ChildProcess): Promise<Man
     });
     return termination;
   };
-  return { child, terminate, finalizeAfterExit: async () => undefined };
+  return { child, start: () => undefined, terminate, finalizeAfterExit: async () => undefined };
 }
 
 function waitForSpawn(child: ChildProcess): Promise<void> {
@@ -398,13 +399,13 @@ export async function spawnShellProcess(
     : undefined;
   const child = spawn(
     profile.executable,
-    buildShellCommandArgs(profile, windows ? gatedCommand(profile, command, msysGroupFile) : command),
+    buildShellCommandArgs(profile, gatedCommand(profile, command, msysGroupFile)),
     {
       cwd,
       env,
       detached: true,
       windowsHide: true,
-      stdio: [windows ? "pipe" : "ignore", "pipe", "pipe"],
+      stdio: ["pipe", "pipe", "pipe"],
     },
   );
   await waitForSpawn(child);
@@ -414,13 +415,22 @@ export async function spawnShellProcess(
     try {
       controller = await startWindowsJobController(child.pid!);
       const assignedController = controller;
-      child.stdin?.end("start\n");
-      const pgid = msysGroupFile ? await readMsysProcessGroup(msysGroupFile) : undefined;
-      if (msysGroupFile) await rm(msysGroupFile, { force: true }).catch(() => undefined);
+      let started = false;
+      let pgidPromise: Promise<number | undefined> | undefined;
+      const start = () => {
+        if (started) return;
+        started = true;
+        child.stdin?.end("start\n");
+        pgidPromise = msysGroupFile
+          ? readMsysProcessGroup(msysGroupFile)
+              .finally(() => rm(msysGroupFile, { force: true }).catch(() => undefined))
+          : Promise.resolve(undefined);
+      };
       let termination: Promise<ProcessTermination> | undefined;
       const terminate = () => {
         termination ??= (async () => {
           const startedAt = Date.now();
+          const pgid = await pgidPromise?.catch(() => undefined);
           const msys = pgid === undefined ? undefined : await terminateMsysProcessGroup(profile, pgid);
           const job = await assignedController.terminate();
           const success = job.success && (msys?.success ?? true);
@@ -436,6 +446,7 @@ export async function spawnShellProcess(
       };
       return {
         child,
+        start,
         terminate,
         finalizeAfterExit: terminate,
       };
@@ -471,7 +482,17 @@ export async function spawnShellProcess(
     });
     return termination;
   };
-  return { child, terminate, finalizeAfterExit: async () => undefined };
+  let started = false;
+  return {
+    child,
+    start: () => {
+      if (started) return;
+      started = true;
+      child.stdin?.end("start\n");
+    },
+    terminate,
+    finalizeAfterExit: async () => undefined,
+  };
 }
 
 export function terminateProcessTree(processHandle: ManagedShellProcess): Promise<ProcessTermination> {
@@ -488,7 +509,12 @@ export function terminateProcessTree(processHandle: ManagedShellProcess): Promis
 
 export function waitForProcess(processHandle: ManagedShellProcess): Promise<ProcessCompletion> {
   const child = processHandle.child;
-  const closed = new Promise<void>((resolveClose) => child.once("close", () => resolveClose()));
+  const outputAlreadyClosed = [child.stdout, child.stderr]
+    .filter(Boolean)
+    .every((stream) => stream!.destroyed || stream!.readableEnded);
+  const closed = outputAlreadyClosed
+    ? Promise.resolve()
+    : new Promise<void>((resolveClose) => child.once("close", () => resolveClose()));
   return new Promise((resolveCompletion) => {
     let settled = false;
     const settle = async (completion: ProcessCompletion) => {
@@ -507,6 +533,14 @@ export function waitForProcess(processHandle: ManagedShellProcess): Promise<Proc
     };
     child.once("error", (error) => { void settle({ code: 1, error }); });
     child.once("exit", (code, signal) => { void settle({ code: code ?? 1, ...(signal ? { signal } : {}) }); });
+    // Very short commands can exit while the Windows containment handshake is
+    // still being established, before these listeners are attached.
+    if (child.exitCode !== null || child.signalCode !== null) {
+      void settle({
+        code: child.exitCode ?? 1,
+        ...(child.signalCode ? { signal: child.signalCode } : {}),
+      });
+    }
   });
 }
 

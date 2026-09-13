@@ -26,9 +26,17 @@ import {
   waitForProcess,
   type ProcessCompletion,
 } from "./process.js";
+import {
+  createTerminalOutputCapture,
+  discardTerminalOutputCapture,
+  finishTerminalOutputCapture,
+  readTerminalOutput,
+} from "./output-store.js";
 
 const DEFAULT_TIMEOUT = 30000;
 const MAX_BUFFER = 1024 * 1024;
+const RETAINED_PREVIEW_HEAD_BYTES = 4 * 1024;
+const RETAINED_PREVIEW_TAIL_BYTES = 4 * 1024;
 const TERMINATED_PROCESS_EXIT_GRACE_MS = 1_500;
 
 function getWorkingDirectory(tool: InternalToolDefinition): string {
@@ -59,6 +67,57 @@ function resolveWithinWorkingDirectory(allowedRoot: string, baseDirectory: strin
 
 function combineOutput(stdout: string, stderr: string): string {
   return [stdout.trim(), stderr.trim()].filter(Boolean).join("\n\n");
+}
+
+function updateTail(current: Buffer, chunk: Buffer): Buffer {
+  const combined = current.length === 0 ? chunk : Buffer.concat([current, chunk]);
+  return combined.length <= RETAINED_PREVIEW_TAIL_BYTES
+    ? combined
+    : combined.subarray(combined.length - RETAINED_PREVIEW_TAIL_BYTES);
+}
+
+function streamPreview(label: string, head: Buffer, tail: Buffer, totalBytes: number): string[] {
+  if (totalBytes === 0) return [];
+  if (totalBytes <= RETAINED_PREVIEW_HEAD_BYTES + RETAINED_PREVIEW_TAIL_BYTES) {
+    return [`[${label}: ${totalBytes} byte(s)]`, head.subarray(0, totalBytes).toString("utf8")];
+  }
+  const headText = head.subarray(0, RETAINED_PREVIEW_HEAD_BYTES).toString("utf8");
+  const tailText = tail.toString("utf8");
+  return [
+    `[${label} head: ${Math.min(totalBytes, RETAINED_PREVIEW_HEAD_BYTES)} byte(s)]`,
+    headText,
+    `[${label} tail: ${Math.min(totalBytes, RETAINED_PREVIEW_TAIL_BYTES)} byte(s)]`,
+    tailText,
+  ];
+}
+
+function retainedOutputNotice(input: {
+  outputId?: string;
+  stdoutHead: Buffer;
+  stderrHead: Buffer;
+  stdoutTail: Buffer;
+  stderrTail: Buffer;
+  stdoutBytes: number;
+  stderrBytes: number;
+}): string {
+  const control = input.outputId
+    ? [
+        "[terminal output retained]",
+        `outputId: ${input.outputId}`,
+        `stdoutBytes: ${input.stdoutBytes}`,
+        `stderrBytes: ${input.stderrBytes}`,
+        `Read exact data with Terminal action="output" and outputId="${input.outputId}".`,
+      ]
+    : [
+        "[terminal output truncated; no active session was available for retention]",
+        `stdoutBytes: ${input.stdoutBytes}`,
+        `stderrBytes: ${input.stderrBytes}`,
+      ];
+  return [
+    ...control,
+    ...streamPreview("stdout", input.stdoutHead, input.stdoutTail, input.stdoutBytes),
+    ...streamPreview("stderr", input.stderrHead, input.stderrTail, input.stderrBytes),
+  ].join("\n");
 }
 
 function shellMetadata(
@@ -132,22 +191,6 @@ function interruptedResult(
   };
 }
 
-function outputLimitResult(
-  profile: TerminalShellProfile,
-  cwd: string,
-  accessScope: AccessScope,
-  output: string,
-): ToolCallResult {
-  return {
-    content: `${output || "[no output]"}\n\n[output exceeded ${MAX_BUFFER} bytes per stream]`,
-    isError: true,
-    metadata: shellMetadata(profile, cwd, accessScope, {
-      interrupted: true,
-      errorKind: "output_limit",
-    }),
-  };
-}
-
 function commandEnvironment(overrides?: Record<string, string>): NodeJS.ProcessEnv {
   return {
     ...process.env,
@@ -163,22 +206,35 @@ async function executeForegroundCommand(
   accessScope: AccessScope,
   timeoutMs: number,
   env: NodeJS.ProcessEnv,
+  sessionId?: string,
   abortSignal?: AbortSignal,
 ): Promise<ToolCallResult> {
-  const processHandle = await spawnShellProcess(profile, command, cwd, env);
+  const captureStore = sessionId ? await createTerminalOutputCapture(sessionId) : undefined;
+  let processHandle;
+  try {
+    processHandle = await spawnShellProcess(profile, command, cwd, env);
+  } catch (error) {
+    if (captureStore) await discardTerminalOutputCapture(captureStore);
+    throw error;
+  }
   const { child } = processHandle;
   const stdoutChunks: Buffer[] = [];
   const stderrChunks: Buffer[] = [];
+  let stdoutTail: Buffer = Buffer.alloc(0);
+  let stderrTail: Buffer = Buffer.alloc(0);
   let stdoutBytes = 0;
   let stderrBytes = 0;
   let timedOut = false;
   let interrupted = false;
-  let outputLimitExceeded = false;
   let termination: ReturnType<typeof terminateProcessTree> | undefined;
   let signalTerminationStarted!: () => void;
   const terminationStarted = new Promise<void>((resolveStarted) => {
     signalTerminationStarted = resolveStarted;
   });
+  if (captureStore) {
+    child.stdout?.pipe(captureStore.stdout);
+    child.stderr?.pipe(captureStore.stderr);
+  }
 
   const terminate = () => {
     if (!termination) {
@@ -190,19 +246,22 @@ async function executeForegroundCommand(
   const capture = (chunks: Buffer[], currentBytes: number, chunk: Buffer): number => {
     const remaining = Math.max(0, MAX_BUFFER - currentBytes);
     if (remaining > 0) chunks.push(chunk.subarray(0, remaining));
-    if (chunk.length > remaining && !outputLimitExceeded) {
-      outputLimitExceeded = true;
-      void terminate();
-    }
     return currentBytes + chunk.length;
   };
 
   child.stdout?.on("data", (chunk: Buffer) => {
-    stdoutBytes = capture(stdoutChunks, stdoutBytes, Buffer.from(chunk));
+    const buffer = Buffer.from(chunk);
+    stdoutTail = updateTail(stdoutTail, buffer);
+    stdoutBytes = capture(stdoutChunks, stdoutBytes, buffer);
   });
   child.stderr?.on("data", (chunk: Buffer) => {
-    stderrBytes = capture(stderrChunks, stderrBytes, Buffer.from(chunk));
+    const buffer = Buffer.from(chunk);
+    stderrTail = updateTail(stderrTail, buffer);
+    stderrBytes = capture(stderrChunks, stderrBytes, buffer);
   });
+
+  const processCompletion = waitForProcess(processHandle);
+  processHandle.start();
 
   const timeout = setTimeout(() => {
     timedOut = true;
@@ -217,7 +276,7 @@ async function executeForegroundCommand(
   else abortSignal?.addEventListener("abort", handleAbort, { once: true });
 
   const completion = await Promise.race<ProcessCompletion | undefined>([
-    waitForProcess(processHandle),
+    processCompletion,
     terminationStarted.then(async () => {
       await termination;
       await new Promise((resolveGrace) => setTimeout(resolveGrace, TERMINATED_PROCESS_EXIT_GRACE_MS));
@@ -228,12 +287,27 @@ async function executeForegroundCommand(
   abortSignal?.removeEventListener("abort", handleAbort);
   await termination;
   await drainProcessOutput(processHandle);
+  if (captureStore) {
+    child.stdout?.unpipe(captureStore.stdout);
+    child.stderr?.unpipe(captureStore.stderr);
+    await finishTerminalOutputCapture(captureStore);
+  }
   closeProcessOutput(processHandle);
 
-  const output = combineOutput(
-    Buffer.concat(stdoutChunks).toString("utf8"),
-    Buffer.concat(stderrChunks).toString("utf8"),
-  );
+  const stdoutHead = Buffer.concat(stdoutChunks);
+  const stderrHead = Buffer.concat(stderrChunks);
+  const outputLimitExceeded = stdoutBytes + stderrBytes > MAX_BUFFER;
+  const output = outputLimitExceeded
+    ? retainedOutputNotice({
+        outputId: captureStore?.id,
+        stdoutHead,
+        stderrHead,
+        stdoutTail,
+        stderrTail,
+        stdoutBytes,
+        stderrBytes,
+      })
+    : combineOutput(stdoutHead.toString("utf8"), stderrHead.toString("utf8"));
   const terminationResult = await termination;
   const terminationMetadata = terminationResult
     ? {
@@ -243,21 +317,26 @@ async function executeForegroundCommand(
         ...(terminationResult.error ? { terminationError: terminationResult.error } : {}),
       }
     : {};
-  if (timedOut) return timeoutResult(profile, cwd, accessScope, timeoutMs, output, terminationMetadata);
-  if (interrupted) return interruptedResult(profile, cwd, accessScope, output, terminationMetadata);
-  if (outputLimitExceeded) return outputLimitResult(profile, cwd, accessScope, output);
+  const outputMetadata = outputLimitExceeded && captureStore
+    ? { outputId: captureStore.id, stdoutBytes, stderrBytes, outputTruncated: true }
+    : {};
+  if (!outputLimitExceeded && captureStore) await discardTerminalOutputCapture(captureStore);
+  if (timedOut) return timeoutResult(profile, cwd, accessScope, timeoutMs, output, { ...terminationMetadata, ...outputMetadata });
+  if (interrupted) return interruptedResult(profile, cwd, accessScope, output, { ...terminationMetadata, ...outputMetadata });
   if (!completion) {
     return foregroundResult(profile, cwd, accessScope, output || "Process did not report exit after termination.", 1, {
       interrupted: true,
       errorKind: "termination_failed",
+      ...outputMetadata,
     });
   }
   if (completion.error) {
-    return foregroundResult(profile, cwd, accessScope, output || completion.error.message, 1, { errorKind: "spawn" });
+    return foregroundResult(profile, cwd, accessScope, output || completion.error.message, 1, { errorKind: "spawn", ...outputMetadata });
   }
   return foregroundResult(profile, cwd, accessScope, output, completion.code, {
     interrupted: Boolean(completion.signal),
     ...(completion.code === 0 ? {} : { errorKind: "exit_code" }),
+    ...outputMetadata,
   });
 }
 
@@ -347,8 +426,44 @@ export async function executeTerminalTool(
   if (!profile) return { content: "Terminal is unavailable because no supported shell was detected.", isError: true };
 
   const action = args.action === undefined ? "run" : String(args.action).trim().toLowerCase();
-  if (!new Set(["run", "status", "stop"]).has(action)) {
-    return { content: `Unsupported Terminal action "${action}". Use run, status, or stop.`, isError: true };
+  if (!new Set(["run", "status", "stop", "output"]).has(action)) {
+    return { content: `Unsupported Terminal action "${action}". Use run, status, stop, or output.`, isError: true };
+  }
+
+  if (action === "output") {
+    const sessionId = context?.sessionId;
+    if (!sessionId) return { content: "Terminal output reads require an active session.", isError: true };
+    const outputId = String(args.outputId ?? "").trim();
+    if (!outputId) return { content: "outputId is required for Terminal action \"output\".", isError: true };
+    const stream = args.stream === "stderr" ? "stderr" : "stdout";
+    try {
+      const result = await readTerminalOutput({
+        sessionId,
+        outputId,
+        stream,
+        offsetBytes: typeof args.offsetBytes === "number" ? args.offsetBytes : undefined,
+        limitBytes: typeof args.limitBytes === "number" ? args.limitBytes : undefined,
+        pattern: typeof args.pattern === "string" && args.pattern ? args.pattern : undefined,
+      });
+      const { content, ...details } = result;
+      return {
+        content: [
+          "[terminal output page]",
+          `outputId: ${outputId}`,
+          `stream: ${stream}`,
+          `offsetBytes: ${result.offset}`,
+          `bytesReturned: ${result.bytesRead}`,
+          `totalBytes: ${result.size}`,
+          `truncated: ${String(result.truncated)}`,
+          "",
+          content || "[no output]",
+        ].join("\n"),
+        isError: false,
+        metadata: { action, outputId, stream, ...details },
+      };
+    } catch (error) {
+      return { content: error instanceof Error ? error.message : String(error), isError: true, metadata: { action, outputId, stream } };
+    }
   }
 
   if (action === "status" || action === "stop") {
@@ -415,6 +530,7 @@ export async function executeTerminalTool(
     accessScope,
     requestedTimeout ?? DEFAULT_TIMEOUT,
     env,
+    context?.sessionId,
     context?.abortSignal,
   );
 }

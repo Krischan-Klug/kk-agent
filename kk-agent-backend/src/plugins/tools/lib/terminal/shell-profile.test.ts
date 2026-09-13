@@ -37,6 +37,8 @@ test("Windows prefers a detected Git Bash over PowerShell", () => {
   assert.equal(result.profile.kind, "git-bash");
   assert.equal(result.profile.dialect, "posix");
   assert.match(result.profile.syntaxRules, /POSIX shell syntax/);
+  assert.match(result.profile.pathConvention, /native Windows programs/u);
+  assert.match(result.profile.pathConvention, /\/tmp are not portable/u);
 });
 
 test("Windows falls back to PowerShell 7 and then Windows PowerShell", () => {
@@ -86,7 +88,9 @@ test("POSIX detection prefers Bash and binds POSIX command arguments", () => {
   if (result.status !== "available") return;
   assert.equal(result.profile.kind, "bash");
   assert.deepEqual(buildShellCommandArgs(result.profile, "node -v && npm -v"), [
-    "-lc",
+    "--noprofile",
+    "--norc",
+    "-c",
     "set -o pipefail\nnode -v && npm -v",
   ]);
 });

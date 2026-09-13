@@ -23,7 +23,7 @@ Runtime configuration:
 - `PORT`: API port, `0` allowed for an ephemeral port
 - `KK_AGENT_STATE_DIR`: optional absolute override for persisted state; by default desktop and development share the OS app-data `KK-Agent/state` directory
 
-The packaged desktop includes the pinned `uvx` launcher used by the internal DuckDuckGo web-search MCP. Backend-only development expects `uvx` on `PATH`.
+The packaged desktop includes the pinned `uvx` launcher used by the internal DuckDuckGo web-search MCP and local document-retrieval worker. Backend-only development expects `uvx` on `PATH`. On first use, uv downloads the pinned Python environments and the local multilingual embedding model into `state/rag-runtime`; no Python installation or API key is required.
 
 Shared contract dependency:
 
@@ -160,9 +160,11 @@ Persistent JSON state lives under `state/`:
 - `user-memory.json`
 - `agent-skills/`
 - `python-package-cache/`
+- `rag-runtime/`
 - `sessions/<sessionId>/session.json`
 - `sessions/<sessionId>/tasks.json`
 - `sessions/<sessionId>/facts.json`
 - `sessions/<sessionId>/assets/`
+- `sessions/<sessionId>/terminal-output/`
 
-Each session uses one atomically replaced, versioned JSON snapshot. A snapshot with an unknown schema is deleted on startup; there are no session migrations or compatibility bridges. Large tool output is bounded before it enters model context and is not written to a separate global store.
+Each session uses one atomically replaced, versioned JSON snapshot. A snapshot with an unknown schema is deleted on startup; there are no session migrations or compatibility bridges. Large tool output is bounded before it enters model context; oversized foreground terminal output is retained only inside its owning session and removed with that session.

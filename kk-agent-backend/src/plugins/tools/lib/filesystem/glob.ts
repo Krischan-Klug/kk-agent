@@ -9,7 +9,7 @@ export async function executeGlob(
   args: Record<string, unknown>,
   abortSignal?: AbortSignal,
 ): Promise<ToolCallResult> {
-  const start = resolveFilesystemPath(config, args.path);
+  const start = await resolveFilesystemPath(config, args.path);
   const pattern = String(args.pattern ?? "").trim();
   if (!pattern) throw new Error("pattern is required");
 

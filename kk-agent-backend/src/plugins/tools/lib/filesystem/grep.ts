@@ -11,7 +11,7 @@ export async function executeGrep(
   const pattern = String(args.pattern ?? "").trim();
   if (!pattern) throw new Error("pattern is required");
 
-  const start = resolveFilesystemPath(config, args.path);
+  const start = await resolveFilesystemPath(config, args.path);
   const glob = typeof args.glob === "string" ? args.glob.trim() || undefined : undefined;
   const type = typeof args.type === "string" ? args.type.trim() || undefined : undefined;
   const outputMode =

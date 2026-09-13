@@ -60,6 +60,10 @@
         ]
       },
       {
+        "from": "../kk-agent-backend/runtime/rag-worker.py",
+        "to": "backend/runtime/rag-worker.py"
+      },
+      {
         "from": "out",
         "to": "renderer"
       }

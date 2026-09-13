@@ -7,6 +7,7 @@ import { createLogger } from "./src/lib/logger.js";
 import { stopAllBackgroundTerminalTasks } from "./src/plugins/tools/lib/terminal/background-tasks.js";
 import { stopAllPythonSandboxes } from "./src/plugins/tools/lib/python/runner.js";
 import { stopAllMcps } from "./src/plugins/mcp/lib/process-manager.js";
+import { stopRetrievalWorker } from "./src/plugins/session/lib/retrieval-worker.js";
 
 const logger = createLogger("backend");
 
@@ -24,7 +25,7 @@ async function main(): Promise<void> {
     if (stopping) return;
     stopping = true;
     logger.info(`Stopping backend after ${signal}`);
-    await Promise.all([stopAllBackgroundTerminalTasks(), stopAllPythonSandboxes(), stopAllMcps()]);
+    await Promise.all([stopAllBackgroundTerminalTasks(), stopAllPythonSandboxes(), stopRetrievalWorker(), stopAllMcps()]);
     await new Promise<void>((resolveClose) => started.server.close(() => resolveClose()));
   };
   process.once("SIGINT", () => void shutdown("SIGINT"));

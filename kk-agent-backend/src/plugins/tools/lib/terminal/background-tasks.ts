@@ -14,6 +14,7 @@ import {
   type ManagedShellProcess,
   type ProcessTermination,
 } from "./process.js";
+import { disposeTerminalOutput } from "./output-store.js";
 
 type TerminalTaskStatus =
   | "running"
@@ -66,6 +67,10 @@ const MAX_RETAINED_TASKS_PER_SESSION = 100;
 const STOP_SETTLE_TIMEOUT_MS = 1_500;
 const records = new Map<string, TerminalTaskRecord>();
 let terminalTaskSessionsRootOverride: string | undefined;
+
+function isActiveStatus(status: TerminalTaskStatus): boolean {
+  return ["running", "stopping", "timed_out"].includes(status);
+}
 
 export function setTerminalTaskSessionsRootForTests(root?: string): void {
   terminalTaskSessionsRootOverride = root ? resolve(root) : undefined;
@@ -163,7 +168,7 @@ async function settleStoppedTask(record: TerminalTaskRecord): Promise<void> {
 
 async function pruneCompletedRecords(sessionId: string): Promise<void> {
   const completed = [...records.values()]
-    .filter((record) => record.sessionId === sessionId && !["running", "stopping"].includes(record.status))
+    .filter((record) => record.sessionId === sessionId && !isActiveStatus(record.status))
     .sort((left, right) => left.startedAt.localeCompare(right.startedAt));
   while (completed.length > MAX_RETAINED_TASKS_PER_SESSION) {
     const oldest = completed.shift();
@@ -260,10 +265,14 @@ export async function startBackgroundTerminalTask(input: {
   if (input.timeoutMs !== undefined) {
     record.timeout = setTimeout(() => {
       record.timedOut = true;
+      record.status = "timed_out";
+      void queueStatusWrite(record).catch(() => undefined);
       void terminate(record);
     }, input.timeoutMs);
     record.timeout.unref();
   }
+
+  processHandle.start();
 
   record.settled = completion.then(async (result) => {
     await drainProcessOutput(record.processHandle);
@@ -310,7 +319,7 @@ export function getTerminalTask(sessionId: string, taskId: string): TerminalTask
 
 export function listActiveTerminalTasks(sessionId: string): TerminalTaskSnapshot[] {
   return [...records.values()]
-    .filter((record) => record.sessionId === sessionId && ["running", "stopping"].includes(record.status))
+    .filter((record) => record.sessionId === sessionId && isActiveStatus(record.status))
     .sort((left, right) => left.startedAt.localeCompare(right.startedAt))
     .map(snapshot);
 }
@@ -318,27 +327,27 @@ export function listActiveTerminalTasks(sessionId: string): TerminalTaskSnapshot
 export async function stopTerminalTask(sessionId: string, taskId: string): Promise<TerminalTaskSnapshot | null> {
   const record = getOwnedRecord(sessionId, taskId);
   if (!record) return null;
-  if (!["running", "stopping"].includes(record.status)) return snapshot(record);
+  if (!isActiveStatus(record.status)) return snapshot(record);
 
-  if (!record.stopRequested) {
+  if (!record.stopRequested && !record.timedOut) {
     record.stopRequested = true;
     record.status = "stopping";
     await queueStatusWrite(record).catch(() => undefined);
-    await terminate(record);
   }
+  await terminate(record);
   await settleStoppedTask(record);
   return snapshot(record);
 }
 
 export async function stopAllBackgroundTerminalTasks(): Promise<void> {
-  const active = [...records.values()].filter((record) => ["running", "stopping"].includes(record.status));
+  const active = [...records.values()].filter((record) => isActiveStatus(record.status));
   await Promise.allSettled(active.map(async (record) => {
-    if (!record.stopRequested) {
+    if (!record.stopRequested && !record.timedOut) {
       record.stopRequested = true;
       record.status = "stopping";
       await queueStatusWrite(record).catch(() => undefined);
-      await terminate(record);
     }
+    await terminate(record);
     await settleStoppedTask(record);
   }));
 }
@@ -346,7 +355,7 @@ export async function stopAllBackgroundTerminalTasks(): Promise<void> {
 export async function disposeSessionTerminalTasks(sessionId: string): Promise<void> {
   const owned = [...records.values()].filter((record) => record.sessionId === sessionId);
   const stopped = await Promise.allSettled(owned.map(async (record) => {
-    if (["running", "stopping"].includes(record.status)) {
+    if (isActiveStatus(record.status)) {
       const result = await stopTerminalTask(sessionId, record.id);
       if (result?.status === "stop_failed") {
         throw new Error(result.error ?? `Terminal task "${record.id}" could not be stopped.`);
@@ -366,5 +375,6 @@ export async function disposeSessionTerminalTasks(sessionId: string): Promise<vo
   }
   const root = sessionTaskRoot(sessionId);
   await rm(root, { recursive: true, force: true });
+  await disposeTerminalOutput(sessionId);
   await rmdir(dirname(root)).catch(() => undefined);
 }

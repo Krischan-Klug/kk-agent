@@ -2,10 +2,11 @@ import { Fragment, type RefObject } from "react";
 import Badge from "@/components/Badge";
 import Spinner from "@/components/Spinner";
 import MarkdownMessage from "@/components/MarkdownMessage";
-import type {
-  RunEvent,
-  SessionState,
-  TranscriptMessage,
+import {
+  summarizeRunToolCalls,
+  type RunEvent,
+  type SessionState,
+  type TranscriptMessage,
 } from "kk-agent-contract";
 import type { RuntimeCapability } from "@/types/runtime";
 import type { PendingPrompt, StreamingTurnState } from "./types";
@@ -153,6 +154,12 @@ export default function ChatMessages({
       {messageGroups.map((group) => {
         const ids = new Set(groupMessageIds(group));
         const events = persistedEvents.filter((event) => ids.has(event.anchorMessageId));
+        const run = group.kind === "agent-step" && group.userMessageId
+          ? session.runs.find((candidate) => candidate.userMessageId === group.userMessageId)
+          : undefined;
+        const isFinalRunStep = group.kind === "agent-step"
+          && Boolean(group.userMessageId)
+          && lastStepIdByUserMessage.get(group.userMessageId!) === group.step.assistant.id;
         for (const event of events) renderedEventIds.add(event.id);
         return (
           <Fragment key={group.key}>
@@ -162,11 +169,14 @@ export default function ChatMessages({
                   currentAgentName={currentAgentName}
                   capabilities={capabilities}
                   step={group.step}
-                  artifacts={(group.userMessageId && lastStepIdByUserMessage.get(group.userMessageId) === group.step.assistant.id
-                    ? (session.runs.find((run) => run.userMessageId === group.userMessageId)?.artifactIds ?? [])
+                  artifacts={(isFinalRunStep
+                    ? (run?.artifactIds ?? [])
                     : [])
                     .map((assetId) => session.assets.find((asset) => asset.id === assetId))
                     .filter((asset) => asset !== undefined)}
+                  toolStats={isFinalRunStep && run?.status !== "running" && group.userMessageId
+                    ? summarizeRunToolCalls(session.messages, group.userMessageId)
+                    : null}
                 />
               : renderSingleMessage(group.message, session)}
             {events.map(renderRunEvent)}

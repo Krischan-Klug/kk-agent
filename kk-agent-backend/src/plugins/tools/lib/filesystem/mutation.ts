@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type { Stats } from "node:fs";
-import { open, readFile, rename, rm, stat } from "node:fs/promises";
-import { basename, dirname, join } from "node:path";
+import { mkdir, open, readFile, rename, rm, stat } from "node:fs/promises";
+import { basename, dirname, join, parse } from "node:path";
 import type { ToolCallResult } from "../../types.js";
 import { isBinaryBuffer } from "./path-utils.js";
 import { countChangedLines, detectLineEnding, generateUnifiedDiff, normalizeLineEndings } from "./diff.js";
@@ -11,6 +11,16 @@ type ExistingTextResult =
   | { ok: false; result: ToolCallResult };
 
 const mutationQueues = new Map<string, Promise<void>>();
+
+export function isFilesystemRoot(path: string): boolean {
+  return path === parse(path).root;
+}
+
+export async function ensureParentDirectory(path: string): Promise<void> {
+  const parent = dirname(path);
+  if (isFilesystemRoot(parent)) return;
+  await mkdir(parent, { recursive: true });
+}
 
 function mutationKey(path: string): string {
   return process.platform === "win32" ? path.toLowerCase() : path;
@@ -32,6 +42,14 @@ export async function withFileMutationLock<T>(path: string, mutate: () => Promis
     release();
     if (mutationQueues.get(key) === current) mutationQueues.delete(key);
   }
+}
+
+export async function withFileMutationLocks<T>(paths: string[], mutate: () => Promise<T>): Promise<T> {
+  const ordered = [...new Set(paths)].sort((left, right) => mutationKey(left).localeCompare(mutationKey(right)));
+  const acquire = (index: number): Promise<T> => index >= ordered.length
+    ? mutate()
+    : withFileMutationLock(ordered[index]!, () => acquire(index + 1));
+  return acquire(0);
 }
 
 export async function readExistingTextForMutation(
@@ -66,11 +84,16 @@ export function buildTextChangeDiff(path: string, before: string, after: string)
 }
 
 export async function writeTextAtomically(path: string, content: string, mode?: number): Promise<Stats> {
+  return writeDataAtomically(path, content, mode);
+}
+
+export async function writeDataAtomically(path: string, content: string | Buffer, mode?: number): Promise<Stats> {
   const temporaryPath = join(dirname(path), `.${basename(path)}.kk-agent-${randomUUID()}.tmp`);
   const handle = await open(temporaryPath, "wx", mode);
   let closed = false;
   try {
-    await handle.writeFile(content, "utf-8");
+    if (typeof content === "string") await handle.writeFile(content, "utf-8");
+    else await handle.writeFile(content);
     await handle.sync();
     await handle.close();
     closed = true;

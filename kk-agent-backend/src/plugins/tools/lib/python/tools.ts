@@ -5,7 +5,7 @@ export const pythonTools: InternalToolDescriptor[] = [
   {
     name: "Python",
     description:
-      "Run Python in an isolated session-scoped WebAssembly runtime for algorithms, simulations, data analysis, code checks, plots, conversions, and artifact generation. Normal Python language features and standard-library imports are available; compatible Pyodide packages are loaded from its package catalog. Variables and /workspace files persist across calls in the same session. End with an expression to return its repr. Input assets are mapped by INPUT_FILES; /input and /output reset per call, and valid non-empty files under /output are returned as artifacts.",
+      "Run Python in an isolated session-scoped WebAssembly runtime for algorithms, simulations, data analysis, code checks, plots, conversions, and artifact generation. Normal Python language features and standard-library imports are available; compatible Pyodide packages are loaded from its package catalog. Variables and /workspace files persist across calls in the same session. End with an expression to return its repr. Input assets are mapped by INPUT_FILES. /input and /output reset per call; write every file that must leave Python to /output. Those files are returned with asset IDs and can be saved to local paths with SaveAsset. Never print or encode binary file data as base64.",
     inputSchema: {
       type: "object",
       properties: {

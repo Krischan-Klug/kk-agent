@@ -8,7 +8,7 @@ import {
   ingestAsset,
   ingestAssetFromPath,
   listSessionAssets,
-  readAssetChunks,
+  searchAssetChunks,
   readAssetText,
 } from "../../../session/lib/assets.js";
 import { truncateSelfBoundedReadOutput } from "../read-output.js";
@@ -77,11 +77,10 @@ export async function executeAttachmentTool(
     const asset = getSessionAssetById(sessionId, assetId);
     if (!asset) throw new Error(`Asset "${assetId}" not found in this session.`);
     const maxResults = Math.min(25, Math.max(1, Math.floor(typeof args.maxResults === "number" ? args.maxResults : 10)));
-    const needle = query.toLocaleLowerCase();
-    const matches = (await readAssetChunks(sessionId, assetId)).filter((chunk) => chunk.text.toLocaleLowerCase().includes(needle)).slice(0, maxResults);
+    const matches = await searchAssetChunks(sessionId, assetId, query, maxResults);
     return {
       content: matches.length
-        ? matches.map((chunk) => `[chunk=${chunk.index}, ${chunk.locator}]\n${chunk.text}`).join("\n\n")
+        ? matches.map((chunk) => `[chunk=${chunk.index}, ${chunk.locator}, score=${chunk.score?.toFixed(4) ?? "n/a"}]\n${chunk.text}`).join("\n\n")
         : `No matches for "${query}" in ${asset.filename}.`,
     };
   }

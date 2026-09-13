@@ -5,7 +5,9 @@ export const filesystemDefinition = defineInternalTool({
   name: "Filesystem",
   instruction:
     "Use filesystem tools for local file work and Terminal only for commands that need a shell. " +
-    "Read files when their contents are needed for the task. Edit and Write validate the current file internally. " +
+    "Use List, Stat, Read, Glob, and Grep to inspect; use Mkdir, Copy, Move, Remove, Edit, Write, and SaveAsset for changes. " +
+    "SaveAsset is the binary-safe bridge from managed session or Python artifacts to a local path; never move binary data through chat text or base64. " +
+    "Edit and Write validate current file state internally, and Edit supports atomic batches and dry-run previews. " +
     "Narrow truncated results with the tool's range or limit options.",
   emoji: "📁",
   config: {

@@ -1,11 +1,20 @@
-import { useCallback, useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 const AUTO_SCROLL_THRESHOLD = 48;
 const scrollStateBySession = new Map<string, { scrollTop: number; shouldAutoScroll: boolean }>();
 
+export function isNearChatBottom(input: {
+  scrollTop: number;
+  scrollHeight: number;
+  clientHeight: number;
+}): boolean {
+  return input.scrollHeight - (input.scrollTop + input.clientHeight) < AUTO_SCROLL_THRESHOLD;
+}
+
 export function useChatAutoScroll(sessionId?: string) {
   const ref = useRef<HTMLDivElement>(null);
   const shouldAutoScrollRef = useRef(true);
+  const [hasUnseenContent, setHasUnseenContent] = useState(false);
 
   const persistScrollState = useCallback(() => {
     if (!sessionId || !ref.current) return;
@@ -18,6 +27,7 @@ export function useChatAutoScroll(sessionId?: string) {
   useEffect(() => {
     const saved = sessionId ? scrollStateBySession.get(sessionId) : undefined;
     shouldAutoScrollRef.current = saved?.shouldAutoScroll ?? true;
+    setHasUnseenContent(false);
 
     const frame = window.requestAnimationFrame(() => {
       if (!ref.current) return;
@@ -37,22 +47,37 @@ export function useChatAutoScroll(sessionId?: string) {
   }, [persistScrollState, sessionId]);
 
   const scrollToBottom = useCallback(() => {
-    if (ref.current && shouldAutoScrollRef.current) {
-      ref.current.scrollTop = ref.current.scrollHeight;
-      persistScrollState();
+    if (!ref.current) return;
+    if (!shouldAutoScrollRef.current) {
+      setHasUnseenContent(true);
+      return;
     }
+    ref.current.scrollTop = ref.current.scrollHeight;
+    setHasUnseenContent(false);
+    persistScrollState();
+  }, [persistScrollState]);
+
+  const jumpToLatest = useCallback(() => {
+    if (!ref.current) return;
+    shouldAutoScrollRef.current = true;
+    ref.current.scrollTop = ref.current.scrollHeight;
+    setHasUnseenContent(false);
+    persistScrollState();
   }, [persistScrollState]);
 
   const handleScroll = useCallback(() => {
     if (!ref.current) return;
     const { scrollTop, scrollHeight, clientHeight } = ref.current;
-    shouldAutoScrollRef.current = scrollHeight - (scrollTop + clientHeight) < AUTO_SCROLL_THRESHOLD;
+    shouldAutoScrollRef.current = isNearChatBottom({ scrollTop, scrollHeight, clientHeight });
+    if (shouldAutoScrollRef.current) setHasUnseenContent(false);
     persistScrollState();
   }, [persistScrollState]);
 
   return {
     ref,
     scrollToBottom,
+    jumpToLatest,
     handleScroll,
+    hasUnseenContent,
   };
 }

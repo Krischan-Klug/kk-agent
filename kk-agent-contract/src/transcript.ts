@@ -65,6 +65,20 @@ export type ToolExecutionStatus =
 
 export type RuntimeToolSource = "internal" | "mcp";
 
+export interface RunToolCallStats {
+  total: number;
+  succeeded: number;
+  failed: number;
+  pending: number;
+  byTool: Array<{
+    name: string;
+    total: number;
+    succeeded: number;
+    failed: number;
+    pending: number;
+  }>;
+}
+
 function generateId(): string {
   const c = (globalThis as { crypto?: { randomUUID?: () => string } }).crypto;
   if (c?.randomUUID) return c.randomUUID();
@@ -166,6 +180,56 @@ export function collectToolResults(blocks: TranscriptBlock[]): TranscriptToolRes
 
 export function collectAssetRefs(blocks: TranscriptBlock[]): TranscriptAssetRefBlock[] {
   return getAssetRefs({ content: blocks });
+}
+
+export function summarizeRunToolCalls(
+  messages: TranscriptMessage[],
+  userMessageId: string,
+): RunToolCallStats | null {
+  const start = messages.findIndex((message) => message.id === userMessageId && message.role === "user");
+  if (start < 0) return null;
+
+  const nextUserOffset = messages.slice(start + 1).findIndex((message) => message.role === "user");
+  const end = nextUserOffset < 0 ? messages.length : start + 1 + nextUserOffset;
+  const runMessages = messages.slice(start + 1, end);
+  const uses = runMessages.flatMap((message) => getToolUses(message));
+  const results = new Map(runMessages.flatMap((message) => getToolResults(message)
+    .map((block) => [block.tool_use_id, block] as const)));
+  const byTool = new Map<string, RunToolCallStats["byTool"][number]>();
+  let succeeded = 0;
+  let failed = 0;
+  let pending = 0;
+
+  for (const use of uses) {
+    const aggregate = byTool.get(use.name) ?? {
+      name: use.name,
+      total: 0,
+      succeeded: 0,
+      failed: 0,
+      pending: 0,
+    };
+    aggregate.total += 1;
+    const result = results.get(use.id);
+    if (!result) {
+      aggregate.pending += 1;
+      pending += 1;
+    } else if (result.is_error) {
+      aggregate.failed += 1;
+      failed += 1;
+    } else {
+      aggregate.succeeded += 1;
+      succeeded += 1;
+    }
+    byTool.set(use.name, aggregate);
+  }
+
+  return {
+    total: uses.length,
+    succeeded,
+    failed,
+    pending,
+    byTool: [...byTool.values()].sort((left, right) => left.name.localeCompare(right.name)),
+  };
 }
 
 export function hasVisibleAssistantContent(message: Pick<TranscriptMessage, "content">): boolean {

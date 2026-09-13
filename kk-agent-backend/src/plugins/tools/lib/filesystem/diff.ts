@@ -89,5 +89,8 @@ export function generateUnifiedDiff(filePath: string, oldContent: string, newCon
 }
 
 export function countChangedLines(diff: string): number {
-  return diff.split("\n").filter((line) => line.startsWith("+") || line.startsWith("-")).length;
+  return diff.split("\n").filter((line) =>
+    (line.startsWith("+") && !line.startsWith("+++ "))
+    || (line.startsWith("-") && !line.startsWith("--- ")),
+  ).length;
 }

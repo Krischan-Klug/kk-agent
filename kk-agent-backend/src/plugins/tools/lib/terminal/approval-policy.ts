@@ -16,12 +16,18 @@ export function resolveTerminalCommandPermission(input: {
   action?: unknown;
   command: string;
   taskId?: unknown;
+  outputId?: unknown;
   shellDialect?: TerminalShellDialect;
   approvalMode?: ApprovalMode;
 }): RuntimeToolPermissionPolicy {
   const action = input.action === undefined ? "run" : String(input.action).trim().toLowerCase();
-  if (!new Set(["run", "status", "stop"]).has(action)) {
+  if (!new Set(["run", "status", "stop", "output"]).has(action)) {
     return { kind: "deny", reason: `Unsupported Terminal action "${action}".` };
+  }
+  if (action === "output") {
+    return String(input.outputId ?? "").trim()
+      ? { kind: "allow" }
+      : { kind: "deny", reason: "Terminal action \"output\" requires outputId." };
   }
   if (action === "status" || action === "stop") {
     if (!String(input.taskId ?? "").trim()) {

@@ -32,8 +32,19 @@ const REASONING_COLORS: Record<ReasoningEffort, string> = {
 const ChatWrapper = styled.div`
   display: flex;
   flex-direction: column;
+  position: relative;
   height: 100%;
   max-height: calc(100vh - 2 * var(--space-lg));
+`;
+
+const JumpToLatestButton = styled(Button).attrs({ size: "sm" })`
+  position: absolute;
+  left: 50%;
+  bottom: 104px;
+  transform: translateX(-50%);
+  z-index: 30;
+  white-space: nowrap;
+  box-shadow: var(--shadow-sm);
 `;
 
 const FloatingDebugButton = styled(Button).attrs({ size: "sm" })`
@@ -72,7 +83,13 @@ export default function ChatPage() {
     setDebugOpen,
     onDebugOpen: refreshDebugPrompt,
   });
-  const { ref: messagesRef, scrollToBottom, handleScroll } = useChatAutoScroll(sessionData.session?.id);
+  const {
+    ref: messagesRef,
+    scrollToBottom,
+    jumpToLatest,
+    handleScroll,
+    hasUnseenContent,
+  } = useChatAutoScroll(sessionData.session?.id);
   const previousSessionIdRef = useRef<string | undefined>(undefined);
   const discardAssets = assets.discardAssets;
 
@@ -113,6 +130,10 @@ export default function ChatPage() {
     scrollToBottom,
     [sessionData.session?.messages, streaming.streamTurn, scrollToBottom],
   );
+
+  useEffect(() => {
+    if (streaming.sending) jumpToLatest();
+  }, [jumpToLatest, streaming.sending]);
 
   const modelInfo = sessionData.session ? sessionData.modelInfoMap.get(getSessionModelRef(sessionData.session)) : undefined;
   const modelSettings = sessionData.session ? sessionData.modelSettingsMap[getSessionModelRef(sessionData.session)] : undefined;
@@ -189,6 +210,11 @@ export default function ChatPage() {
         onCustomAnswerChange={streaming.setCustomAnswer}
         onPromptResponse={streaming.handlePromptResponse}
       />
+      {hasUnseenContent && (
+        <JumpToLatestButton type="button" onClick={jumpToLatest}>
+          ↓ Zur neuesten Nachricht
+        </JumpToLatestButton>
+      )}
       <ChatComposer
         input={streaming.input}
         sending={streaming.sending || assets.uploading}

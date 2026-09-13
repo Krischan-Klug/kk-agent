@@ -5,11 +5,11 @@ import { basename, extname, join, resolve } from "node:path";
 import { inflateSync } from "node:zlib";
 import { fileTypeFromBuffer } from "file-type";
 import { unzipSync } from "fflate";
-import readXlsxFile from "read-excel-file/node";
 import { ASSET_EXTENSION_KINDS, type AssetKind, type AssetMeta } from "kk-agent-contract";
 import { ConflictError } from "../../../lib/errors.js";
 import { getStateDirPath } from "../../lib/state.js";
 import * as sessionStore from "./store.js";
+import { ingestDocumentWithRag, searchDocumentWithRag } from "./retrieval-worker.js";
 import type { AssetChunk, AssetInput, ProcessedAsset, ResolvedAsset } from "./asset-types.js";
 
 const MAX_TEXT_BYTES = 10 * 1024 * 1024;
@@ -19,8 +19,7 @@ const MAX_PDF_PREVIEWS = 8;
 const MAX_ARCHIVE_ENTRIES = 10_000;
 const MAX_ARCHIVE_UNCOMPRESSED_BYTES = 200 * 1024 * 1024;
 const MAX_ARCHIVE_ENTRY_BYTES = 25 * 1024 * 1024;
-const CHUNK_SIZE = 4_000;
-const CHUNK_OVERLAP = 400;
+const ZIP_DOCUMENT_EXTENSIONS = new Set([".docx", ".pptx", ".xlsx", ".odt", ".odp", ".ods"]);
 const CRC32_TABLE = Uint32Array.from({ length: 256 }, (_unused, index) => {
   let value = index;
   for (let bit = 0; bit < 8; bit += 1) value = (value >>> 1) ^ (0xedb88320 & -(value & 1));
@@ -95,70 +94,11 @@ function maxSize(kind: AssetKind): number {
   return MAX_DOCUMENT_BYTES;
 }
 
-function chunkText(text: string, locatorPrefix = "text"): AssetChunk[] {
-  const normalized = text.replace(/\r\n?/gu, "\n").trim();
-  if (!normalized) return [];
-  const chunks: AssetChunk[] = [];
-  let start = 0;
-  while (start < normalized.length) {
-    let end = Math.min(start + CHUNK_SIZE, normalized.length);
-    if (end < normalized.length) {
-      const boundary = Math.max(normalized.lastIndexOf("\n", end), normalized.lastIndexOf(" ", end));
-      if (boundary > start + CHUNK_SIZE / 2) end = boundary;
-    }
-    chunks.push({ index: chunks.length, locator: `${locatorPrefix}:${start}-${end}`, text: normalized.slice(start, end) });
-    if (end === normalized.length) break;
-    start = Math.max(start + 1, end - CHUNK_OVERLAP);
-  }
-  return chunks;
-}
-
 function decodeText(buffer: Buffer): string {
   if (buffer.subarray(0, Math.min(buffer.length, 8_192)).includes(0)) {
     throw new Error("The uploaded file is binary but was declared as text.");
   }
   return buffer.toString("utf8").replace(/^\uFEFF/u, "");
-}
-
-function decodeXmlEntities(value: string): string {
-  return value
-    .replace(/&#x([0-9a-f]+);/giu, (_match, hex: string) => String.fromCodePoint(Number.parseInt(hex, 16)))
-    .replace(/&#(\d+);/gu, (_match, decimal: string) => String.fromCodePoint(Number.parseInt(decimal, 10)))
-    .replaceAll("&lt;", "<").replaceAll("&gt;", ">").replaceAll("&quot;", "\"")
-    .replaceAll("&apos;", "'").replaceAll("&amp;", "&");
-}
-
-function extractXmlText(data: Uint8Array): string {
-  const xml = Buffer.from(data).toString("utf8");
-  return decodeXmlEntities(xml
-    .replace(/<w:tab\b[^>]*\/?\s*>/giu, "\t")
-    .replace(/<text:tab\b[^>]*\/?\s*>/giu, "\t")
-    .replace(/<w:br\b[^>]*\/?\s*>/giu, "\n")
-    .replace(/<a:br\b[^>]*\/?\s*>/giu, "\n")
-    .replace(/<\/w:tc\s*>/giu, "\t")
-    .replace(/<\/table:table-cell\s*>/giu, "\t")
-    .replace(/<\/(?:w:p|a:p|text:p|text:h|table:table-row)\s*>/giu, "\n")
-    .replace(/<[^>]+>/gu, ""))
-    .replace(/[ \t]+\n/gu, "\n")
-    .replace(/\n{3,}/gu, "\n\n")
-    .trim();
-}
-
-function numericPathSort(left: string, right: string): number {
-  return left.localeCompare(right, undefined, { numeric: true, sensitivity: "base" });
-}
-
-function extractRtfText(buffer: Buffer): string {
-  return buffer.toString("latin1")
-    .replace(/\\'([0-9a-f]{2})/giu, (_match, hex: string) => Buffer.from([Number.parseInt(hex, 16)]).toString("latin1"))
-    .replace(/\\u(-?\d+)\??/gu, (_match, raw: string) => String.fromCharCode((Number.parseInt(raw, 10) + 65536) % 65536))
-    .replace(/\\(?:par|line)\b/gu, "\n")
-    .replace(/\\tab\b/gu, "\t")
-    .replace(/\\[a-z]+-?\d* ?/giu, "")
-    .replace(/\\[{}\\]/gu, (match) => match.slice(1))
-    .replace(/[{}]/gu, "")
-    .replace(/\n{3,}/gu, "\n\n")
-    .trim();
 }
 
 function validateZipArchive(buffer: Buffer): void {
@@ -176,81 +116,20 @@ function validateZipArchive(buffer: Buffer): void {
   });
 }
 
-function extractOfficeText(buffer: Buffer, extension: string): string {
-  if (extension === ".rtf") return extractRtfText(buffer);
-  validateZipArchive(buffer);
-  const archive = unzipSync(new Uint8Array(buffer), {
-    filter: (entry) => entry.name === "content.xml"
-      || /^word\/(?:document|header\d+|footer\d+|footnotes|endnotes|comments)\.xml$/u.test(entry.name)
-      || /^ppt\/(?:slides\/slide\d+|notesSlides\/notesSlide\d+)\.xml$/u.test(entry.name),
-  });
-  const names = Object.keys(archive);
-  if (extension === ".docx") {
-    const ordered = [
-      "word/document.xml",
-      ...names.filter((name) => /^word\/(?:header|footer)\d+\.xml$/u.test(name)).sort(numericPathSort),
-      ...["word/footnotes.xml", "word/endnotes.xml", "word/comments.xml"].filter((name) => archive[name]),
-    ];
-    return ordered.flatMap((name) => archive[name] ? [extractXmlText(archive[name])] : []).filter(Boolean).join("\n\n");
-  }
-  if (extension === ".pptx") {
-    const slides = names.filter((name) => /^ppt\/slides\/slide\d+\.xml$/u.test(name)).sort(numericPathSort);
-    const notes = names.filter((name) => /^ppt\/notesSlides\/notesSlide\d+\.xml$/u.test(name)).sort(numericPathSort);
-    const sections = slides.map((name, index) => `--- Slide ${index + 1} ---\n${extractXmlText(archive[name]!)}`);
-    if (notes.length) sections.push(`--- Speaker notes ---\n${notes.map((name) => extractXmlText(archive[name]!)).join("\n\n")}`);
-    return sections.join("\n\n");
-  }
-  const content = archive["content.xml"];
-  if (!content) throw new Error("Office document does not contain a supported content.xml payload.");
-  return extractXmlText(content);
-}
-
-async function processPdf(buffer: Buffer): Promise<ProcessedAsset> {
+async function renderPdfPreviews(buffer: Buffer): Promise<ProcessedAsset["previews"]> {
   const { PDFParse } = await import("pdf-parse");
   const parser = new PDFParse({ data: new Uint8Array(buffer) });
   try {
-    const result = await parser.getText({ pageJoiner: "" });
-    const pageChunks = result.pages.flatMap((page) => chunkText(page.text, `page:${page.num}`));
     const screenshots = await parser.getScreenshot({
-      first: Math.min(result.total, MAX_PDF_PREVIEWS),
+      first: MAX_PDF_PREVIEWS,
       desiredWidth: 1_400,
       imageDataUrl: false,
       imageBuffer: true,
     });
-    return {
-      text: result.pages.map((page) => `--- Page ${page.num} ---\n${page.text.trim()}`).join("\n\n").trim(),
-      chunks: pageChunks,
-      pageCount: result.total,
-      previews: screenshots.pages.map((page) => ({ page: page.pageNumber, data: page.data })),
-    };
+    return screenshots.pages.map((page) => ({ page: page.pageNumber, data: page.data }));
   } finally {
     await parser.destroy();
   }
-}
-
-function stringifyCell(value: unknown): string {
-  if (value instanceof Date) return value.toISOString();
-  if (value === null || value === undefined) return "";
-  return String(value).replace(/\t/gu, " ").replace(/\r?\n/gu, " ");
-}
-
-async function processSpreadsheet(buffer: Buffer, extension: string): Promise<ProcessedAsset> {
-  if (extension !== ".xlsx") {
-    const text = extractOfficeText(buffer, extension);
-    return { text, chunks: chunkText(text, "sheet"), previews: [] };
-  }
-  validateZipArchive(buffer);
-  const sheets = await readXlsxFile(buffer);
-  const sections = sheets.map(({ sheet, data }) => {
-    const rows = data.map((row) => row.map(stringifyCell).join("\t")).join("\n");
-    return `--- Sheet: ${sheet} ---\n${rows}`;
-  });
-  const text = sections.join("\n\n");
-  return {
-    text,
-    chunks: sheets.flatMap(({ sheet, data }) => chunkText(data.map((row) => row.map(stringifyCell).join("\t")).join("\n"), `sheet:${sheet}`)),
-    previews: [],
-  };
 }
 
 function isBinaryModel(buffer: Buffer, extension: string): boolean {
@@ -265,29 +144,44 @@ function isBinaryModel(buffer: Buffer, extension: string): boolean {
   return buffer.subarray(0, Math.min(buffer.length, 8_192)).includes(0);
 }
 
-async function processAsset(kind: AssetKind, buffer: Buffer, extension: string, mimeType: string): Promise<ProcessedAsset> {
+function supportsDocumentRetrieval(kind: AssetKind, buffer: Buffer, extension: string): boolean {
+  if (["pdf", "document", "presentation", "spreadsheet", "text"].includes(kind)) return true;
+  return kind === "model" && !isBinaryModel(buffer, extension);
+}
+
+async function processAsset(
+  kind: AssetKind,
+  buffer: Buffer,
+  extension: string,
+  mimeType: string,
+  stageDir: string,
+  sourcePath: string,
+): Promise<ProcessedAsset> {
   if (kind === "image") {
     validateImageBuffer(buffer, mimeType);
-    return { text: "", chunks: [], previews: [] };
-  }
-  if (kind === "pdf") return processPdf(buffer);
-  if (kind === "spreadsheet" && extension !== ".csv" && extension !== ".tsv") {
-    return processSpreadsheet(buffer, extension);
-  }
-  if (kind === "document" || kind === "presentation") {
-    const text = extractOfficeText(buffer, extension);
-    return { text, chunks: chunkText(text, kind), previews: [] };
+    await writeFile(join(stageDir, "content.txt"), "", "utf8");
+    return { textAvailable: false, previews: [] };
   }
   if (kind === "archive") {
     if (extension === ".zip") validateZipArchive(buffer);
-    return { text: "", chunks: [], previews: [] };
+    await writeFile(join(stageDir, "content.txt"), "", "utf8");
+    return { textAvailable: false, previews: [] };
   }
-  if (kind === "binary") return { text: "", chunks: [], previews: [] };
-  if (kind === "model" && isBinaryModel(buffer, extension)) {
-    return { text: "", chunks: [], previews: [] };
+  if (!supportsDocumentRetrieval(kind, buffer, extension)) {
+    await writeFile(join(stageDir, "content.txt"), "", "utf8");
+    return { textAvailable: false, previews: [] };
   }
-  const text = decodeText(buffer);
-  return { text, chunks: chunkText(text, kind), previews: [] };
+  if (ZIP_DOCUMENT_EXTENSIONS.has(extension)) validateZipArchive(buffer);
+  if (kind === "text" || kind === "model") decodeText(buffer);
+  const [retrieval, previews] = await Promise.all([
+    ingestDocumentWithRag(sourcePath, stageDir, kind === "text" || kind === "model" || extension === ".tsv" || extension === ".rtf"),
+    kind === "pdf" ? renderPdfPreviews(buffer) : Promise.resolve([]),
+  ]);
+  return {
+    textAvailable: retrieval.textAvailable,
+    ...(retrieval.pageCount > 0 ? { pageCount: retrieval.pageCount } : {}),
+    previews,
+  };
 }
 
 export async function resolveAssetInputType(input: AssetInput): Promise<{ kind: AssetKind; mimeType: string }> {
@@ -321,25 +215,26 @@ export async function ingestAsset(sessionId: string, input: AssetInput): Promise
   const id = randomUUID();
   const stageDir = join(assetsDir(sessionId), `.staging-${id}`);
   const finalDir = assetDir(sessionId, id);
-  const processed = await processAsset(kind, input.buffer, extname(input.filename).toLowerCase(), mimeType);
-  const meta: AssetMeta = {
-    id,
-    filename: sanitizeFilename(input.filename),
-    mimeType,
-    kind,
-    source: input.source,
-    size: input.buffer.length,
-    textAvailable: processed.text.trim().length > 0,
-    previewAvailable: kind === "image" || processed.previews.length > 0,
-    ...(processed.pageCount ? { pageCount: processed.pageCount } : {}),
-  };
+  const extension = extname(input.filename).toLowerCase();
+  const sourcePath = join(stageDir, `source${extension || ".bin"}`);
 
   try {
     await mkdir(join(stageDir, "previews"), { recursive: true });
+    await writeFile(sourcePath, input.buffer);
+    const processed = await processAsset(kind, input.buffer, extension, mimeType, stageDir, sourcePath);
+    const meta: AssetMeta = {
+      id,
+      filename: sanitizeFilename(input.filename),
+      mimeType,
+      kind,
+      source: input.source,
+      size: input.buffer.length,
+      textAvailable: processed.textAvailable,
+      previewAvailable: kind === "image" || processed.previews.length > 0,
+      ...(processed.pageCount ? { pageCount: processed.pageCount } : {}),
+    };
     await Promise.all([
-      writeFile(join(stageDir, "original"), input.buffer),
-      writeFile(join(stageDir, "content.txt"), processed.text, "utf8"),
-      writeFile(join(stageDir, "chunks.json"), JSON.stringify(processed.chunks, null, 2), "utf8"),
+      rename(sourcePath, join(stageDir, "original")),
       ...processed.previews.map((preview) => writeFile(join(stageDir, "previews", `page-${preview.page}.png`), preview.data)),
     ]);
     await rename(stageDir, finalDir);
@@ -421,7 +316,6 @@ export function resolveAsset(sessionId: string, assetId: string): ResolvedAsset 
     meta,
     originalPath: join(dir, "original"),
     textPath: join(dir, "content.txt"),
-    chunksPath: join(dir, "chunks.json"),
     previewsDir: join(dir, "previews"),
   };
 }
@@ -438,10 +332,11 @@ export async function readAssetText(sessionId: string, assetId: string): Promise
   return readFile(asset.textPath, "utf8");
 }
 
-export async function readAssetChunks(sessionId: string, assetId: string): Promise<AssetChunk[]> {
+export async function searchAssetChunks(sessionId: string, assetId: string, query: string, limit: number): Promise<AssetChunk[]> {
   const asset = resolveAsset(sessionId, assetId);
   if (!asset) throw new Error(`Asset "${assetId}" not found in this session.`);
-  return JSON.parse(await readFile(asset.chunksPath, "utf8")) as AssetChunk[];
+  if (!asset.meta.textAvailable) return [];
+  return searchDocumentWithRag(assetDir(sessionId, assetId), query, limit);
 }
 
 export async function readAssetPreview(sessionId: string, assetId: string, page = 1): Promise<{ data: Buffer; mimeType: string }> {

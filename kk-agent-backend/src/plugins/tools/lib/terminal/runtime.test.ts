@@ -89,6 +89,26 @@ test("detected shell executes commands with its declared dialect and UTF-8 outpu
   assert.equal(result.metadata?.accessScope, "user");
 });
 
+test("fresh foreground shells complete repeatedly without a login-profile warmup", async (t) => {
+  initializeTerminalShell();
+  const resolution = getTerminalShellResolution();
+  if (resolution.status === "unavailable") {
+    t.skip(resolution.error);
+    return;
+  }
+
+  for (let index = 0; index < 3; index += 1) {
+    const result = await executeTerminalTool(terminalDefinition, "Terminal", {
+      command: `echo TERMINAL_READY_${index}`,
+      cwd: process.cwd(),
+      timeoutMs: 5_000,
+    });
+    assert.ok(result);
+    assert.equal(result.isError, false, JSON.stringify(result, null, 2));
+    assert.match(result.content, new RegExp(`TERMINAL_READY_${index}`, "u"));
+  }
+});
+
 test("system scope expands the root without elevating the shell process", async (t) => {
   initializeTerminalShell();
   const resolution = getTerminalShellResolution();
@@ -346,6 +366,48 @@ test("managed background tasks expose status and stop through their task id", as
         TERMINAL_ROOT: cwd,
       },
     }), /<terminal_tasks>/);
+  } finally {
+    await disposeSessionTerminalTasks(sessionId);
+    await rm(cwd, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
+  }
+});
+
+test("large foreground output completes and remains readable through a session-owned output id", async (t) => {
+  initializeTerminalShell();
+  const resolution = getTerminalShellResolution();
+  if (resolution.status === "unavailable") {
+    t.skip(resolution.error);
+    return;
+  }
+  const sessionId = "large-foreground-output-test";
+  const cwd = await mkdtemp(join(tmpdir(), "kk-agent-terminal-large-output-"));
+  try {
+    const result = await executeTerminalTool(terminalDefinition, "Terminal", {
+      command: "node -e \"process.stdout.write('A'.repeat(1100000))\"",
+      cwd,
+    }, sessionContext(sessionId));
+    assert.ok(result);
+    assert.equal(result.isError, false);
+    assert.equal(result.metadata?.outputTruncated, true);
+    const outputId = String(result.metadata?.outputId ?? "");
+    assert.match(outputId, /^[0-9a-f-]{36}$/u);
+    assert.match(result.content, new RegExp(`^\\[terminal output retained\\]\\noutputId: ${outputId}`, "u"));
+    assert.match(result.content, /stdoutBytes: 1100000/u);
+    assert.ok(result.content.length < 12_000, `retained-output preview was ${result.content.length} characters`);
+
+    const page = await executeTerminalTool(terminalDefinition, "Terminal", {
+      action: "output",
+      outputId,
+      stream: "stdout",
+      offsetBytes: 1_099_990,
+      limitBytes: 10,
+    }, sessionContext(sessionId));
+    assert.ok(page);
+    assert.equal(page.isError, false);
+    assert.match(page.content, new RegExp(`^\\[terminal output page\\]\\noutputId: ${outputId}`, "u"));
+    assert.match(page.content, /offsetBytes: 1099990/u);
+    assert.match(page.content, /bytesReturned: 10/u);
+    assert.match(page.content, /\n\nA{10}$/u);
   } finally {
     await disposeSessionTerminalTasks(sessionId);
     await rm(cwd, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });

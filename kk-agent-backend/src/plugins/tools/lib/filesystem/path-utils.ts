@@ -1,4 +1,5 @@
-import { extname, resolve, sep } from "node:path";
+import { lstat, realpath } from "node:fs/promises";
+import { dirname, extname, resolve, sep } from "node:path";
 import { getDefaultPathForScope, resolveAccessScope, resolveFilesystemConfig } from "../access-paths.js";
 import type { InternalToolDefinition } from "../../types.js";
 
@@ -61,7 +62,7 @@ function getFilesystemBasePath(tool: InternalToolDefinition): string {
   return resolveFilesystemConfig(tool.config).basePath ?? resolve("/");
 }
 
-function getFilesystemAllowedRoot(tool: InternalToolDefinition): string {
+export function getFilesystemAllowedRoot(tool: InternalToolDefinition): string {
   return getDefaultPathForScope(resolveAccessScope(tool.config?.accessScope));
 }
 
@@ -88,6 +89,61 @@ function resolveWithinRoot(allowedRoot: string, basePath: string, target?: unkno
   return candidate;
 }
 
-export function resolveFilesystemPath(config: InternalToolDefinition, target?: unknown): string {
+function normalizeForComparison(path: string): string {
+  return process.platform === "win32" ? path.toLowerCase() : path;
+}
+
+function assertWithinRoot(root: string, candidate: string, requested: unknown): void {
+  const normalizedRoot = normalizeForComparison(root);
+  const prefix = normalizedRoot.endsWith(sep) ? normalizedRoot : `${normalizedRoot}${sep}`;
+  const normalizedCandidate = normalizeForComparison(candidate);
+  if (normalizedCandidate !== normalizedRoot && !normalizedCandidate.startsWith(prefix)) {
+    throw new Error(`Path "${String(requested ?? "")}" resolves outside the allowed root path`);
+  }
+}
+
+async function nearestExistingAncestor(path: string): Promise<string> {
+  let current = path;
+  while (true) {
+    try {
+      await lstat(current);
+      return current;
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+      const parent = dirname(current);
+      if (parent === current) throw error;
+      current = parent;
+    }
+  }
+}
+
+export function resolveFilesystemPathLexical(config: InternalToolDefinition, target?: unknown): string {
   return resolveWithinRoot(getFilesystemAllowedRoot(config), getFilesystemBasePath(config), target);
+}
+
+export async function resolveFilesystemPath(config: InternalToolDefinition, target?: unknown): Promise<string> {
+  const requestedRoot = getFilesystemAllowedRoot(config);
+  const candidate = resolveFilesystemPathLexical(config, target);
+  const canonicalRoot = await realpath(requestedRoot).catch(() => resolve(requestedRoot));
+  try {
+    const canonicalCandidate = await realpath(candidate);
+    assertWithinRoot(canonicalRoot, canonicalCandidate, target);
+    return canonicalCandidate;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+    const ancestor = await nearestExistingAncestor(dirname(candidate));
+    const canonicalAncestor = await realpath(ancestor);
+    assertWithinRoot(canonicalRoot, canonicalAncestor, target);
+    return candidate;
+  }
+}
+
+export async function resolveFilesystemEntryPath(config: InternalToolDefinition, target?: unknown): Promise<string> {
+  const requestedRoot = getFilesystemAllowedRoot(config);
+  const candidate = resolveFilesystemPathLexical(config, target);
+  const canonicalRoot = await realpath(requestedRoot).catch(() => resolve(requestedRoot));
+  const ancestor = await nearestExistingAncestor(dirname(candidate));
+  const canonicalAncestor = await realpath(ancestor);
+  assertWithinRoot(canonicalRoot, canonicalAncestor, target);
+  return candidate;
 }
